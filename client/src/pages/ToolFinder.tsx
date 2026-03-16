@@ -932,7 +932,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Tool Series
               <Hint text="Filter by product series (e.g. VST5, VXR, CMH120). Useful when you already know which line you want." />
             </label>
-            <MultiSelect<string>
+            <MultiSelect
               placeholder="All series..."
               options={options.series}
               selected={selSeries}
@@ -961,7 +961,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Chamfer Angle (°)
               <Hint text="Half-angle of the cutting edge. 45°: standard chamfer. 60°: thread prep. 82°/90°: countersinking." />
             </label>
-            <MultiSelect<number>
+            <MultiSelect
               placeholder="All angles..."
               options={options.chamferAngles}
               selected={selChamferAngles}
@@ -976,7 +976,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Tip Diameter (in)
               <Hint text="Diameter at the tool tip. Smaller tip = chamfer closer to a shoulder or in tighter spaces." />
             </label>
-            <MultiSelect<number>
+            <MultiSelect
               placeholder="All tip diameters..."
               options={options.tipDiameters}
               selected={selTipDiameters}
@@ -991,7 +991,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Flute Count
               <Hint text="More flutes = better finish and higher feeds. Fewer flutes = better chip evacuation for aluminum." />
             </label>
-            <MultiSelect<number>
+            <MultiSelect
               placeholder="Select flute counts..."
               options={options.flutes}
               selected={selFlutes}
@@ -1047,7 +1047,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Corner Condition
               <Hint text="Square: sharp corners. Ballnose: 3D contouring. Corner radius: added strength and better finish on shoulders." />
             </label>
-            <MultiSelect<string>
+            <MultiSelect
               placeholder="Select corner conditions..."
               options={options.corners}
               selected={selCorners}
@@ -1062,7 +1062,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Coating
               <Hint text="AlTiN: high-temp alloys. TiN: general purpose. ZrN: aluminum/non-ferrous." />
             </label>
-            <MultiSelect<string>
+            <MultiSelect
               placeholder="Select coatings..."
               options={options.coatings}
               selected={selCoatings}
@@ -1097,7 +1097,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Flute Geometry
               <Hint text="Standard: general milling. Chipbreaker: high-feed roughing (≥8% WOC, ≥1×D). Truncated Rougher: aggressive removal (≥10% WOC, ≥1×D)." />
             </label>
-            <MultiSelect<string>
+            <MultiSelect
               placeholder="All geometries..."
               options={displayedGeometries}
               selected={selGeometries}
@@ -1230,7 +1230,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                 Min. Cutting Edge Length
                 <Hint text="Showing all hypotenuse lengths ≥ based upon your Required Chamfer Hypotenuse Length (in) input." />
               </label>
-              <MultiSelect<number>
+              <MultiSelect
                 placeholder="All chamfer hypotenuse lengths..."
                 options={options.chamferLengths.filter(l => {
                   const req = parseFloat(reqChamferLength);

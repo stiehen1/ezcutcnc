@@ -1235,12 +1235,12 @@ export async function registerRoutes(
           code: machiningMentorCode,
           language: "python",
         });
-        console.log("Created Machining Mentor snippet");
+        console.log("Created EZCutCNC snippet");
       } else {
         await storage.updateSnippet(machMentor.id, {
           code: machiningMentorCode,
         });
-        console.log("Updated Machining Mentor snippet");
+        console.log("Updated EZCutCNC snippet");
       }
     }
   } catch (err) {
