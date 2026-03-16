@@ -860,7 +860,7 @@ export default function Mentor() {
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const MODE_LABELS: Record<string, string> = {
       hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
-      face: "Planar Milling (Facing)", slot: "Slotting", trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
+      face: "Planar Milling (Facing)", slot: "Slotting — Traditional", trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
     const opLabel = operation === "milling" ? (MODE_LABELS[form.mode] ?? baseOpLabel) : baseOpLabel;
@@ -1140,7 +1140,7 @@ ${stabSection}
     };
     const modeLabel: Record<string, string> = {
       hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
-      face: "Planar Milling (Facing)", slot: "Slotting",
+      face: "Planar Milling (Facing)", slot: "Slotting — Traditional",
       trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
     };
     const isRoughing = form.mode === "hem" || form.mode === "traditional" || form.mode === "trochoidal";
@@ -1642,7 +1642,7 @@ ${stabSection}
                 <option value="finish">Finishing</option>
                 <option value="face">Planar Milling (Facing)</option>
                 <option value="hem">HEM Roughing</option>
-                <option value="slot">Slotting</option>
+                <option value="slot">Slotting — Traditional</option>
                 <option value="traditional">Traditional Roughing</option>
                 <option value="trochoidal">Trochoidal</option>
               </select>

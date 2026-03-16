@@ -385,7 +385,7 @@ const QP_OPERATIONS = [
   { value: "traditional", label: "Conventional Roughing",    desc: "Standard full-width roughing",              geo: "standard",    toolType: "endmill" },
   { value: "finish",      label: "Finishing / Semi-finish",  desc: "Light cuts, tight tolerances",              geo: "standard",    toolType: "endmill" },
   { value: "face",        label: "Planar Milling (Facing)",  desc: "Wide shallow passes across flat surfaces",  geo: "standard",    toolType: "endmill" },
-  { value: "slot",        label: "Slotting",                 desc: "Full-width slot or keyway",                 geo: "standard",    toolType: "endmill" },
+  { value: "slot",        label: "Slotting — Traditional",                 desc: "Full-width slot or keyway",                 geo: "standard",    toolType: "endmill" },
   { value: "circ_interp", label: "Circular Interpolation",  desc: "Helical or circular bore entry",            geo: "standard",    toolType: "endmill" },
   { value: "chamfer",     label: "Chamfering / Deburring",   desc: "Edge break and chamfer",                    geo: null,          toolType: "chamfer_mill" },
 ];
