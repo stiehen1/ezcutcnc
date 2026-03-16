@@ -3,7 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const STP_CDN = "https://cdn.ezcutcnc.app";
 function stpUrl(edp: string): string {
-  return `${STP_CDN}/${encodeURIComponent(edp + " v1.step")}`;
+  return `${STP_CDN}/${encodeURIComponent("Core_Cutter_" + edp + " v1.step")}`;
 }
 
 type SkuRow = {
