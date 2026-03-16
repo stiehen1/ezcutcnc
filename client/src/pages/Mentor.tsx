@@ -1601,7 +1601,7 @@ ${stabSection}
 
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <select
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className={`w-full rounded-md border px-3 py-2 text-sm ${!form.mode ? "animate-pulse border-yellow-400 bg-yellow-400/10 text-yellow-300" : "bg-background"}`}
                 aria-label="Milling process"
                 value={form.mode}
                 onChange={(e) => {
