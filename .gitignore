@@ -1,0 +1,16 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.env
+.env.local
+.env.production
+__pycache__/
+*.pyc
+attached_assets/
+*.xlsx
+*.png
+*.jpg
+*.jpeg

@@ -1,0 +1,5582 @@
+import * as React from "react";
+
+const STP_CDN = "https://cdn.ezcutcnc.app";
+function stpUrl(edp: string): string {
+  return `${STP_CDN}/${encodeURIComponent(edp + " v1.stp")}`;
+}
+import { useMentor } from "@/hooks/use-mentor";
+import Calculators from "./Calculators";
+import ToolFinder from "./ToolFinder";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch as UiSwitch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { ISO_CATEGORIES, ISO_SUBCATEGORIES, MATERIAL_NOTES, MATERIAL_HARDNESS_RANGE, type IsoCategory } from "@shared/materials";
+
+// ── Thread TPI / pitch lookup tables (mirrors engine/physics.py) ─────────────
+const UN_TPI: Record<string, Record<number, number>> = {
+  unc:  { 0.0600:80, 0.0730:64, 0.0860:56, 0.0990:48, 0.1120:40, 0.1250:40, 0.1380:32, 0.1640:32, 0.1900:24, 0.2160:24, 0.2500:20, 0.3125:18, 0.3750:16, 0.4375:14, 0.5000:13, 0.5625:12, 0.6250:11, 0.7500:10, 0.8750:9, 1.0000:8, 1.1250:7, 1.2500:7, 1.3750:6, 1.5000:6, 1.7500:5, 2.0000:4.5 },
+  unf:  { 0.0600:80, 0.0730:72, 0.0860:64, 0.0990:56, 0.1120:48, 0.1250:44, 0.1380:40, 0.1640:36, 0.1900:32, 0.2160:28, 0.2500:28, 0.3125:24, 0.3750:24, 0.4375:20, 0.5000:20, 0.5625:18, 0.6250:18, 0.7500:16, 0.8750:14, 1.0000:12, 1.1250:12, 1.2500:12 },
+  unef: { 0.2500:32, 0.3125:32, 0.3750:32, 0.4375:28, 0.5000:28, 0.5625:24, 0.6250:24, 0.7500:20, 0.8750:20, 1.0000:20, 1.0625:18, 1.1250:18, 1.1875:18, 1.2500:18 },
+};
+const METRIC_PITCH: Record<number, number> = {
+  1.0:0.25, 1.2:0.25, 1.4:0.30, 1.6:0.35, 2.0:0.40, 2.5:0.45, 3.0:0.50, 3.5:0.60,
+  4.0:0.70, 5.0:0.80, 6.0:1.00, 8.0:1.25, 10.0:1.50, 12.0:1.75, 14.0:2.00, 16.0:2.00,
+  18.0:2.50, 20.0:2.50, 22.0:2.50, 24.0:3.00, 27.0:3.00, 30.0:3.50, 33.0:3.50, 36.0:4.00,
+  39.0:4.00, 42.0:4.50, 48.0:5.00, 56.0:5.50, 64.0:6.00,
+};
+/** Closest-match lookup: returns TPI for UN standards or pitch_mm for metric. */
+function lookupTpi(standard: string, inchVal: number): { tpi?: number; pitch_mm?: number } {
+  if (standard === "metric") {
+    const mmVal = inchVal * 25.4;
+    const keys = Object.keys(METRIC_PITCH).map(Number);
+    const closest = keys.reduce((a, b) => Math.abs(b - mmVal) < Math.abs(a - mmVal) ? b : a);
+    if (Math.abs(closest - mmVal) < 2.0) return { pitch_mm: METRIC_PITCH[closest] };
+    return {};
+  }
+  const table = UN_TPI[standard];
+  if (!table) return {};
+  const keys = Object.keys(table).map(Number);
+  const closest = keys.reduce((a, b) => Math.abs(b - inchVal) < Math.abs(a - inchVal) ? b : a);
+  if (Math.abs(closest - inchVal) < 0.010) return { tpi: table[closest] };
+  return {};
+}
+
+/** Default thread mill flute count based on cutter diameter. */
+function defaultThreadFlutes(dia: number): number {
+  if (dia < 0.1875) return 3;
+  if (dia < 0.500)  return 4;
+  return 5;
+}
+
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Label className="flex items-center gap-1 cursor-default w-fit text-xs">
+            {children}
+            <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
+          </Label>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-56 text-xs">
+          {hint}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-2xl border p-3">
+      <div className="text-xs text-muted-foreground flex items-center gap-1">
+        {hint ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex items-center gap-1 cursor-default">
+                  {label}
+                  <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                    <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                  </svg>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-56 text-xs">{hint}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : label}
+      </div>
+      <div className="mt-1 text-lg font-bold leading-tight">{value}</div>
+    </div>
+  );
+}
+
+type SkuRecord = {
+  // Identity — DB returns lowercase column names; EDP is an alias for edp
+  EDP?: string;
+  edp?: string;
+  series?: string;
+  description?: string;
+  // Geometry
+  tool_type?: string;
+  cutting_diameter_in: number;
+  flutes: number;
+  loc_in: number;
+  lbs_in?: number;
+  neck_dia_in?: number;
+  shank_dia_in?: number;
+  oal_in?: number;
+  corner_condition?: string | number;  // "square" | "ball" | 0.030 (CR in inches)
+  flute_wash?: number;
+  coating?: string;
+  // Flute character
+  geometry?: "standard" | "chipbreaker" | "truncated_rougher";
+  variable_pitch?: boolean;
+  variable_helix?: boolean;
+  helix?: number;
+  // Chamfer mills
+  chamfer_angle?: number;
+  tip_diameter?: number;
+};
+
+function fmtNum(n: unknown, digits = 2): string {
+  const x = Number(n);
+  return Number.isFinite(x) ? x.toFixed(digits) : "—";
+}
+
+function fmtInt(n: unknown): string {
+  const x = Number(n);
+  return Number.isFinite(x) ? Math.round(x).toLocaleString() : "—";
+}
+
+// Mirror of engine/physics.py ream_stock_range — keeps pre-drill recommendation
+// in sync without an extra API round-trip.
+const REAM_STOCK_ANCHORS: [number, number, number][] = [
+  [0.0625, 0.003, 0.005],
+  [0.125,  0.007, 0.010],
+  [0.250,  0.010, 0.012],
+  [0.375,  0.012, 0.013],
+  [0.500,  0.013, 0.014],
+  [0.750,  0.016, 0.017],
+  [1.000,  0.018, 0.019],
+];
+function reamStockRange(D: number): { min: number; ideal: number; max: number } | null {
+  if (!D || D <= 0) return null;
+  let lo: number, hi: number;
+  if (D <= REAM_STOCK_ANCHORS[0][0]) {
+    [, lo, hi] = REAM_STOCK_ANCHORS[0];
+  } else if (D >= REAM_STOCK_ANCHORS[REAM_STOCK_ANCHORS.length - 1][0]) {
+    [, lo, hi] = REAM_STOCK_ANCHORS[REAM_STOCK_ANCHORS.length - 1];
+  } else {
+    lo = 0; hi = 0;
+    for (let i = 0; i < REAM_STOCK_ANCHORS.length - 1; i++) {
+      const [d0, lo0, hi0] = REAM_STOCK_ANCHORS[i];
+      const [d1, lo1, hi1] = REAM_STOCK_ANCHORS[i + 1];
+      if (D >= d0 && D <= d1) {
+        const t = (D - d0) / (d1 - d0);
+        lo = lo0 + t * (lo1 - lo0);
+        hi = hi0 + t * (hi1 - hi0);
+        break;
+      }
+    }
+  }
+  const ideal = (lo + hi) / 2;
+  return { min: lo, ideal, max: hi };
+}
+
+// Generate metric drill sizes: label "X.Xmm", diameter in inches
+function _metricDrills(fromMm: number, toMm: number, stepMm: number): [string, number][] {
+  const out: [string, number][] = [];
+  // Use integer arithmetic to avoid float drift
+  const factor = Math.round(1 / stepMm);
+  const start  = Math.round(fromMm * factor);
+  const end    = Math.round(toMm   * factor);
+  for (let i = start; i <= end; i++) {
+    const mm  = i / factor;
+    const lbl = Number.isInteger(mm) ? `${mm}mm` : `${mm}mm`;
+    out.push([lbl, mm / 25.4]);
+  }
+  return out;
+}
+
+// Standard drill sizes: [label, diameter (in)]
+// Number drills #80–#1, Letter drills A–Z, Fractional 1/64–1-1/2", Metric 0.5–38mm
+const DRILL_SIZES: [string, number][] = ([
+  // Number drills
+  ["#80",0.0135],["#79",0.0145],["#78",0.0160],["#77",0.0180],["#76",0.0200],
+  ["#75",0.0210],["#74",0.0225],["#73",0.0240],["#72",0.0250],["#71",0.0260],
+  ["#70",0.0280],["#69",0.0292],["#68",0.0310],["#67",0.0320],["#66",0.0330],
+  ["#65",0.0350],["#64",0.0360],["#63",0.0370],["#62",0.0380],["#61",0.0390],
+  ["#60",0.0400],["#59",0.0410],["#58",0.0420],["#57",0.0430],["#56",0.0465],
+  ["#55",0.0520],["#54",0.0550],["#53",0.0595],["#52",0.0635],["#51",0.0670],
+  ["#50",0.0700],["#49",0.0730],["#48",0.0760],["#47",0.0785],["#46",0.0810],
+  ["#45",0.0820],["#44",0.0860],["#43",0.0890],["#42",0.0935],["#41",0.0960],
+  ["#40",0.0980],["#39",0.0995],["#38",0.1015],["#37",0.1040],["#36",0.1065],
+  ["#35",0.1100],["#34",0.1110],["#33",0.1130],["#32",0.1160],["#31",0.1200],
+  ["#30",0.1285],["#29",0.1360],["#28",0.1405],["#27",0.1440],["#26",0.1470],
+  ["#25",0.1495],["#24",0.1520],["#23",0.1540],["#22",0.1570],["#21",0.1590],
+  ["#20",0.1610],["#19",0.1660],["#18",0.1695],["#17",0.1730],["#16",0.1770],
+  ["#15",0.1800],["#14",0.1820],["#13",0.1850],["#12",0.1890],["#11",0.1910],
+  ["#10",0.1935],["#9",0.1960],["#8",0.1990],["#7",0.2010],["#6",0.2040],
+  ["#5",0.2055],["#4",0.2090],["#3",0.2130],["#2",0.2210],["#1",0.2280],
+  // Letter drills
+  ["A",0.2340],["B",0.2380],["C",0.2420],["D",0.2460],["E",0.2500],
+  ["F",0.2570],["G",0.2610],["H",0.2660],["I",0.2720],["J",0.2770],
+  ["K",0.2810],["L",0.2900],["M",0.2950],["N",0.3020],["O",0.3160],
+  ["P",0.3230],["Q",0.3320],["R",0.3390],["S",0.3480],["T",0.3580],
+  ["U",0.3680],["V",0.3770],["W",0.3860],["X",0.3970],["Y",0.4040],["Z",0.4130],
+  // Fractional drills 1/64" through 1-1/2"
+  ["1/64\"",0.015625],["1/32\"",0.03125],["3/64\"",0.046875],["1/16\"",0.0625],
+  ["5/64\"",0.078125],["3/32\"",0.09375],["7/64\"",0.109375],["1/8\"",0.125],
+  ["9/64\"",0.140625],["5/32\"",0.15625],["11/64\"",0.171875],["3/16\"",0.1875],
+  ["13/64\"",0.203125],["7/32\"",0.21875],["15/64\"",0.234375],["1/4\"",0.25],
+  ["17/64\"",0.265625],["9/32\"",0.28125],["19/64\"",0.296875],["5/16\"",0.3125],
+  ["21/64\"",0.328125],["11/32\"",0.34375],["23/64\"",0.359375],["3/8\"",0.375],
+  ["25/64\"",0.390625],["13/32\"",0.40625],["27/64\"",0.421875],["7/16\"",0.4375],
+  ["29/64\"",0.453125],["15/32\"",0.46875],["31/64\"",0.484375],["1/2\"",0.5],
+  ["33/64\"",0.515625],["17/32\"",0.53125],["35/64\"",0.546875],["9/16\"",0.5625],
+  ["37/64\"",0.578125],["19/32\"",0.59375],["39/64\"",0.609375],["5/8\"",0.625],
+  ["41/64\"",0.640625],["21/32\"",0.65625],["43/64\"",0.671875],["11/16\"",0.6875],
+  ["45/64\"",0.703125],["23/32\"",0.71875],["47/64\"",0.734375],["3/4\"",0.75],
+  ["49/64\"",0.765625],["25/32\"",0.78125],["51/64\"",0.796875],["13/16\"",0.8125],
+  ["53/64\"",0.828125],["27/32\"",0.84375],["55/64\"",0.859375],["7/8\"",0.875],
+  ["57/64\"",0.890625],["29/32\"",0.90625],["59/64\"",0.921875],["15/16\"",0.9375],
+  ["61/64\"",0.953125],["31/32\"",0.96875],["63/64\"",0.984375],["1\"",1.0],
+  ["1-1/16\"",1.0625],["1-1/8\"",1.125],["1-3/16\"",1.1875],["1-1/4\"",1.25],
+  ["1-5/16\"",1.3125],["1-3/8\"",1.375],["1-7/16\"",1.4375],["1-1/2\"",1.5],
+  // Metric — 0.5mm steps 0.5–3mm, 0.05mm steps 3–13mm, 0.5mm steps 13.5–38mm
+  // 0.05mm resolution fills gaps 0.1mm misses (e.g. 12.35mm lands in range for a 1/2" reamer)
+  ..._metricDrills(0.5,  3.0,  0.5),
+  ..._metricDrills(3.0,  13.0, 0.05),
+  ..._metricDrills(13.5, 38.0, 0.5),
+] as [string, number][]).sort((a, b) => a[1] - b[1]);
+
+interface DrillMatch { label: string; dia: number; inRange: boolean; }
+
+function nearestDrills(target: number, lo: number, hi: number): DrillMatch[] {
+  const result: DrillMatch[] = [];
+  const byDist = (a: [string,number], b: [string,number]) =>
+    Math.abs(a[1] - target) - Math.abs(b[1] - target);
+
+  // 1. Best in-range match (any type — metric often wins here)
+  const inRange = DRILL_SIZES.filter(([, d]) => d >= lo && d <= hi);
+  const bestInRange = inRange.length > 0
+    ? [...inRange].sort(byDist)[0]
+    : null;
+  if (bestInRange) {
+    result.push({ label: bestInRange[0], dia: bestInRange[1], inRange: true });
+  }
+
+  // 2. Nearest fractional drill — always shown as a shop-floor reference
+  const fractionals = DRILL_SIZES.filter(([lbl]) => lbl.includes("/"));
+  const nearestFrac = fractionals.length > 0
+    ? [...fractionals].sort(byDist)[0]
+    : null;
+  if (nearestFrac && nearestFrac[0] !== bestInRange?.[0]) {
+    const fracInRange = nearestFrac[1] >= lo && nearestFrac[1] <= hi;
+    result.push({ label: nearestFrac[0], dia: nearestFrac[1], inRange: fracInRange });
+  }
+
+  // 3. Fallback when nothing was in range: nearest drill below and above
+  if (result.length === 0) {
+    const below = [...DRILL_SIZES].filter(([, d]) => d < lo).sort((a,b) => b[1]-a[1])[0];
+    const above = [...DRILL_SIZES].filter(([, d]) => d > hi).sort((a,b) => a[1]-b[1])[0];
+    if (below) result.push({ label: below[0], dia: below[1], inRange: false });
+    if (above) result.push({ label: above[0], dia: above[1], inRange: false });
+  }
+
+  return result;
+}
+
+/** Core Cutter standard reamer flute count by diameter. */
+/** ISO tolerance band (total) for a reamed hole, returned as a display string. */
+function reamTolBand(D: number, cls: "H6" | "H7" | "H8"): string {
+  // H7 total tolerance in inches, by diameter range (approximate ISO 286)
+  const h7 = D <= 0.125 ? 0.0004 : D <= 0.250 ? 0.0005 : D <= 0.500 ? 0.0007 : D <= 1.000 ? 0.0008 : 0.0010;
+  const tol = cls === "H6" ? h7 * 0.60 : cls === "H8" ? h7 * 1.60 : h7;
+  return `+0.0000 / −${tol.toFixed(4)}"`;
+}
+
+function reamFlutes(D: number): number {
+  if (!D || D <= 0) return 6;
+  if (D <= 0.125)  return 4;
+  if (D <= 0.375)  return 4;
+  if (D <= 0.750)  return 6;
+  return 8;
+}
+
+export default function Mentor() {
+  const { toast } = useToast();
+  const mentor = useMentor();
+
+
+  const [isoCategory, setIsoCategory] = React.useState<IsoCategory>("P");
+  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "feedmilling" | "toolfinder">("milling");
+  const [units, setUnits] = React.useState<"imperial" | "metric">("imperial");
+  const metric = units === "metric";
+
+  // Conversion factors: imperial → metric
+  const UL = (imp: string, met: string) => metric ? met : imp;
+  const UC = (val: number | null | undefined, factor: number, digits: number) => {
+    const x = Number(val);
+    return Number.isFinite(x) ? (metric ? x * factor : x).toFixed(digits) : "—";
+  };
+
+  // Unit-aware input: displays metric, stores imperial
+  const onUnitNum = (key: keyof typeof form, factor: number) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const n = Number(e.target.value);
+      setForm((p) => ({ ...p, [key]: Number.isFinite(n) ? (metric ? n / factor : n) as any : p[key] }));
+    };
+
+  // Parse a dimension string: supports decimals and fractions like "3/4"
+  const parseDim = (raw: string): number => {
+    const s = raw.trim();
+    const slash = s.indexOf("/");
+    if (slash > 0) {
+      const num = parseFloat(s.slice(0, slash));
+      const den = parseFloat(s.slice(slash + 1));
+      if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) return num / den;
+    }
+    return parseFloat(s);
+  };
+
+  // This matches shared/routes.ts input schema keys (or is trivially mappable)
+  const INITIAL_FORM = {
+    operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling",
+    mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "",
+    material: "steel_alloy",
+    tool_dia: 0,
+    flutes: 0,
+    loc: 0,
+    lbs: 0,
+    edp: "",
+    tool_type: "endmill" as "endmill" | "ballnose" | "corner_radius" | "chamfer_mill",
+    corner_condition: "square" as "square" | "corner_radius" | "ball",
+    corner_radius: 0,
+    geometry: "standard" as "standard" | "chipbreaker" | "truncated_rougher",
+    variable_pitch: false,
+    variable_helix: false,
+    shank_dia: 0,
+    coating: "",
+    target_ra_uin: 0,
+    tool_series: "",
+    helix_angle: 0,
+
+    // Chamfer mill
+    chamfer_series: "CMH" as "CMS" | "CMH",
+    chamfer_angle: 90,
+    chamfer_tip_dia: 0,
+    chamfer_depth: 0,
+
+    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65",
+    machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
+    toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "shell_mill_arbor" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
+    dual_contact: false,
+    holder_gage_length: 0,
+    holder_nose_dia: 0,
+    extension_holder: false,
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate",
+    coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
+    coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
+    coolant_concentration: 10,
+
+    max_rpm: 0,
+    rpm_util_pct: 0.95,
+    drill_feed_util_pct: 0.90,
+
+    woc_pct: 10, // default = HEM med (10%)
+    doc_xd: 0,
+
+    machine_hp: 0,
+    spindle_drive: "belt" as "direct" | "belt" | "gear",
+    stickout: 0,
+
+    existing_hole_dia: 0,
+    target_hole_dia: 0,
+
+    hardness_value: ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.value ?? 0,
+    hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
+
+    // Drilling-specific
+    drill_point_angle: 135 as 118 | 130 | 135 | 140 | 145,
+    drill_flute_length: 0,
+    drill_hole_depth: 0,
+    drill_blind: false,
+    drill_geometry: "standard" as "standard" | "med_helix" | "high_helix",
+    drill_coolant_fed: false,
+    drill_steps: 0,
+    drill_step_diameters: [] as number[],
+    drill_step_lengths: [] as number[],
+
+    // Reaming
+    ream_pre_drill_dia: 0,
+    ream_hole_depth: 0,
+    ream_shank_dia: 0,
+    ream_blind: false,
+    ream_coolant_fed: false,
+    ream_steps: 0,
+    ream_step_diameters: [] as number[],
+    ream_step_lengths: [] as number[],
+    ream_lead_chamfer: "standard" as "standard" | "long_lead" | "short_lead",
+
+    // Thread milling-specific
+    thread_standard: "unc" as "unc" | "unf" | "unef" | "metric" | "npt" | "nptf",
+    thread_major_dia: 0,
+    thread_tpi: undefined as number | undefined,
+    thread_pitch_mm: undefined as number | undefined,
+    thread_class: "2B" as "1A" | "1B" | "2A" | "2B" | "3A" | "3B" | "6H" | "6g",
+    thread_internal: true,
+    thread_engagement: 0,
+    thread_hand: "right" as "right" | "left",
+    thread_rows: 1,
+    thread_neck_length: 0,
+    npt_size: "",
+    thread_gcode_dialect: "fanuc" as "fanuc" | "siemens",
+    thread_cut_direction: "top_down" as "top_down" | "bottom_up",
+
+    quiet: true,
+  };
+  const [form, setForm] = React.useState(INITIAL_FORM);
+
+  // ── Flute+Material aware WOC/DOC med lookup ─────────────────────────────
+  // Returns { wocMed (%), docMed (xD) } for HEM and Traditional.
+  // DOC is always capped at LOC (caller must apply cap).
+  function getHemMed(iso: string, flutes: number): { wocMed: number; docMed: number } {
+    const f = flutes <= 5 ? 5 : flutes <= 6 ? 6 : flutes <= 7 ? 7 : flutes <= 9 ? 9 : 11;
+    // WOC med % by ISO × flute bucket
+    const wocTable: Record<string, Record<number, number>> = {
+      P: { 5: 12, 6: 10, 7: 9, 9: 7, 11: 5 },
+      M: { 5: 10, 6:  8, 7: 7, 9: 6, 11: 4 },
+      K: { 5:  8, 6:  7, 7: 6, 9: 5, 11: 4 },
+      S: { 5:  7, 6:  6, 7: 5, 9: 4, 11: 3 },
+      H: { 5:  5, 6:  4, 7: 4, 9: 3, 11: 3 },
+    };
+    // DOC med xD by ISO × flute bucket
+    const docTable: Record<string, Record<number, number>> = {
+      P: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
+      M: { 5: 1.25,6: 1.5, 7: 2.0, 9: 2.0, 11: 2.5 },
+      K: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
+      S: { 5: 1.0, 6: 1.25,7: 1.5, 9: 1.5, 11: 2.0 },
+      H: { 5: 0.75,6: 1.0, 7: 1.0, 9: 1.0, 11: 1.25 },
+    };
+    const wocMed = wocTable[iso]?.[f] ?? wocTable["P"][5];
+    const docMed = docTable[iso]?.[f] ?? docTable["P"][5];
+    return { wocMed, docMed };
+  }
+
+  function getTradMed(iso: string, flutes: number): { wocMed: number; docMed: number } {
+    // Aluminum — 2 & 3 flute only
+    if (iso === "N") {
+      return { wocMed: flutes <= 2 ? 45 : 40, docMed: 0.75 };
+    }
+    const f = flutes <= 4 ? 4 : flutes <= 5 ? 5 : 6;
+    const wocTable: Record<string, Record<number, number>> = {
+      P: { 4: 35, 5: 30, 6: 25 },
+      M: { 4: 30, 5: 25, 6: 20 },
+      K: { 4: 35, 5: 30, 6: 25 },
+      S: { 4: 25, 5: 20, 6: 18 },
+      H: { 4:  7, 5:  6, 6:  5 },
+    };
+    const docTable: Record<string, Record<number, number>> = {
+      P: { 4: 1.0, 5: 1.25, 6: 1.25 },
+      M: { 4: 0.75,5: 1.0,  6: 1.0  },
+      K: { 4: 1.0, 5: 1.25, 6: 1.25 },
+      S: { 4: 0.5, 5: 0.75, 6: 0.75 },
+      H: { 4: 0.5, 5: 0.5,  6: 0.75 },
+    };
+    const wocMed = wocTable[iso]?.[f] ?? 30;
+    const docMed = docTable[iso]?.[f] ?? 1.0;
+    return { wocMed, docMed };
+  }
+
+  // Derive dynamic presets for the current mode/material/flutes
+  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number): {
+    woc: { low: number; med: number; high: number };
+    doc: { low: number; med: number; high: number };
+  } {
+    if (mode === "hem" || mode === "trochoidal") {
+      const { wocMed, docMed } = getHemMed(iso, flutes);
+      const wocLow  = Math.max(2,  Math.round(wocMed * 0.55));
+      const wocHigh = Math.min(15, Math.round(wocMed * 1.50));
+      const docLow  = Math.round(docMed * 0.6 * 4) / 4;
+      const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
+      return {
+        woc: { low: wocLow, med: wocMed, high: wocHigh },
+        doc: { low: docLow, med: loc > 0 && dia > 0 ? Math.min(docMed, loc / dia) : docMed, high: Math.round(docHigh * 4) / 4 },
+      };
+    }
+    if (mode === "traditional") {
+      const { wocMed, docMed } = getTradMed(iso, flutes);
+      const wocLow  = Math.max(10, Math.round(wocMed * 0.55));
+      const wocHigh = Math.min(60, Math.round(wocMed * 1.50));
+      const docLow  = Math.round(docMed * 0.6 * 4) / 4;
+      const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
+      return {
+        woc: { low: wocLow, med: wocMed, high: wocHigh },
+        doc: { low: docLow, med: loc > 0 && dia > 0 ? Math.min(docMed, loc / dia) : docMed, high: Math.round(docHigh * 4) / 4 },
+      };
+    }
+    // Fallback for finish, face, slot, circ_interp — keep flat presets
+    const flatWoc: Record<string, { low: number; med: number; high: number }> = {
+      finish:     { low: 5,  med: 15, high: 25 },
+      face:       { low: 50, med: 75, high: 90 },
+      trochoidal: { low: 5,  med: 8,  high: 12 },
+      slot:       { low: 100,med: 100,high: 100 },
+      circ_interp:{ low: 10, med: 25, high: 50 },
+    };
+    const flatDoc: Record<string, { low: number; med: number; high: number }> = {
+      finish:     { low: 0.1, med: 0.25, high: 0.5 },
+      face:       { low: 0.03,med: 0.08, high: 0.15 },
+      trochoidal: { low: 1.0, med: 1.5,  high: 2.0 },
+      slot:       { low: 0.25,med: 0.5,  high: 1.0 },
+      circ_interp:{ low: 0.25,med: 0.5,  high: 1.0 },
+    };
+    return {
+      woc: flatWoc[mode] ?? { low: 10, med: 30, high: 50 },
+      doc: flatDoc[mode] ?? { low: 0.25, med: 0.5, high: 1.0 },
+    };
+  }
+
+  // Convenience: get presets for current form state
+  const dynPresets = React.useMemo(() =>
+    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc),
+    [form.mode, isoCategory, form.flutes, form.tool_dia, form.loc] // eslint-disable-line
+  );
+
+  // Keep WOC_PRESETS / DOC_PRESETS as aliases pointing to dynamic values for
+  // any existing code that references them directly
+  const WOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
+    hem:         dynPresets.woc,
+    traditional: dynPresets.woc,
+    finish:      { low: 5,  med: 15, high: 25 },
+    face:        { low: 50, med: 75, high: 90 },
+    trochoidal:  dynPresets.woc,
+    slot:        { low: 100,med: 100,high: 100 },
+    circ_interp: { low: 10, med: 25, high: 50 },
+  };
+  const DOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
+    hem:         dynPresets.doc,
+    traditional: dynPresets.doc,
+    finish:      { low: 0.1, med: 0.25, high: 0.5 },
+    face:        { low: 0.03,med: 0.08, high: 0.15 },
+    trochoidal:  dynPresets.doc,
+    slot:        { low: 0.25,med: 0.5,  high: 1.0 },
+    circ_interp: { low: 0.25,med: 0.5,  high: 1.0 },
+  };
+  const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
+  const [docPreset, setDocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
+
+  // Local text state for WOC/DOC — WOC shows actual inches (woc_pct/100 × tool_dia)
+  const [wocText, setWocText] = React.useState("");
+  const [docText, setDocText] = React.useState("");
+  const [crText, setCrText] = React.useState("");
+  const [toolDiaText, setToolDiaText] = React.useState("");
+  const [locText, setLocText] = React.useState("");
+  const [lbsText, setLbsText] = React.useState("");
+  const [holderGageText, setHolderGageText] = React.useState("");
+  const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
+  const [existingHoleText, setExistingHoleText] = React.useState("");
+  const [targetHoleText, setTargetHoleText] = React.useState("");
+  const [drillFluteLenText, setDrillFluteLenText] = React.useState("");
+  const [drillHoleDepthText, setDrillHoleDepthText] = React.useState("");
+  const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
+  const [stepLenTexts, setStepLenTexts] = React.useState<string[]>([]);
+  const [raText, setRaText] = React.useState("");
+  const [chamferTipDiaText, setChamferTipDiaText] = React.useState("");
+  const [chamferDepthText, setChamferDepthText] = React.useState("");
+  const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
+  const [tmTpiText, setTmTpiText] = React.useState("");
+  const [tmPitchMmText, setTmPitchMmText] = React.useState("");
+  const [tmEngText, setTmEngText] = React.useState("");
+  // Reaming mode
+  const [reamMode, setReamMode] = React.useState<"print" | "known">("print");
+  const [reamTolClass, setReamTolClass] = React.useState<"H6" | "H7" | "H8">("H7");
+  const [reamFinishedDiaText, setReamFinishedDiaText] = React.useState("");
+
+  const [tmNeckText, setTmNeckText] = React.useState("");
+  const [stickoutText, setStickoutText] = React.useState("");
+  const [tmStickoutText, setTmStickoutText] = React.useState("");
+  const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
+  const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
+  const [tmGcodeExpanded, setTmGcodeExpanded] = React.useState(false);
+
+  // EDP# / SKU lookup state
+  const [edpText, setEdpText] = React.useState("");
+  const [skuResults, setSkuResults] = React.useState<SkuRecord[]>([]);
+  const [skuDropdownOpen, setSkuDropdownOpen] = React.useState(false);
+  const [skuLocked, setSkuLocked] = React.useState(false);
+
+  // Quote modals — shared customer form, separate open/status per product
+  const [quoteForm, setQuoteForm] = React.useState({ name: "", company: "", email: "", phone: "", qty: "", tolerance: "H7", notes: "" });
+  const [showQuote, setShowQuote] = React.useState(false);
+  const [quoteSending, setQuoteSending] = React.useState(false);
+  const [quoteSent, setQuoteSent] = React.useState(false);
+  const [showDrillQuote, setShowDrillQuote] = React.useState(false);
+  const [drillQuoteSending, setDrillQuoteSending] = React.useState(false);
+  const [drillQuoteSent, setDrillQuoteSent] = React.useState(false);
+  const [showTmQuote, setShowTmQuote] = React.useState(false);
+  const [tmQuoteSending, setTmQuoteSending] = React.useState(false);
+  const [tmQuoteSent, setTmQuoteSent] = React.useState(false);
+
+  // Keep WOC/DOC inch displays in sync when diameter changes (skip if no dia yet)
+  React.useEffect(() => {
+    if (!form.tool_dia) return;
+    if (form.woc_pct) setWocText(((form.woc_pct / 100) * form.tool_dia).toFixed(4));
+    if (form.doc_xd) setDocText((form.doc_xd * form.tool_dia).toFixed(3));
+  }, [form.tool_dia]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onNum =
+    (key: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const n = Number(e.target.value);
+      setForm((p) => ({
+        ...p,
+        [key]: Number.isFinite(n) ? (n as any) : p[key],
+      }));
+    };
+
+  const onStr =
+    (key: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((p) => ({ ...p, [key]: e.target.value as any }));
+    };
+
+  const [formDirty, setFormDirty] = React.useState(false);
+  const [runWarnings, setRunWarnings] = React.useState<string[]>([]);
+
+  // Mark dirty whenever form changes after a successful run
+  React.useEffect(() => {
+    if (mentor.data) setFormDirty(true);
+    setRunWarnings([]);
+  }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // EDP# debounced search
+  React.useEffect(() => {
+    if (!edpText.trim() || skuLocked) { setSkuResults([]); setSkuDropdownOpen(false); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/skus?q=${encodeURIComponent(edpText.trim())}`);
+        const data: SkuRecord[] = await r.json();
+        setSkuResults(data);
+        setSkuDropdownOpen(data.length > 0);
+      } catch { setSkuResults([]); }
+    }, 200);
+    return () => clearTimeout(t);
+  }, [edpText, skuLocked]);
+
+  function applySkuToForm(sku: SkuRecord) {
+    // Parse corner_condition: "square" | "ball" | number (CR in inches)
+    const skuToolType = (sku.tool_type ?? "endmill").toLowerCase();
+    const isChamfer = skuToolType === "chamfer_mill";
+    const cc = sku.corner_condition;
+    const ccStr = String(cc ?? "square").toLowerCase();
+    const isBall = ccStr === "ball" || skuToolType === "ballnose";
+    const crIn = (!isBall && cc !== undefined && cc !== "square" && Number(cc) > 0) ? Number(cc) : 0;
+    const corner_condition = isBall ? "ball" : crIn > 0 ? "corner_radius" : "square";
+    const form_tool_type = isBall ? "ballnose" : isChamfer ? "chamfer_mill" : crIn > 0 ? "corner_radius" : "endmill";
+
+    // Default stickout: LOC + flute_wash + 0.5×D — keeps flutes clear of the holder
+    const _dia = Number(sku.cutting_diameter_in);
+    const _loc = Number(sku.loc_in);
+    const _fw  = Number(sku.flute_wash ?? 0);
+    const defaultStickout = Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
+
+    setEdpText(sku.EDP ?? (sku as any).edp ?? "");
+    setSkuDropdownOpen(false);
+    setSkuResults([]);
+    setSkuLocked(true);
+    setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
+    setLocText(Number(sku.loc_in).toFixed(3));
+    setStickoutText(defaultStickout.toFixed(3));
+    setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
+    setCrText(crIn > 0 ? crIn.toFixed(4) : "");
+    if (isChamfer) {
+      setChamferTipDiaText(sku.tip_diameter ? Number(sku.tip_diameter).toFixed(4) : "");
+      setChamferDepthText("");
+    }
+    setForm((p) => ({
+      ...p,
+      edp: String(sku.EDP ?? (sku as any).edp ?? ""),
+      tool_dia: Number(sku.cutting_diameter_in),
+      flutes: Number(sku.flutes),
+      loc: Number(sku.loc_in),
+      lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
+      corner_condition,
+      tool_type: form_tool_type as any,
+      corner_radius: crIn,
+      geometry: sku.geometry ?? "standard",
+      variable_pitch: sku.variable_pitch ?? false,
+      variable_helix: sku.variable_helix ?? false,
+      shank_dia: Number(sku.shank_dia_in ?? 0),
+      stickout: defaultStickout,
+      tool_series: sku.series ?? "",
+      helix_angle: Number(sku.helix ?? 0),
+      coating: String(sku.coating ?? ""),
+      ...(isChamfer ? {
+        chamfer_angle: Number(sku.chamfer_angle ?? 90),
+        chamfer_tip_dia: Number(sku.tip_diameter ?? 0),
+        chamfer_depth: 0,
+      } : {}),
+    }));
+  }
+
+  function clearSku() {
+    setSkuLocked(false);
+    setEdpText("");
+    setSkuResults([]);
+    setSkuDropdownOpen(false);
+  }
+
+  function resetAll() {
+    setForm(INITIAL_FORM);
+    setIsoCategory("P");
+    setOperation("milling");
+    setWocPreset("med");
+    setDocPreset("med");
+    setWocText("");
+    setDocText("");
+    setCrText("");
+    setToolDiaText("");
+    setLocText("");
+    setLbsText("");
+    setHolderGageText("");
+    setHolderNoseDiaText("");
+    setExistingHoleText("");
+    setTargetHoleText("");
+    setDrillFluteLenText("");
+    setDrillHoleDepthText("");
+    setStepDiaTexts([]);
+    setStepLenTexts([]);
+    setChamferTipDiaText("");
+    setChamferDepthText("");
+    setTmMajorDiaText("");
+    setTmTpiText("");
+    setTmPitchMmText("");
+    setTmEngText("");
+    setTmNeckText("");
+    setTmGcodeExpanded(false);
+    clearSku();
+    setFormDirty(false);
+    mentor.reset();
+  }
+
+  function getCoatingRec(cat: string): { code: string; desc: string } {
+    if (cat === "N") return { code: "Uncoated or D-MAX", desc: "non-ferrous / aluminum" };
+    if (cat === "P" || cat === "K") return { code: "P-MAX", desc: "steel & cast iron" };
+    return { code: "T-MAX", desc: "stainless, superalloys & hardened" };
+  }
+
+  function getMillingCoatings(cat: string): { coatings: string[]; note: string } {
+    if (cat === "N") return { coatings: ["Uncoated", "D-MAX"], note: "non-ferrous / aluminum" };
+    if (cat === "P") return { coatings: ["A-MAX", "P-MAX"], note: "steel" };
+    if (cat === "K") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "cast iron" };
+    if (cat === "M") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "stainless" };
+    if (cat === "S") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "superalloys & titanium" };
+    if (cat === "H") return { coatings: ["T-MAX", "C-MAX"], note: "hardened steel" };
+    return { coatings: ["P-MAX"], note: "" };
+  }
+
+  const run = async () => {
+    // Pre-flight validation — show friendly inline warnings instead of a red crash
+    const missing: string[] = [];
+    if (!(form.machine_hp > 0)) missing.push("Machine HP");
+    if (!(form.max_rpm > 0)) missing.push("Max RPM");
+    if (!(form.tool_dia > 0)) missing.push("Tool Diameter");
+    if (operation === "milling" || operation === "feedmilling") {
+      if (!form.mode) missing.push("Process (HEM / Conventional / Slot…)");
+      if (!(form.flutes > 0)) missing.push("Flute Count");
+      if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
+      if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
+    }
+    if (operation === "drilling" && !(form.drill_hole_depth > 0)) missing.push("Hole Depth");
+    if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0)) missing.push("Pre-Drill / Existing Hole Diameter");
+    if (missing.length > 0) {
+      setRunWarnings(missing);
+      return;
+    }
+
+    // Slotting safety block — chip packing risk with too many flutes
+    if ((operation === "milling" || operation === "feedmilling") && form.mode === "slot") {
+      const fl = form.flutes;
+      const isHardened50Plus =
+        form.material === "hardened_gt55" ||
+        (form.hardness_scale === "hrc" && form.hardness_value >= 50);
+      if (fl >= 6) {
+        setRunWarnings([`Slotting with ${fl} flutes will pack chips and break the tool. Use 2–4 flutes for full slotting, or 5 flutes at 50% WOC maximum.`]);
+        return;
+      }
+      if (fl === 5 && form.woc_pct > 50) {
+        setRunWarnings([`5-flute slotting is limited to 50% WOC (1/2×D) for chip clearance. Reduce WOC to 50% or use a 4-flute tool for full slotting.`]);
+        return;
+      }
+      // Hardened material conventional slotting — strict DOC limits
+      if (isHardened50Plus && fl > 0) {
+        if (fl === 5 && form.doc_xd > 0.10) {
+          setRunWarnings([`5-flute slotting in hardened material (≥50 HRC) is limited to 10% DOC (0.10×D) maximum. Reduce axial depth or switch to a 4-flute tool at 15% DOC max.`]);
+          return;
+        }
+        if (fl <= 4 && form.doc_xd > 0.15) {
+          setRunWarnings([`Slotting in hardened material (≥50 HRC) is limited to 15% DOC (0.15×D) maximum with a 4-flute tool. Reduce axial depth.`]);
+          return;
+        }
+      }
+    }
+
+    // Hardened material block — 50 HRC+ requires 6+ flutes (non-slotting)
+    if ((operation === "milling" || operation === "feedmilling") && form.mode !== "slot") {
+      const isHardened50Plus =
+        form.material === "hardened_gt55" ||
+        (form.hardness_scale === "hrc" && form.hardness_value >= 50);
+      const fl = form.flutes;
+      if (isHardened50Plus && fl > 0 && fl < 6) {
+        setRunWarnings([`Milling hardened material at ≥50 HRC requires 6 or more flutes for adequate edge strength and surface finish. Select a 6-flute (or higher) tool.`]);
+        return;
+      }
+    }
+
+    setRunWarnings([]);
+    try {
+      await mentor.mutateAsync({
+        ...form,
+        flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
+        stickout: form.stickout || form.loc * 1.25,
+        debug: false,
+      });
+      setFormDirty(false);
+    } catch (e: any) {
+      // Server-side error — shown inline in the error box below the button
+    }
+  };
+
+  const result: any = mentor.data;
+  const customer = result?.customer ?? null;
+
+  const printSummary = () => {
+    const r = result;
+    if (!r) return;
+    const cust  = r.customer    ?? null;
+    const eng   = r.engineering ?? null;
+    const stab  = r.stability   ?? null;
+    const drill = r.drilling    ?? null;
+    const ream  = r.reaming     ?? null;
+    // milling params live in customer (when not drill/ream)
+    const mil   = (!drill && !ream && cust?.rpm) ? cust : null;
+    const now = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const MODE_LABELS: Record<string, string> = {
+      hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
+      face: "Planar Milling (Facing)", slot: "Slotting", trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
+    };
+    const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
+    const opLabel = operation === "milling" ? (MODE_LABELS[form.mode] ?? baseOpLabel) : baseOpLabel;
+    const modeLabel = MODE_LABELS[form.mode] ?? form.mode.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+    const row = (label: string, value: string | null | undefined) =>
+      value ? `<tr><td class="lbl">${label}</td><td class="val">${value}</td></tr>` : "";
+
+    const isBlank = (v: string | null | undefined) =>
+      !v || v === "—" || /^0+\.?0*["x×%]?$/.test(v.trim());
+    const kpiBox = (label: string, value: string | null | undefined) =>
+      !isBlank(value) ? `<div class="kpi"><div class="kpi-val">${value}</div><div class="kpi-lbl">${label}</div></div>` : "";
+
+    const milSection = mil ? `
+      <div class="kpi-grid">
+        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() : null)}
+        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) : null)}
+        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) : null)}
+        ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
+        ${kpiBox("Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
+        ${kpiBox(form.mode === "face" ? "Step-Over (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
+        ${kpiBox(form.mode === "face" ? "Pass Depth (in)" : "DOC (in)", mil.doc_in != null ? `${mil.doc_in.toFixed(4)}" (${(mil.doc_in / (form.tool_dia || 0.5)).toFixed(2)}xD)` : null)}
+        ${kpiBox("MRR (in³/min)", mil.mrr_in3_min != null ? mil.mrr_in3_min.toFixed(4) : null)}
+        ${kpiBox("HP Required", mil.hp_required != null ? mil.hp_required.toFixed(2) : null)}
+        ${(() => {
+          if (form.mode !== "face" || mil.ra_actual_uin == null) return "";
+          const raUin = mil.ra_actual_uin;
+          const target = form.target_ra_uin;
+          const capped = mil.ra_feed_capped;
+          const label = `${raUin.toFixed(1)} µin${target > 0 ? ` ✓ target ${target}` : ""}${capped ? " (feed capped)" : ""}`;
+          return kpiBox("Theoretical Ra", label);
+        })()}
+      </div>` : drill ? `
+      <div class="kpi-grid">
+        ${kpiBox("RPM", drill.rpm != null ? drill.rpm.toLocaleString() : null)}
+        ${kpiBox("SFM", drill.sfm != null ? drill.sfm.toFixed(0) : null)}
+        ${kpiBox("Feed (IPM)", drill.ipm != null ? drill.ipm.toFixed(3) : null)}
+        ${kpiBox("IPR", drill.ipr != null ? drill.ipr.toFixed(5) : null)}
+        ${kpiBox("HP Required", drill.hp_required != null ? drill.hp_required.toFixed(2) : null)}
+        ${kpiBox("Depth / D", drill.depth_to_dia != null ? `${drill.depth_to_dia.toFixed(1)}×` : null)}
+      </div>
+      ${drill.cycle ? `<div style="margin:6px 0 4px;font-size:10px;"><strong>Recommended Cycle:</strong> ${drill.cycle}${drill.peck_depth_in != null ? ` — Peck Q=${drill.peck_depth_in.toFixed(4)}"` : ""}${drill.cycle_note ? `<br><span style="color:#666">${drill.cycle_note}</span>` : ""}</div>` : ""}
+      ${drill.peck_schedule?.length > 0 ? `
+        <div style="margin:4px 0 6px;font-size:10px;">
+          <strong>Pecking Optimizer</strong> <span style="color:#666;font-weight:normal">— decrease peck depth as hole deepens</span><br>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+            ${drill.peck_schedule.map((q: number, i: number) =>
+              `<div style="border:1px solid #a5b4fc;border-radius:4px;padding:3px 8px;text-align:center;font-size:10px;">
+                <div style="color:#6366f1;font-size:9px;">Peck ${i + 1}${i === drill.peck_schedule.length - 1 ? "+" : ""}</div>
+                <div style="font-weight:700;">${q.toFixed(4)}"</div>
+              </div>`
+            ).join("")}
+          </div>
+        </div>` : ""}
+      ` : ream ? `
+      <div class="kpi-grid">
+        ${kpiBox("RPM", ream.rpm != null ? ream.rpm.toLocaleString() : null)}
+        ${kpiBox("SFM", ream.sfm != null ? ream.sfm.toFixed(0) : null)}
+        ${kpiBox("Feed (IPM)", ream.ipm != null ? ream.ipm.toFixed(3) : null)}
+        ${kpiBox("IPR", ream.ipr != null ? ream.ipr.toFixed(5) : null)}
+        ${kpiBox("HP Required", ream.hp_required != null ? ream.hp_required.toFixed(2) : null)}
+      </div>` : "";
+
+    const em = result?.entry_moves;
+    const entrySection = (mil && em) ? `
+      <h3>Entry Moves</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
+        <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Max Ramp Angle</td><td style="font-weight:600;">≤${em.ramp_angle_deg}°</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(0.5–1°, chip-thinning)</span></td></tr>
+        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Min Bore Dia</td><td style="font-weight:600;">≥${em.helix_bore_min_in.toFixed(4)}"</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Ideal Bore Dia</td><td style="font-weight:600;">${em.helix_bore_ideal_low.toFixed(4)}" – ${em.helix_bore_ideal_high.toFixed(4)}"</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>
+      </table>` : "";
+
+    const engSection = eng ? `
+      <h3>Engineering Data</h3>
+      <div class="kpi-grid">
+        ${kpiBox("Force (lbf)", eng.force_lbf != null ? eng.force_lbf.toFixed(0) : null)}
+        ${kpiBox("Torque (in-lbf)", eng.torque_in_lbf != null ? eng.torque_in_lbf.toFixed(1) : null)}
+        ${kpiBox("Deflection (in)", eng.deflection_in != null ? eng.deflection_in.toFixed(6) : null)}
+        ${kpiBox("Chip Thick (in)", eng.chip_thickness_in != null ? eng.chip_thickness_in.toFixed(6) : null)}
+        ${kpiBox("Tooth Engagement", eng.teeth_engaged != null ? eng.teeth_engaged.toFixed(2) : null)}
+      </div>
+      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:2px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee.</p>` : ""}
+      ${(() => {
+        if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
+        const raUin = mil.ra_actual_uin;
+        const target = form.target_ra_uin;
+        const capped = mil.ra_feed_capped;
+        const raDisclaimer = `<p style="font-size:8px;color:#888;font-style:italic;margin-top:3px;">Surface finish is theoretical. Actual results depend on spindle condition, toolholder accuracy, tool runout, workholding rigidity, chip evacuation, coolant delivery, and material lot variation. Estimate only — not a guarantee from Core Cutter.</p>`;
+        if (capped && target > 0) {
+          return `<p style="font-size:9px;color:#166534;background:#f0fdf4;padding:4px 6px;border-radius:4px;margin-top:4px;"><strong>Surface Finish:</strong> Feed capped to <strong>${mil.feed_ipm?.toFixed(2)} IPM</strong> to achieve Ra ≤ ${target} µin. Theoretical Ra: ${raUin.toFixed(1)} µin (${(raUin * 0.0254).toFixed(3)} µm).</p>${raDisclaimer}`;
+        }
+        return `<p style="font-size:9px;color:#555;margin-top:2px;">Theoretical Ra: <strong>${raUin.toFixed(1)} µin</strong> (${(raUin * 0.0254).toFixed(3)} µm)${target > 0 ? ` — meets ${target} µin target ✓` : ""}.</p>${raDisclaimer}`;
+      })()}` : "";
+
+    const stabSection = stab ? `
+      <h3>Rigidity & Chatter Audit</h3>
+      <p class="verdict ${stab.deflection_pct >= 175 ? "red" : stab.deflection_pct >= 100 ? "yellow" : "green"}">
+        ${stab.deflection_pct >= 175 ? "High Chatter Risk" : stab.deflection_pct >= 100 ? "Chatter Risk" : "Setup Looks Stable"}
+        — ${stab.deflection_pct?.toFixed(0)}% of safe limit · L/D ${stab.l_over_d?.toFixed(1)} · Stickout ${stab.stickout_in?.toFixed(3)}"
+      </p>
+      ${stab.suggestions?.filter((s: any) => s.type !== "info").length > 0 ? `
+        <ol class="suggestions">
+          ${stab.suggestions.filter((s: any) => s.type !== "info").map((s: any) =>
+            `<li><strong>${s.label}</strong>${s.detail ? ` — ${s.detail}` : ""}${s.suggested_edps?.length ? ` <span class="edp">EDP# ${s.suggested_edps.join(", ")}</span>` : ""}</li>`
+          ).join("")}
+        </ol>` : ""}` : "";
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Core Cutter Machining Summary</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 24px 32px; }
+  .header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; gap: 12px; }
+  .header img { height: 44px; width: auto; justify-self: start; }
+  .header-center { text-align: center; color: #555; font-size: 10px; }
+  .header-center strong { font-size: 13px; color: #111; display: block; }
+  .header-contact { text-align: right; font-size: 10px; color: #555; line-height: 1.6; justify-self: end; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #e55a00; border-bottom: 1px solid #eee; padding-bottom: 4px; margin: 14px 0 8px; }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 12px 0 6px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  .lbl { color: #555; width: 45%; padding: 2px 0; }
+  .val { font-weight: 600; padding: 2px 0; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+  .kpi { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; }
+  .kpi-val { font-size: 14px; font-weight: 700; }
+  .kpi-lbl { font-size: 9px; color: #666; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .verdict { padding: 6px 10px; border-radius: 4px; font-weight: 600; font-size: 11px; margin-bottom: 8px; }
+  .verdict.green { background: #f0fdf4; color: #166534; }
+  .verdict.yellow { background: #fefce8; color: #854d0e; }
+  .verdict.red { background: #fef2f2; color: #991b1b; }
+  .suggestions { padding-left: 18px; }
+  .suggestions li { margin-bottom: 3px; }
+  .edp { color: #b45309; font-weight: 700; }
+  .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
+  @media print { body { padding: 12px 18px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="${window.location.origin}/EZCutCNC_light_horizontal.png" alt="EZCutCNC">
+  <div class="header-center">
+    <strong>EZCutCNC — Machining Parameter Summary</strong>
+    ${now}<br>
+    ${opLabel}${mil && modeLabel !== opLabel ? ` · ${modeLabel}` : ""}
+  </div>
+  <div class="header-contact">
+    120 Technology Drive<br>
+    Gardiner, ME 04345<br>
+    (p) 207-588-7519<br>
+    sales@corecutterusa.com
+  </div>
+</div>
+
+<h2>Setup</h2>
+<table>
+  ${form.edp ? row("EDP #", form.edp) : ""}
+  ${row("Material", matLabel + (form.hardness_value ? ` — ${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : ""))}
+  ${row("Operation", opLabel)}
+  ${row("Tool Diameter", `${form.tool_dia?.toFixed(4)}" (${(form.tool_dia * 25.4).toFixed(2)} mm)`)}
+  ${row("Flute Count", `${form.flutes}-flute`)}
+  ${form.loc ? row("LOC (in)", form.loc.toFixed(4) + '"') : ""}
+  ${row("Corner Condition", form.corner_condition === "corner_radius" ? `CR ${form.corner_radius?.toFixed(4)}"` : form.corner_condition)}
+  ${row("Flute Geometry", form.geometry ?? "standard")}
+  ${form.stickout > 0 ? row("Tool Stickout (in)", `${form.stickout.toFixed(3)}"`) : ""}
+  ${row("Machine", `${form.machine_type?.toUpperCase()} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
+  ${row("Coolant", form.coolant?.replace(/_/g," "))}
+  ${(() => {
+    if (!drill && !ream) {
+      if (form.coating) return row("Tool Coating", form.coating);
+      const cr = getMillingCoatings(isoCategory);
+      return row("Recommended Coating(s)", cr.coatings.join(" / ") + (cr.note ? " — " + cr.note : ""));
+    } else {
+      const cr = getCoatingRec(isoCategory);
+      return row("Recommended Coating", cr.code + " — " + cr.desc);
+    }
+  })()}
+</table>
+
+<h2>Recommended Parameters</h2>
+${milSection}
+${entrySection}
+${engSection}
+${stabSection}
+
+<div class="disclaimer">
+  <strong>Disclaimer:</strong> These recommendations are generated by the Core Cutter Engineering Department and are intended as a starting point only. Actual speeds, feeds, and depths of cut should be adjusted based on machine condition, fixturing rigidity, material lot variation, coolant delivery, tool condition, and operator experience. Core Cutter LLC assumes no liability for damages arising from use of these parameters. Always start conservatively and adjust based on observed results. This is not a guarantee of performance.
+</div>
+<script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, "_blank");
+    if (!w) { alert("Please allow popups for this site to print the summary."); return; }
+    w.focus();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+  const engineering = result?.engineering ?? null;
+  const stability = result?.stability ?? null;
+  const drillResult  = result?.drilling   ?? null;
+  const reamResult   = result?.reaming    ?? null;
+  const threadResult = result?.thread_mill ?? null;
+  const chamferResult = result?.chamfer  ?? null;
+
+  // ── Machining Stability Index ─────────────────────────────────────────────
+  function calcStabilityIndex(
+    stab: typeof result.stability,
+    eng: typeof result.engineering,
+    cust: typeof result.customer,
+  ): { overall: number; defl: number; load: number; chip: number; ld: number } | null {
+    if (!stab && !eng && !cust) return null;
+    // Deflection score (0–100): 0% deflection = 100, 100% = 50, 175%+ = 0
+    const deflPct = stab?.deflection_pct ?? 0;
+    const deflScore = Math.max(0, Math.min(100, deflPct < 100
+      ? 100 - deflPct * 0.5
+      : 50 - (deflPct - 100) * (50 / 75)));
+    // Machine load score — only include when HP data is available
+    const hasMachineHp = (cust?.machine_hp ?? 0) > 0;
+    const loadPct = cust?.spindle_load_pct ?? 0;
+    const loadScore = hasMachineHp ? Math.max(0, Math.min(100, 100 - loadPct * 1.25)) : null;
+    // Chip thickness score: below min fpt*0.30 = bad
+    const ct = eng?.chip_thickness_in ?? null;
+    const minCt = (cust?.fpt ?? 0) * 0.30;
+    const chipScore = ct == null ? 75
+      : minCt <= 0 ? 75
+      : Math.max(0, Math.min(100, (ct / minCt) * 60));
+    // L/D score: ≤3 = 100, 4 = 88, 5 = 72, 6 = 54, 7 = 36, 8+ = 15
+    const ld = stab?.l_over_d ?? 3;
+    const ldScore = Math.max(10, Math.min(100, 100 - Math.max(0, ld - 3) * 18));
+    // Weight redistribution when machine HP not available
+    const overall = loadScore !== null
+      ? Math.round(deflScore * 0.30 + loadScore * 0.20 + chipScore * 0.25 + ldScore * 0.25)
+      : Math.round(deflScore * 0.375 + chipScore * 0.3125 + ldScore * 0.3125);
+    return {
+      overall,
+      defl:  Math.round(deflScore),
+      load:  loadScore !== null ? Math.round(loadScore) : -1,
+      chip:  Math.round(chipScore),
+      ld:    Math.round(ldScore),
+    };
+  }
+
+  const stabilityIndex = React.useMemo(() =>
+    calcStabilityIndex(result?.stability, result?.engineering, result?.customer),
+    [result]
+  );
+
+  const [camCopied, setCamCopied] = React.useState(false);
+  function copyCamParams() {
+    const L = (label: string, value: string) => `${(label + ":").padEnd(18)} ${value}`;
+    const DIV = "────────────────────────────────────────";
+    const cust   = result?.customer;
+    const eng    = result?.engineering;
+    const stab   = result?.stability;
+    const em     = result?.entry_moves;
+    const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "—";
+
+    const toolTypeLabel: Record<string, string> = {
+      endmill: "Solid Carbide Endmill", ballnose: "Ball Nose Endmill",
+      corner_radius: "Corner Radius Endmill", chamfer_mill: "Chamfer Mill",
+    };
+    const cornerLabel = form.corner_condition === "ball" ? "Ball Nose"
+      : form.corner_condition === "corner_radius" ? `Corner Radius  ${form.corner_radius?.toFixed(4)}"`
+      : "Square";
+    const geoLabel: Record<string, string> = {
+      standard: "Standard", chipbreaker: "Chipbreaker (CB)", truncated_rougher: "VXR Rougher",
+    };
+    const modeLabel: Record<string, string> = {
+      hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
+      face: "Planar Milling (Facing)", slot: "Slotting",
+      trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
+    };
+    const isRoughing = form.mode === "hem" || form.mode === "traditional" || form.mode === "trochoidal";
+
+    const lines: string[] = [];
+    lines.push("CORE CUTTER MACHINING ADVISOR");
+    lines.push(`Generated: ${new Date().toLocaleDateString()}`);
+    lines.push("════════════════════════════════════════");
+    lines.push("");
+
+    // ── TOOL ─────────────────────────────────
+    lines.push("TOOL");
+    lines.push(DIV);
+    lines.push(L("Brand",        "Core Cutter"));
+    lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
+    if (form.edp)        lines.push(L("EDP",          form.edp));
+    if (form.tool_series) lines.push(L("Series",       form.tool_series));
+    lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+    lines.push(L("Flutes",       String(form.flutes || "—")));
+    if (form.loc > 0)    lines.push(L("LOC",           `${form.loc.toFixed(4)}"`));
+    if (form.lbs > 0)    lines.push(L("LBS",           `${form.lbs.toFixed(4)}"`));
+    lines.push(L("Corner",       cornerLabel));
+    lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
+    if (form.coating)    lines.push(L("Coating",       form.coating));
+    lines.push("");
+
+    // ── MATERIAL ──────────────────────────────
+    lines.push("MATERIAL");
+    lines.push(DIV);
+    lines.push(L("Material",     matLabel));
+    if (form.hardness_value > 0) lines.push(L("Hardness", `${form.hardness_value} ${form.hardness_scale.toUpperCase()}`));
+    lines.push("");
+
+    if (drillResult) {
+      // ── HOLE SETUP ───────────────────────────────
+      lines.push("HOLE SETUP");
+      lines.push(DIV);
+      lines.push(L("Hole Type",     form.drill_blind ? "Blind" : "Through"));
+      if (form.drill_hole_depth > 0) {
+        const depthD = form.tool_dia > 0 ? (form.drill_hole_depth / form.tool_dia) : 0;
+        lines.push(L("Hole Depth",  `${form.drill_hole_depth.toFixed(4)}"  (${depthD.toFixed(1)}×D)`));
+      }
+      lines.push(L("Point Angle",   `${form.drill_point_angle}°`));
+      lines.push(L("Flute Geometry",{ standard: "Standard", med_helix: "Medium Helix", high_helix: "High Helix" }[form.drill_geometry as string] ?? form.drill_geometry));
+      if (form.coolant) lines.push(L("Coolant",       form.coolant));
+      if (drillResult.entry_dia != null && drillResult.largest_dia != null && drillResult.entry_dia !== drillResult.largest_dia) {
+        lines.push(L("Step Drill",  `Entry ø${drillResult.entry_dia.toFixed(4)}" · Largest ø${drillResult.largest_dia.toFixed(4)}"`));
+        lines.push(L("  SFM basis", `ø${drillResult.largest_dia.toFixed(4)}"  (largest dia)`));
+        lines.push(L("  Feed basis",`ø${drillResult.entry_dia.toFixed(4)}"  (entry/smallest dia)`));
+      }
+      lines.push("");
+
+      // ── SPEEDS & FEEDS ───────────────────────────
+      lines.push("SPEEDS & FEEDS");
+      lines.push(DIV);
+      lines.push(L("Spindle Speed", `${Math.round(drillResult.rpm).toLocaleString()} RPM`));
+      lines.push(L("SFM",           String(Math.round(drillResult.sfm ?? 0))));
+      lines.push(L("Feed Rate",     `${drillResult.ipm?.toFixed(3) ?? "—"} IPM`));
+      lines.push(L("Feed / Rev",    `${drillResult.ipr?.toFixed(5) ?? "—"} IPR`));
+      lines.push(L("MRR",           `${drillResult.mrr_in3_min?.toFixed(4) ?? "—"} in³/min`));
+      lines.push("");
+
+      // ── CYCLE ────────────────────────────────────
+      lines.push("DRILL CYCLE");
+      lines.push(DIV);
+      lines.push(L("Cycle",         drillResult.cycle ?? "—"));
+      if (drillResult.cycle_note) lines.push(`  ${drillResult.cycle_note}`);
+      lines.push(L("R Plane",       `${drillResult.r_plane_in?.toFixed(3) ?? "—"}"`));
+      if (drillResult.peck_depth_in != null)
+        lines.push(L("Q (Peck Depth)", `${drillResult.peck_depth_in.toFixed(4)}"`));
+      if (drillResult.peck_schedule && drillResult.peck_schedule.length > 0) {
+        lines.push("  Peck schedule:");
+        drillResult.peck_schedule.forEach((q: number, i: number) => {
+          const isLast = i === drillResult.peck_schedule!.length - 1;
+          lines.push(`    Peck ${i + 1}${isLast ? "+" : ""}:  ${q.toFixed(4)}"`);
+        });
+      }
+      lines.push("");
+
+      // ── PERFORMANCE ──────────────────────────────
+      lines.push("PERFORMANCE");
+      lines.push(DIV);
+      lines.push(L("HP Required",   `${drillResult.hp_required?.toFixed(2) ?? "—"} HP`));
+      lines.push(L("Thrust",        `${drillResult.thrust_lbf?.toFixed(1) ?? "—"} lbf`));
+      lines.push(L("Torque",        `${drillResult.torque_inlbf?.toFixed(2) ?? "—"} in·lbf`));
+
+      // ── NOTES ────────────────────────────────────
+      const drillNotes: string[] = [];
+      if (drillResult.geometry_tip)  drillNotes.push(drillResult.geometry_tip);
+      if (drillResult.chip_warning)  drillNotes.push(`⚠ Chip warning: ${drillResult.chip_warning}`);
+      if (drillResult.flute_warning) drillNotes.push(`⚠ ${drillResult.flute_warning}`);
+      if (drillNotes.length > 0) {
+        lines.push("");
+        lines.push("NOTES");
+        lines.push(DIV);
+        drillNotes.forEach(n => lines.push(`  ${n}`));
+      }
+
+    } else if (reamResult) {
+      // ── HOLE SETUP ───────────────────────────────
+      lines.push("HOLE SETUP");
+      lines.push(DIV);
+      lines.push(L("Hole Type",     form.ream_blind ? "Blind" : "Through"));
+      if (form.ream_hole_depth > 0) {
+        lines.push(L("Hole Depth",  `${form.ream_hole_depth.toFixed(4)}"  (${reamResult.depth_xd?.toFixed(1)}×D)`));
+      }
+      if (form.ream_pre_drill_dia > 0) lines.push(L("Pre-Drill Dia",`${form.ream_pre_drill_dia.toFixed(4)}"`));
+      if (form.existing_hole_dia  > 0) lines.push(L("Existing Hole", `${form.existing_hole_dia.toFixed(4)}"`));
+      lines.push(L("Coolant",       reamResult.coolant_identity ?? form.coolant ?? "—"));
+      lines.push(L("Lead Chamfer",  { standard: "Standard 45°", long_lead: "Long Lead 15–30°", short_lead: "Short Lead 60°+" }[form.ream_lead_chamfer as string] ?? form.ream_lead_chamfer));
+      if (reamResult.entry_dia != null && reamResult.largest_dia != null && reamResult.entry_dia !== reamResult.largest_dia) {
+        lines.push(L("Step Reamer", `Entry ø${reamResult.entry_dia.toFixed(4)}" · Largest ø${reamResult.largest_dia.toFixed(4)}"`));
+      }
+      lines.push("");
+
+      // ── SPEEDS & FEEDS ───────────────────────────
+      lines.push("SPEEDS & FEEDS");
+      lines.push(DIV);
+      lines.push(L("Spindle Speed", `${Math.round(reamResult.rpm).toLocaleString()} RPM`));
+      lines.push(L("SFM",           String(Math.round(reamResult.sfm ?? 0))));
+      lines.push(L("Feed Rate",     `${reamResult.ipm?.toFixed(3) ?? "—"} IPM`));
+      lines.push(L("Feed / Rev",    `${reamResult.ipr?.toFixed(5) ?? "—"} IPR`));
+      lines.push("");
+
+      // ── STOCK ────────────────────────────────────
+      if (reamResult.stock_per_side_in != null || reamResult.stock_status) {
+        lines.push("STOCK CONDITION");
+        lines.push(DIV);
+        if (reamResult.stock_per_side_in != null)
+          lines.push(L("Stock / Side",  `${reamResult.stock_per_side_in.toFixed(4)}"  (${reamResult.stock_total_in?.toFixed(4)}" total diametral)`));
+        lines.push(L("Ideal Range",   `${reamResult.stock_min_in?.toFixed(4)}"–${reamResult.stock_max_in?.toFixed(4)}"  (target ${reamResult.stock_ideal_in?.toFixed(4)}")`));
+        if (reamResult.stock_status)   lines.push(L("Status",         reamResult.stock_status.toUpperCase()));
+        if (reamResult.stock_warning)  lines.push(`  ⚠ ${reamResult.stock_warning}`);
+        lines.push("");
+      }
+
+      // ── PERFORMANCE ──────────────────────────────
+      lines.push("PERFORMANCE");
+      lines.push(DIV);
+      lines.push(L("HP Required",   `${reamResult.hp_required?.toFixed(2) ?? "—"} HP`));
+      lines.push(L("Depth / D",     `${reamResult.depth_xd?.toFixed(1) ?? "—"}×D`));
+      if (reamResult.depth_note) lines.push(`  ${reamResult.depth_note}`);
+      lines.push("");
+
+      // ── QUALITY PREDICTION ───────────────────────
+      if (reamResult.finish_risk || reamResult.straightness_risk) {
+        lines.push("QUALITY PREDICTION");
+        lines.push(DIV);
+        if (reamResult.finish_risk) {
+          lines.push(L("Surface Finish",  reamResult.finish_risk.toUpperCase()));
+          if (reamResult.finish_ra_base_min != null)
+            lines.push(L("Expected Ra",   `${reamResult.finish_ra_base_min}–${reamResult.finish_ra_base_max} μin`));
+          (reamResult.finish_notes ?? []).forEach((n: string) => lines.push(`  ${n}`));
+        }
+        if (reamResult.straightness_risk) {
+          lines.push(L("Straightness",    reamResult.straightness_risk.toUpperCase()));
+          (reamResult.straightness_notes ?? []).forEach((n: string) => lines.push(`  ${n}`));
+        }
+        lines.push("");
+      }
+
+      // ── TOOL GUIDANCE ────────────────────────────
+      lines.push("TOOL GUIDANCE");
+      lines.push(DIV);
+      if (reamResult.helix_rec)        lines.push(L("Helix Direction",  reamResult.helix_rec));
+      if (reamResult.coating_rec)      lines.push(L("Coating",          reamResult.coating_rec));
+      if (reamResult.iso_category)     lines.push(L("ISO Category",     `ISO ${reamResult.iso_category}`));
+      if (reamResult.tool_life_lo != null && reamResult.tool_life_hi != null)
+        lines.push(L("Tool Life",       `${reamResult.tool_life_lo}–${reamResult.tool_life_hi} holes typical`));
+      if (reamResult.helix_note)       lines.push(`  ${reamResult.helix_note}`);
+      if (reamResult.helix_angle_note) lines.push(`  ${reamResult.helix_angle_note}`);
+      (reamResult.helix_warnings ?? []).forEach((w: string) => lines.push(`  ⚠ ${w}`));
+      if (reamResult.confidence && reamResult.confidence !== "green") {
+        lines.push("");
+        lines.push(L("Confidence",      reamResult.confidence.toUpperCase()));
+        (reamResult.risk_flags ?? []).forEach((f: string) => lines.push(`  • ${f}`));
+      }
+
+    } else if (threadResult) {
+      lines.push("THREAD MILLING");
+      lines.push(DIV);
+      lines.push(L("Spindle Speed", `${Math.round(threadResult.rpm).toLocaleString()} RPM`));
+      lines.push(L("SFM",           String(Math.round(threadResult.sfm ?? 0))));
+      lines.push(L("Feed Rate",     `${threadResult.feed_ipm?.toFixed(2) ?? "—"} IPM`));
+      lines.push(L("FPT",           `${threadResult.fpt?.toFixed(6) ?? "—"}"`));
+      lines.push(L("Pitch",         `${threadResult.pitch_in?.toFixed(5) ?? "—"}"`));
+      lines.push(L("Thread Depth",  `${threadResult.thread_depth_in?.toFixed(5) ?? "—"}"`));
+      lines.push("");
+      // ── RADIAL PASS STRATEGY ─────────────────────
+      {
+        const n = threadResult.radial_passes ?? 1;
+        const docEa = threadResult.doc_per_pass_in ?? 0;
+        const perPassDocs: number[] = (threadResult.pass_docs && threadResult.pass_docs.length === n)
+          ? threadResult.pass_docs
+          : Array(n).fill(docEa);
+        const pitch = threadResult.pitch_in ?? 0;
+        const reasons: string[] = [];
+        if (pitch >= 0.100)       reasons.push("very coarse pitch (TPI ≤ 10)");
+        else if (pitch >= 0.0625) reasons.push("coarse pitch (TPI ≤ 16)");
+        const matLow = form.material.toLowerCase();
+        const isInconelTi = ["inconel","titanium","hastelloy","waspaloy","monel","mp35n","hitemp"].some(k => matLow.includes(k));
+        const isStainless  = matLow.includes("stainless");
+        if (isInconelTi)   reasons.push("Inconel / titanium — 3 passes minimum for tool life");
+        else if (isStainless) reasons.push("stainless — work-hardens, needs light finishing cut");
+        if (form.thread_neck_length > 0) reasons.push("necked tool — reduced rigidity");
+        lines.push(`RADIAL PASS STRATEGY  (${n} pass${n > 1 ? "es" : ""}${threadResult.spring_pass ? " + spring" : ""})`);
+        lines.push(DIV);
+        if (reasons.length > 0) lines.push(`  Why: ${reasons.join(", ")}.`);
+        for (let i = 0; i < n; i++) {
+          const label = n === 1 ? "Pass 1 (single-pass finish)" : i < n - 1 ? `Pass ${i + 1} (roughing)` : `Pass ${n} (finish)`;
+          lines.push(L(label, `${perPassDocs[i].toFixed(5)}"`));
+        }
+        if (threadResult.spring_pass) {
+          lines.push(L(`Spring pass (repeat pass ${n} at same offset)`, `${docEa.toFixed(5)}"`));
+        }
+        if (threadResult.finish_pass_frac != null && n > 1) {
+          lines.push(`  Finish pass = ${Math.round(threadResult.finish_pass_frac * 100)}% of thread depth`);
+        }
+      }
+      lines.push(L("Deflection",    `${threadResult.deflection_in?.toFixed(5) ?? "—"}"`));
+
+    } else if (cust?.rpm) {
+      const dia    = form.tool_dia || 0.5;
+      const wocIn  = cust.woc_in ?? (form.woc_pct && dia ? (form.woc_pct / 100) * dia : null);
+      const docIn  = cust.doc_in ?? (form.doc_xd && dia ? form.doc_xd * dia : null);
+      const wocPct = wocIn != null && dia > 0 ? (wocIn / dia) * 100 : form.woc_pct;
+      const docXd  = docIn != null && dia > 0 ? docIn / dia : form.doc_xd;
+
+      // ── STRATEGY ────────────────────────────
+      lines.push("STRATEGY");
+      lines.push(DIV);
+      lines.push(L("Operation",    modeLabel[form.mode] ?? form.mode));
+      if (wocIn != null) lines.push(L("WOC (Radial)",  `${wocIn.toFixed(4)}"  (${wocPct.toFixed(1)}% Ø)`));
+      if (docIn != null) lines.push(L("DOC (Axial)",   `${docIn.toFixed(4)}"  (${docXd.toFixed(2)}×D)`));
+      if (wocPct)        lines.push(L("Optimal Load",  `${wocPct.toFixed(1)}%`));
+      if (isRoughing)    lines.push(L("Stock to Leave","0.010\" radial  /  0.005\" axial  (suggested)"));
+      lines.push("");
+
+      // ── SPEEDS & FEEDS ───────────────────────
+      lines.push("SPEEDS & FEEDS");
+      lines.push(DIV);
+      lines.push(L("Spindle Speed",  `${Math.round(cust.rpm).toLocaleString()} RPM`));
+      lines.push(L("SFM",            String(Math.round(cust.sfm ?? 0))));
+      lines.push(L("Feed Rate",      `${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
+      if (cust.fpt != null)     lines.push(L("Chipload (FPT)", `${cust.fpt.toFixed(5)}"`));
+      if (cust.adj_fpt != null && cust.fpt != null && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005) {
+        lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
+        lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
+      }
+      if (eng?.chip_thickness_in != null) {
+        const ct = eng.chip_thickness_in;
+        const minCt = (cust.fpt ?? ct) * 0.30;
+        const ctStatus = ct >= minCt ? "✓ Cutting" : "⚠ Near rubbing threshold";
+        lines.push(L("Chip Thickness",  `${ct.toFixed(5)}"  (min ~${minCt.toFixed(5)}")  ${ctStatus}`));
+      }
+      if (cust.peripheral_feed_ipm != null)
+        lines.push(L("Peripheral Feed",`${cust.peripheral_feed_ipm.toFixed(2)} IPM`));
+      lines.push("");
+
+      // ── ENTRY MOVES ─────────────────────────
+      if (em) {
+        lines.push("ENTRY MOVES");
+        lines.push(DIV);
+        lines.push(L("Entry Type",    "Helical / Ramp"));
+        lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
+        lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
+        lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
+        lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
+        lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
+        lines.push("");
+      }
+
+      // ── PERFORMANCE ─────────────────────────
+      lines.push("PERFORMANCE");
+      lines.push(DIV);
+      if (stabilityIndex) {
+        const si = stabilityIndex;
+        const siLabel = si.overall >= 80 ? "✓ Excellent" : si.overall >= 65 ? "✓ Good" : si.overall >= 50 ? "⚠ Moderate" : si.overall >= 35 ? "⚠ Caution" : "⚠ High Risk";
+        lines.push(L("Stability Index", `${si.overall} / 100  ${siLabel}`));
+        lines.push(L("  └ Deflection",  `${si.defl} / 100`));
+        lines.push(L("  └ Machine Load",`${si.load} / 100`));
+        lines.push(L("  └ Chip Quality",`${si.chip} / 100`));
+        lines.push(L("  └ L/D Ratio",   `${si.ld} / 100`));
+        lines.push("");
+      }
+      lines.push(L("MRR",           `${(cust.mrr_in3_min ?? 0).toFixed(3)} in³/min`));
+      if (cust.hp_required != null) lines.push(L("HP Required",  `${cust.hp_required.toFixed(2)} HP`));
+      if (cust.machine_hp && cust.hp_util_pct != null)
+        lines.push(L("Spindle Load",  `${(cust.spindle_load_pct ?? 0).toFixed(0)}%  (of ${cust.machine_hp.toFixed(0)} HP avail)`));
+      if (eng?.force_lbf != null)   lines.push(L("Cutting Force", `${eng.force_lbf.toFixed(1)} lbf`));
+      if (eng?.torque_inlbf != null) lines.push(L("Torque",        `${eng.torque_inlbf.toFixed(2)} in·lbf`));
+      if (stab) {
+        const stable = stab.deflection_pct < 100;
+        lines.push(L("Deflection",   `${stab.deflection_in.toFixed(5)}"  (${stab.deflection_pct.toFixed(0)}% of limit)  ${stable ? "✓ Stable" : "⚠ Chatter Risk"}`));
+        lines.push(L("Stickout",     `${stab.stickout_in.toFixed(3)}"  (L/D ${stab.l_over_d.toFixed(1)}×D)  ${stab.l_over_d <= 4 ? "✓ Good" : stab.l_over_d <= 6 ? "⚠ Moderate" : "⚠ High — reduce if possible"}`));
+      }
+
+      // Chip evacuation advisory
+      const chipEvacRisk = form.mode === "slot" ? "⚠ Full-width slot — ensure flood coolant or air blast to clear chips"
+        : (form.woc_pct ?? 0) > 50 ? "⚠ High WOC — coolant/air blast critical for chip clearance"
+        : form.flutes >= 7 ? "⚠ High flute count — chip clearance critical; use adequate coolant pressure"
+        : "✓ OK — standard flood coolant or air blast";
+      lines.push(L("Chip Evacuation", chipEvacRisk));
+
+      // Engine advisory notes
+      if (cust.status && cust.status !== "ok") lines.push(L("Status", cust.status));
+      if (cust.risk)    lines.push(L("Risk Flag",   cust.risk));
+      if (cust.notes?.length) {
+        lines.push("");
+        lines.push("ADVISOR NOTES");
+        lines.push(DIV);
+        cust.notes.forEach((n, i) => lines.push(`  ${i + 1}. ${n}`));
+      }
+    }
+
+    if (lines.filter(l => l.startsWith("TOOL")).length === 0) return;
+    lines.push("");
+    lines.push("════════════════════════════════════════");
+    lines.push("Core Cutter Tool  |  corecuttertool.com");
+    navigator.clipboard.writeText(lines.join("\n")).then(() => {
+      setCamCopied(true);
+      setTimeout(() => setCamCopied(false), 2000);
+    });
+  }
+
+  // Optional: gate engineering even if toggle is on but no data returned
+
+  // ── Tool Finder → apply SKU and switch to milling ────────────────────────
+  function handleToolFinderSelect(tool: any, extras?: { mode?: string; isoMat?: string }) {
+    applySkuToForm(tool as any);
+    setOperation("milling");
+    mentor.reset();
+    if (extras?.mode) setForm(p => ({ ...p, mode: extras.mode as any }));
+    if (extras?.isoMat) {
+      setIsoCategory(extras.isoMat.toUpperCase() as IsoCategory);
+      setForm(p => ({ ...p, material: "" }));
+    }
+  }
+
+  // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
+  const ALL_OPS = ["toolfinder","feedmilling","milling","drilling","reaming","threadmilling"] as const;
+  const OP_LABELS: Record<string, string> = {
+    toolfinder: "Tool Finder", feedmilling: "Calculators",
+    milling: "Milling", drilling: "Drilling", reaming: "Reaming", threadmilling: "Thread Milling",
+  };
+  function SharedTabBar() {
+    return (
+      <div className="flex flex-wrap gap-2 mb-6">
+        {ALL_OPS.map((op) => (
+          <button key={op} type="button"
+            onClick={() => { setOperation(op); mentor.reset(); }}
+            className="rounded px-3 py-1.5 text-xs font-semibold border transition-all"
+            style={{
+              backgroundColor: operation === op ? "#6366f1" : "transparent",
+              borderColor: "#6366f1",
+              color: operation === op ? "#fff" : "#6366f1",
+            }}
+          >
+            {OP_LABELS[op]}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-6xl p-3 sm:p-4">
+      {/* App header */}
+      <div className="flex items-center justify-end mb-4 pb-3 border-b border-white/10">
+        <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
+      </div>
+
+      {operation === "toolfinder" && (
+        <div>
+          <SharedTabBar />
+          <ToolFinder onSelectTool={handleToolFinderSelect} />
+        </div>
+      )}
+      {operation === "feedmilling" && (
+        <div>
+          <SharedTabBar />
+          <Calculators />
+        </div>
+      )}
+      {operation !== "feedmilling" && operation !== "toolfinder" && <div className="grid grid-cols-1 md:grid-cols-2 md:gap-5 gap-4 items-start">
+
+      {/* LEFT — INPUT CARD */}
+      <Card className="rounded-2xl">
+        <CardHeader className="pt-2 pb-0">
+          <div className="relative flex justify-center">
+            <img src="/vectorink-background-removed.png" alt="EZCutCNC" className="h-52 w-auto -mt-4 -mb-12" />
+            <div className="absolute right-0 top-0 flex rounded-md border overflow-hidden text-xs font-semibold">
+              {(["imperial", "metric"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setUnits(u)}
+                  className="px-2.5 py-1 transition-colors"
+                  style={{
+                    backgroundColor: units === u ? "#6366f1" : "transparent",
+                    color: units === u ? "#fff" : undefined,
+                  }}
+                >
+                  {u === "imperial" ? "IN" : "MM"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4 pt-0">
+          {/* Operation / Process */}
+          <div className="flex items-center gap-3 my-1">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Operation / Process</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {([
+                { op: "toolfinder",   label: "Tool Finder",   icon: "🔍" },
+                { op: "feedmilling",  label: "Calculators",   icon: "⊞" },
+                { op: "milling",      label: "Milling",       icon: "⟳" },
+                { op: "drilling",     label: "Drilling",      icon: "↓" },
+                { op: "reaming",      label: "Reaming",       icon: "◎" },
+                { op: "threadmilling",label: "Thread Milling",icon: "⌇" },
+              ] as const).map(({ op, label, icon }) => {
+                const active = operation === op;
+                const soon = false;
+                return (
+                  <button
+                    key={op}
+                    type="button"
+                    disabled={soon}
+                    onClick={() => {
+                      setOperation(op);
+                      mentor.reset();
+                      setForm((p) => ({
+                        ...p,
+                        operation: (op === "milling" || op === "drilling" || op === "reaming" || op === "threadmilling") ? op as any : "milling",
+                        ...(op === "milling" ? { mode: "" } : {}),
+                      }));
+                    }}
+                    className="rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all disabled:opacity-40 flex-1"
+                    style={{
+                      backgroundColor: active ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1",
+                      color: active ? "#fff" : "#6366f1",
+                    }}
+                  >
+                    <span>{label}</span>
+                    <span className="text-lg leading-none">{icon}</span>
+                  </button>
+                );
+              })}
+
+            </div>
+
+            {operation === "milling" && form.tool_type !== "chamfer_mill" && (
+              <select
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                aria-label="Milling process"
+                value={form.mode}
+                onChange={(e) => {
+                  const mode = e.target.value as typeof form.mode;
+                  const dia = form.tool_dia || 0.5;
+                  const cr = form.corner_radius || 0;
+                  // Compute fresh presets for the NEW mode (dynPresets still has old mode at this point)
+                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc);
+                  const wp = freshPresets.woc;
+                  const dp = freshPresets.doc;
+
+                  // For face mode, auto-fill stepover from formula: (dia - 2×cr) × 0.75
+                  const faceStepover = mode === "face" ? Math.max(0, (dia - 2 * cr) * 0.75) : null;
+                  const faceWocPct   = faceStepover !== null && dia > 0 ? (faceStepover / dia) * 100 : wp.med;
+
+                  setForm((p) => ({
+                    ...p,
+                    mode,
+                    ...(mode === "slot" ? { woc_pct: 100 } : mode === "face" ? { woc_pct: faceWocPct } : { woc_pct: wp.med }),
+                    doc_xd: dp.med,
+                  }));
+                  if (mode === "slot") {
+                    setWocText(dia ? dia.toFixed(4) : "");
+                    setWocPreset(null);
+                  } else if (mode === "face" && faceStepover !== null) {
+                    setWocText(faceStepover.toFixed(4));
+                    setWocPreset(null);
+                  } else {
+                    setWocText(((wp.med / 100) * dia).toFixed(4));
+                    setWocPreset("med");
+                  }
+                  setDocText((dp.med * dia).toFixed(3));
+                  setDocPreset("med");
+                }}
+              >
+                <option value="" disabled>— Select Process —</option>
+                <option value="circ_interp">Circular Interpolation</option>
+                <option value="finish">Finishing</option>
+                <option value="face">Planar Milling (Facing)</option>
+                <option value="hem">HEM Roughing</option>
+                <option value="slot">Slotting</option>
+                <option value="traditional">Traditional Roughing</option>
+                <option value="trochoidal">Trochoidal</option>
+              </select>
+            )}
+
+            {/* Circular Interpolation hole dimensions */}
+            {form.mode === "circ_interp" && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Diameter of the existing pre-drilled or pre-bored hole the tool will enter. Must be larger than the tool diameter.">{UL("Existing Hole Ø (in)", "Existing Hole Ø (mm)")}</FieldLabel>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 0.750"
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
+                    value={existingHoleText}
+                    onChange={(e) => setExistingHoleText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(existingHoleText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const val = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, existing_hole_dia: val }));
+                        setExistingHoleText(metric ? n.toFixed(2) : val.toFixed(3));
+                      } else {
+                        setExistingHoleText(form.existing_hole_dia > 0 ? form.existing_hole_dia.toFixed(3) : "");
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Final target hole diameter after circular interpolation. The radial wall removed per pass = (Target − Existing) / 2.">{UL("Target Hole Ø (in)", "Target Hole Ø (mm)")}</FieldLabel>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 1.250"
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
+                    value={targetHoleText}
+                    onChange={(e) => setTargetHoleText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(targetHoleText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const val = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, target_hole_dia: val }));
+                        setTargetHoleText(metric ? n.toFixed(2) : val.toFixed(3));
+                      } else {
+                        setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(3) : "");
+                      }
+                    }}
+                  />
+                </div>
+                {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && (
+                  <div className="col-span-2 text-xs text-muted-foreground">
+                    Radial wall (a<sub>e</sub>): <strong>{(((form.target_hole_dia - form.existing_hole_dia) / 2)).toFixed(3)}"</strong>
+                    {" · "}Feed correction: <strong>×{(form.tool_dia / form.target_hole_dia).toFixed(2)}</strong> (programmed ÷ peripheral)
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Material */}
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Material</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {ISO_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.iso}
+                  type="button"
+                  onClick={() => {
+                    setIsoCategory(cat.iso);
+                    const first = ISO_SUBCATEGORIES.find((s) => s.iso === cat.iso);
+                    if (first) setForm((p) => ({
+                      ...p,
+                      material: first.key,
+                      hardness_value: first.hardness.value,
+                      hardness_scale: first.hardness.scale,
+                    }));
+                  }}
+                  className="rounded px-3 py-1 text-xs font-bold border transition-all"
+                  style={{
+                    backgroundColor: isoCategory === cat.iso ? cat.color : "transparent",
+                    borderColor: cat.color,
+                    color: isoCategory === cat.iso ? "#111" : cat.color,
+                  }}
+                >
+                  {cat.iso} <span className="font-normal opacity-80">{cat.label}</span>
+                </button>
+              ))}
+              <div className="flex items-center gap-1.5 flex-1 min-w-36 pl-2 border-l border-zinc-600">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 shrink-0">Grade</span>
+              <select
+                className="flex-1 rounded-md border border-orange-500/40 bg-background px-2 py-1 text-xs text-orange-200"
+                value={form.material}
+                onChange={(e) => {
+                  const sub = ISO_SUBCATEGORIES.find((s) => s.key === e.target.value);
+                  setForm((p) => ({
+                    ...p,
+                    material: e.target.value,
+                    ...(sub ? { hardness_value: sub.hardness.value, hardness_scale: sub.hardness.scale } : {}),
+                  }));
+                }}
+              >
+                {(!form.material || !ISO_SUBCATEGORIES.find(s => s.key === form.material && s.iso === isoCategory)) && (
+                  <option value="" disabled>— Please select actual material subgroup —</option>
+                )}
+                {ISO_SUBCATEGORIES.filter((s) => s.iso === isoCategory).map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
+                ))}
+              </select>
+              </div>
+            </div>
+
+            {/* Hardness — ferrous only (P, M, K, H, S) */}
+            {["P","M","K","H","S"].includes(isoCategory) && (() => {
+              const hRange = MATERIAL_HARDNESS_RANGE[form.material];
+              const hVal = form.hardness_value;
+              const wrongScale = hRange && hVal > 0 && form.hardness_scale !== hRange.scale;
+              const outOfRange = hRange && hVal > 0 && !wrongScale && (hVal < hRange.min || hVal > hRange.max);
+              return (
+                <>
+                  <div className="mt-3 flex items-center gap-2">
+                    <FieldLabel hint="Material hardness. HRC (Rockwell C) for hardened/alloy steels; HRB (Rockwell B) for softer steels and stainless. Affects SFM, cutting force, and torque.">
+                      Hardness
+                    </FieldLabel>
+                    <div className="flex rounded-md border overflow-hidden text-xs font-semibold ml-1">
+                      {(["hrc","hrb"] as const).map((scale) => (
+                        <button
+                          key={scale}
+                          type="button"
+                          onClick={() => setForm((p) => ({ ...p, hardness_scale: scale }))}
+                          className="px-2 py-1 transition-colors"
+                          style={{
+                            backgroundColor: form.hardness_scale === scale ? "#6366f1" : "transparent",
+                            color: form.hardness_scale === scale ? "#fff" : undefined,
+                          }}
+                        >
+                          {scale.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={form.hardness_scale === "hrc" ? 70 : 110}
+                      step={1}
+                      placeholder={form.hardness_scale === "hrc" ? "e.g. 32" : "e.g. 95"}
+                      className={`no-spinners w-24 text-sm${(wrongScale || outOfRange) ? " border-amber-500" : ""}`}
+                      value={form.hardness_value || ""}
+                      onChange={(e) => setForm((p) => ({ ...p, hardness_value: Number(e.target.value) || 0 }))}
+                    />
+                    <span className="text-xs text-muted-foreground">{form.hardness_scale.toUpperCase()}</span>
+                  </div>
+                  {wrongScale && hRange && (
+                    <p className="mt-1 text-xs text-amber-500 leading-snug px-1">
+                      ⚠ This material is typically measured in {hRange.scale.toUpperCase()} ({hRange.min}–{hRange.max} {hRange.scale.toUpperCase()}). Switching scales may give unexpected results.
+                    </p>
+                  )}
+                  {outOfRange && hRange && (
+                    <p className="mt-1 text-xs text-amber-500 leading-snug px-1">
+                      ⚠ {hRange.note}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Material note */}
+          {MATERIAL_NOTES[form.material] && (
+            <p className="mt-2 text-xs text-muted-foreground italic leading-snug px-1">
+              {MATERIAL_NOTES[form.material]}
+            </p>
+          )}
+
+          {/* Hole Details — drilling only, shown BEFORE tool geometry so point angle can be recommended */}
+          {operation === "drilling" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <FieldLabel hint={form.drill_steps > 0 ? `How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. For step drills, this must be greater than the last step length (${(Math.max(...form.drill_step_lengths.slice(0, form.drill_steps).filter(l => l > 0)) || 0).toFixed(3)}") so all diameters fully engage. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle.` : "How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle."}>Hole Depth (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 1.25"
+                value={drillHoleDepthText}
+                onChange={(e) => setDrillHoleDepthText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(drillHoleDepthText);
+                  if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, drill_hole_depth: n })); setDrillHoleDepthText(n.toFixed(3)); }
+                  else setDrillHoleDepthText(form.drill_hole_depth > 0 ? form.drill_hole_depth.toFixed(3) : "");
+                }}
+              />
+              {(() => {
+                if (form.drill_steps < 1) return null;
+                const maxStepLen = Math.max(...form.drill_step_lengths.slice(0, form.drill_steps).filter(l => l > 0));
+                if (!isFinite(maxStepLen) || maxStepLen <= 0) return null;
+                if (form.drill_hole_depth > 0 && form.drill_hole_depth <= maxStepLen) {
+                  return (
+                    <p className="text-xs text-amber-400 mt-1">
+                      ⚠ Hole depth must exceed step {form.drill_steps} length ({maxStepLen.toFixed(3)}") for all steps to engage.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Blind holes may need a dwell (G82) at the bottom for clean finish. Through holes can use a standard drill cycle.">Hole Type</FieldLabel>
+              <div className="flex gap-2 pt-1">
+                {([{ val: false, label: "Through" }, { val: true, label: "Blind" }] as const).map(({ val, label }) => (
+                  <button key={label} type="button"
+                    onClick={() => setForm((p) => ({ ...p, drill_blind: val }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.drill_blind === val ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.drill_blind === val ? "#fff" : "#6366f1",
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          </>)}
+
+          {/* Tool Geometry — adapts per operation */}
+          {operation !== "threadmilling" && (
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          )}
+
+          {operation === "milling" ? (<>
+          {/* Tool Type toggle — Endmill vs Chamfer Mill */}
+          <div className="flex gap-2 mb-4">
+            {([
+              { key: "endmill",      label: "Endmill" },
+              { key: "chamfer_mill", label: "Chamfer Mill" },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, tool_type: key, ...(key === "endmill" ? { corner_condition: "square", tool_type: "endmill" } : { corner_condition: "square" }) }))}
+                className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                style={{
+                  backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#6366f1" : "transparent",
+                  borderColor: "#6366f1",
+                  color: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#fff" : "#6366f1",
+                }}
+              >{label}</button>
+            ))}
+          </div>
+
+          {/* EDP# / SKU lookup */}
+          <div className="mb-4 relative">
+            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields. Leave blank for manual entry — the form works either way.">EDP# (this will auto-fill tool specifications)</FieldLabel>
+            <div className="relative mt-1.5">
+              <Input
+                type="text"
+                className="no-spinners pr-8"
+                placeholder={form.tool_type === "chamfer_mill" ? "e.g. H09055" : "e.g. 505221"}
+                value={edpText}
+                onChange={(e) => { if (skuLocked) clearSku(); setEdpText(e.target.value); }}
+                onFocus={() => { if (skuResults.length > 0 && !skuLocked) setSkuDropdownOpen(true); }}
+                onBlur={() => setTimeout(() => setSkuDropdownOpen(false), 150)}
+              />
+              {skuLocked && (
+                <button
+                  type="button"
+                  title="Clear EDP# and unlock fields"
+                  onClick={clearSku}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-500 hover:text-orange-700 text-sm leading-none"
+                >✕</button>
+              )}
+            </div>
+            {skuLocked && (
+              <p className="mt-1 text-[11px] text-orange-400">
+                Auto-filled from {edpText} — fields populated from catalog.{" "}
+                <button type="button" onClick={clearSku} className="underline hover:text-orange-600">Clear</button>
+              </p>
+            )}
+            {skuDropdownOpen && skuResults.length > 0 && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-52 overflow-y-auto">
+                {skuResults.map((s) => (
+                  <button
+                    key={s.EDP ?? s.edp}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-baseline gap-2 overflow-hidden"
+                    onMouseDown={(e) => { e.preventDefault(); applySkuToForm(s); }}
+                  >
+                    <span className="font-semibold">{s.EDP ?? s.edp}</span>
+                    <span className="text-muted-foreground text-xs whitespace-nowrap truncate">
+                      {s.flutes}fl · {Number(s.cutting_diameter_in).toFixed(4)}" · {Number(s.loc_in).toFixed(3)}" LOC{s.oal_in ? ` · ${Number(s.oal_in).toFixed(3)}" OAL` : ""}
+                      {s.series ? ` · ${s.series}` : ""}
+                      {" · "}{(() => {
+                        const cc = String(s.corner_condition ?? "square").toLowerCase();
+                        if (cc === "ball") return "Ball";
+                        const cr = Number(s.corner_condition);
+                        if (!isNaN(cr) && cr > 0) return `CR ${cr.toFixed(4)}"`;
+                        return "Square";
+                      })()}
+                      {s.coating ? <span className="ml-1 text-orange-400 font-medium">· {s.coating}</span> : null}
+                      {s.geometry === "chipbreaker" ? <span className="ml-1 text-sky-400 font-medium">· Chipbreaker</span> : null}
+                      {s.geometry === "truncated_rougher" ? <span className="ml-1 text-sky-400 font-medium">· VXR Rougher</span> : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-3" style={{ gridTemplateColumns: form.tool_type === "chamfer_mill" ? "4rem 1fr 1fr" : "4rem 1fr 1fr 1fr" }}>
+            <div className="space-y-2">
+              <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
+              <Input
+                type="number"
+                step="1"
+                className="no-spinners"
+                value={form.flutes || ""}
+                onChange={onNum("flutes")}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia (in)", "Cut Dia (mm)")}</FieldLabel>
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="no-spinners"
+                value={toolDiaText}
+                onChange={(e) => setToolDiaText(e.target.value)}
+                onFocus={() => {
+                  if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3));
+                }}
+                onBlur={() => {
+                  const n = parseDim(toolDiaText);
+                  if (Number.isFinite(n) && n > 0) {
+                    const stored = metric ? n / 25.4 : n;
+                    setForm((p) => ({ ...p, tool_dia: stored }));
+                    setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                  } else {
+                    setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3)) : "");
+                  }
+                }}
+              />
+            </div>
+            {<div className="space-y-2">
+              <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC (in)", "LOC (mm)")}</FieldLabel>
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="no-spinners"
+                value={locText}
+                onChange={(e) => setLocText(e.target.value)}
+                onFocus={() => {
+                  if (form.loc) setLocText(metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3));
+                }}
+                onBlur={() => {
+                  const n = parseDim(locText);
+                  if (Number.isFinite(n) && n > 0) {
+                    const stored = metric ? n / 25.4 : n;
+                    setForm((p) => ({ ...p, loc: stored }));
+                    setLocText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                  } else {
+                    setLocText(form.loc ? (metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3)) : "");
+                  }
+                }}
+              />
+            </div>}
+            {form.tool_type !== "chamfer_mill" && <div className="space-y-2">
+              <FieldLabel hint={'Length Below Shank — refers to necked tooling indicating the whole reach from the base of the shank to the tool tip (complete drop depth without interference). LOC is encompassed inside LBS measurement, rather than being supplementary to it. Set to "0" for conventional tools.'}>{UL("LBS (in)", "LBS (mm)")}</FieldLabel>
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="no-spinners"
+                value={lbsText}
+                onChange={(e) => setLbsText(e.target.value)}
+                onFocus={() => {
+                  if (form.lbs) setLbsText(metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3));
+                }}
+                onBlur={() => {
+                  const n = parseDim(lbsText);
+                  if (Number.isFinite(n) && n > 0) {
+                    const stored = metric ? n / 25.4 : n;
+                    setForm((p) => ({ ...p, lbs: stored }));
+                    setLbsText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                  } else if (!lbsText.trim() || lbsText.trim() === "0") {
+                    setForm((p) => ({ ...p, lbs: 0 }));
+                    setLbsText("");
+                  } else {
+                    setLbsText(form.lbs ? (metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3)) : "");
+                  }
+                }}
+              />
+            </div>}
+          </div>
+
+          {/* Chamfer Mill specific fields */}
+          {form.tool_type === "chamfer_mill" && (
+            <div className="space-y-4 mt-2">
+              <div className="space-y-1.5">
+                <FieldLabel hint="CMH series: high-performance with shear angle and edge prep — runs significantly higher chip load. CMS series: straight-flute, center-cutting — lower chip load (~65% of CMH).">Series</FieldLabel>
+                <div className="flex gap-1.5">
+                  {(["CMH", "CMS"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, chamfer_series: s }))}
+                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.chamfer_series === s ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1",
+                        color: form.chamfer_series === s ? "#fff" : "#6366f1",
+                      }}
+                    >{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel hint="Included angle of the chamfer mill (tip angle). CMS series: 60°, 90°, 120°. CMH series: 60°, 82°, 90°, 100°, 120°.">Chamfer Angle</FieldLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {([60, 82, 90, 100, 120] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, chamfer_angle: a }))}
+                      className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.chamfer_angle === a ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1",
+                        color: form.chamfer_angle === a ? "#fff" : "#6366f1",
+                      }}
+                    >{a}°</button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Tip diameter (flat at the very tip). CMH series has a tip flat — enter from catalog. CMS series is center-cutting with a point, leave at 0.">Tip Dia (in)</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      className="no-spinners"
+                      placeholder="0 = point (CMS)"
+                      value={chamferTipDiaText}
+                      onChange={(e) => setChamferTipDiaText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(chamferTipDiaText);
+                        if (Number.isFinite(n) && n >= 0) {
+                          setForm((p) => ({ ...p, chamfer_tip_dia: n }));
+                          setChamferTipDiaText(n > 0 ? n.toFixed(4) : "");
+                        } else {
+                          setChamferTipDiaText(form.chamfer_tip_dia > 0 ? form.chamfer_tip_dia.toFixed(4) : "");
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Axial depth of the chamfer being cut. Determines D_eff (the effective cutting diameter at the outer edge of contact). D_eff = tip_dia + 2 × depth × tan(angle/2).">Chamfer Depth (in)</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    placeholder="e.g. 0.050"
+                    value={chamferDepthText}
+                    onChange={(e) => setChamferDepthText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(chamferDepthText);
+                      if (Number.isFinite(n) && n > 0) {
+                        setForm((p) => ({ ...p, chamfer_depth: n }));
+                        setChamferDepthText(n.toFixed(4));
+                      } else {
+                        setChamferDepthText(form.chamfer_depth > 0 ? form.chamfer_depth.toFixed(4) : "");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Corner Condition — endmill only */}
+          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
+            <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = honed edge for strength. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(["square", "corner_radius"] as const).map((key) => {
+                const label = key === "square" ? "Square" : "Corner Radius";
+                const tt = key === "square" ? "endmill" : "corner_radius";
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => { setForm((p) => ({ ...p, corner_condition: key, tool_type: tt, corner_radius: key === "square" ? 0 : p.corner_radius })); if (key === "square") setCrText(""); }}
+                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                    style={{ backgroundColor: form.corner_condition === key ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.corner_condition === key ? "#fff" : "#6366f1" }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {form.corner_condition === "corner_radius" && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">{UL("CR (in)", "CR (mm)")}</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="h-7 w-20 text-xs no-spinners rounded-md border border-input bg-background px-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                    value={crText}
+                    onChange={(e) => setCrText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(crText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const val = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, corner_radius: val }));
+                        setCrText(metric ? n.toFixed(2) : val.toFixed(3));
+                      } else {
+                        setCrText(form.corner_radius > 0 ? (metric ? (form.corner_radius * 25.4).toFixed(2) : form.corner_radius.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, corner_condition: "ball", tool_type: "ballnose", corner_radius: 0 }))}
+                className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                style={{ backgroundColor: form.corner_condition === "ball" ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.corner_condition === "ball" ? "#fff" : "#6366f1" }}
+              >
+                Ball Nose
+              </button>
+            </div>
+          </div>}
+
+          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
+            <FieldLabel hint="Standard = full-length flute. Chipbreaker (-CB) = notched flute that segments the chip, net ~20% force reduction. Truncated Rougher (VXR) = serrated flute with negative K-land edge prep — K-land strengthens the edge but adds back ~12% pressure, so net force reduction is ~17% vs standard.">
+              Flute Geometry
+            </FieldLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { key: "standard",          label: "Standard" },
+                { key: "chipbreaker",       label: "Chipbreaker (CB)" },
+                { key: "truncated_rougher", label: "Truncated Rougher (VXR)" },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, geometry: key }))}
+                  className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.geometry === key ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1",
+                    color: form.geometry === key ? "#fff" : "#6366f1",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>}
+
+          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5 mt-1">
+            <FieldLabel hint="Variable Pitch spaces flute angles unevenly to disrupt regenerative chatter — the primary driver of vibration in steel, stainless, and titanium. Variable Helix varies the helix angle along the flute length to spread axial cutting forces and further dampen vibration. Most Core Cutter steel/stainless/titanium tools are Variable Pitch; select tools add Variable Helix. Aluminum tools are typically neither.">
+              Tool Design
+            </FieldLabel>
+            <div className="flex gap-4">
+              {([
+                { key: "variable_pitch" as const, label: "Variable Pitch" },
+                { key: "variable_helix" as const, label: "Variable Helix" },
+              ]).map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form[key]}
+                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.checked }))}
+                    className="w-4 h-4 rounded accent-indigo-500"
+                  />
+                  <span className="text-xs font-semibold text-indigo-400">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>}
+          </>) : operation === "drilling" ? (<>
+          {/* Drilling tool fields */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <FieldLabel hint="Entry diameter — the smallest (tip) diameter. SFM is set by the largest step diameter; feed (IPR) is set by this entry diameter.">{form.drill_steps > 0 ? "Entry Dia (in)" : "Drill Dia (in)"}</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                value={toolDiaText}
+                onChange={(e) => setToolDiaText(e.target.value)}
+                onFocus={() => { if (form.tool_dia) setToolDiaText(form.tool_dia.toFixed(4)); }}
+                onBlur={() => {
+                  const n = parseDim(toolDiaText);
+                  if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, tool_dia: n })); setToolDiaText(n.toFixed(4)); }
+                  else setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : "");
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Flute length — the fluted portion of the drill from tip to where the shank begins. Sets the maximum usable hole depth; the engine warns if hole depth exceeds flute length minus point clearance.">Flute Length (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 1.5"
+                value={drillFluteLenText}
+                onChange={(e) => setDrillFluteLenText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(drillFluteLenText);
+                  if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, drill_flute_length: n })); setDrillFluteLenText(n.toFixed(3)); }
+                  else setDrillFluteLenText(form.drill_flute_length > 0 ? form.drill_flute_length.toFixed(3) : "");
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Number of flutes on the drill. Standard jobber drills are 2-flute. Some specialty drills use 3 or 4 flutes for improved chip evacuation in non-ferrous materials.">Flutes</FieldLabel>
+              <Input
+                type="number"
+                step="1"
+                className="no-spinners"
+                value={form.flutes > 0 ? form.flutes : 2}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value);
+                  setForm((p) => ({ ...p, flutes: Number.isFinite(n) && n > 0 ? n : 2 }));
+                }}
+              />
+            </div>
+          </div>
+          {/* Steps selector */}
+          <div className="space-y-1.5 mt-3">
+            <FieldLabel hint="Number of step-up diameters on this drill. 0 = standard single-diameter drill. Each step adds a larger diameter above the entry tip. SFM is set by the largest diameter; feed (IPR) is set by the entry (smallest) diameter.">Number of Steps</FieldLabel>
+            <div className="flex gap-2">
+              {([0, 1, 2, 3] as const).map((n) => (
+                <button key={n} type="button"
+                  onClick={() => {
+                    const newDias = form.drill_step_diameters.slice(0, n);
+                    const newLens = form.drill_step_lengths.slice(0, n);
+                    setStepDiaTexts((prev) => {
+                      const t = [...prev];
+                      t.length = n;
+                      return t.fill("", prev.length, n);
+                    });
+                    setStepLenTexts((prev) => {
+                      const t = [...prev];
+                      t.length = n;
+                      return t.fill("", prev.length, n);
+                    });
+                    setForm((p) => ({ ...p, drill_steps: n, drill_step_diameters: newDias, drill_step_lengths: newLens }));
+                  }}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.drill_steps === n ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.drill_steps === n ? "#fff" : "#6366f1",
+                  }}
+                >{n === 0 ? "Standard" : `${n} Step${n > 1 ? "s" : ""}`}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dynamic step rows */}
+          {form.drill_steps > 0 && (
+            <div className="mt-3 space-y-2">
+              {Array.from({ length: form.drill_steps }).map((_, i) => (
+                <div key={i} className="grid grid-cols-2 gap-3 items-end">
+                  <div className="space-y-1">
+                    <FieldLabel hint={`Step ${i + 1} diameter — larger than entry diameter. SFM is calculated on the largest step diameter.`}>Step {i + 1} Dia (in)</FieldLabel>
+                    <Input
+                      type="text" inputMode="decimal" className="no-spinners"
+                      placeholder="e.g. 0.500"
+                      value={stepDiaTexts[i] ?? ""}
+                      onChange={(e) => setStepDiaTexts((prev) => { const t = [...prev]; t[i] = e.target.value; return t; })}
+                      onBlur={() => {
+                        const n = parseDim(stepDiaTexts[i] ?? "");
+                        if (Number.isFinite(n) && n > 0) {
+                          setForm((p) => {
+                            const dias = [...p.drill_step_diameters];
+                            dias[i] = n;
+                            return { ...p, drill_step_diameters: dias };
+                          });
+                          setStepDiaTexts((prev) => { const t = [...prev]; t[i] = n.toFixed(4); return t; });
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel hint={`Distance from the drill tip to where Step ${i + 1} begins. Measured from the point tip.`}>Step {i + 1} Length from Tip (in)</FieldLabel>
+                    <Input
+                      type="text" inputMode="decimal" className="no-spinners"
+                      placeholder="e.g. 0.375"
+                      value={stepLenTexts[i] ?? ""}
+                      onChange={(e) => setStepLenTexts((prev) => { const t = [...prev]; t[i] = e.target.value; return t; })}
+                      onBlur={() => {
+                        const n = parseDim(stepLenTexts[i] ?? "");
+                        if (Number.isFinite(n) && n > 0) {
+                          setForm((p) => {
+                            const lens = [...p.drill_step_lengths];
+                            lens[i] = n;
+                            return { ...p, drill_step_lengths: lens };
+                          });
+                          setStepLenTexts((prev) => { const t = [...prev]; t[i] = n.toFixed(4); return t; });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Coolant Fed — drill tool property */}
+          <div className="space-y-1.5 mt-3">
+            <FieldLabel hint="Coolant-fed drills have internal through-holes that deliver coolant directly to the cutting edge. This significantly improves chip evacuation, extends tool life, and allows deeper holes without pecking vs non-coolant-fed drills.">Coolant Delivery</FieldLabel>
+            <div className="flex gap-2">
+              {([{ val: false, label: "Non-Coolant Fed" }, { val: true, label: "Coolant Fed (Through)" }] as const).map(({ val, label }) => (
+                <button key={String(val)} type="button"
+                  onClick={() => setForm((p) => ({ ...p, drill_coolant_fed: val }))}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.drill_coolant_fed === val ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.drill_coolant_fed === val ? "#fff" : "#6366f1",
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Flute Geometry */}
+          {(() => {
+            const iso = isoCategory;
+            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
+            const isDeep = depthD > 5;
+            const isVeryDeep = depthD > 7;
+            const hasCoolant = form.drill_coolant_fed;
+
+            // Base recommendation by material
+            let recGeo: string[] = [];
+            if (iso === "N" || iso === "K") {
+              recGeo = ["standard"];
+            } else if (iso === "P") {
+              recGeo = isDeep ? ["med_helix"] : ["standard"];
+            } else if (iso === "M") {
+              recGeo = isDeep ? ["high_helix"] : ["med_helix"];
+            } else if (iso === "S") {
+              recGeo = ["high_helix"];
+            } else if (iso === "H") {
+              recGeo = ["standard", "med_helix"];
+            }
+
+            // Coolant-through: can step down one level (coolant does evacuation work)
+            if (hasCoolant && recGeo.includes("high_helix") && !isVeryDeep) {
+              recGeo = ["med_helix"];
+            } else if (hasCoolant && recGeo.includes("med_helix") && !isDeep) {
+              recGeo = ["standard"];
+            }
+
+            // No coolant + deep: nudge up
+            if (!hasCoolant && isDeep && recGeo.includes("standard")) {
+              recGeo = ["med_helix"];
+            }
+            if (!hasCoolant && isVeryDeep && recGeo.includes("med_helix")) {
+              recGeo = ["high_helix"];
+            }
+
+            const hasRec = recGeo.length > 0;
+            return (
+              <div className="space-y-1.5 mt-3">
+                <div className="flex items-center justify-between">
+                  <FieldLabel hint="Flute geometry determines chip storage capacity and evacuation speed. Standard: up to 5×D. Med Helix: 5–7×D, better chip lift. High Helix: 7–9×D, steep flute for deep hole chip flow. Coolant-through can allow one step lower geometry.">Flute Geometry</FieldLabel>
+                  {hasRec && (
+                    <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {([
+                    { val: "standard",   label: "Standard",   depth: "up to 5×D", desc: "General purpose twist drill" },
+                    { val: "med_helix",  label: "Med Helix",  depth: "5–7×D",     desc: "Moderate helix, better chip lift" },
+                    { val: "high_helix", label: "High Helix", depth: "7–9×D",     desc: "Steep helix, deep hole chip flow" },
+                  ] as const).map(({ val, label, depth, desc }) => {
+                    const active = form.drill_geometry === val;
+                    const isRec = recGeo.includes(val);
+                    return (
+                      <button key={val} type="button"
+                        onClick={() => setForm((p) => ({ ...p, drill_geometry: val }))}
+                        className="flex-1 rounded border transition-all px-2 py-2 text-left"
+                        style={{
+                          backgroundColor: active ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
+                          borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
+                        }}
+                      >
+                        <div className={`text-xs font-semibold leading-tight ${active ? "text-white" : isRec ? "text-amber-400" : "text-indigo-400"}`}>
+                          {label}{isRec && !active ? " ★" : ""}
+                        </div>
+                        <div className={`text-[10px] font-bold mt-0.5 ${active ? "text-indigo-200" : isRec ? "text-amber-500" : "text-indigo-500"}`}>{depth}</div>
+                        <div className={`text-[9px] leading-tight mt-0.5 ${active ? "text-indigo-100" : "text-muted-foreground"}`}>{desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Point Angle */}
+          {(() => {
+            // Recommend point angle based on material, depth, and hole type
+            const iso = isoCategory;
+            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
+            const isDeep = depthD > 5;
+            const isBlind = form.drill_blind;
+
+            let recommended: number[] = [];
+            if (iso === "N") {
+              recommended = [118];
+            } else if (iso === "P") {
+              recommended = isDeep ? [135, 140] : [130, 135];
+            } else if (iso === "K") {
+              recommended = [118, 130];
+            } else if (iso === "M") {
+              recommended = isDeep ? [140, 145] : [135, 140];
+            } else if (iso === "S") {
+              recommended = [140, 145];
+            } else if (iso === "H") {
+              recommended = [135, 140];
+            }
+            // Blind holes favor higher angle (stronger edge)
+            if (isBlind && recommended.length > 0) {
+              const max = Math.max(...recommended);
+              if (!recommended.includes(max + 5) && max < 145) recommended = [max];
+              else recommended = [Math.min(...recommended) + 5 <= 145 ? Math.min(...recommended) + 5 : max];
+            }
+
+            const hasRecommendation = recommended.length > 0;
+
+            return (
+              <div className="space-y-1.5 mt-3">
+                <div className="flex items-center justify-between">
+                  <FieldLabel hint="Controls cutting aggressiveness, chip formation, and centering. 118° = soft materials & aluminum. 130° = general purpose carbide (alloy/stainless). 135° = stainless & tough alloys. 140° = high-performance / deep holes. 145° = superalloys & aerospace (Inconel, Ti).">Point Angle</FieldLabel>
+                  {hasRecommendation && (
+                    <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {([118, 130, 135, 140, 145] as const).map((pa) => {
+                    const isSelected = form.drill_point_angle === pa;
+                    const isRec = recommended.includes(pa);
+                    return (
+                      <button key={pa} type="button"
+                        onClick={() => setForm((p) => ({ ...p, drill_point_angle: pa }))}
+                        className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                        style={{
+                          backgroundColor: isSelected ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
+                          borderColor: isSelected ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
+                          color: isSelected ? "#fff" : isRec ? "#f59e0b" : "#6366f1",
+                        }}
+                      >{pa}°{isRec && !isSelected ? " ★" : ""}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          </>) : null}
+
+          {/* Reaming Tool Geometry */}
+          {operation === "reaming" && (<>
+          {/* Mode toggle */}
+          <div className="flex gap-2 mt-3">
+            {(["print", "known"] as const).map((m) => (
+              <button key={m} type="button"
+                onClick={() => setReamMode(m)}
+                className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                style={{
+                  backgroundColor: reamMode === m ? "#6366f1" : "transparent",
+                  borderColor: "#6366f1", color: reamMode === m ? "#fff" : "#6366f1",
+                }}>
+                {m === "print" ? "📐 From Print Dimension" : "🔧 I Know My Reamer Size"}
+              </button>
+            ))}
+          </div>
+
+          {reamMode === "print" ? (<>
+            {/* Print-dimension workflow */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <FieldLabel hint="The finished hole diameter called out on the print. The reamer will be ground to this nominal size.">
+                  {UL("Finished Hole Dia (in.)", "Finished Hole Dia (mm)")}
+                </FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners"
+                  placeholder={metric ? "e.g. 12.700" : "e.g. 0.5000"}
+                  value={reamFinishedDiaText}
+                  onChange={(e) => setReamFinishedDiaText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseDim(reamFinishedDiaText);
+                    if (Number.isFinite(n) && n > 0) {
+                      const stock = reamStockRange(n);
+                      const preDrill = stock ? +(n - stock.ideal).toFixed(4) : 0;
+                      setForm((p) => ({ ...p, tool_dia: n, ream_pre_drill_dia: preDrill }));
+                      setReamFinishedDiaText(metric ? (n * 25.4).toFixed(3) : n.toFixed(4));
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <FieldLabel hint="ISO hole tolerance class. H7 is the standard for most reaming applications. H6 is tighter (precision bores); H8 is looser (general clearance fits).">Tolerance Class</FieldLabel>
+                <div className="flex gap-1 mt-1">
+                  {(["H6","H7","H8"] as const).map((cls) => (
+                    <button key={cls} type="button"
+                      onClick={() => setReamTolClass(cls)}
+                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: reamTolClass === cls ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1", color: reamTolClass === cls ? "#fff" : "#6366f1",
+                      }}>{cls}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {form.tool_dia > 0 && (
+              <div className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2.5 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Reamer OD</span>
+                  <span className="font-semibold text-foreground">{metric ? (form.tool_dia * 25.4).toFixed(3) + " mm" : form.tool_dia.toFixed(4) + '"'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Tolerance Band ({reamTolClass})</span>
+                  <span className="font-mono text-indigo-300">{reamTolBand(form.tool_dia, reamTolClass)}</span>
+                </div>
+                {(() => {
+                  const stock = reamStockRange(form.tool_dia);
+                  if (!stock) return null;
+                  const ideal = +(form.tool_dia - stock.ideal).toFixed(4);
+                  const lo    = +(form.tool_dia - stock.max).toFixed(4);
+                  const hi    = +(form.tool_dia - stock.min).toFixed(4);
+                  const drills = nearestDrills(ideal, lo, hi);
+                  const ranked = [...drills].sort((a, b) => Math.abs(a.dia - ideal) - Math.abs(b.dia - ideal));
+                  const rankStyle = [
+                    "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400",
+                    "border-amber-500/60  bg-amber-500/10  text-amber-300  hover:bg-amber-500/25  hover:border-amber-400",
+                  ];
+                  return (<>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Recommended Pre-Drill</span>
+                      <span className="font-semibold text-foreground">{metric ? (ideal * 25.4).toFixed(3) + " mm" : ideal.toFixed(4) + '"'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400">Nearest Drill Sizes</span>
+                      <div className="flex gap-1.5 flex-wrap justify-end">
+                        {ranked.map((d, i) => (
+                          <button key={d.label} type="button"
+                            title="Click to use this pre-drill size"
+                            onClick={() => setForm((p) => ({ ...p, ream_pre_drill_dia: +d.dia.toFixed(4) }))}
+                            className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold transition-all cursor-pointer ${rankStyle[i] ?? "border-zinc-600 bg-zinc-800 text-foreground"}`}>
+                            {d.label}
+                            <span className="font-normal text-[10px] opacity-60">{d.dia.toFixed(4)}"</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>);
+                })()}
+              </div>
+            )}
+          </>) : (<>
+            {/* Known-reamer workflow */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <FieldLabel hint="Reamer cutting diameter.">{UL("Reamer Dia (in.)", "Reamer Dia (mm)")}</FieldLabel>
+                <Input type="number" step={metric ? "0.01" : "0.0001"} className="no-spinners"
+                  value={form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(3) : form.tool_dia) : ""}
+                  onChange={onUnitNum("tool_dia", 25.4)} />
+              </div>
+              <div>
+                <FieldLabel hint="Pre-drilled hole diameter. Must be within the correct undersize range for the reamer.">{UL("Pre-Drill Dia (in.)", "Pre-Drill Dia (mm)")}</FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners"
+                  placeholder={(() => {
+                    const s = reamStockRange(form.tool_dia);
+                    if (!s) return metric ? "e.g. 12.34" : "e.g. 0.4865";
+                    const lo = form.tool_dia - s.max, hi = form.tool_dia - s.min;
+                    return metric ? `${(lo * 25.4).toFixed(2)} – ${(hi * 25.4).toFixed(2)}` : `${lo.toFixed(4)} – ${hi.toFixed(4)}`;
+                  })()}
+                  value={form.ream_pre_drill_dia ? (metric ? (form.ream_pre_drill_dia * 25.4).toFixed(3) : form.ream_pre_drill_dia) : ""}
+                  onChange={onUnitNum("ream_pre_drill_dia", 25.4)} />
+                {(() => {
+                  const stock = reamStockRange(form.tool_dia);
+                  if (!stock) return null;
+                  const ideal  = +(form.tool_dia - stock.ideal).toFixed(4);
+                  const lo     = +(form.tool_dia - stock.max).toFixed(4);
+                  const hi     = +(form.tool_dia - stock.min).toFixed(4);
+                  const drills = nearestDrills(ideal, lo, hi);
+                  const ranked = [...drills].sort((a, b) => Math.abs(a.dia - ideal) - Math.abs(b.dia - ideal));
+                  const rankStyle = [
+                    "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400",
+                    "border-amber-500/60  bg-amber-500/10  text-amber-300  hover:bg-amber-500/25  hover:border-amber-400",
+                  ];
+                  return (
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      {ranked.map((d, i) => (
+                        <button key={d.label} type="button"
+                          onClick={() => setForm((p) => ({ ...p, ream_pre_drill_dia: +d.dia.toFixed(4) }))}
+                          className={`flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold transition-all cursor-pointer ${rankStyle[i] ?? "border-zinc-600 bg-zinc-800 text-foreground"}`}>
+                          {d.label}
+                          <span className="font-normal text-[10px] opacity-60">{d.dia.toFixed(4)}"</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </>)}
+
+          {/* Flutes + Shank — shared across both modes */}
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <FieldLabel hint="Number of flutes on the reamer. Leave blank to use the standard count for this diameter.">Flutes</FieldLabel>
+              <Input type="number" step="1" className="no-spinners"
+                placeholder={String(reamFlutes(form.tool_dia))}
+                value={form.flutes || ""} onChange={onNum("flutes")} />
+              {form.tool_dia > 0 && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">
+                    Standard: <span className="font-semibold text-foreground">{reamFlutes(form.tool_dia)}-flute</span>
+                  </span>
+                  {form.flutes > 0 && form.flutes !== reamFlutes(form.tool_dia) && (
+                    <button type="button"
+                      className="rounded bg-indigo-600/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300 hover:bg-indigo-600/50 transition-colors"
+                      onClick={() => setForm((p) => ({ ...p, flutes: reamFlutes(form.tool_dia) }))}>
+                      Use standard
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <FieldLabel hint="Shank diameter. Defaults to cut diameter if left blank.">{UL("Shank Dia (in.)", "Shank Dia (mm)")}</FieldLabel>
+              <Input type="number" step={metric ? "0.01" : "0.0001"} className="no-spinners"
+                placeholder={form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(3) : form.tool_dia.toFixed(4)) : (metric ? "e.g. 12.70" : "e.g. 0.500")}
+                value={form.ream_shank_dia ? (metric ? (form.ream_shank_dia * 25.4).toFixed(3) : form.ream_shank_dia) : ""}
+                onChange={onUnitNum("ream_shank_dia", 25.4)} />
+            </div>
+          </div>
+
+          {/* Reaming — Coolant Delivery (Identity 1 vs 2/3) */}
+          <div className="space-y-1.5 mt-3">
+            <FieldLabel hint="Coolant-fed reamers have internal coolant passages that deliver coolant directly to the cutting edges — critical for blind holes, deep holes, and gummy materials. Non-coolant-fed relies entirely on external coolant.">Coolant Delivery</FieldLabel>
+            <div className="flex gap-2">
+              {([
+                { val: false, label: "Non-Coolant Fed" },
+                { val: true,  label: "Coolant Fed (Through)" },
+              ] as const).map(({ val, label }) => (
+                <button key={String(val)} type="button"
+                  onClick={() => setForm((p) => ({ ...p, ream_coolant_fed: val }))}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.ream_coolant_fed === val ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.ream_coolant_fed === val ? "#fff" : "#6366f1",
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+          </>)}
+
+          {/* Cut Engagement — milling only, not chamfer mills */}
+          {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Cut Engagement</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="flex gap-3 items-start">
+            <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
+              <div className="flex items-center justify-between">
+                <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC</FieldLabel>
+                {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (
+                  <button
+                    type="button"
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                    style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                    onClick={() => {
+                      const wp = WOC_PRESETS[form.mode];
+                      const dp = DOC_PRESETS[form.mode];
+                      if (!wp || !dp) return;
+                      const dia = form.tool_dia || 0.5;
+                      const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                      const floorWoc = Math.max(geoMinWoc, wp.low);
+                      const optPct = Math.min(100, Math.max(floorWoc, (wp.med * dp.med) / form.doc_xd));
+                      setForm((p) => ({ ...p, woc_pct: optPct }));
+                      setWocText(((optPct / 100) * dia).toFixed(4));
+                      const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
+                      setWocPreset(wocMatch ?? "optimal");
+                    }}
+                  >Optimal</button>
+                )}
+              </div>
+              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  value={wocText}
+                  onChange={(e) => setWocText(e.target.value)}
+                  onBlur={() => {
+                    const raw = wocText.trim();
+                    const hasPercent = raw.includes("%");
+                    const n = parseFloat(raw.replace(/[^\d.]/g, ""));
+                    const dia = form.tool_dia || 0.5;
+                    if (Number.isFinite(n) && n > 0) {
+                      // % or integer (≥1) → treat as percent; decimal (<1, no %) → treat as inches
+                      const pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
+                      setForm((p) => ({ ...p, woc_pct: pct }));
+                      setWocText(((pct / 100) * dia).toFixed(4));
+                      setWocPreset(null);
+                    } else {
+                      setWocText(((form.woc_pct / 100) * dia).toFixed(4));
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{form.woc_pct ? `${form.woc_pct.toFixed(1)}%` : ""}</span>
+              </div>
+              {/* WOC Low/Med/High buttons */}
+              {WOC_PRESETS[form.mode] && (() => {
+                const wp = WOC_PRESETS[form.mode];
+                const dia = form.tool_dia || 0.5;
+                const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                const btns = [
+                  { key: "low" as const,  label: "Low",  val: geoMinWoc > 0 ? Math.max(geoMinWoc, wp.low) : wp.low },
+                  { key: "med" as const,  label: "Med",  val: wp.med },
+                  { key: "high" as const, label: "High", val: wp.high },
+                ];
+                return (
+                  <div className="flex gap-1 mt-1">
+                    {btns.map(({ key, label, val }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setForm((p) => ({ ...p, woc_pct: val }));
+                          setWocText(((val / 100) * dia).toFixed(4));
+                          setWocPreset(key);
+                        }}
+                        className="flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight"
+                        style={{
+                          background: wocPreset === key ? "#eab308" : "transparent",
+                          borderColor: wocPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
+                          color: wocPreset === key ? "#000" : "rgba(255,255,255,0.6)",
+                        }}
+                      >
+                        {label} <span className="opacity-75">{val}%</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* WOC out-of-range note */}
+              {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (() => {
+                const wp = WOC_PRESETS[form.mode];
+                if (form.woc_pct < wp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — chip clearance may suffer</p>;
+                if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
+                return null;
+              })()}
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center justify-between">
+                <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC</FieldLabel>
+                {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (
+                  <button
+                    type="button"
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                    style={docPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                    onClick={() => {
+                      const wp = WOC_PRESETS[form.mode];
+                      const dp = DOC_PRESETS[form.mode];
+                      if (!wp || !dp) return;
+                      const dia = form.tool_dia || 0.5;
+                      const optXd = Math.min(form.loc > 0 ? form.loc / dia : 99, Math.max(0.1, (wp.med * dp.med) / form.woc_pct));
+                      const optIn = optXd * dia;
+                      setForm((p) => ({ ...p, doc_xd: optXd }));
+                      setDocText(optIn.toFixed(3));
+                      const docMatch = (["low","med","high"] as const).find(k => Math.abs(dp[k] - optXd) < 0.05);
+                      setDocPreset(docMatch ?? "optimal");
+                    }}
+                  >Optimal</button>
+                )}
+              </div>
+              <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  value={docText}
+                  onChange={(e) => setDocText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(docText);
+                    const dia = form.tool_dia || 0.5;
+                    if (Number.isFinite(n) && n > 0) {
+                      const clamped = Math.min(n, form.loc);
+                      const xd = clamped / dia;
+                      setForm((p) => ({ ...p, doc_xd: xd }));
+                      setDocText(clamped.toFixed(3));
+                      setDocPreset(null);
+                    } else {
+                      setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(3))}xD` : ""}
+                </span>
+              </div>
+              {/* DOC Low/Med/High buttons */}
+              {DOC_PRESETS[form.mode] && (() => {
+                const dp = DOC_PRESETS[form.mode];
+                const dia = form.tool_dia || 0.5;
+                const btns = [
+                  { key: "low" as const,  label: "Low",  val: dp.low },
+                  { key: "med" as const,  label: "Med",  val: dp.med },
+                  { key: "high" as const, label: "High", val: dp.high },
+                ];
+                return (
+                  <div className="flex gap-1 mt-1">
+                    {btns.map(({ key, label, val }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          const rawInches = val * dia;
+                          const clampedInches = form.loc > 0 ? Math.min(rawInches, form.loc) : rawInches;
+                          const clampedXd = clampedInches / dia;
+                          setForm((p) => ({ ...p, doc_xd: clampedXd }));
+                          setDocText(clampedInches.toFixed(3));
+                          setDocPreset(clampedXd < val - 0.001 ? null : key);
+                        }}
+                        className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
+                        style={{
+                          background: docPreset === key ? "#eab308" : "transparent",
+                          borderColor: docPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
+                          color: docPreset === key ? "#000" : "rgba(255,255,255,0.6)",
+                        }}
+                      >
+                        {label} <span className="opacity-75">{val}xD</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* DOC out-of-range note */}
+              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (() => {
+                const dp = DOC_PRESETS[form.mode];
+                if (form.doc_xd < dp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below typical range ({dp.low}–{dp.high}×D) — axial engagement may be too light</p>;
+                if (form.doc_xd > dp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above typical range ({dp.low}–{dp.high}×D) — deflection and force increase significantly</p>;
+                return null;
+              })()}
+            </div>
+          </div>
+          {form.mode === "face" && (
+            <div className="mt-3 w-52 space-y-2">
+              <FieldLabel hint="Target surface roughness in micro-inches (µin). Common finish specs: 63 µin = machined, 32 µin = smooth machined, 16 µin = fine, 8 µin = very fine. The advisor will show the theoretical Ra with your current parameters and the max feed needed to hit this target.">Target Ra (µin) <span className="text-xs font-normal text-muted-foreground">(optional)</span></FieldLabel>
+              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="e.g. 32"
+                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  value={raText}
+                  onChange={(e) => setRaText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(raText);
+                    if (Number.isFinite(n) && n > 0) {
+                      setForm((p) => ({ ...p, target_ra_uin: n }));
+                      setRaText(n.toFixed(0));
+                    } else {
+                      setForm((p) => ({ ...p, target_ra_uin: 0 }));
+                      setRaText("");
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground shrink-0">µin</span>
+              </div>
+              <div className="flex gap-1">
+                {[8, 16, 32, 63, 125].map(v => (
+                  <button key={v} type="button"
+                    onClick={() => { setForm((p) => ({ ...p, target_ra_uin: v })); setRaText(String(v)); }}
+                    className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
+                    style={{
+                      background: form.target_ra_uin === v ? "#eab308" : "transparent",
+                      borderColor: form.target_ra_uin === v ? "#eab308" : "rgba(255,255,255,0.25)",
+                      color: form.target_ra_uin === v ? "#000" : "rgba(255,255,255,0.6)",
+                    }}
+                  >{v}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="mt-3 w-40 space-y-2">
+            <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
+            <Input
+              type="text" inputMode="decimal"
+              className="no-spinners"
+              placeholder="e.g. 1.500"
+              value={stickoutText}
+              onChange={(e) => setStickoutText(e.target.value)}
+              onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
+              onBlur={() => {
+                const n = parseDim(stickoutText);
+                const val = metric ? n / 25.4 : n;
+                if (Number.isFinite(val) && val > 0) { setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3)); }
+                else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+              }}
+            />
+          </div>
+
+          {/* Chipbreaker / truncated rougher engagement warning */}
+          {(form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (() => {
+            const dia = form.tool_dia || 0.5;
+            const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
+            const wocTooLow = form.woc_pct > 0 && form.woc_pct < minWoc;
+            const docTooLow = form.doc_in > 0 && form.doc_in < dia;
+            if (!wocTooLow && !docTooLow) return null;
+            const geoLabel = form.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated Rougher";
+            const reasons = [
+              wocTooLow && `WOC ${form.woc_pct.toFixed(1)}% is below ${minWoc}% minimum`,
+              docTooLow && `DOC ${form.doc_in.toFixed(3)}" is below 1×D (${dia.toFixed(3)}")`,
+            ].filter(Boolean).join(" · ");
+            return (
+              <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+                <span className="mt-0.5 shrink-0">⚠</span>
+                <span><span className="font-semibold">{geoLabel} geometry inactive</span> — {reasons}. Requires ≥{minWoc}% WOC and ≥1×D DOC to engage. Consider Standard geometry at this engagement.</span>
+              </div>
+            );
+          })()}
+          </>)}
+
+          {/* Hole Details — reaming */}
+          {operation === "reaming" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <FieldLabel hint="Total depth of the hole to be reamed. Used to calculate depth-to-diameter ratio and apply depth correction factors.">{UL("Hole Depth (in.)", "Hole Depth (mm)")}</FieldLabel>
+              <Input type="number" step={metric ? "0.1" : "0.001"} className="no-spinners"
+                value={form.ream_hole_depth ? (metric ? (form.ream_hole_depth * 25.4).toFixed(2) : form.ream_hole_depth) : ""}
+                onChange={onUnitNum("ream_hole_depth", 25.4)} />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Through holes allow chips to exit ahead of the reamer. Blind holes trap chips — coolant-fed is strongly recommended for blind holes in any difficult material.">Hole Type</FieldLabel>
+              <div className="flex gap-2 pt-1">
+                {([{ val: false, label: "Through" }, { val: true, label: "Blind" }] as const).map(({ val, label }) => (
+                  <button key={label} type="button"
+                    onClick={() => setForm((p) => ({ ...p, ream_blind: val }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.ream_blind === val ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.ream_blind === val ? "#fff" : "#6366f1",
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Lead Chamfer */}
+          {(() => {
+            const iso = isoCategory;
+            const isBlind = form.ream_blind;
+
+            let recChamfer: string;
+            if (iso === "N" || iso === "K") {
+              recChamfer = isBlind ? "standard" : "short_lead";
+            } else if (iso === "P") {
+              recChamfer = isBlind ? "long_lead" : "standard";
+            } else if (iso === "M" || iso === "S" || iso === "H") {
+              recChamfer = "long_lead";
+            } else {
+              recChamfer = "standard";
+            }
+
+            return (
+              <div className="space-y-1.5 mt-3">
+                <div className="flex items-center justify-between">
+                  <FieldLabel hint="The lead chamfer is the angled entry at the tip of the reamer that eases it into the hole. Standard (45°) is the Core Cutter default and works well for most applications. Long Lead (15–30°) spreads the cut over more edge — better surface finish and chatter reduction, preferred for blind holes, stainless, and tight tolerance work. Short Lead (60°+) is more aggressive — higher feed rates, good for production through-hole work in softer materials.">Lead Chamfer</FieldLabel>
+                  <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
+                </div>
+                <div className="flex gap-2">
+                  {([
+                    { val: "standard",   label: "Standard",   angle: "45°",    desc: "Default — balanced performance",
+                      hint: "✓ Balanced entry force\n✓ Works on most materials and hole types\n✓ Easy to regrind\n✗ Not optimized for finish or speed" },
+                    { val: "long_lead",  label: "Long Lead",  angle: "15–30°", desc: "Fine finish, blind & hard materials",
+                      hint: "✓ Gradual load — lower chatter, better finish\n✓ Spreads wear over more edge → longer tool life\n✓ Best for stainless, Inconel, blind holes\n✗ Higher thrust on entry\n✗ Slower feed rates\n✗ Needs more clearance at blind hole bottom" },
+                    { val: "short_lead", label: "Short Lead", angle: "60°+",   desc: "Production, high feed, through holes",
+                      hint: "✓ Fast stock removal, high production feed rates\n✓ Lower thrust force\n✓ Good chip clearance in through holes\n✗ Higher chatter risk on entry\n✗ Edge wears faster in hard or stringy materials\n✗ Poor finish in difficult materials" },
+                  ] as const).map(({ val, label, angle, desc, hint }) => {
+                    const active = form.ream_lead_chamfer === val;
+                    const isRec = recChamfer === val;
+                    return (
+                      <TooltipProvider key={val} delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button"
+                              onClick={() => setForm((p) => ({ ...p, ream_lead_chamfer: val }))}
+                              className="flex-1 rounded border transition-all px-2 py-2 text-left"
+                              style={{
+                                backgroundColor: active ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
+                                borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
+                              }}
+                            >
+                              <div className={`text-xs font-semibold leading-tight ${active ? "text-white" : isRec ? "text-amber-400" : "text-indigo-400"}`}>
+                                {label}{isRec && !active ? " ★" : ""}
+                              </div>
+                              <div className={`text-[10px] font-bold mt-0.5 ${active ? "text-indigo-200" : isRec ? "text-amber-500" : "text-indigo-500"}`}>{angle}</div>
+                              <div className={`text-[9px] leading-tight mt-0.5 ${active ? "text-indigo-100" : "text-muted-foreground"}`}>{desc}</div>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs whitespace-pre-line">{hint}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          </>)}
+
+          {/* Thread Details — thread milling */}
+          {operation === "threadmilling" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Thread Details</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+
+          {/* Standard + Internal/External */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <FieldLabel hint="Thread standard. UN = Unified inch. Metric = ISO metric. NPT/NPTF = tapered pipe threads.">Thread Standard</FieldLabel>
+              <div className="flex flex-wrap gap-1">
+                {(["unc", "unf", "unef", "metric", "npt", "nptf"] as const).map((s) => (
+                  <button key={s} type="button"
+                    onClick={() => setForm((p) => ({
+                      ...p,
+                      thread_standard: s,
+                      thread_class: s === "metric" ? (p.thread_internal ? "6H" : "6g") : (p.thread_internal ? "2B" : "2A"),
+                    }))}
+                    className="rounded px-2 py-1 text-xs font-semibold border uppercase transition-all"
+                    style={{
+                      backgroundColor: form.thread_standard === s ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.thread_standard === s ? "#fff" : "#6366f1",
+                    }}
+                  >{s === "unef" ? "UNEF" : s.toUpperCase()}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel hint="Internal (bore/hole) or External (stud/OD). Affects cutter path direction and diameter selection.">Thread Type</FieldLabel>
+              <div className="flex gap-2">
+                {([{ val: true, label: "Internal" }, { val: false, label: "External" }] as const).map(({ val, label }) => (
+                  <button key={label} type="button"
+                    onClick={() => setForm((p) => ({
+                      ...p,
+                      thread_internal: val,
+                      thread_class: p.thread_standard === "metric" ? (val ? "6H" : "6g") : (val ? "2B" : "2A"),
+                    }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.thread_internal === val ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.thread_internal === val ? "#fff" : "#6366f1",
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* NPT Size selector */}
+          {(form.thread_standard === "npt" || form.thread_standard === "nptf") && (
+            <div className="mt-3 space-y-1.5">
+              <FieldLabel hint="NPT/NPTF pipe size. Sets major diameter and TPI automatically from the standard table.">Pipe Size</FieldLabel>
+              <select
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={form.npt_size}
+                onChange={(e) => setForm((p) => ({ ...p, npt_size: e.target.value }))}
+              >
+                <option value="">Select size…</option>
+                {["1/16", "1/8", "1/4", "3/8", "1/2", "3/4", "1", "1-1/4", "1-1/2", "2", "4"].map((sz) => (
+                  <option key={sz} value={sz}>{sz}"</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Major Dia + TPI/Pitch (hidden for NPT when size is selected) */}
+          {!((form.thread_standard === "npt" || form.thread_standard === "nptf") && form.npt_size) && (
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="space-y-1.5">
+                <FieldLabel hint={form.thread_standard === "metric" ? "Thread major diameter in millimeters (e.g. 10 for M10×1.5)." : "Thread major diameter — accepts fractions (1/2, 3/4, 5/16) or decimal inches (0.5000). For 1/2\"-13 UNC enter 1/2 or 0.5000."}>
+                  Major Dia {form.thread_standard === "metric" ? "(mm)" : "(in)"}
+                </FieldLabel>
+                <Input
+                  type="text" inputMode="decimal" className="no-spinners"
+                  placeholder={form.thread_standard === "metric" ? "e.g. 10" : "e.g. 1/2 or 0.5000"}
+                  value={tmMajorDiaText}
+                  onChange={(e) => setTmMajorDiaText(e.target.value)}
+                  onBlur={() => {
+                    // parseDim handles fractions (1/2, 3/8, etc.) and decimals
+                    const n = form.thread_standard === "metric"
+                      ? parseFloat(tmMajorDiaText)
+                      : parseDim(tmMajorDiaText);
+                    if (Number.isFinite(n) && n > 0) {
+                      const inchVal = form.thread_standard === "metric" ? n / 25.4 : n;
+                      // Auto-lookup TPI / pitch from standard table
+                      const looked = lookupTpi(form.thread_standard, inchVal);
+                      setForm((p) => {
+                        const next: any = {
+                          ...p,
+                          thread_major_dia: inchVal,
+                          thread_tpi: looked.tpi ?? undefined,
+                          thread_pitch_mm: looked.pitch_mm ?? undefined,
+                        };
+                        // Auto-suggest cutter dia if not yet set
+                        if (!p.tool_dia || p.tool_dia === 0) {
+                          const suggested = parseFloat((inchVal * (p.thread_internal ? 0.65 : 0.50)).toFixed(4));
+                          next.tool_dia = suggested;
+                          next.flutes = defaultThreadFlutes(suggested);
+                          setToolDiaText(suggested.toFixed(4));
+                        }
+                        return next;
+                      });
+                      setTmMajorDiaText(inchVal.toFixed(4));
+                      if (looked.tpi) { setTmTpiText(looked.tpi.toString()); setTmPitchMmText(""); }
+                      else if (looked.pitch_mm) { setTmPitchMmText(looked.pitch_mm.toString()); setTmTpiText(""); }
+                      else { setTmTpiText(""); setTmPitchMmText(""); }
+                    } else {
+                      const d = form.thread_major_dia > 0
+                        ? (form.thread_standard === "metric" ? (form.thread_major_dia * 25.4).toFixed(2) : form.thread_major_dia.toFixed(4))
+                        : "";
+                      setTmMajorDiaText(d);
+                    }
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel hint={form.thread_standard === "metric" ? "Pitch in mm. Leave blank to auto-look up from ISO standard table for the entered diameter." : "Threads per inch. Leave blank to auto-look up from ANSI standard table for the entered diameter."}>
+                  {form.thread_standard === "metric" ? "Pitch (mm)" : "TPI"}
+                </FieldLabel>
+                <Input
+                  type="text" inputMode="decimal" className="no-spinners"
+                  placeholder="auto"
+                  value={form.thread_standard === "metric" ? tmPitchMmText : tmTpiText}
+                  onChange={(e) => form.thread_standard === "metric" ? setTmPitchMmText(e.target.value) : setTmTpiText(e.target.value)}
+                  onBlur={() => {
+                    if (form.thread_standard === "metric") {
+                      const n = parseFloat(tmPitchMmText);
+                      if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, thread_pitch_mm: n })); setTmPitchMmText(n.toString()); }
+                      else { setTmPitchMmText(""); setForm((p) => ({ ...p, thread_pitch_mm: undefined })); }
+                    } else {
+                      const n = parseFloat(tmTpiText);
+                      if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, thread_tpi: n })); setTmTpiText(n.toString()); }
+                      else { setTmTpiText(""); setForm((p) => ({ ...p, thread_tpi: undefined })); }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Thread Class + Hand + Engagement */}
+          <div className="grid grid-cols-3 gap-3 mt-3">
+            <div className="space-y-1.5">
+              <FieldLabel hint="Tolerance class. 2B/2A = commercial. 3B/3A = precision. 6H/6g = ISO metric.">Thread Class</FieldLabel>
+              <div className="flex flex-wrap gap-1">
+                {(form.thread_standard === "metric"
+                  ? (form.thread_internal ? ["6H"] : ["6g"])
+                  : (form.thread_internal ? ["2B", "3B"] : ["2A", "3A"])
+                ).map((cls) => (
+                  <button key={cls} type="button"
+                    onClick={() => setForm((p) => ({ ...p, thread_class: cls as any }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.thread_class === cls ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.thread_class === cls ? "#fff" : "#6366f1",
+                    }}
+                  >{cls}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel hint="Thread hand. RH (standard) = G2 helical climb. LH = G3 reverse helix.">Hand</FieldLabel>
+              <div className="flex gap-1">
+                {([{ val: "right", label: "RH" }, { val: "left", label: "LH" }] as const).map(({ val, label }) => (
+                  <button key={val} type="button"
+                    onClick={() => setForm((p) => ({ ...p, thread_hand: val }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.thread_hand === val ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.thread_hand === val ? "#fff" : "#6366f1",
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel hint="Axial thread depth — how far the thread mill travels in Z. Typically 1–1.5× major dia for through threads; use actual depth for blind holes.">Thread Depth (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 0.500"
+                value={tmEngText}
+                onChange={(e) => setTmEngText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(tmEngText);
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm((p) => {
+                      const suggestedNeck = +(n + 0.075).toFixed(3);
+                      const suggestedStickout = +(suggestedNeck + 0.750).toFixed(3);
+                      const newNeck = p.thread_neck_length > 0 ? p.thread_neck_length : suggestedNeck;
+                      const newStickout = p.stickout > 0 ? p.stickout : suggestedStickout;
+                      if (p.thread_neck_length === 0) { setTmNeckText(suggestedNeck.toFixed(3)); setNeckAutoSuggested(true); }
+                      if (p.stickout === 0) { setTmStickoutText(suggestedStickout.toFixed(3)); setStickoutAutoSuggested(true); }
+                      return { ...p, thread_engagement: n, thread_neck_length: newNeck, stickout: newStickout };
+                    });
+                    setTmEngText(n.toFixed(4));
+                  } else setTmEngText(form.thread_engagement > 0 ? form.thread_engagement.toFixed(4) : "");
+                }}
+              />
+            </div>
+          </div>
+
+          {/* G-Code Dialect */}
+          <div className="mt-3 space-y-1.5">
+            <FieldLabel hint="CNC control dialect for G-code output. Fanuc/Haas: ( ) comments, T01 M06, G43 TLO. Siemens 840D: ; comments, T1 D1, TURN=1 helical arc.">G-Code Dialect</FieldLabel>
+            <div className="flex gap-2">
+              {([{ val: "fanuc", label: "Fanuc / Haas" }, { val: "siemens", label: "Siemens 840D" }] as const).map(({ val, label }) => (
+                <button key={val} type="button"
+                  onClick={() => setForm((p) => ({ ...p, thread_gcode_dialect: val }))}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.thread_gcode_dialect === val ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.thread_gcode_dialect === val ? "#fff" : "#6366f1",
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+          {/* Cut Direction */}
+          {(() => {
+            const isTough = isoCategory === "S" || isoCategory === "H" ||
+              form.material.includes("titanium") || form.material.includes("inconel") ||
+              form.material.includes("hastelloy") || form.material.includes("waspaloy");
+            const isBlindInternal = form.thread_internal && (form.thread_engagement > 0);
+            const recDir = (isTough || isBlindInternal) ? "bottom_up" : "top_down";
+            return (
+              <div className="mt-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <FieldLabel hint="Top-down: cutter plunges to Z0 and helices downward — standard approach. Bottom-up: cutter plunges to full depth first then helices upward — preferred for blind holes and tough materials (Inconel, titanium) as chips evacuate toward the opening.">Cut Direction</FieldLabel>
+                  <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
+                </div>
+                <div className="flex gap-1">
+                  {([
+                    { val: "top_down",  label: "Top Down"  },
+                    { val: "bottom_up", label: "Bottom Up" },
+                  ] as const).map(({ val, label }) => {
+                    const active = form.thread_cut_direction === val;
+                    const isRec = recDir === val;
+                    return (
+                      <button key={val} type="button"
+                        onClick={() => setForm((p) => ({ ...p, thread_cut_direction: val }))}
+                        className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                        style={{
+                          backgroundColor: active ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
+                          borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
+                          color: active ? "#fff" : isRec ? "#f59e0b" : "#6366f1",
+                        }}
+                      >{label}{isRec && !active ? " ★" : ""}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          </>)}
+
+          {/* Thread Mill Tool Geometry */}
+          {operation === "threadmilling" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <FieldLabel hint="Outer diameter of the thread mill cutter. Must be smaller than the thread minor diameter for internal threads.">Cutter Dia (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 0.375"
+                value={toolDiaText}
+                onChange={(e) => setToolDiaText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(toolDiaText);
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm((p) => ({ ...p, tool_dia: n, flutes: defaultThreadFlutes(n) }));
+                    setToolDiaText(n.toFixed(4));
+                  } else setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : "");
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Number of cutting flutes on the thread mill. Directly multiplies the feed rate — a 4-flute tool feeds 4× faster than a 1-flute at the same chip load.">Flutes</FieldLabel>
+              <div className="flex gap-1">
+                {([3, 4, 5, 6] as const).map((n) => (
+                  <button key={n} type="button"
+                    onClick={() => setForm((p) => ({ ...p, flutes: n }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.flutes === n ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.flutes === n ? "#fff" : "#6366f1",
+                    }}
+                  >{n}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Number of thread profiles on the cutter — how many pitches it cuts per helical pass. Single-profile = 1 axial pitch per pass; multi-profile = all pitches in one pass.">Tool Thread Profiles</FieldLabel>
+              <div className="flex gap-1">
+                {([1, 2, 3, 4] as const).map((n) => (
+                  <button key={n} type="button"
+                    onClick={() => setForm((p) => ({ ...p, thread_rows: n }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.thread_rows === n ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: form.thread_rows === n ? "#fff" : "#6366f1",
+                    }}
+                  >{n}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 w-48 space-y-2">
+            <FieldLabel hint="Distance from the part surface down to where the threads start — the tool neck must clear this zone before the thread profiles engage. Enter the pocket depth, boss height, or counterbore depth. Leave 0 if threads are at the surface.">Reach / Neck Length (in)</FieldLabel>
+            <Input
+              type="text" inputMode="decimal" className="no-spinners"
+              placeholder="0 = no reach/neck needed"
+              value={tmNeckText}
+              onChange={(e) => { setTmNeckText(e.target.value); setNeckAutoSuggested(false); }}
+              onBlur={() => {
+                const n = parseDim(tmNeckText);
+                if (Number.isFinite(n) && n >= 0) { setForm((p) => ({ ...p, thread_neck_length: n })); setTmNeckText(n > 0 ? n.toFixed(3) : ""); }
+                else setTmNeckText(form.thread_neck_length > 0 ? form.thread_neck_length.toFixed(3) : "");
+              }}
+            />
+            {neckAutoSuggested && <p className="text-[10px] text-amber-400 mt-1">Auto-suggested from thread depth — override anytime</p>}
+          </div>
+          <div className="mt-3 w-40 space-y-2">
+            <FieldLabel hint="Distance from toolholder face to tool tip. Used to calculate deflection. Shorter stickout = better rigidity.">Tool Stickout (in)</FieldLabel>
+            <Input
+              type="text" inputMode="decimal" className="no-spinners"
+              placeholder="e.g. 1.500"
+              value={tmStickoutText}
+              onChange={(e) => { setTmStickoutText(e.target.value); setStickoutAutoSuggested(false); }}
+              onFocus={() => { if (form.stickout > 0) setTmStickoutText(form.stickout.toFixed(3)); }}
+              onBlur={() => {
+                const n = parseDim(tmStickoutText);
+                if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, stickout: n })); setTmStickoutText(n.toFixed(3)); }
+                else setTmStickoutText(form.stickout > 0 ? form.stickout.toFixed(3) : "");
+              }}
+            />
+            {stickoutAutoSuggested && <p className="text-[10px] text-amber-400 mt-1">Auto-suggested from thread depth — override anytime</p>}
+          </div>
+          </>)}
+
+
+          {/* Machine Power */}
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <FieldLabel hint="Spindle speed ceiling from your machine spec. The engine will not exceed this value.">Max RPM</FieldLabel>
+              <Input
+                type="number"
+                step="10"
+                className="no-spinners"
+                value={form.max_rpm || ""}
+                onChange={onNum("max_rpm")}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP.">{UL("Machine HP", "Machine kW")}</FieldLabel>
+              <Input
+                type="number"
+                step={metric ? "0.1" : "0.5"}
+                className="no-spinners"
+                value={form.machine_hp === 0 ? "" : metric ? (form.machine_hp * 0.7457).toFixed(1) : form.machine_hp}
+                onChange={onUnitNum("machine_hp", 0.7457)}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Spindle drive type determines power transmission efficiency. Direct drive (servo-direct, HSK): 96%. Belt drive (most VMC/HMC): 92%. Gear drive (older machines): 88%. Nameplate HP is derated accordingly.">Spindle Drive</FieldLabel>
+              <div className="flex gap-1">
+                {(["direct", "belt", "gear"] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, spindle_drive: d }))}
+                    className="rounded px-2.5 py-1 text-xs font-semibold border transition-all capitalize"
+                    style={{
+                      backgroundColor: form.spindle_drive === d ? "#f97316" : "transparent",
+                      borderColor: "#f97316",
+                      color: form.spindle_drive === d ? "#fff" : "#f97316",
+                    }}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {operation !== "drilling" && operation !== "reaming" && <div className="space-y-2 col-span-3">
+              <FieldLabel hint="Caps the spindle speed as a percentage of your Max RPM. Use 95% for standard work. Drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern.">Max RPM Use</FieldLabel>
+              <div className="flex w-full gap-1.5">
+                {([
+                  { val: 1.00, label: "100%" },
+                  { val: 0.95, label: "95%"  },
+                  { val: 0.90, label: "90%"  },
+                  { val: 0.80, label: "80%"  },
+                  { val: 0.70, label: "70%"  },
+                ] as const).map(({ val, label }) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, rpm_util_pct: val }))}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all text-center"
+                    style={{
+                      backgroundColor: form.rpm_util_pct === val ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1",
+                      color: form.rpm_util_pct === val ? "#fff" : "#6366f1",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>}
+            {operation === "drilling" && (
+              <div className="space-y-2">
+                <FieldLabel hint="Applies a safety factor to the calculated drill feed. Use 90% for standard holes. Reduce to 80–70% for deep holes (>3×D), difficult materials, or worn machines.">Feed Safety Factor</FieldLabel>
+                <div className="flex w-full gap-1.5">
+                  {([
+                    { val: 1.00, label: "100%" },
+                    { val: 0.90, label: "90%"  },
+                    { val: 0.80, label: "80%"  },
+                    { val: 0.70, label: "70%"  },
+                  ] as const).map(({ val, label }) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, drill_feed_util_pct: val }))}
+                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all text-center"
+                      style={{
+                        backgroundColor: form.drill_feed_util_pct === val ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1",
+                        color: form.drill_feed_util_pct === val ? "#fff" : "#6366f1",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Machine Setup */}
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Setup</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="space-y-6">
+
+            {/* Machine Type */}
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-indigo-500 p-3 space-y-1.5">
+              <FieldLabel hint="Machine configuration affects rigidity and chatter tendency. HMC and 5-axis spindles are often stiffer than VMC. Mill/Turn and Lathe live tooling have lower RPM and HP limits.">Machine Type</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { key: "vmc",       label: "VMC",        hint: "Vertical Machining Center — spindle is vertical. Most common shop machine. Good all-around rigidity for prismatic parts." },
+                  { key: "hmc",       label: "HMC",        hint: "Horizontal Machining Center — spindle is horizontal. Chips fall away from the cut, better for deep pockets and high-volume production. Typically stiffer than VMC." },
+                  { key: "5axis",     label: "5-Axis",     hint: "5-Axis simultaneous machining — spindle can tilt and rotate. Enables complex contoured surfaces in one setup, but shorter effective stickout required for stability." },
+                  { key: "mill_turn", label: "Mill/Turn",  hint: "Mill/Turn machine (e.g. Mazak Integrex, DMG NTX) — dedicated multi-tasking center with full milling spindle and turning capability. Live tool RPM and HP are typically lower than a VMC." },
+                  { key: "lathe",     label: "Lathe",      hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
+                ] as const).map(({ key, label, hint }) => (
+                  <Tooltip key={key}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setForm((p) => {
+                          const isLathe    = key === "lathe";
+                          const isMillTurn = key === "mill_turn";
+                          const isLatheLike = isLathe || isMillTurn;
+                          // workholding default
+                          const defaultWH = isLatheLike ? "3_jaw_chuck" as const : "vise" as const;
+                          // toolholder — reset if switching away from a lathe-incompatible holder
+                          const latheSafe = ["er_collet","hp_collet","weldon","hydraulic","shrink_fit","capto"] as const;
+                          const thReset = isLatheLike && !(latheSafe as readonly string[]).includes(p.toolholder) ? "er_collet" as const : p.toolholder;
+                          // spindle taper default per machine type
+                          const defaultTaper = (
+                            isLathe    ? "VDI40"  :
+                            isMillTurn ? "HSK63"  :
+                            key === "5axis" ? "HSK63" :
+                            "CAT40"
+                          ) as typeof p.spindle_taper;
+                          // if current taper isn't valid for new machine type, reset to default
+                          const latheTapers  = ["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const;
+                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK63","HSK100"] as const;
+                          const taperReset =
+                            isLathe && !(latheTapers as readonly string[]).includes(p.spindle_taper)  ? defaultTaper :
+                            !isLathe && !(millingTapers as readonly string[]).includes(p.spindle_taper) ? defaultTaper :
+                            p.spindle_taper;
+                          return { ...p, machine_type: key, workholding: defaultWH, toolholder: thReset, spindle_taper: taperReset };
+                        })}
+                        className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                        style={{
+                          backgroundColor: form.machine_type === key ? "#6366f1" : "transparent",
+                          borderColor: "#6366f1",
+                          color: form.machine_type === key ? "#fff" : "#6366f1",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-60 text-xs">{hint}</TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+
+              {/* Lathe note — live tooling implied, turning not yet supported */}
+              {form.machine_type === "lathe" && (
+                <p className="mt-2 text-xs text-gray-400">
+                  Live tooling assumed. Turning operations (dead tooling) are not yet supported.
+                </p>
+              )}
+            </div>
+
+            {/* Spindle Interface */}
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-sky-500 p-3 space-y-1.5">
+              <FieldLabel hint={
+                form.machine_type === "lathe"
+                  ? "Live tool turret interface standard. VDI (DIN 69880) is most common on CNC lathes. BMT (Built-in Motor Turret) offers higher rigidity and RPM on modern machines."
+                  : "Spindle interface standard. CV40 (CAT40) is most common in VMCs. BT50 and CAT50 handle higher torque on large HMCs. HSK is inherently dual-contact and stiffer at high RPM."
+              }>Spindle Interface</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  form.machine_type === "lathe"
+                  ? (["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const)
+                  : form.machine_type === "hmc"
+                  ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100"] as const)
+                  : (form.machine_type === "5axis" || form.machine_type === "mill_turn")
+                  ? (["CAT40","BT40","HSK63","HSK100"] as const)
+                  : /* vmc */ (["CAT30","CAT40","CAT50","BT30","BT40","HSK63","HSK100"] as const)
+                ).map((t) => {
+                  const taperLabel: Record<string, string> = { CAT30: "CV30", CAT40: "CV40", CAT50: "CV50" };
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, spindle_taper: t }))}
+                      className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.spindle_taper === t ? "#0ea5e9" : "transparent",
+                        borderColor: "#0ea5e9",
+                        color: form.spindle_taper === t ? "#fff" : "#0ea5e9",
+                      }}
+                    >
+                      {taperLabel[t] ?? t}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Dual Contact — only relevant for CAT/BT tapers; HSK is inherently dual contact; VDI/BMT N/A */}
+              {!form.spindle_taper.startsWith("HSK") && !form.spindle_taper.startsWith("VDI") && !form.spindle_taper.startsWith("BMT") && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={form.dual_contact}
+                        onClick={() => setForm((p) => ({ ...p, dual_contact: !p.dual_contact }))}
+                        className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                        style={{
+                          backgroundColor: form.dual_contact ? "#ef4444" : "transparent",
+                          borderColor: "#ef4444",
+                          color: form.dual_contact ? "#fff" : "#ef4444",
+                        }}
+                      >
+                        {form.dual_contact ? "Dual Contact ✓" : "Dual Contact"}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-64 text-xs">
+                      Big-Plus dual contact — adds simultaneous taper and face contact between spindle and holder. Increases rigidity ~8%, reduces deflection and micro-vibration. Available on CAT/BT Big-Plus holders.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
+            </div>
+
+            {/* Toolholder */}
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-emerald-500 p-3 space-y-1.5">
+              <FieldLabel hint="Toolholder type affects runout and rigidity. Shrink fit and HP Collet (SK/FX-style) have the lowest runout. HP Collet uses a shallow taper angle with a precision bearing nut for superior grip vs standard ER.">Tool Holder</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  (form.machine_type === "lathe" || form.machine_type === "mill_turn")
+                  ? ([
+                      { key: "er_collet",  label: "ER Collet",  hint: "Standard ER collet — most common live tooling holder. 3–5 µm runout. Versatile across drills, end mills, and taps." },
+                      { key: "hp_collet",  label: "HP Collet",  hint: "SK/FX-style precision bearing nut collet — better clamping and runout than standard ER. Good upgrade for live tool stations." },
+                      { key: "weldon",     label: "Weldon",     hint: "Side-lock set screw on a flat — positive mechanical lock, prevents pullout under heavy radial load on live tool turrets." },
+                      { key: "hydraulic",  label: "Hydraulic",  hint: "Oil-membrane clamping — excellent vibration damping and 1–2 µm runout. Available on premium live tool heads." },
+                      { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
+                      { key: "capto",      label: "Capto",      hint: "Sandvik Capto polygon taper — designed for turning/milling centres. Exceptional rigidity and fast changeover on live tool turrets." },
+                    ] as const)
+                  : ([
+                      { key: "er_collet",       label: "ER Collet",       hint: "Standard ER collet — versatile and widely available. 3–5 µm runout. Good for general use; upgrade for precision or HEM work." },
+                      { key: "hp_collet",       label: "HP Collet",       hint: "SK/FX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer FX)" },
+                      { key: "weldon",          label: "Weldon",          hint: "Side-lock set screw on a flat ground into the shank — positive mechanical lock, prevents pullout under heavy load. Larger tools (≥1\") often use double Weldon flats." },
+                      { key: "shell_mill_arbor",label: "Shell Mill Arbor",hint: "Face contact + drive keys + center bolt — used for indexable face mills and shell mills. Rigid face interface; swap insert bodies without re-indicating." },
+                      { key: "milling_chuck",   label: "Milling Chuck",   hint: "Full-bore mechanical chuck — high clamping torque, good radial stiffness. Well suited for heavy interrupted cuts and roughing." },
+                      { key: "hydraulic",       label: "Hydraulic",       hint: "Oil-membrane clamping — full circumferential contact, excellent vibration damping, 1–2 µm runout. Great for finishing and long-reach applications." },
+                      { key: "press_fit",       label: "Press-Fit",       hint: "Lobed press-fit interface — full bore contact with self-centering geometry under load. High rigidity and excellent runout. Requires dedicated press tooling to assemble." },
+                      { key: "shrink_fit",      label: "Shrink Fit",      hint: "Thermally shrunk onto shank — <1 µm runout, maximum grip and rigidity. Best for high-speed and heavy roughing." },
+                      { key: "capto",           label: "Capto",           hint: "Polygon taper with face contact — exceptional rigidity and repeatability. Common on turning/milling centres." },
+                    ] as const)
+                ).map(({ key, label, hint }) => (
+                  <Tooltip key={key}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setForm((p) => ({ ...p, toolholder: key }))}
+                        className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                        style={{
+                          backgroundColor: form.toolholder === key ? "#10b981" : "transparent",
+                          borderColor: "#10b981",
+                          color: form.toolholder === key ? "#fff" : "#10b981",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-56 text-xs">{hint}</TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+              {/* Extension holder Yes/No */}
+              <div className="flex items-center gap-3 pt-2 mt-1 border-t border-border flex-wrap">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-xs font-medium text-zinc-300 cursor-default">Is an Extension Holder being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-64 text-xs">
+                    An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability advisor will flag this.
+                  </TooltipContent>
+                </Tooltip>
+                {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                  <button
+                    key={String(val)}
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, extension_holder: val }))}
+                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                      borderColor: val ? "#f59e0b" : "#52525b",
+                      color: form.extension_holder === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {form.extension_holder && (
+                  <span className="text-[11px] text-amber-400">⚠ Multi-joint setup — added compliance and runout at each interface</span>
+                )}
+              </div>
+
+              {/* Holder extension inputs */}
+              <div className="flex gap-3 pt-2 mt-1 border-t border-border">
+                <div className="flex-1 space-y-1">
+                  <FieldLabel hint="Total projection from spindle face to end of holder (where tool starts). Accounts for long-nose, extended shrink fit, or any holder that adds reach before the tool. Leave blank for standard holders.">Holder Gage Length (in)</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 4.0"
+                    className="no-spinners"
+                    value={holderGageText}
+                    onChange={(e) => setHolderGageText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(holderGageText);
+                      if (Number.isFinite(n) && n > 0) {
+                        setForm((p) => ({ ...p, holder_gage_length: n }));
+                        setHolderGageText(n.toFixed(3));
+                      } else {
+                        setForm((p) => ({ ...p, holder_gage_length: 0 }));
+                        setHolderGageText("");
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <FieldLabel hint="Diameter of the holder nose / extension section. Critical for long-nose and slender extension holders — a thin nose deflects much more than a standard body. Leave blank to use a default estimate (2× tool diameter).">Nose Dia (in)</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 1.25"
+                    className="no-spinners"
+                    value={holderNoseDiaText}
+                    onChange={(e) => setHolderNoseDiaText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(holderNoseDiaText);
+                      if (Number.isFinite(n) && n > 0) {
+                        setForm((p) => ({ ...p, holder_nose_dia: n }));
+                        setHolderNoseDiaText(n.toFixed(3));
+                      } else {
+                        setForm((p) => ({ ...p, holder_nose_dia: 0 }));
+                        setHolderNoseDiaText("");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Coolant */}
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
+              <FieldLabel hint="Coolant delivery method affects tool life and surface finish. TSC (through-spindle coolant) significantly extends tool life in tough materials.">Coolant</FieldLabel>
+              {/* Row 1: Delivery */}
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { key: "dry",      label: "Dry",         hint: null },
+                  { key: "mist",     label: "Mist",        hint: null },
+                  { key: "flood",    label: "Flood",       hint: null },
+                  { key: "tsc_low",  label: "TSC 300psi",  hint: "Through-Spindle Coolant — pumped at high pressure through the spindle and toolholder, exiting at the cutting edge. 300 psi is effective for aluminum and mild steel." },
+                  { key: "tsc_high", label: "TSC 1000psi", hint: "Through-Spindle Coolant at high pressure — coolant blasts directly at the cutting edge through the tool body. Dramatically extends tool life in stainless, titanium, and Inconel." },
+                ] as const).map(({ key, label, hint }) => {
+                  const btn = (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, coolant: key }))}
+                      className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.coolant === key ? "#f59e0b" : "transparent",
+                        borderColor: "#f59e0b",
+                        color: form.coolant === key ? "#111" : "#f59e0b",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                  if (!hint) return btn;
+                  return (
+                    <Tooltip key={key}>
+                      <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-64 text-xs">{hint}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+
+              {/* Row 2: Fluid Type (hidden when dry) */}
+              {form.coolant !== "dry" && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Fluid Type</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { key: "water_soluble",  label: "Water-Soluble",  hint: "Soluble oil (oil-in-water emulsion). Good lubricity and cooling. Measure with a refractometer — target 8–12%. Best all-around for steel and stainless." },
+                      { key: "semi_synthetic", label: "Semi-Synthetic",  hint: "Partial synthetic + partial mineral oil. Balanced lubricity and cooling. Very common in job shops — good for steel, stainless, and cast iron." },
+                      { key: "synthetic",      label: "Synthetic",       hint: "Water-based, no mineral oil. Excellent cooling, lower lubricity. Preferred for aluminum. Less ideal for stainless/Inconel where lubricity reduces built-up edge." },
+                      { key: "straight_oil",   label: "Straight Oil",    hint: "Pure cutting oil — no water. Best lubricity, minimal cooling. Preferred for difficult stainless, Inconel, and threading. Not ideal for high-speed aluminum." },
+                    ] as const).map(({ key, label, hint }) => (
+                      <Tooltip key={key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setForm((p) => ({ ...p, coolant_fluid: key }))}
+                            className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                            style={{
+                              backgroundColor: form.coolant_fluid === key ? "#f59e0b" : "transparent",
+                              borderColor: "#f59e0b",
+                              color: form.coolant_fluid === key ? "#111" : "#f59e0b",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-64 text-xs">{hint}</TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Row 3: Concentration (water-based fluids only) */}
+              {form.coolant !== "dry" && form.coolant_fluid !== "straight_oil" && (() => {
+                const pct = form.coolant_concentration ?? 10;
+                const concTip =
+                  pct < 7  ? "⚠ Below recommended — poor lubricity and bacterial risk. Target 8–12%." :
+                  pct <= 12 ? "Optimal for most metals — good balance of lubricity and cooling." :
+                  pct <= 16 ? "Richer mix — better lubricity for tough materials (stainless, Inconel)." :
+                              "⚠ Over-concentrated — residue buildup and foaming risk. Check with fluid supplier.";
+                return (
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+                      Refractometer Reading (Concentration %)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="w-7 h-7 rounded border border-zinc-600 text-zinc-300 text-sm font-bold flex items-center justify-center hover:bg-zinc-700"
+                        onClick={() => setForm(p => ({ ...p, coolant_concentration: Math.max(1, (p.coolant_concentration ?? 10) - 1) }))}
+                      >−</button>
+                      <span className="text-sm font-semibold text-white w-10 text-center">{pct}%</span>
+                      <button
+                        type="button"
+                        className="w-7 h-7 rounded border border-zinc-600 text-zinc-300 text-sm font-bold flex items-center justify-center hover:bg-zinc-700"
+                        onClick={() => setForm(p => ({ ...p, coolant_concentration: Math.min(25, (p.coolant_concentration ?? 10) + 1) }))}
+                      >+</button>
+                      <span className={`text-[11px] ${pct < 7 || pct > 16 ? "text-amber-400" : "text-zinc-400"}`}>{concTip}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Workholding */}
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
+              <FieldLabel hint="Workholding rigidity affects chatter and deflection. Rigid fixtures and between-centers setups minimize compliance; soft jaws and standard chucks introduce more vibration tendency.">Workholding</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  (form.machine_type === "lathe" || form.machine_type === "mill_turn")
+                  ? ([
+                      { key: "3_jaw_chuck",     label: "3-Jaw Chuck"      },
+                      { key: "4_jaw_chuck",     label: "4-Jaw Chuck"      },
+                      { key: "collet_chuck",    label: "Collet Chuck"     },
+                      { key: "between_centers", label: "Between Centers"  },
+                      { key: "face_plate",      label: "Face Plate"       },
+                      { key: "soft_jaws",       label: "Soft Jaws"        },
+                    ] as const)
+                  : form.machine_type === "hmc"
+                  ? ([
+                      { key: "rigid_fixture", label: "Rigid Fixture" },
+                      { key: "tombstone",     label: "Tombstone"     },
+                      { key: "dovetail",      label: "Dovetail"      },
+                      { key: "vise",          label: "Vise"          },
+                      { key: "toe_clamps",    label: "Toe Clamps"    },
+                      { key: "soft_jaws",     label: "Soft Jaws"     },
+                    ] as const)
+                  : form.machine_type === "5axis"
+                  ? ([
+                      { key: "rigid_fixture", label: "Rigid Fixture"  },
+                      { key: "5th_axis_vise", label: "5th-Axis Vise"  },
+                      { key: "dovetail",      label: "Dovetail"       },
+                      { key: "vise",          label: "Vise"           },
+                      { key: "soft_jaws",     label: "Soft Jaws"      },
+                    ] as const)
+                  : /* vmc default */ ([
+                      { key: "rigid_fixture", label: "Rigid Fixture"  },
+                      { key: "5th_axis_vise", label: "5th-Axis Vise"  },
+                      { key: "dovetail",      label: "Dovetail"       },
+                      { key: "vise",          label: "Vise"           },
+                      { key: "toe_clamps",    label: "Toe Clamps"     },
+                      { key: "soft_jaws",     label: "Soft Jaws"      },
+                    ] as const)
+                ).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, workholding: key }))}
+                    className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.workholding === key ? "#a855f7" : "transparent",
+                      borderColor: "#a855f7",
+                      color: form.workholding === key ? "#fff" : "#a855f7",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button
+              className="w-full transition-all"
+              onClick={run}
+              disabled={mentor.isPending}
+              style={formDirty ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
+            >
+              {mentor.isPending ? "Running…" : formDirty ? "⟳ Inputs changed — Re-run EZCutCNC" : "Run EZCutCNC"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={resetAll}
+              disabled={mentor.isPending}
+            >
+              Clear
+            </Button>
+          </div>
+
+          {runWarnings.length > 0 && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
+              <p className="font-semibold mb-1">Please fill in the following before running:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {runWarnings.map(w => <li key={w}>{w}</li>)}
+              </ul>
+            </div>
+          )}
+          {!runWarnings.length && mentor.error ? (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
+              <p className="font-semibold mb-1">Something went wrong — check your inputs:</p>
+              <p>{(mentor.error as any)?.message || "Unknown error"}</p>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* RIGHT — OUTPUT + STABILITY */}
+      <div className="flex flex-col gap-4">
+
+      {/* OUTPUT CARD */}
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Recommendation</CardTitle>
+            {customer && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={copyCamParams}
+                  className="text-[11px] font-semibold px-3 py-1 rounded border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 transition-colors leading-tight"
+                >
+                  {camCopied ? "Copied ✓" : "Copy CAM Parameters"}
+                </button>
+                <button
+                  type="button"
+                  onClick={printSummary}
+                  className="text-[11px] font-semibold px-3 py-1 rounded border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 transition-colors leading-tight"
+                >
+                  ⬇ Print / Save PDF
+                </button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {!customer ? (
+            <div className="text-sm text-muted-foreground">
+              Run Mentor to see recommendations.
+            </div>
+          ) : threadResult ? (
+            /* ── THREAD MILLING OUTPUT ───────────────────────────── */
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Kpi label="RPM"           hint="Spindle speed for thread milling, based on target SFM at the cutter OD." value={fmtInt(threadResult.rpm)} />
+                <Kpi label="SFM"           hint="Surface Feet per Minute at the cutter OD. Thread form engagement reduces SFM target vs. flat milling." value={fmtNum(threadResult.sfm, 0)} />
+                <Kpi label="Feed (IPM)"    hint="Table feed rate. Scales with number of thread rows — each row cuts simultaneously, increasing effective feed." value={fmtNum(threadResult.feed_ipm, 2)} />
+                <Kpi label="FPT"           hint="Feed per tooth per row. Reduced ~20% from base milling chip load due to thread form engagement." value={threadResult.fpt.toFixed(6)} />
+                <Kpi label="Radial Passes" hint="Number of radial passes to reach full thread depth. Coarser pitch, harder material, and tight-class threads require more passes." value={String(threadResult.radial_passes)} />
+                <Kpi label="DOC / Pass"    hint="Radial depth of cut per pass — thread depth divided by pass count." value={`${threadResult.doc_per_pass_in.toFixed(5)}"`} />
+              </div>
+
+              {/* Thread Geometry card */}
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2.5">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Thread Geometry</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                  <div><span className="text-zinc-500">TPI</span><span className="ml-2 font-semibold text-foreground">{threadResult.tpi % 1 === 0 ? threadResult.tpi : threadResult.tpi.toFixed(2)}</span></div>
+                  <div><span className="text-zinc-500">Pitch</span><span className="ml-2 font-semibold text-foreground">{threadResult.pitch_in.toFixed(5)}"</span></div>
+                  <div><span className="text-zinc-500">Thread Depth</span><span className="ml-2 font-semibold text-foreground">{threadResult.thread_depth_in.toFixed(5)}"</span></div>
+                  <div><span className="text-zinc-500">Minor Dia</span><span className="ml-2 font-semibold text-foreground">{threadResult.minor_dia_in.toFixed(5)}"</span></div>
+                  <div><span className="text-zinc-500">Pitch Dia</span><span className="ml-2 font-semibold text-foreground">{threadResult.pitch_dia_in.toFixed(5)}"</span></div>
+                  <div>
+                    <span className="text-zinc-500">{threadResult.internal ? "Internal" : "External"}</span>
+                    <span className="ml-2 text-zinc-500">·</span>
+                    <span className="ml-2 text-zinc-500">{threadResult.hand === "right" ? "RH" : "LH"}</span>
+                    {threadResult.is_tapered && <span className="ml-2 text-sky-400 font-semibold">Tapered</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Pass Strategy card */}
+              {(() => {
+                const n = threadResult.radial_passes;
+                const docEa = threadResult.doc_per_pass_in;
+                // Derive why reasons from pitch and inputs
+                const pitch = threadResult.pitch_in;
+                const reasons: string[] = [];
+                if (pitch >= 0.100)       reasons.push("very coarse pitch (TPI ≤ 10)");
+                else if (pitch >= 0.0625) reasons.push("coarse pitch (TPI ≤ 16)");
+                const mat = form.material.toLowerCase();
+                const isInconelTi = ["inconel","titanium","hastelloy","waspaloy","monel","mp35n","hiTemp"].some(k => mat.includes(k));
+                const isStainless = mat.includes("stainless");
+                if (isInconelTi)  reasons.push("Inconel / titanium — 3 passes minimum for tool life (reduces heat and edge load per pass)");
+                else if (isStainless) reasons.push("stainless — work-hardens, needs light finishing cut");
+                if (form.thread_neck_length > 0) reasons.push("necked tool — reduced rigidity");
+                // Build pass rows using per-pass DOCs from engine (variable split), fall back to equal
+                const perPassDocs: number[] = (threadResult.pass_docs && threadResult.pass_docs.length === n)
+                  ? threadResult.pass_docs
+                  : Array(n).fill(docEa);
+                const passes = Array.from({ length: n }, (_, i) => ({
+                  label: n === 1 ? "Pass 1 (single-pass finish)" : i < n - 1 ? `Pass ${i + 1} (roughing)` : `Pass ${n} (finish)`,
+                  doc: perPassDocs[i],
+                }));
+                return (
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 px-3 py-2.5 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Radial Pass Strategy</p>
+                      <span className="text-muted-foreground font-medium">{n} pass{n > 1 ? "es" : ""}{threadResult.spring_pass ? " + spring" : ""}</span>
+                    </div>
+                    {reasons.length > 0 && (
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        <span className="text-zinc-500">Why: </span>{reasons.join(", ")}.
+                      </p>
+                    )}
+                    <div className="space-y-1">
+                      {passes.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-400">{p.label}</span>
+                          <span className="font-medium text-foreground tabular-nums">{p.doc.toFixed(5)}" DOC</span>
+                        </div>
+                      ))}
+                      {threadResult.spring_pass && (
+                        <div className="flex items-center justify-between text-[11px] text-indigo-300">
+                          <span>Spring pass (repeat pass {n} at same offset)</span>
+                          <span className="font-medium tabular-nums">{docEa.toFixed(5)}" DOC</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                      Total thread depth: <span className="text-foreground font-medium">{threadResult.thread_depth_in.toFixed(5)}"</span>
+                      {threadResult.finish_pass_frac != null && n > 1 && (
+                        <span> · finish pass = <span className="text-foreground font-medium">{Math.round(threadResult.finish_pass_frac * 100)}%</span> of depth</span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Deflection indicator */}
+              {(() => {
+                const pct = threadResult.deflection_pct;
+                const cfg = pct < 100
+                  ? { border: "border-emerald-500/50", bg: "bg-emerald-500/10", bar: "bg-emerald-500", text: "text-emerald-300", label: "OK" }
+                  : pct < 175
+                  ? { border: "border-amber-500/50",  bg: "bg-amber-500/10",  bar: "bg-amber-500",  text: "text-amber-300",  label: "CAUTION" }
+                  : { border: "border-red-500/50",     bg: "bg-red-500/10",     bar: "bg-red-500",     text: "text-red-300",     label: "WARNING" };
+                const limitIn = threadResult.deflection_pct > 0 ? (threadResult.deflection_in / (threadResult.deflection_pct / 100)) : 0;
+                return (
+                  <div className={`rounded-lg border ${cfg.border} ${cfg.bg} px-3 py-2 text-xs`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Tool Deflection</span>
+                      <span className={`font-bold ${cfg.text}`}>{cfg.label} — {pct.toFixed(0)}% of limit</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-zinc-700">
+                      <div className={`h-1.5 rounded-full ${cfg.bar}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                    </div>
+                    <p className="mt-1 text-muted-foreground">{threadResult.deflection_in.toFixed(6)}" deflection · limit {limitIn.toFixed(6)}"</p>
+                  </div>
+                );
+              })()}
+
+              {/* Stability suggestions */}
+              {(() => {
+                const pct = threadResult.deflection_pct;
+                if (pct < 100) return null;
+                const isRed = pct >= 175;
+                const border = isRed ? "border-red-500/40" : "border-amber-500/40";
+                const bg     = isRed ? "bg-red-500/10"     : "bg-amber-500/10";
+                const hdr    = isRed ? "text-red-400"       : "text-amber-400";
+                const txt    = isRed ? "text-red-300"       : "text-amber-200";
+                const suggestions: string[] = [];
+                if (form.stickout > 0) suggestions.push(`Reduce stickout — current ${form.stickout.toFixed(3)}". Deflection scales with length³; even 10% less stickout cuts force ~27%.`);
+                if (form.thread_neck_length === 0) suggestions.push("Add a neck — a necked thread mill lets you shorten the cutting engagement length while reaching full depth.");
+                suggestions.push(`Increase radial passes — currently ${threadResult.radial_passes}. More passes = smaller DOC per pass = less radial force per pass.`);
+                if (form.tool_dia < form.thread_major_dia * 0.55) suggestions.push("Use a larger cutter diameter — bigger shank = higher second moment of area (I = πd⁴/64), dramatically stiffer.");
+                return (
+                  <div className={`rounded-lg border ${border} ${bg} px-3 py-2.5 text-xs space-y-2`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${hdr}`}>
+                      {isRed ? "⚠ High Deflection — Action Recommended" : "Deflection Caution — Review Setup"}
+                    </p>
+                    <ol className={`list-decimal list-inside space-y-1 ${txt}`}>
+                      {suggestions.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
+                    </ol>
+                  </div>
+                );
+              })()}
+
+              {/* Spring pass note */}
+              {threadResult.spring_pass && (
+                <div className="rounded-lg border border-indigo-500/50 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-300">
+                  Class {form.thread_class}: <span className="font-semibold">Spring pass recommended</span> — repeat the final radial pass at the same offset to achieve consistent thread accuracy.
+                </div>
+              )}
+
+              {/* Engine notes / warnings */}
+              {threadResult.notes.length > 0 && (
+                <div className="space-y-1.5">
+                  {threadResult.notes.map((note: string, i: number) => (
+                    <div key={i} className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                      ⚠ {note}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* G-Code section */}
+              <div className="rounded-xl border-2 border-indigo-500 bg-indigo-500/10 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wide">
+                    G-Code — {form.thread_gcode_dialect === "siemens" ? "Siemens 840D" : "Fanuc / Haas"} · {form.thread_cut_direction === "bottom_up" ? "Bottom-Up" : "Top-Down"}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTmGcodeExpanded((v) => !v)}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded border border-indigo-400/50 text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                    >
+                      {tmGcodeExpanded ? "Hide" : "Show G-Code"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(threadResult.gcode).then(() => {
+                          toast({ title: "G-Code copied", description: "Paste into your CNC program editor." });
+                        });
+                      }}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded border border-indigo-400/50 text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                    >
+                      Copy G-Code
+                    </button>
+                  </div>
+                </div>
+                {tmGcodeExpanded && (
+                  <pre className="overflow-x-auto rounded bg-zinc-900 p-3 text-[11px] font-mono text-emerald-300 whitespace-pre max-h-72 overflow-y-auto">
+                    {threadResult.gcode}
+                  </pre>
+                )}
+              </div>
+
+              {/* Core Cutter Recommends — thread mill quote card */}
+              {(() => {
+                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
+                const cr = getCoatingRec(isoCategory);
+                const tpiLabel = form.thread_tpi
+                  ? `× ${form.thread_tpi} TPI`
+                  : form.thread_pitch_mm
+                  ? `× ${form.thread_pitch_mm} mm pitch`
+                  : "";
+                return (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">Core Cutter Recommends</p>
+                        <p className="font-semibold text-foreground text-sm">Custom Thread Mill — Built to Order</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setTmQuoteSent(false); setShowTmQuote(true); }}
+                        className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
+                      >
+                        Request Quote
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
+                      <div><span className="text-zinc-500">Thread</span><span className="ml-2 font-medium text-foreground">{form.thread_standard.toUpperCase()} {form.thread_major_dia > 0 ? `ø${form.thread_major_dia.toFixed(4)}"` : "—"} {tpiLabel}</span></div>
+                      <div><span className="text-zinc-500">Class / Hand</span><span className="ml-2 font-medium text-foreground">{form.thread_class} · {form.thread_hand === "right" ? "RH" : "LH"}</span></div>
+                      <div><span className="text-zinc-500">Int / Ext</span><span className="ml-2 font-medium text-foreground">{form.thread_internal ? "Internal" : "External"}</span></div>
+                      <div><span className="text-zinc-500">Cutter Dia</span><span className="ml-2 font-medium text-foreground">{form.tool_dia > 0 ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
+                      <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes}</span></div>
+                      <div><span className="text-zinc-500">Thread Profiles</span><span className="ml-2 font-medium text-foreground">{form.thread_rows}</span></div>
+                      <div><span className="text-zinc-500">Reach / Neck</span><span className="ml-2 font-medium text-foreground">{form.thread_neck_length > 0 ? `${form.thread_neck_length.toFixed(3)}"` : "None"}</span></div>
+                      <div><span className="text-zinc-500">Material</span><span className="ml-2 font-medium text-foreground">{matLabel}</span></div>
+                      <div><span className="text-zinc-500">Recommended Coating</span><span className="ml-2 font-bold text-orange-400">{cr.code}</span></div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Thread Mill quote modal */}
+              {showTmQuote && (() => {
+                const qf = quoteForm;
+                const setQf = (patch: Partial<typeof quoteForm>) => setQuoteForm(p => ({ ...p, ...patch }));
+                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
+                const spec = {
+                  thread_standard: form.thread_standard.toUpperCase(),
+                  major_dia: form.thread_major_dia > 0 ? `${form.thread_major_dia.toFixed(4)}"` : "?",
+                  tpi: form.thread_tpi ? String(form.thread_tpi) : "—",
+                  pitch_mm: form.thread_pitch_mm ? `${form.thread_pitch_mm} mm` : "—",
+                  thread_class: form.thread_class,
+                  hand: form.thread_hand === "right" ? "RH" : "LH",
+                  int_ext: form.thread_internal ? "Internal" : "External",
+                  cutter_dia: form.tool_dia > 0 ? `${form.tool_dia.toFixed(4)}"` : "?",
+                  thread_profiles: String(form.thread_rows),
+                  neck_length: form.thread_neck_length > 0 ? `${form.thread_neck_length.toFixed(3)}"` : "None",
+                  material: matLabel,
+                  coating: getCoatingRec(isoCategory).code,
+                };
+                const handleSubmit = async (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!qf.name || !qf.email) return;
+                  setTmQuoteSending(true);
+                  try {
+                    const r = await fetch("/api/quote/threadmill", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ customer: qf, spec }),
+                    });
+                    if (r.ok) {
+                      setTmQuoteSent(true);
+                    } else {
+                      const d = await r.json().catch(() => ({}));
+                      toast({ title: "Submission failed", description: d.message || "Please try again.", variant: "destructive" });
+                    }
+                  } catch {
+                    toast({ title: "Network error", description: "Could not reach server.", variant: "destructive" });
+                  } finally {
+                    setTmQuoteSending(false);
+                  }
+                };
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowTmQuote(false)}>
+                    <div className="relative w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+                      <button type="button" onClick={() => setShowTmQuote(false)} className="absolute top-3 right-3 text-zinc-400 hover:text-white text-lg leading-none">✕</button>
+
+                      {tmQuoteSent ? (
+                        <div className="py-8 text-center space-y-3">
+                          <div className="text-4xl">✓</div>
+                          <p className="font-semibold text-emerald-400">Quote Request Sent</p>
+                          <p className="text-xs text-zinc-400">The Core Cutter team at <span className="text-zinc-200">sales@corecutterusa.com</span> will follow up shortly.</p>
+                          <button type="button" onClick={() => setShowTmQuote(false)} className="mt-2 rounded-lg bg-zinc-700 px-5 py-1.5 text-xs font-semibold hover:bg-zinc-600 transition-colors">Close</button>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                          <h2 className="font-semibold text-sm text-foreground">Request Custom Thread Mill Quote</h2>
+
+                          <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs space-y-1 text-zinc-300">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Thread Mill Spec</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <span className="text-zinc-500">Standard</span><span>{spec.thread_standard}</span>
+                              <span className="text-zinc-500">Major Dia</span><span>{spec.major_dia}</span>
+                              {form.thread_standard === "metric"
+                                ? <><span className="text-zinc-500">Pitch</span><span>{spec.pitch_mm}</span></>
+                                : <><span className="text-zinc-500">TPI</span><span>{spec.tpi}</span></>}
+                              <span className="text-zinc-500">Class / Hand</span><span>{spec.thread_class} · {spec.hand}</span>
+                              <span className="text-zinc-500">Int / Ext</span><span>{spec.int_ext}</span>
+                              <span className="text-zinc-500">Cutter Dia</span><span>{spec.cutter_dia}</span>
+                              <span className="text-zinc-500">Thread Profiles</span><span>{spec.thread_profiles}</span>
+                              <span className="text-zinc-500">Neck Length</span><span>{spec.neck_length}</span>
+                              <span className="text-zinc-500">Material</span><span>{spec.material}</span>
+                              <span className="text-zinc-500">Coating</span><span className="font-bold text-orange-400">{spec.coating}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Name <span className="text-red-400">*</span></label>
+                              <input required value={qf.name} onChange={e => setQf({ name: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="Your name" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Company</label>
+                              <input value={qf.company} onChange={e => setQf({ company: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="Company name" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Phone</label>
+                              <input value={qf.phone} onChange={e => setQf({ phone: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="(555) 000-0000" />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
+                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Quantity</label>
+                              <input value={qf.qty} onChange={e => setQf({ qty: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="e.g. 5" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Tolerance</label>
+                              <input value={qf.tolerance} onChange={e => setQf({ tolerance: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="e.g. 2B, 6H" />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Notes</label>
+                              <textarea value={qf.notes} onChange={e => setQf({ notes: e.target.value })} rows={2} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none" placeholder="Coating, shank style, special profile, drawing notes…" />
+                            </div>
+                          </div>
+
+                          <button type="submit" disabled={tmQuoteSending || !qf.name || !qf.email} className="w-full rounded-lg bg-amber-500 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                            {tmQuoteSending ? "Sending…" : "Send Quote Request to Core Cutter"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          ) : reamResult ? (
+            /* ── REAMING OUTPUT ──────────────────────────────────── */
+            <>
+              {/* KPI grid */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Kpi label="RPM"          hint="Spindle speed for reaming. Significantly lower than drilling — typically 50–65% of the equivalent drill speed to maintain surface finish and dimensional accuracy." value={fmtInt(reamResult.rpm)} />
+                <Kpi label="SFM"          hint="Surface Feet per Minute for the reamer. Conservative SFM protects the cutting edge and ensures consistent hole geometry. For step reamers, based on the largest diameter." value={fmtNum(reamResult.sfm, 0)} />
+                <Kpi label="Feed (IPM)"   hint="Table feed rate in inches per minute for reaming. Reaming uses higher IPR (feed per rev) than drilling — sufficient feed is critical to prevent rubbing and built-up edge." value={fmtNum(reamResult.ipm, 3)} />
+                <Kpi label="IPR"          hint="Inches Per Revolution for reaming — the key parameter for hole quality. Too light causes rubbing and poor finish; too heavy risks bell-mouthing and size overrun. The engine targets 0.001–0.003 in stock removal per side." value={reamResult.ipr?.toFixed(5) ?? "—"} />
+                <Kpi label="HP Required"  hint="Estimated cutting power for reaming. Much lower than drilling since the reamer removes only a thin stock layer (0.002–0.006 in total). HP scales with reamer diameter and material." value={fmtNum(reamResult.hp_required, 2)} />
+                <Kpi label="Depth / D"    hint="Hole depth as a multiple of reamer diameter. Deep reamers (above 3×D) are prone to deflection and chatter — consider a longer-shank reamer or guide bushing above 5×D." value={`${fmtNum(reamResult.depth_xd, 1)}×`} />
+              </div>
+
+              {/* Coating recommendation */}
+              {(() => { const cr = getCoatingRec(isoCategory); return (
+                <div className="flex items-center gap-2 px-1 text-xs">
+                  <span className="text-muted-foreground">Recommended Coating:</span>
+                  <span className="font-bold text-orange-400">{cr.code}</span>
+                  <span className="text-muted-foreground">— optimized for {cr.desc}</span>
+                </div>
+              ); })()}
+
+              {/* Step reamer note */}
+              {reamResult.largest_dia != null && reamResult.entry_dia != null && reamResult.largest_dia !== reamResult.entry_dia && (
+                <div className="rounded-lg border border-sky-500 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+                  Step reamer — SFM on ø{reamResult.largest_dia.toFixed(4)}" (largest) · Feed (IPR) on ø{reamResult.entry_dia.toFixed(4)}" (entry)
+                </div>
+              )}
+
+              {/* Stock allowance card */}
+              {(() => {
+                const stockColor =
+                  reamResult.stock_status === "ok"        ? { border: "border-emerald-500/50", bg: "bg-emerald-500/10", text: "text-emerald-300", badge: "bg-emerald-500/20 text-emerald-300" }
+                  : reamResult.stock_status === "low"     ? { border: "border-amber-500/50",  bg: "bg-amber-500/10",  text: "text-amber-300",  badge: "bg-amber-500/20  text-amber-300"  }
+                  : reamResult.stock_status === "high"    ? { border: "border-orange-500/50",  bg: "bg-orange-500/10",  text: "text-orange-300",  badge: "bg-orange-500/20  text-orange-300"  }
+                  : reamResult.stock_status === "excessive"? { border: "border-red-500/50",    bg: "bg-red-500/10",     text: "text-red-300",     badge: "bg-red-500/20     text-red-300"     }
+                  :                                         { border: "border-zinc-600",       bg: "bg-zinc-800/40",    text: "text-zinc-300",    badge: "bg-zinc-700      text-zinc-300"    };
+                return (
+                  <div className={`rounded-lg border ${stockColor.border} ${stockColor.bg} px-3 py-2.5 text-xs space-y-1`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground">Stock Allowance</span>
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${stockColor.badge}`}>
+                        {reamResult.stock_status.toUpperCase()}
+                      </span>
+                    </div>
+                    {reamResult.stock_per_side_in != null && reamResult.stock_total_in != null && (
+                      <p className={stockColor.text}>
+                        {reamResult.stock_per_side_in.toFixed(4)}" per side · {reamResult.stock_total_in.toFixed(4)}" total diametral
+                      </p>
+                    )}
+                    <p className="text-muted-foreground">
+                      Ideal: {reamResult.stock_ideal_in.toFixed(4)}" total · Range: {reamResult.stock_min_in.toFixed(4)}"–{reamResult.stock_max_in.toFixed(4)}"
+                    </p>
+                    {reamResult.stock_warning && (
+                      <p className={`font-medium ${stockColor.text}`}>⚠ {reamResult.stock_warning}</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Depth status */}
+              {(() => {
+                const depthColor =
+                  reamResult.depth_status === "ok"      ? { border: "border-emerald-500/50", bg: "bg-emerald-500/10", text: "text-emerald-300" }
+                  : reamResult.depth_status === "caution"? { border: "border-amber-500/50",  bg: "bg-amber-500/10",  text: "text-amber-300"  }
+                  :                                        { border: "border-red-500/50",      bg: "bg-red-500/10",     text: "text-red-300"     };
+                return (
+                  <div className={`rounded-lg border ${depthColor.border} ${depthColor.bg} px-3 py-2 text-xs`}>
+                    <span className="font-semibold text-foreground">Hole Depth: </span>
+                    <span className={depthColor.text}>{reamResult.depth_xd.toFixed(1)}×D</span>
+                    {reamResult.depth_note && (
+                      <p className={`mt-0.5 ${depthColor.text}`}>{reamResult.depth_note}</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Confidence score + risk flags */}
+              {(() => {
+                const confColor =
+                  reamResult.confidence === "green"  ? { border: "border-emerald-500/50", bg: "bg-emerald-500/10", text: "text-emerald-300", label: "Setup Optimized — Good to Go"  }
+                  : reamResult.confidence === "yellow"? { border: "border-amber-500/50",  bg: "bg-amber-500/10",  text: "text-amber-300",  label: "Tool Optimization Suggestion(s)"    }
+                  : reamResult.confidence === "orange"? { border: "border-orange-500/50",  bg: "bg-orange-500/10",  text: "text-orange-300",  label: "Tool Optimization Suggestion(s)"  }
+                  :                                     { border: "border-red-500/50",      bg: "bg-red-500/10",     text: "text-red-300",     label: "Setup Needs Attention"        };
+                return (
+                  <div className={`rounded-lg border ${confColor.border} ${confColor.bg} px-3 py-2.5 text-xs space-y-1.5`}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-foreground">{confColor.label}</span>
+                    </div>
+                    {reamResult.risk_flags.length > 0 && (
+                      <ul className="list-none space-y-1 mt-0.5">
+                        {reamResult.risk_flags.map((flag: string, i: number) => (
+                          <li key={i} className={`flex gap-1.5 ${confColor.text}`}>
+                            <span className="shrink-0">💡</span>
+                            <span>{flag}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Quality Considerations — finish + straightness */}
+              {(reamResult.finish_risk || reamResult.straightness_risk) && (() => {
+                const dotColor = (r: string) =>
+                  r === "green"  ? "bg-emerald-400"
+                  : r === "yellow" ? "bg-amber-400"
+                  : r === "orange" ? "bg-orange-400"
+                  : "bg-red-400";
+                return (
+                  <div className="rounded-lg border border-zinc-600 bg-zinc-800/40 px-3 py-2.5 text-xs space-y-3">
+                    <p className="font-semibold text-foreground uppercase tracking-wide text-[10px]">Hole Quality Considerations</p>
+
+                    {/* Surface finish section */}
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-0.5 inline-block h-2 w-2 rounded-full flex-shrink-0 ${dotColor(reamResult.finish_risk ?? "green")}`} />
+                      <div className="space-y-1">
+                        <div className="font-semibold text-foreground">Surface Finish</div>
+                        {reamResult.finish_ra_base_min != null && reamResult.finish_ra_base_max != null && (
+                          <div className="text-zinc-400">
+                            Expected: {reamResult.finish_ra_base_min}–{reamResult.finish_ra_base_max} μin under good conditions
+                          </div>
+                        )}
+                        {reamResult.finish_notes && reamResult.finish_notes.length > 0 && (
+                          <ul className="list-disc list-inside space-y-0.5 text-zinc-400">
+                            {reamResult.finish_notes.map((n: string, i: number) => (
+                              <li key={i}>{n}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Straightness section */}
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-0.5 inline-block h-2 w-2 rounded-full flex-shrink-0 ${dotColor(reamResult.straightness_risk ?? "green")}`} />
+                      <div className="space-y-1">
+                        <div className="font-semibold text-foreground">Hole Straightness</div>
+                        {reamResult.straightness_notes && reamResult.straightness_notes.length > 0 && (
+                          <ul className="list-disc list-inside space-y-0.5 text-zinc-400">
+                            {reamResult.straightness_notes.map((n: string, i: number) => (
+                              <li key={i}>{n}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Recommended Reamer + Quote CTA — combined card */}
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs space-y-3">
+                {/* Header */}
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">Core Cutter Recommends</p>
+                    <p className="font-semibold text-foreground text-sm">Custom Reamer — Built to Order</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setQuoteSent(false); setShowQuote(true); }}
+                    className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
+                  >
+                    Request Quote
+                  </button>
+                </div>
+
+                {/* Flute configuration — full width, no wrap */}
+                {reamResult.helix_rec && (
+                  <div className="text-[11px]">
+                    <span className="text-zinc-500">Flute Configuration</span>
+                    <span className="ml-2 font-medium text-foreground whitespace-nowrap">{reamResult.helix_rec}</span>
+                  </div>
+                )}
+
+                {/* Spec grid */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
+                  <div><span className="text-zinc-500">Cutting Diameter</span><span className="ml-2 font-medium text-foreground">{form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
+                  <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes || reamFlutes(form.tool_dia)}</span></div>
+                  {reamResult.coating_rec && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-zinc-500">Coating</span>
+                      <span className="font-medium text-foreground ml-2">{reamResult.coating_rec}</span>
+                      {reamResult.iso_category && (
+                        <span className="rounded bg-zinc-700 px-1 py-0.5 text-[9px] font-bold text-zinc-300">ISO {reamResult.iso_category}</span>
+                      )}
+                    </div>
+                  )}
+                  <div><span className="text-zinc-500">Shank Dia</span><span className="ml-2 font-medium text-foreground">{form.ream_shank_dia ? `${form.ream_shank_dia.toFixed(4)}"` : form.tool_dia ? `${form.tool_dia.toFixed(4)}" (= cut dia)` : "—"}</span></div>
+                  <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.ream_hole_depth ? `${form.ream_hole_depth.toFixed(3)}"` : "—"}</span></div>
+                  <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.ream_blind ? "Blind" : "Through"}</span></div>
+                  <div><span className="text-zinc-500">Coolant Thru</span><span className="ml-2 font-medium text-foreground">{form.ream_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"}</span></div>
+                  {reamResult.tool_life_lo != null && reamResult.tool_life_hi != null && (
+                    <div className="col-span-2">
+                      <span className="text-zinc-500">Est. Tool Life</span>
+                      <span className="ml-2 font-medium text-foreground">{reamResult.tool_life_lo}–{reamResult.tool_life_hi} holes typical</span>
+                      <span className="ml-2 text-zinc-500 text-[10px]">varies with runout, pre-drill accuracy & coolant — estimate only, not a guarantee from Core Cutter</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Helix rationale — hand direction + angle reason */}
+                {(reamResult.helix_note || reamResult.helix_angle_note) && (
+                  <div className="space-y-1">
+                    {reamResult.helix_note && (
+                      <p className="text-zinc-400 text-[11px] leading-relaxed">{reamResult.helix_note}</p>
+                    )}
+                    {reamResult.helix_angle_note && (
+                      <p className="text-zinc-300 text-[11px] leading-relaxed">{reamResult.helix_angle_note}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Helix warnings */}
+                {reamResult.helix_warnings && reamResult.helix_warnings.length > 0 && (
+                  <ul className="list-disc list-inside space-y-0.5 text-amber-300 text-[11px]">
+                    {reamResult.helix_warnings.map((w: string, i: number) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Quote modal */}
+              {showQuote && (() => {
+                const qf = quoteForm;
+                const setQf = (patch: Partial<typeof quoteForm>) => setQuoteForm(p => ({ ...p, ...patch }));
+                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
+                const spec = {
+                  diameter: form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "?",
+                  shank_dia: form.ream_shank_dia ? `${form.ream_shank_dia.toFixed(4)}"` : form.tool_dia ? `${form.tool_dia.toFixed(4)}" (= cut dia)` : "?",
+                  flutes: form.flutes ? String(form.flutes) : "?",
+                  depth: form.ream_hole_depth ? `${form.ream_hole_depth.toFixed(4)}"` : "?",
+                  hole_type: form.ream_blind ? "Blind" : "Through",
+                  helix: reamResult?.helix_rec ?? "?",
+                  coating: reamResult?.coating_rec ?? "?",
+                  coolant_thru: form.ream_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank",
+                  material: matLabel,
+                  pre_drill: form.ream_pre_drill_dia ? `${form.ream_pre_drill_dia.toFixed(4)}"` : "?",
+                };
+                const handleSubmit = async (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!qf.name || !qf.email) return;
+                  setQuoteSending(true);
+                  try {
+                    const r = await fetch("/api/quote/reamer", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ customer: qf, spec }),
+                    });
+                    if (r.ok) {
+                      setQuoteSent(true);
+                    } else {
+                      const d = await r.json().catch(() => ({}));
+                      toast({ title: "Submission failed", description: d.message || "Please try again.", variant: "destructive" });
+                    }
+                  } catch {
+                    toast({ title: "Network error", description: "Could not reach server.", variant: "destructive" });
+                  } finally {
+                    setQuoteSending(false);
+                  }
+                };
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowQuote(false)}>
+                    <div className="relative w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+                      <button type="button" onClick={() => setShowQuote(false)} className="absolute top-3 right-3 text-zinc-400 hover:text-white text-lg leading-none">✕</button>
+
+                      {quoteSent ? (
+                        <div className="py-8 text-center space-y-3">
+                          <div className="text-4xl">✓</div>
+                          <p className="font-semibold text-emerald-400">Quote Request Sent</p>
+                          <p className="text-xs text-zinc-400">The Core Cutter team at <span className="text-zinc-200">sales@corecutterusa.com</span> will follow up shortly.</p>
+                          <button type="button" onClick={() => setShowQuote(false)} className="mt-2 rounded-lg bg-zinc-700 px-5 py-1.5 text-xs font-semibold hover:bg-zinc-600 transition-colors">Close</button>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                          <h2 className="font-semibold text-sm text-foreground">Request Custom Reamer Quote</h2>
+
+                          {/* Spec summary */}
+                          <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs space-y-1 text-zinc-300">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Reamer Spec</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <span className="text-zinc-500">Diameter</span><span>{spec.diameter}"</span>
+                              <span className="text-zinc-500">Flutes</span><span>{spec.flutes}</span>
+                              <span className="text-zinc-500">Hole Depth</span><span>{spec.depth}"</span>
+                              <span className="text-zinc-500">Hole Type</span><span>{spec.hole_type}</span>
+                              <span className="text-zinc-500">Helix</span><span>{spec.helix}</span>
+                              <span className="text-zinc-500">Coating</span><span>{spec.coating}</span>
+                              <span className="text-zinc-500">Coolant</span><span>{spec.coolant}</span>
+                              <span className="text-zinc-500">Material</span><span>{spec.material}</span>
+                            </div>
+                          </div>
+
+                          {/* Customer fields */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Name <span className="text-red-400">*</span></label>
+                              <input required value={qf.name} onChange={e => setQf({ name: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="Your name" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Company</label>
+                              <input value={qf.company} onChange={e => setQf({ company: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="Company name" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Phone</label>
+                              <input value={qf.phone} onChange={e => setQf({ phone: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="(555) 000-0000" />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
+                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Quantity</label>
+                              <input value={qf.qty} onChange={e => setQf({ qty: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="e.g. 5" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Tolerance Class</label>
+                              <select value={qf.tolerance} onChange={e => setQf({ tolerance: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500">
+                                <option>H6</option>
+                                <option>H7</option>
+                                <option>H8</option>
+                                <option>Custom</option>
+                              </select>
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Notes</label>
+                              <textarea value={qf.notes} onChange={e => setQf({ notes: e.target.value })} rows={2} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none" placeholder="Tolerance, surface finish target, drawing notes…" />
+                            </div>
+                          </div>
+
+                          <button type="submit" disabled={quoteSending || !qf.name || !qf.email} className="w-full rounded-lg bg-amber-500 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                            {quoteSending ? "Sending…" : "Send Quote Request to Core Cutter"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          ) : drillResult ? (
+            /* ── DRILLING OUTPUT ─────────────────────────────────── */
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Kpi label="RPM"           hint="Spindle speed for this drill, based on target SFM for the material and drill diameter, capped at your Max RPM setting." value={fmtInt(drillResult.rpm)} />
+                <Kpi label="SFM"           hint="Surface Feet per Minute at the drill OD. Primary driver of tool life and heat in drilling. For step drills, SFM is based on the largest (outer) diameter." value={fmtNum(drillResult.sfm, 0)} />
+                <Kpi label="Feed (IPM)"    hint="Table feed rate in inches per minute. Equal to RPM × IPR. Applies to all diameters — entry and steps use the same IPM." value={fmtNum(drillResult.ipm, 2)} />
+                <Kpi label="IPR"           hint="Inches Per Revolution — chip load for drilling. Scales with drill diameter (larger drills take heavier feeds). The engine applies a feed safety factor for depth and chip evacuation." value={drillResult.ipr?.toFixed(5) ?? "—"} />
+                <Kpi label="MRR (in³/min)" hint="Material Removal Rate for drilling. Equal to (π/4 × D² × IPM) for a standard drill. Lower than milling MRR at equivalent HP due to the chisel edge inefficiency." value={fmtNum(drillResult.mrr_in3_min, 4)} />
+                <Kpi label="HP Required"   hint="Cutting power for this drill derived from torque and RPM (HP = T × RPM / 63,025). Includes a depth factor that increases HP estimate for deeper holes due to chip evacuation resistance." value={fmtNum(drillResult.hp_required, 2)} />
+                <Kpi label="Thrust (lbf)"  hint="Axial thrust force pushing the drill into the workpiece. High thrust stresses the drill point and workholding. Parabolic and high-helix drills reduce thrust vs standard geometry." value={fmtNum(drillResult.thrust_lbf, 0)} />
+                <Kpi label="Torque (in-lbf)" hint="Twisting torque at the drill shank. Compared against your spindle taper's grip capacity. Excessive torque can cause drill spin-out in the holder — use a Weldon flat or drill chuck with torque ring for deep holes." value={fmtNum(drillResult.torque_inlbf, 1)} />
+                <Kpi label="Depth / D"     hint="Hole depth expressed as a multiple of drill diameter. Below 3×D: standard cycle. 3–5×D: consider chip-breaking peck. Above 5×D: peck drilling recommended. Above 8×D: high-helix or parabolic flute strongly advised." value={`${fmtNum(drillResult.depth_to_dia, 1)}×`} />
+              </div>
+
+              {/* Coating recommendation */}
+              {(() => { const cr = getCoatingRec(isoCategory); return (
+                <div className="flex items-center gap-2 px-1 text-xs">
+                  <span className="text-muted-foreground">Recommended Coating:</span>
+                  <span className="font-bold text-orange-400">{cr.code}</span>
+                  <span className="text-muted-foreground">— optimized for {cr.desc}</span>
+                </div>
+              ); })()}
+
+              {/* Step drill note */}
+              {drillResult.largest_dia != null && drillResult.entry_dia != null && drillResult.largest_dia !== drillResult.entry_dia && (
+                <div className="rounded-lg border border-sky-500 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+                  Step drill — SFM on ø{drillResult.largest_dia.toFixed(4)}" (largest) · Feed (IPR) on ø{drillResult.entry_dia.toFixed(4)}" (entry)
+                </div>
+              )}
+
+              {/* Drill Stability Triangle */}
+              {drillResult.drill_stability && (() => {
+                const s = drillResult.drill_stability!;
+                const cfg = (st: string) => st === "ok"
+                  ? { border: "border-emerald-500/50", bg: "bg-emerald-500/10", badge: "bg-emerald-500/20 text-emerald-300", label: "OK" }
+                  : st === "caution"
+                  ? { border: "border-amber-500/50",  bg: "bg-amber-500/10",  badge: "bg-amber-500/20 text-amber-200",  label: "CAUTION" }
+                  : { border: "border-red-500/50",     bg: "bg-red-500/10",     badge: "bg-red-500/20 text-red-300",        label: "WARNING" };
+                return (
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Drill Stability Triangle</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: "Feed",      status: s.feed_status,  sub: `${(s.feed_ratio * 100).toFixed(0)}% of min` },
+                        { label: "Chip Evac", status: s.evac_status,  sub: drillResult.cycle },
+                        { label: "Depth",     status: s.depth_status, sub: `${s.depth_xd}×D` },
+                      ].map(({ label, status, sub }) => {
+                        const c = cfg(status);
+                        return (
+                          <div key={label} className={`rounded-lg border ${c.border} ${c.bg} px-2 py-2.5 text-center`}>
+                            <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${c.badge}`}>{c.label}</span>
+                            <div className="mt-1.5 text-[10px] font-semibold text-foreground uppercase tracking-wide">{label}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Drill Design Advisor */}
+              {drillResult.geometry_tip && (
+                <div className="rounded-lg border border-sky-500/50 bg-sky-500/10 px-3 py-2.5 text-xs">
+                  <p className="font-semibold text-sky-300 mb-0.5">Drill Design Advisor</p>
+                  <p className="text-sky-100/80">{drillResult.geometry_tip}</p>
+                </div>
+              )}
+
+              {/* G-code recommendation */}
+              <div className="rounded-xl border-2 border-indigo-500 bg-indigo-500/10 p-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-extrabold text-indigo-400">{drillResult.cycle}</span>
+                  <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wide">Recommended Cycle</span>
+                </div>
+                <p className="text-sm text-foreground">{drillResult.cycle_note}</p>
+                {drillResult.peck_depth_in != null && (
+                  <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>Q (peck): <span className="font-semibold text-foreground">{drillResult.peck_depth_in.toFixed(4)}"</span></span>
+                    <span>R (clearance): <span className="font-semibold text-foreground">{drillResult.r_plane_in.toFixed(3)}"</span></span>
+                  </div>
+                )}
+              </div>
+
+              {/* Pecking Optimizer — decreasing schedule for G83 */}
+              {drillResult.peck_schedule != null && drillResult.peck_schedule.length > 0 && (
+                <div className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2">
+                  <p className="mb-1.5 text-xs font-semibold text-indigo-300 uppercase tracking-wide">Pecking Optimizer</p>
+                  <p className="mb-2 text-xs text-muted-foreground">Chip column builds with depth — decrease peck size as you go deeper.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {drillResult.peck_schedule.map((q: number, i: number) => (
+                      <div key={i} className="flex flex-col items-center rounded bg-indigo-900/40 px-2 py-1">
+                        <span className="text-[10px] text-indigo-400">Peck {i + 1}{i === drillResult.peck_schedule!.length - 1 ? "+" : ""}</span>
+                        <span className="text-xs font-bold text-foreground">{q.toFixed(4)}"</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Critical chip thickness warning */}
+              {drillResult.chip_warning && (
+                <div className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  ⚠ <span className="font-semibold">Critical Chip Thickness:</span> {drillResult.chip_warning}
+                </div>
+              )}
+
+              {/* Flute length warning */}
+              {drillResult.flute_warning && (
+                <div className="rounded-lg border border-orange-500 bg-orange-500/10 px-3 py-2 text-xs text-orange-300">
+                  ⚠ {drillResult.flute_warning}
+                </div>
+              )}
+
+              {/* Core Cutter Recommends — drill quote card */}
+              {(() => {
+                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
+                const hasSteps = form.drill_steps > 0;
+                return (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">Core Cutter Recommends</p>
+                        <p className="font-semibold text-foreground text-sm">Custom {hasSteps ? "Step Drill" : "Drill"} — Built to Order</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setDrillQuoteSent(false); setShowDrillQuote(true); }}
+                        className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
+                      >
+                        Request Quote
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
+                      <div><span className="text-zinc-500">Drill Diameter</span><span className="ml-2 font-medium text-foreground">{form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
+                      <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes || "—"}</span></div>
+                      <div><span className="text-zinc-500">Point Angle</span><span className="ml-2 font-medium text-foreground">{form.drill_point_angle}°</span></div>
+                      <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "—"}</span></div>
+                      <div><span className="text-zinc-500">Hole Depth</span><span className="ml-2 font-medium text-foreground">{form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "—"}</span></div>
+                      <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.drill_blind ? "Blind" : "Through"}</span></div>
+                      <div><span className="text-zinc-500">Flute Geometry</span><span className="ml-2 font-medium text-foreground">{{ standard: "Standard", high_helix: "High Helix", parabolic: "Parabolic" }[form.drill_geometry as string] ?? form.drill_geometry}</span></div>
+                      <div><span className="text-zinc-500">Coolant Thru</span><span className="ml-2 font-medium text-foreground">{form.drill_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"}</span></div>
+                      <div><span className="text-zinc-500">Material</span><span className="ml-2 font-medium text-foreground">{matLabel}</span></div>
+                      {hasSteps && form.drill_step_diameters.map((d: number, i: number) => (
+                        <div key={i} className="col-span-2">
+                          <span className="text-zinc-500">Step {i + 1}</span>
+                          <span className="ml-2 font-medium text-foreground">ø{d.toFixed(4)}"</span>
+                          {form.drill_step_lengths[i] != null && (
+                            <span className="ml-2 text-zinc-400">× {form.drill_step_lengths[i].toFixed(3)}" from tip</span>
+                          )}
+                        </div>
+                      ))}
+                      <div className="col-span-2">
+                        <span className="text-zinc-500">Recommended Coating</span>
+                        <span className="ml-2 font-bold text-orange-400">{getCoatingRec(isoCategory).code}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Drill quote modal */}
+              {showDrillQuote && (() => {
+                const qf = quoteForm;
+                const setQf = (patch: Partial<typeof quoteForm>) => setQuoteForm(p => ({ ...p, ...patch }));
+                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
+                const hasSteps = form.drill_steps > 0;
+                const spec = {
+                  diameter: form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "?",
+                  flutes: form.flutes ? String(form.flutes) : "?",
+                  point_angle: `${form.drill_point_angle}°`,
+                  flute_length: form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "?",
+                  hole_depth: form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "?",
+                  hole_type: form.drill_blind ? "Blind" : "Through",
+                  coolant_thru: form.drill_coolant_fed ? "Yes" : "No",
+                  material: matLabel,
+                  cycle: drillResult.cycle ?? "?",
+                  steps: hasSteps ? form.drill_step_diameters.map((d: number, i: number) => ({
+                    dia: `${d.toFixed(4)}"`,
+                    length: form.drill_step_lengths[i] != null ? `${form.drill_step_lengths[i].toFixed(3)}"` : "?",
+                  })) : [],
+                };
+                const handleSubmit = async (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!qf.name || !qf.email) return;
+                  setDrillQuoteSending(true);
+                  try {
+                    const r = await fetch("/api/quote/drill", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ customer: qf, spec }),
+                    });
+                    if (r.ok) {
+                      setDrillQuoteSent(true);
+                    } else {
+                      const d = await r.json().catch(() => ({}));
+                      toast({ title: "Submission failed", description: d.message || "Please try again.", variant: "destructive" });
+                    }
+                  } catch {
+                    toast({ title: "Network error", description: "Could not reach server.", variant: "destructive" });
+                  } finally {
+                    setDrillQuoteSending(false);
+                  }
+                };
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowDrillQuote(false)}>
+                    <div className="relative w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+                      <button type="button" onClick={() => setShowDrillQuote(false)} className="absolute top-3 right-3 text-zinc-400 hover:text-white text-lg leading-none">✕</button>
+
+                      {drillQuoteSent ? (
+                        <div className="py-8 text-center space-y-3">
+                          <div className="text-4xl">✓</div>
+                          <p className="font-semibold text-emerald-400">Quote Request Sent</p>
+                          <p className="text-xs text-zinc-400">The Core Cutter team at <span className="text-zinc-200">sales@corecutterusa.com</span> will follow up shortly.</p>
+                          <button type="button" onClick={() => setShowDrillQuote(false)} className="mt-2 rounded-lg bg-zinc-700 px-5 py-1.5 text-xs font-semibold hover:bg-zinc-600 transition-colors">Close</button>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                          <h2 className="font-semibold text-sm text-foreground">Request Custom {hasSteps ? "Step Drill" : "Drill"} Quote</h2>
+
+                          {/* Spec summary */}
+                          <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs space-y-1 text-zinc-300">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Drill Spec</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <span className="text-zinc-500">Diameter</span><span>{spec.diameter}</span>
+                              <span className="text-zinc-500">Flutes</span><span>{spec.flutes}</span>
+                              <span className="text-zinc-500">Point Angle</span><span>{spec.point_angle}</span>
+                              <span className="text-zinc-500">Flute Length</span><span>{spec.flute_length}</span>
+                              <span className="text-zinc-500">Hole Depth</span><span>{spec.hole_depth}</span>
+                              <span className="text-zinc-500">Hole Type</span><span>{spec.hole_type}</span>
+                              <span className="text-zinc-500">Coolant Thru</span><span>{spec.coolant_thru}</span>
+                              <span className="text-zinc-500">Material</span><span>{spec.material}</span>
+                              <span className="text-zinc-500">Cycle</span><span>{spec.cycle}</span>
+                            </div>
+                            {spec.steps.length > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                <p className="text-zinc-500 text-[10px] uppercase tracking-wide mt-1">Steps</p>
+                                {spec.steps.map((s: { dia: string; length: string }, i: number) => (
+                                  <div key={i} className="grid grid-cols-2 gap-x-4">
+                                    <span className="text-zinc-500">Step {i + 1} Dia</span><span>{s.dia}</span>
+                                    <span className="text-zinc-500">Step {i + 1} Length</span><span>{s.length}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Customer fields */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Name <span className="text-red-400">*</span></label>
+                              <input required value={qf.name} onChange={e => setQf({ name: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="Your name" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Company</label>
+                              <input value={qf.company} onChange={e => setQf({ company: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="Company name" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Phone</label>
+                              <input value={qf.phone} onChange={e => setQf({ phone: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="(555) 000-0000" />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
+                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Quantity</label>
+                              <input value={qf.qty} onChange={e => setQf({ qty: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="e.g. 5" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-400">Tolerance</label>
+                              <input value={qf.tolerance} onChange={e => setQf({ tolerance: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="e.g. ±0.0005&quot;" />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-xs text-zinc-400">Notes</label>
+                              <textarea value={qf.notes} onChange={e => setQf({ notes: e.target.value })} rows={2} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none" placeholder="Coating, shank style, special geometry, drawing notes…" />
+                            </div>
+                          </div>
+
+                          <button type="submit" disabled={drillQuoteSending || !qf.name || !qf.email} className="w-full rounded-lg bg-amber-500 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                            {drillQuoteSending ? "Sending…" : "Send Quote Request to Core Cutter"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          ) : (
+            <>
+              {/* Chamfer Mill: D_eff info panel */}
+              {chamferResult && (
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 text-sm space-y-1">
+                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Chamfer Geometry</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Series</span><span className="ml-2 font-semibold text-indigo-300">{form.chamfer_series}</span></div>
+                    <div><span className="text-muted-foreground">Included Angle</span><span className="ml-2 font-semibold">{chamferResult.chamfer_angle_deg}°</span></div>
+                    <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 (point)"}</span></div>
+                    <div><span className="text-muted-foreground">Chamfer Depth</span><span className="ml-2 font-semibold">{chamferResult.chamfer_depth_in > 0 ? `${chamferResult.chamfer_depth_in.toFixed(4)}"` : "—"}</span></div>
+                    <div><span className="text-muted-foreground">D_eff</span><span className="ml-2 font-semibold text-orange-400">{chamferResult.d_eff_in.toFixed(4)}"</span></div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">RPM and feed are based on D_eff — the effective cutting diameter at the outer edge of the chamfer.</p>
+                </div>
+              )}
+
+              {/* Chamfer tips */}
+              {chamferResult?.tips && (chamferResult.tips as string[]).length > 0 && (
+                <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Chamfer Tips</div>
+                  {(chamferResult.tips as string[]).map((tip: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Customer KPIs (single grid, auto-flows) */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Kpi
+                  label="Material"
+                  value={
+                    ISO_SUBCATEGORIES.find((s) => s.key === customer.material)?.label
+                    ?? String(customer.material ?? "—")
+                  }
+                />
+                <Kpi label={UL("Ø (in)", "Ø (mm)")} hint="Cutting diameter of the tool as confirmed by the engine." value={UC(customer.diameter, 25.4, metric ? 2 : 3)} />
+                <Kpi label="Flutes" hint="Number of cutting flutes. More flutes increase feed rate but reduce chip clearance — critical in gummy materials like aluminum and stainless." value={fmtInt(customer.flutes)} />
+
+                <Kpi label="RPM" hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting." value={fmtInt(customer.rpm)} />
+                <Kpi label={UL("SFM", "m/min")} hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing." value={UC(customer.sfm, 0.3048, metric ? 1 : 0)} />
+                <Kpi
+                  label={UL("Feed (IPM)", "Feed (mm/min)")}
+                  hint="Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."
+                  value={
+                    <>
+                      {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
+                      {customer.status ? (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                />
+
+                {customer.peripheral_feed_ipm != null && (
+                  <Kpi
+                    label={UL("Peripheral Feed (IPM)", "Peripheral Feed (mm/min)")}
+                    value={
+                      <span className="text-amber-400">
+                        {UC(customer.peripheral_feed_ipm, 25.4, metric ? 1 : 2)}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">at wall</span>
+                      </span>
+                    }
+                  />
+                )}
+
+                <Kpi
+                  label={UL("FPT (in)", "FPT (mm)")}
+                  hint="Base chip load per tooth before radial chip thinning correction. Calculated as a fixed fraction of diameter for the material. This is the starting point; the engine adjusts it for WOC via the chip thinning factor."
+                  value={
+                    <>
+                      {UC(customer.fpt, 25.4, metric ? 4 : 5)}
+                      {customer.diameter ? (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          ({fmtNum((customer.fpt / customer.diameter) * 100, 1)}%)
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                />
+                {customer.adj_fpt != null ? (
+                  <Kpi
+                    label={UL("Adj FPT (in)", "Adj FPT (mm)")}
+                    hint="Adjusted chip load per tooth after applying the radial chip thinning factor (RCTF) for your WOC. At low radial engagement, the tool must feed faster to generate the same actual chip thickness. This is the value the engine uses to compute feed IPM."
+                    value={
+                      <>
+                        {UC(customer.adj_fpt, 25.4, metric ? 4 : 5)}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          ({fmtNum((customer.adj_fpt / customer.diameter) * 100, 1)}%)
+                        </span>
+                      </>
+                    }
+                  />
+                ) : null}
+
+                <Kpi
+                  label={form.mode === "face" ? UL("Pass Depth (in)", "Pass Depth (mm)") : UL("DOC (in)", "DOC (mm)")}
+                  value={
+                    <>
+                      {UC(customer.doc_in, 25.4, metric ? 2 : 4)}
+                      {customer.diameter ? (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          ({(customer.doc_in / customer.diameter).toFixed(1).replace(/\.0$/, "")}D)
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                />
+                <Kpi
+                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : UL("WOC (in)", "WOC (mm)")}
+                  value={
+                    <>
+                      {UC(customer.woc_in, 25.4, metric ? 2 : 4)}
+                      {customer.diameter ? (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          ({fmtNum((customer.woc_in / customer.diameter) * 100, 1)}%)
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                />
+                {customer.recommended_stepover != null && (
+                  <Kpi
+                    label={UL("Rec. Step-Over (in)", "Rec. Step-Over (mm)")}
+                    hint="Recommended facing step-over per pass based on (Cut Diameter − 2 × Corner Radius) × 75%. Ensures the flat face of the tool does the cutting — not the corner radius — with 25% overlap for consistent surface finish."
+                    value={
+                      <span className="text-amber-400 font-semibold">
+                        {UC(customer.recommended_stepover, 25.4, metric ? 3 : 4)}
+                        {customer.diameter ? (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            ({fmtNum((customer.recommended_stepover / customer.diameter) * 100, 1)}% dia)
+                          </span>
+                        ) : null}
+                      </span>
+                    }
+                  />
+                )}
+                {form.mode === "face" && (() => {
+                  const cr = form.corner_radius ?? 0;
+                  if (cr <= 0) return (
+                    <Kpi label="Theoretical Ra" hint="Surface finish prediction requires a corner radius > 0. Square-corner tools produce finish limited by runout and engagement geometry." value={<span className="text-muted-foreground text-xs">CR required</span>} />
+                  );
+                  const raUin = customer.ra_actual_uin;
+                  const capped = customer.ra_feed_capped;
+                  const target = form.target_ra_uin;
+                  if (raUin == null) return null;
+                  const meetsTarget = target > 0 ? raUin <= target + 0.01 : null;
+                  return (
+                    <>
+                      <Kpi
+                        label="Theoretical Ra (µin)"
+                        hint="Estimated surface roughness from Ra = FPT² × 1,000,000 / (8 × CR). Assumes sharp tool, no runout, consistent engagement. Actual finish depends on machine condition, tool runout, and coolant."
+                        value={
+                          <span className={meetsTarget === true ? "text-emerald-400 font-semibold" : meetsTarget === false ? "text-red-400 font-semibold" : "font-semibold"}>
+                            {raUin.toFixed(1)} µin
+                            <span className="ml-1 text-xs font-normal text-muted-foreground">({(raUin * 0.0254).toFixed(3)} µm)</span>
+                            {meetsTarget === true && <span className="ml-1 text-xs"> ✓ meets {target} µin target</span>}
+                          </span>
+                        }
+                      />
+                      {capped && target > 0 && (
+                        <div className="col-span-full px-1 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400">
+                          Feed capped to <span className="font-semibold">{customer.feed_ipm?.toFixed(2)} IPM</span> to achieve Ra ≤ {target} µin. RPM unchanged — only feed was reduced.
+                        </div>
+                      )}
+                      <p className="col-span-full text-[10px] text-muted-foreground italic px-1">
+                        Surface finish is theoretical and depends on many factors beyond tool geometry and cutting parameters — including spindle condition, toolholder accuracy, tool runout, workholding rigidity, chip evacuation, coolant delivery, and material lot variation. Actual results will vary. This is an estimate only and is not a guarantee from Core Cutter.
+                      </p>
+                    </>
+                  );
+                })()}
+                <Kpi label={UL("MRR (in³/min)", "MRR (cm³/min)")} hint="Material Removal Rate — volume of material removed per minute. The key productivity metric: higher MRR = faster cycle time. MRR = WOC × DOC × Feed IPM." value={UC(customer.mrr_in3_min, 16.387, metric ? 2 : 4)} />
+
+                <Kpi label={UL("HP Req", "kW Req")} hint="Estimated cutting power required for this operation. Calculated from MRR × material unit power (HP·min/in³), adjusted for geometry and workpiece hardness." value={UC(customer.hp_required, 0.7457, 2)} />
+                <Kpi label={UL("Avail HP", "Avail kW")} hint="Your machine's nameplate HP derated by spindle drive efficiency (Direct 96%, Belt 92%, Gear 88%). This is the actual cutting power available at the spindle." value={UC(customer.machine_hp, 0.7457, metric ? 1 : 1)} />
+                <Kpi
+                  label="HP Util (%)"
+                  hint="HP Required as a percentage of available spindle HP. Above 90% risks spindle overload and poor surface finish. Ideally 50–80% for a productive cut with headroom."
+                  value={
+                    customer.hp_util_pct != null
+                      ? `${fmtNum(customer.hp_util_pct, 0)}%`
+                      : "—"
+                  }
+                />
+
+                <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
+              </div>
+
+              {/* Coating — show actual SKU coating if known, otherwise generic recommendation */}
+              {form.coating ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs">
+                  <span className="text-muted-foreground">Tool Coating:</span>
+                  <span className="font-bold text-orange-400 border border-orange-400/40 rounded px-1.5 py-0.5">{form.coating}</span>
+                </div>
+              ) : (() => { const cr = getMillingCoatings(isoCategory); return (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs">
+                  <span className="text-muted-foreground">Recommended Coating{cr.coatings.length > 1 ? "s" : ""}:</span>
+                  {cr.coatings.map(c => (
+                    <span key={c} className="font-bold text-orange-400 border border-orange-400/40 rounded px-1.5 py-0.5">{c}</span>
+                  ))}
+                  {cr.note && <span className="text-muted-foreground">— {cr.note}</span>}
+                </div>
+              ); })()}
+
+              {/* Tool life recommendation */}
+              {engineering?.tool_life_min != null && (
+                <div className="text-xs text-muted-foreground px-1">
+                  Estimated tool life: <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min, 0)} min ({fmtNum(engineering.tool_life_min / 60, 1)} hrs)</span> of cutting time (varies with coating, runout, coolant conditions, machine tool condition, and toolholder condition). <span className="italic">This is an estimate only and is not a guarantee from Core Cutter.</span>
+                </div>
+              )}
+
+              {/* Entry Moves */}
+              {result?.entry_moves && (() => {
+                const em = result.entry_moves;
+                return (
+                  <div className="rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-3 py-2.5 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400">Entry Moves</p>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                      {/* Ramp */}
+                      <div className="col-span-2 border-b border-indigo-500/20 pb-1 mb-0.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Ramp Entry</span>
+                      </div>
+                      <div><span className="text-zinc-500">Max Ramp Angle</span><span className="ml-2 font-medium text-foreground">≤{em.ramp_angle_deg}°</span></div>
+                      <div><span className="text-zinc-500">Standard Feed</span><span className="ml-2 font-medium text-foreground">{em.standard_ramp_ipm.toFixed(1)} IPM</span></div>
+                      <div className="col-span-2 whitespace-nowrap"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500 font-normal">(0.5–1°, chip-thinning)</span></span></div>
+
+                      {/* Helical */}
+                      <div className="col-span-2 border-b border-indigo-500/20 pb-1 mb-0.5 mt-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Helical Entry</span>
+                      </div>
+                      <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium text-foreground">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
+                      <div><span className="text-zinc-500">Ideal Bore Dia</span><span className="ml-2 font-medium text-foreground">{em.helix_bore_ideal_low.toFixed(4)}" – {em.helix_bore_ideal_high.toFixed(4)}"</span></div>
+                      <div><span className="text-zinc-500">Standard Feed</span><span className="ml-2 font-medium text-foreground">{em.standard_helix_ipm.toFixed(1)} IPM · {em.helix_pitch_in.toFixed(5)}" / rev @ {em.helix_angle_deg.toFixed(2)}°</span></div>
+                      <div><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_helix_ipm.toFixed(1)} IPM · {(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev @ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</span></div>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">
+                      Advanced entry uses chip-thinning optimization at light engagement. Use tangent arc / sweep lead-in; step to full feed once engagement stabilizes.
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Chip-clearance warnings */}
+              {customer.notes && (customer.notes as string[]).length > 0 ? (
+                <div className={`rounded-xl border p-3 text-sm space-y-1 ${
+                  customer.risk === "warning"
+                    ? "border-red-500/40 bg-red-500/8 text-red-300"
+                    : "border-amber-500/30 bg-amber-500/5 text-amber-300"
+                }`}>
+                  {(customer.notes as string[]).map((note, i) => (
+                    <div key={i}>{note}</div>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Feed limiter hint banner — only for non-Deflection limiters; stability section covers deflection */}
+              {customer.status_hint && customer.status !== "User input" && customer.status !== "Deflection" ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                  <span className="font-semibold">Feed limited by {customer.status}:</span>{" "}
+                  {customer.status_hint}
+                </div>
+              ) : null}
+
+              {/* Engineering */}
+              {engineering ? (
+                <>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <Kpi label={UL("Force (lbf)", "Force (N)")} hint="Estimated radial cutting force at the tool tip. Drives deflection and chatter. Increases with chip load, DOC, and material hardness. Key input to the stability model." value={UC(engineering?.force_lbf, 4.44822, 0)} />
+                    <Kpi
+                      label={UL("Torque (in-lbf)", "Torque (N·m)")}
+                      hint="Cutting torque derived from HP and RPM (T = HP × 63,025 / RPM). The % shown is cutting torque vs. your spindle taper's interface grip capacity — not the machine's motor torque limit. It indicates toolholder pullout risk, not spindle overload."
+                      value={
+                        <>
+                          {UC(engineering?.torque_inlbf, 0.112985, metric ? 2 : 1)}
+                          {engineering?.torque_pct != null ? (
+                            <span className={`ml-1 text-xs font-normal ${engineering.torque_pct > 90 ? "text-red-400" : engineering.torque_pct > 70 ? "text-amber-400" : "text-muted-foreground"}`}>
+                              ({fmtNum(engineering.torque_pct, 0)}% cap)
+                            </span>
+                          ) : null}
+                        </>
+                      }
+                    />
+                    <Kpi label={UL("Deflection (in)", "Deflection (mm)")} hint="Estimated tool tip deflection under radial cutting force, modeled as a cantilever beam. Excessive deflection causes dimensional error, chatter, and poor surface finish. The stability limit is shown in the Stability Check section." value={UC(engineering?.deflection_in, 25.4, metric ? 4 : 6)} />
+                    <Kpi label={UL("Chip Thick (in)", "Chip Thick (mm)")} hint="Effective chip thickness after radial chip thinning (RCTF). At low WOC, the actual chip is thinner than the programmed FPT — the engine boosts feed to compensate. Must exceed the minimum chip thickness to avoid rubbing." value={UC(engineering?.chip_thickness_in, 25.4, metric ? 4 : 6)} />
+                    <Kpi
+                      label="Tooth Engagement"
+                      hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
+                      value={
+                        engineering?.teeth_in_cut != null ? (
+                          <div className="leading-snug">
+                            <div>{fmtNum(engineering.teeth_in_cut, 2)} teeth</div>
+                            {engineering?.helix_wrap_deg != null && (
+                              <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                                {fmtNum(engineering.helix_wrap_deg, 0)}° wrap
+                                {engineering?.engagement_continuous
+                                  ? " · continuous"
+                                  : " · interrupted"}
+                              </div>
+                            )}
+                          </div>
+                        ) : "—"
+                      }
+                    />
+
+                    <Kpi label="Chatter" hint="Chatter index — a relative indicator combining deflection, RPM, and workholding compliance. Lower is better. This is an internal diagnostic value; use the Rigidity & Chatter Audit section for actionable guidance." value={fmtNum(engineering?.chatter_index, 3)} />
+                  </div>
+                </>
+              ) : null}
+
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only */}
+      {operation === "milling" && (stabilityIndex || stability) && (
+      <div className="rounded-2xl border border-amber-500/30 overflow-hidden">
+
+      {/* MACHINING STABILITY INDEX */}
+      {stabilityIndex && (() => {
+        const si = stabilityIndex.overall;
+        const siLabel = si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 50 ? "Moderate" : si >= 35 ? "Caution" : "High Risk";
+        const siColor = si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-red-400";
+        return (
+        <Card className="rounded-none border-0 border-b border-amber-500/20">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center justify-between gap-4">
+              {/* Big score */}
+              <div className="flex flex-col items-start">
+                <span className={`text-xs font-semibold uppercase tracking-wide ${siColor}`}>
+                  {siLabel}
+                </span>
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-5xl font-black leading-none ${siColor}`}>
+                    {stabilityIndex.overall}
+                  </span>
+                  <span className="text-zinc-500 text-xl font-light leading-none">/100</span>
+                </div>
+              </div>
+              {/* Sub-scores */}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
+                {(() => {
+                  const deflPct = stability?.deflection_pct;
+                  const ld      = stability?.l_over_d;
+                  const loadPct = result?.customer?.spindle_load_pct;
+                  const ct      = result?.engineering?.chip_thickness_in;
+                  const minCt   = (result?.customer?.fpt ?? 0) * 0.30;
+
+                  const deflResult = deflPct != null
+                    ? deflPct < 100  ? `✓ Deflection is within safe zone (${deflPct.toFixed(0)}% of limit).`
+                    : deflPct < 175  ? `⚠ Deflection exceeds safe limit (${deflPct.toFixed(0)}% of limit) — reduce stickout.`
+                    :                  `⚠ Significant over-deflection (${deflPct.toFixed(0)}% of limit) — adjust setup.`
+                    : null;
+
+                  const loadResult = loadPct != null
+                    ? loadPct < 50   ? `✓ Light load — ${loadPct.toFixed(0)}% of available HP. Plenty of headroom.`
+                    : loadPct < 80   ? `✓ Moderate load — ${loadPct.toFixed(0)}% of available HP.`
+                    : loadPct < 100  ? `⚠ High load — ${loadPct.toFixed(0)}% of available HP. Monitor for stall.`
+                    :                  `⚠ Over limit — ${loadPct.toFixed(0)}% of available HP. Reduce feedrate.`
+                    : null;
+
+                  const chipResult = ct != null
+                    ? ct >= minCt    ? `✓ Chip thickness ${ct.toFixed(5)}" — tool is cutting cleanly.`
+                    :                  `⚠ Chip thickness ${ct.toFixed(5)}" is near rubbing threshold (min ~${minCt.toFixed(5)}") — consider increasing feed.`
+                    : null;
+
+                  const ldResult = ld != null
+                    ? ld <= 3        ? `✓ L/D is ${ld.toFixed(1)}× — excellent rigidity.`
+                    : ld <= 5        ? `⚠ L/D is ${ld.toFixed(1)}× — moderate vibration risk. Reduce stickout if possible.`
+                    :                  `⚠ L/D is ${ld.toFixed(1)}× — high chatter risk. Reduce stickout.`
+                    : null;
+
+                  return ([
+                    ["Deflection",   stabilityIndex.defl, "Tool deflection vs. safe limit. 100 = no deflection; drops as stickout, force, or DOC increase. Below 50 means chatter is likely.",     deflResult],
+                    ["Mach Load",    stabilityIndex.load, "Spindle power usage vs. available HP. 100 = very light load; drops as HP required approaches machine limit. Only shown when Machine HP is entered.", loadResult],
+                    ["Chip Quality", stabilityIndex.chip, "Chip thickness relative to the minimum needed to cut cleanly (~30% of chipload). Too thin = rubbing instead of cutting, which accelerates wear and heat.", null],
+                    ["L/D Ratio",    stabilityIndex.ld,   "Length-to-diameter ratio of tool stickout. Below 3× is ideal; above 5× introduces significant vibration risk. Shorter is always stiffer.", ldResult],
+                  ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
+                  <div key={label} className="flex items-center gap-2">
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-zinc-500 w-24 cursor-default flex items-center gap-0.5">
+                            {label}
+                            <span className="text-muted-foreground/50 text-[9px] leading-none">ⓘ</span>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-64 text-xs">
+                          <p>{hint}</p>
+                          {resultLine && <p className="mt-1.5 font-semibold border-t border-zinc-600 pt-1.5">{resultLine}</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    {score === -1 ? (
+                      <span className="text-xs text-zinc-600 italic">enter machine HP</span>
+                    ) : (
+                      <>
+                        <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[60px]">
+                          <div
+                            className={`h-full rounded-full ${score >= 65 ? "bg-emerald-400" : score >= 35 ? "bg-amber-400" : "bg-red-400"}`}
+                            style={{ width: `${score}%` }}
+                          />
+                        </div>
+                        <span className={`w-7 text-right font-semibold ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>{score}</span>
+                      </>
+                    )}
+                  </div>
+                ));
+                })()}
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2">Machining Stability Index — composite of deflection, spindle load, chip quality, and L/D ratio</p>
+          </CardContent>
+        </Card>
+        );
+      })()}
+
+      {/* STABILITY ADVISOR CARD */}
+      {stability ? (
+        <>
+          {(() => {
+
+            const pct = stability.deflection_pct;
+            const isRed    = pct >= 175;
+            const isYellow = pct >= 100 && pct < 175;
+            const isGreen  = pct < 100;
+
+            const verdict =
+              pct >= 175 ? "High Chatter Risk" :
+              pct >= 100 ? "Chatter Risk" :
+                           "Setup Looks Stable";
+
+            const verdictColor =
+              isRed    ? "text-red-400" :
+              isYellow ? "text-amber-400" :
+                         "text-emerald-500";
+
+            const explanation =
+              pct >= 175
+                ? "Deflection is significantly over the safe limit — chatter, vibration, and poor surface finish are likely. Review the suggestions below and adjust setup before running."
+                : pct >= 100
+                ? "Deflection exceeds the safe limit. The setup may run with careful monitoring, but expect some vibration and reduced surface finish or tool life. Review suggestions below."
+                : "Deflection is within the safe zone. This setup should produce good surface finish and tool life.";
+
+            // First suggestion that is an actual action (not info/lbs)
+            const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info");
+
+            return (
+              <Card className="rounded-none border-0">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base leading-tight">Rigidity & Chatter Audit</CardTitle>
+                    <span className={`text-sm font-semibold whitespace-nowrap ${verdictColor}`}>
+                      {verdict}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+
+                  {/* Plain-language verdict */}
+                  <div className={`text-sm rounded-lg px-3 py-2 ${isRed ? "bg-red-950/40 text-red-200" : isYellow ? "bg-amber-950/40 text-amber-200" : "bg-emerald-950/30 text-emerald-200"}`}>
+                    {explanation}
+                  </div>
+
+                  {/* Tech detail row */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Stickout <span className="font-medium text-foreground">{UC(stability.stickout_in, 25.4, metric ? 1 : 2)}{metric ? "mm" : "\""}</span>
+                      {" · "}L/D <span className="font-medium text-foreground">{fmtNum(stability.l_over_d, 1)}</span>
+                      <span className="ml-1 text-muted-foreground/60">(length-to-diameter ratio)</span>
+                    </span>
+                    <span className={`font-medium ${verdictColor}`}>
+                      {fmtNum(pct, 0)}% of safe limit
+                    </span>
+                  </div>
+
+                  {/* Deflection bar */}
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={isRed ? "h-full rounded-full bg-red-500" : isYellow ? "h-full rounded-full bg-amber-500" : "h-full rounded-full bg-emerald-500"}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+
+                  {/* Suggestions */}
+                  {stability.suggestions.length > 0 ? (
+                    <>
+                      {(() => {
+                        const actionItems = stability.suggestions.filter((s: any) => s.type !== "info");
+                        const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
+                        return (
+                          <>
+                            {actionItems.length > 0 && (
+                              <>
+                                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">
+                                  Possible Improvements
+                                </div>
+                                <ul className="space-y-2">
+                                  {actionItems.map((s: any, idx: number) => {
+                                    const isBest = stability.suggestions.indexOf(s) === firstActionIdx && isRed;
+                                    return (
+                                      <li key={idx} className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1.5 ${isBest ? "bg-muted/50 border border-muted" : ""}`}>
+                                        <span className="mt-0.5 text-xs font-bold leading-none text-muted-foreground w-4 shrink-0 text-center">{idx + 1}</span>
+                                        <span className="flex-1">
+                                          <span className="font-medium">{s.label}</span>
+                                          {isBest && (
+                                            <span className="ml-2 text-xs font-semibold text-orange-400 uppercase tracking-wide">best fix</span>
+                                          )}
+                                          {s.detail ? (
+                                            <div className="text-xs text-muted-foreground mt-0.5">
+                                              {s.detail}
+                                              {(() => {
+                                                const edps = s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [];
+                                                const dia = form.tool_dia || 0.5;
+                                                const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
+                                                const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_in < dia);
+                                                if (!edps.length || cbInactive) return null;
+                                                return (
+                                                  <span className="ml-2 inline-flex items-center gap-2 flex-wrap">
+                                                    <span className="font-semibold text-amber-400">EDP# {edps.join(", ")}</span>
+                                                    {edps.map((edp: string) => (
+                                                      <a key={edp}
+                                                        href={stpUrl(edp)}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
+                                                        title={`Download ${edp} v1.stp`}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      >⬇ .STP</a>
+                                                    ))}
+                                                  </span>
+                                                );
+                                              })()}
+                                            </div>
+                                          ) : null}
+                                        </span>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </>
+                            )}
+                            {infoItems.map((s: any, idx: number) => (
+                              <div key={idx} className="mt-2 flex items-start gap-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+                                <span className="mt-0.5 shrink-0 font-bold">ℹ</span>
+                                <span>
+                                  <span className="font-semibold">{s.label}</span>
+                                  {s.detail && <div className="mt-0.5 opacity-80">{s.detail}</div>}
+                                </span>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </>
+                  ) : null}
+
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </>
+      ) : null}
+
+      </div>
+      )}
+
+      </div>
+      </div>} {/* end grid */}
+
+      {/* Disclaimer */}
+      <div className="mt-6 px-1 text-[11px] text-muted-foreground/60 leading-relaxed border-t border-border pt-4">
+        The speeds and feeds shown are recommended starting values only. Actual results will vary depending on the machine, setup rigidity, tooling, coolant, and material condition — adjust parameters as necessary. Core Cutter LLC accepts no responsibility for application results.
+      </div>
+
+      {/* Footer branding */}
+      <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
+        <img src="/vectorink-background-removed.png" alt="EZCutCNC" className="h-10 w-auto" />
+        <div className="text-right text-[11px] text-muted-foreground/60 leading-snug">
+          <div>Generated by EZCutCNC</div>
+          <div>Speeds • Feeds • Intelligence</div>
+          <div>Powered by Core Cutter LLC</div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
