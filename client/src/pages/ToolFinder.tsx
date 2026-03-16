@@ -399,11 +399,11 @@ const QP_DIAMETERS: { label: string; min: number; max: number; pick: number }[] 
 const QP_DOCS = [
   { label: "Shallow  (< 0.5×D)", desc: "Finishing, spring passes, skim cuts",      docXd: 0.4 },
   { label: "Standard (0.5–1.5×D)", desc: "General roughing and semi-finishing",    docXd: 1.0 },
-  { label: "Deep     (> 1.5×D)", desc: "HEM, trochoidal, aggressive roughing",     docXd: 2.0 },
+  { label: "Deep     (> 1.5×D)", desc: "HEM/trochoidal roughing · Slotting requires reduced neck tool", docXd: 2.0 },
 ];
 
 function QuickPick({ onApply, onOperationPick, onClear, applied }: {
-  onApply: (mat: string, toolType: string, geo: string | null, diaRange: { min: number; max: number }, minLoc: number | null, summary: string[], mode: string) => void;
+  onApply: (mat: string, toolType: string, geo: string | null, diaRange: { min: number; max: number }, minLoc: number | null, summary: string[], mode: string, minLbs?: number | null) => void;
   onOperationPick: (toolType: string) => void;
   onClear: () => void;
   applied: boolean;
@@ -423,16 +423,19 @@ function QuickPick({ onApply, onOperationPick, onClear, applied }: {
     if (docXd !== null && docXd < 1.0 && (geo === "chipbreaker" || geo === "truncated_rougher")) {
       geo = "standard";
     }
-    const minLoc = (docXd !== null && d.pick > 0) ? docXd * d.pick : null;
+    const isDeepSlot = op.value === "slot" && docXd !== null && docXd > 1.0;
+    const minLoc = (isDeepSlot || docXd === null || d.pick <= 0) ? null : docXd * d.pick;
+    const minLbs = isDeepSlot && docXd !== null && d.pick > 0 ? docXd * d.pick : null;
     const matLabel = QP_MATERIALS.find(m => m.value === mat)?.label ?? mat;
+    const depthLabel = isDeepSlot ? "Deep Slot (RN tool)" : docLabel;
     const summary = [
       matLabel,
       op.toolType === "endmill" ? "Endmill" : "Chamfer Mill",
       op.label,
       `Cut Dia (${d.label.trim().replace(/[()]/g, "").replace(/\s+/g, " ").trim()})`,
-      ...(docLabel ? [`Cut Depth (${docLabel.trim()})`] : []),
+      ...(depthLabel ? [`Cut Depth (${depthLabel.trim()})`] : []),
     ];
-    onApply(mat, op.toolType, geo, { min: d.min, max: d.max }, minLoc, summary, op.value);
+    onApply(mat, op.toolType, geo, { min: d.min, max: d.max }, minLoc, summary, op.value, minLbs);
     setOpen(false);
     reset();
   }
@@ -764,6 +767,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     minLoc: number | null,
     summary: string[],
     mode: string,
+    minLbs?: number | null,
   ) {
     // Update visible filter state so the filter panel reflects what was picked
     setMaterial(mat);
@@ -775,8 +779,10 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     setSelGeometries([]); // don't pre-filter by geometry — show all, recommend below
     setQpDiaRange(diaRange);
     setQpMinLoc(minLoc);
-    // Auto-fill axial depth from QP minLoc so Part Feature Match stays coordinated
-    if (minLoc != null && minLoc > 0) setAxialDepth(minLoc.toFixed(3));
+    if (minLbs != null && minLbs > 0) { setSelLbs(String(minLbs)); setExcludeLbs(false); }
+    // Auto-fill axial depth from QP minLoc/minLbs so Part Feature Match stays coordinated
+    const depthForAxial = minLoc ?? minLbs ?? null;
+    if (depthForAxial != null && depthForAxial > 0) setAxialDepth(depthForAxial.toFixed(3));
     else setAxialDepth("");
     setPartCornerRadius("");
 
@@ -811,6 +817,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       if (diasInRange.length > 0) p.set("diameter", diasInRange.join(","));
       else { p.set("dia_min", String(diaRange.min)); p.set("dia_max", String(diaRange.max)); }
       if (minLoc != null) p.set("min_loc", String(minLoc));
+      if (minLbs != null) p.set("lbs", String(minLbs));
       const r = await fetch(`/api/tools/search?${p}`);
       const data = await r.json();
       if (!r.ok) setSearchErr(data.message ?? "Search failed");
