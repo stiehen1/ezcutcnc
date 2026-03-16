@@ -1927,9 +1927,16 @@ ${stabSection}
               )}
             </div>
             {skuLocked && (
-              <p className="mt-1 text-[11px] text-orange-400">
-                Auto-filled from {edpText} — fields populated from catalog.{" "}
-                <button type="button" onClick={clearSku} className="underline hover:text-orange-600">Clear</button>
+              <p className="mt-1 text-[11px] text-orange-400 flex items-center gap-2 flex-wrap">
+                <span>Auto-filled from {edpText} — fields populated from catalog.{" "}
+                <button type="button" onClick={clearSku} className="underline hover:text-orange-600">Clear</button></span>
+                <a
+                  href={stpUrl(edpText)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
+                  title={`Download Core_Cutter_${edpText} v1.step`}
+                >⬇ .STP</a>
               </p>
             )}
             {skuDropdownOpen && skuResults.length > 0 && (
