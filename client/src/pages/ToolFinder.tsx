@@ -946,7 +946,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Cut Diameter
               <Hint text="The cutting diameter." />
             </label>
-            <SingleSelect<number>
+            <SingleSelect
               placeholder={qpTip && selDias.length > 1 ? `${selDias.length} sizes from Quick Pick — pick one to narrow` : "Select a diameter..."}
               options={qpTip && selDias.length > 1 ? selDias : options.diameters}
               value={selDias.length === 1 ? selDias[0] : null}
@@ -1006,7 +1006,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               Length of Cut (LOC)
               <Hint text="Usable flute length. Must meet or exceed your axial depth. Longer LOC reduces rigidity." />
             </label>
-            <SingleSelect<number>
+            <SingleSelect
               placeholder={selDias.length !== 1 ? "Select a diameter first" : "All Lengths"}
               options={selDias.length === 1 ? options.locs : []}
               value={selLoc !== "" ? Number(selLoc) : null}
@@ -1032,7 +1032,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                 Exclude LBS tools
               </label>
             </label>
-            <SingleSelect<number>
+            <SingleSelect
               placeholder={selDias.length !== 1 ? "Select a diameter first" : "All LBS Lengths"}
               options={!excludeLbs && selDias.length === 1 ? options.lbsLengths : []}
               value={selLbs !== "" ? Number(selLbs) : null}
