@@ -48,7 +48,7 @@ export const mentorSchemas = {
     holder_gage_length: z.number().min(0).default(0),
     holder_nose_dia: z.number().min(0).default(0),
     dual_contact: z.boolean().default(false),
-    workholding: z.enum(["rigid_fixture", "dovetail", "vise", "soft_jaws", "3_jaw_chuck", "4_jaw_chuck", "collet_chuck", "between_centers", "face_plate"]).default("vise"),
+    workholding: z.enum(["rigid_fixture", "tombstone", "dovetail", "vise", "soft_jaws", "3_jaw_chuck", "4_jaw_chuck", "collet_chuck", "between_centers", "face_plate"]).default("vise"),
     coolant: z.enum(["dry", "mist", "flood", "tsc_low", "tsc_high"]).default("flood"),
 
     max_rpm: z.number().int().min(0).default(12000),
