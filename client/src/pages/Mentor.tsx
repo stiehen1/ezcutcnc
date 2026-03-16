@@ -2,7 +2,7 @@ import * as React from "react";
 
 const STP_CDN = "https://cdn.ezcutcnc.app";
 function stpUrl(edp: string): string {
-  return `${STP_CDN}/${encodeURIComponent(edp + " v1.stp")}`;
+  return `${STP_CDN}/${encodeURIComponent(edp + " v1.step")}`;
 }
 import { useMentor } from "@/hooks/use-mentor";
 import Calculators from "./Calculators";
@@ -5518,7 +5518,7 @@ ${stabSection}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
-                                                        title={`Download ${edp} v1.stp`}
+                                                        title={`Download ${edp} v1.step`}
                                                         onClick={(e) => e.stopPropagation()}
                                                       >⬇ .STP</a>
                                                     ))}

@@ -3,7 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const STP_CDN = "https://cdn.ezcutcnc.app";
 function stpUrl(edp: string): string {
-  return `${STP_CDN}/${encodeURIComponent(edp + " v1.stp")}`;
+  return `${STP_CDN}/${encodeURIComponent(edp + " v1.step")}`;
 }
 
 type SkuRow = {
@@ -1474,7 +1474,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border border-emerald-600 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors whitespace-nowrap"
-                          title={`Download ${row.edp} v1.stp`}
+                          title={`Download ${row.edp} v1.step`}
                         >
                           ⬇ .STP
                         </a>
