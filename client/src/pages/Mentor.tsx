@@ -317,6 +317,20 @@ export default function Mentor() {
   const [engPasswordError, setEngPasswordError] = React.useState("");
   const [engAuthLoading, setEngAuthLoading] = React.useState(false);
 
+  // ── Toolbox state ──────────────────────────────────────────────────────────
+  const [tbSaving, setTbSaving] = React.useState(false);
+  const [tbSaved, setTbSaved] = React.useState(false);
+  const [tbShowModal, setTbShowModal] = React.useState(false);
+  const [tbEmail, setTbEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
+  const [tbToken, setTbToken] = React.useState(() => localStorage.getItem("tb_token") || "");
+  const [tbStep, setTbStep] = React.useState<"email" | "code" | "saving">(
+    localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "saving" : "email"
+  );
+  const [tbInputEmail, setTbInputEmail] = React.useState("");
+  const [tbInputCode, setTbInputCode] = React.useState("");
+  const [tbError, setTbError] = React.useState("");
+  const [tbTitle, setTbTitle] = React.useState("");
+
   const enterEngMode = async () => {
     setEngAuthLoading(true);
     setEngPasswordError("");
@@ -344,6 +358,77 @@ export default function Mentor() {
     setEngMode(false);
     localStorage.removeItem("cc_eng_mode");
   };
+
+  // ── Toolbox functions ──────────────────────────────────────────────────────
+  async function saveToToolbox() {
+    const e = tbEmail || localStorage.getItem("tb_email") || "";
+    const t = tbToken || localStorage.getItem("tb_token") || "";
+    if (!e || !t) { setTbShowModal(true); return; }
+    setTbSaving(true);
+    try {
+      const title = tbTitle || `${form.operation} — ${form.material} — Ø${form.tool_dia}"`;
+      const r = await fetch("/api/toolbox/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: e, token: t,
+          type: "result",
+          title,
+          data: { inputs: form, customer: result?.customer, engineering: result?.engineering },
+        }),
+      });
+      if (r.status === 401) { setTbShowModal(true); return; }
+      setTbSaved(true);
+      setTimeout(() => setTbSaved(false), 3000);
+    } finally { setTbSaving(false); }
+  }
+
+  async function tbSendCode() {
+    setTbError("");
+    setTbSaving(true);
+    try {
+      const r = await fetch("/api/toolbox/send-code", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: tbInputEmail }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setTbError(d.error || "Failed"); return; }
+      setTbStep("code");
+    } catch { setTbError("Network error"); }
+    finally { setTbSaving(false); }
+  }
+
+  async function tbVerifyCode() {
+    setTbError("");
+    setTbSaving(true);
+    try {
+      const r = await fetch("/api/toolbox/verify-code", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: tbInputEmail, code: tbInputCode }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setTbError(d.error || "Invalid code"); return; }
+      localStorage.setItem("tb_email", tbInputEmail.toLowerCase());
+      localStorage.setItem("tb_token", d.token);
+      setTbEmail(tbInputEmail.toLowerCase());
+      setTbToken(d.token);
+      setTbStep("saving");
+      // now save
+      const title = tbTitle || `${form.operation} — ${form.material} — Ø${form.tool_dia}"`;
+      await fetch("/api/toolbox/save", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: tbInputEmail.toLowerCase(), token: d.token,
+          type: "result", title,
+          data: { inputs: form, customer: result?.customer, engineering: result?.engineering },
+        }),
+      });
+      setTbShowModal(false);
+      setTbSaved(true);
+      setTimeout(() => setTbSaved(false), 3000);
+    } catch { setTbError("Network error"); }
+    finally { setTbSaving(false); }
+  }
 
   // ── PDF Print Upload ──────────────────────────────────────────────────────
   const [pdfUploading, setPdfUploading] = React.useState(false);
@@ -5488,6 +5573,18 @@ ${stabSection}
                 <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
               </div>
 
+              {/* Save to Toolbox */}
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={saveToToolbox}
+                  disabled={tbSaving}
+                  className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50"
+                >
+                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
+                </button>
+                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
+              </div>
+
               {/* Coating — show actual SKU coating if known, otherwise generic recommendation */}
               {form.coating ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs">
@@ -5875,6 +5972,61 @@ ${stabSection}
           <div>Powered by Core Cutter LLC</div>
         </div>
       </div>
+
+    {/* Toolbox auth modal */}
+    {tbShowModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTbShowModal(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">🧰 Save to Toolbox</h2>
+          {tbStep === "email" && (<>
+            <p className="text-xs text-zinc-400 mb-3">Enter your email to save this result. We'll send you a quick verification code.</p>
+            <input
+              type="text"
+              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 mb-2 focus:outline-none focus:border-indigo-500"
+              placeholder="Title (optional)"
+              value={tbTitle}
+              onChange={e => setTbTitle(e.target.value)}
+            />
+            <input
+              type="email"
+              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+              placeholder="your@email.com"
+              value={tbInputEmail}
+              onChange={e => setTbInputEmail(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") tbSendCode(); }}
+              autoFocus
+            />
+            {tbError && <p className="text-xs text-red-400 mt-1">{tbError}</p>}
+            <div className="flex gap-2 mt-3">
+              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbSendCode} disabled={tbSaving || !tbInputEmail}>{tbSaving ? "Sending…" : "Send Code"}</button>
+              <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setTbShowModal(false)}>Cancel</button>
+            </div>
+          </>)}
+          {tbStep === "code" && (<>
+            <p className="text-xs text-zinc-400 mb-3">Enter the 6-digit code sent to <span className="text-white">{tbInputEmail}</span></p>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white text-center tracking-widest text-lg placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+              placeholder="000000"
+              value={tbInputCode}
+              onChange={e => setTbInputCode(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={e => { if (e.key === "Enter" && tbInputCode.length === 6) tbVerifyCode(); }}
+              autoFocus
+            />
+            {tbError && <p className="text-xs text-red-400 mt-1">{tbError}</p>}
+            <div className="flex gap-2 mt-3">
+              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbVerifyCode} disabled={tbSaving || tbInputCode.length !== 6}>{tbSaving ? "Verifying…" : "Verify & Save"}</button>
+              <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setTbStep("email"); setTbError(""); setTbInputCode(""); }}>← Back</button>
+            </div>
+          </>)}
+          {tbStep === "saving" && (
+            <p className="text-sm text-zinc-400 text-center py-4">Saving…</p>
+          )}
+        </div>
+      </div>
+    )}
 
     {/* Engineering Mode Password Modal */}
     {showEngModal && (

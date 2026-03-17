@@ -10,6 +10,7 @@ import fs from "fs";
 import nodemailer from "nodemailer";
 import multer from "multer";
 import Anthropic from "@anthropic-ai/sdk";
+import crypto from "crypto";
 
 function resolvePython(): string {
   const cwd = process.cwd();
@@ -72,6 +73,37 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE skus ADD COLUMN IF NOT EXISTS center_cutting BOOLEAN NOT NULL DEFAULT FALSE`);
     await pool.query(`ALTER TABLE skus ADD COLUMN IF NOT EXISTS max_cutting_edge_length FLOAT`);
   } catch { /* table may not exist yet — uploads will create it */ }
+
+  // ── Toolbox tables ────────────────────────────────────────────────────────
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS toolbox_sessions (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        otp TEXT,
+        otp_expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      ALTER TABLE toolbox_sessions ADD CONSTRAINT toolbox_sessions_email_unique UNIQUE (email)
+    `).catch(() => { /* constraint may already exist */ });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS toolbox_items (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'result',
+        title TEXT NOT NULL,
+        data JSONB,
+        notes TEXT DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  } catch (err: any) {
+    console.warn("[Toolbox migration]", err?.message ?? err);
+  }
 
   app.get(api.snippets.list.path, async (req, res) => {
     const snippets = await storage.getSnippets();
@@ -1354,6 +1386,98 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       console.error("PDF extraction error:", err?.message ?? err);
       return res.status(500).json({ error: "Extraction failed — please enter dimensions manually" });
     }
+  });
+
+  // ── Toolbox: send OTP ─────────────────────────────────────────────────────
+  app.post("/api/toolbox/send-code", async (req, res) => {
+    const { email } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Valid email required" });
+    }
+    const { pool } = await import("./db");
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    await pool.query(
+      `INSERT INTO toolbox_sessions (email, token, otp, otp_expires_at)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET otp = $3, otp_expires_at = $4`,
+      [email.toLowerCase(), crypto.randomUUID(), otp, expires]
+    );
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+    const mailOptions = {
+      from: process.env.SMTP_USER || "noreply@corecutterusa.com",
+      to: email,
+      subject: "Your EZCutCNC Toolbox Code",
+      text: `Your verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nEnter it on the EZCutCNC app to access your Toolbox.`,
+      html: `<div style="font-family:sans-serif;max-width:400px"><h2 style="color:#6366f1">EZCutCNC Toolbox</h2><p>Your verification code is:</p><div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6366f1;padding:16px 0">${otp}</div><p style="color:#666">Expires in 10 minutes.</p></div>`,
+    };
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      await transporter.sendMail(mailOptions);
+    } else {
+      console.log(`[Toolbox OTP] ${email}: ${otp}`);
+    }
+    res.json({ sent: true });
+  });
+
+  // ── Toolbox: verify OTP ───────────────────────────────────────────────────
+  app.post("/api/toolbox/verify-code", async (req, res) => {
+    const { email, code } = req.body;
+    if (!email || !code) return res.status(400).json({ error: "Email and code required" });
+    const { pool } = await import("./db");
+    const result = await pool.query(
+      `SELECT token, otp, otp_expires_at FROM toolbox_sessions WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+    if (!result.rows.length) return res.status(401).json({ error: "Code not found" });
+    const row = result.rows[0];
+    if (row.otp !== String(code)) return res.status(401).json({ error: "Incorrect code" });
+    if (new Date(row.otp_expires_at) < new Date()) return res.status(401).json({ error: "Code expired" });
+    await pool.query(`UPDATE toolbox_sessions SET otp = NULL, otp_expires_at = NULL WHERE email = $1`, [email.toLowerCase()]);
+    res.json({ ok: true, token: row.token });
+  });
+
+  // ── Toolbox: save item ────────────────────────────────────────────────────
+  app.post("/api/toolbox/save", async (req, res) => {
+    const { email, token, type, title, data, notes } = req.body;
+    if (!email || !token || !title) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const result = await pool.query(
+      `INSERT INTO toolbox_items (email, type, title, data, notes) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [email.toLowerCase(), type || "result", title, data ? JSON.stringify(data) : null, notes || ""]
+    );
+    res.json(result.rows[0]);
+  });
+
+  // ── Toolbox: list items ───────────────────────────────────────────────────
+  app.get("/api/toolbox/items", async (req, res) => {
+    const { email, token } = req.query as { email: string; token: string };
+    if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const result = await pool.query(
+      `SELECT * FROM toolbox_items WHERE email = $1 ORDER BY created_at DESC`,
+      [email.toLowerCase()]
+    );
+    res.json(result.rows);
+  });
+
+  // ── Toolbox: delete item ──────────────────────────────────────────────────
+  app.delete("/api/toolbox/items/:id", async (req, res) => {
+    const { email, token } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(`DELETE FROM toolbox_items WHERE id = $1 AND email = $2`, [id, email.toLowerCase()]);
+    res.json({ ok: true });
   });
 
   return httpServer;
