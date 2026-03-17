@@ -1678,35 +1678,62 @@ ${stabSection}
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
           <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
+            {/* Top row: Tool Finder + Calculators — equal width */}
+            <div className="flex gap-2">
               {([
-                { op: "toolfinder",   label: "Tool Finder",   icon: "🔍" },
-                { op: "feedmilling",  label: "Calculators",   icon: "⊞" },
-                { op: "milling",      label: "Milling",       icon: "⟳" },
-                { op: "drilling",     label: "Drilling",      icon: "↓" },
-                { op: "reaming",      label: "Reaming",       icon: "◎" },
-                { op: "threadmilling",label: "Thread Milling",icon: "⌇" },
-                { op: "keyseat",      label: "Keyseat",       icon: "⊟" },
-                { op: "dovetail",     label: "Dovetail",      icon: "◇" },
+                { op: "toolfinder",  label: "Tool Finder", icon: "🔍" },
+                { op: "feedmilling", label: "Calculators",  icon: "⊞" },
               ] as const).map(({ op, label, icon }) => {
-                const active = operation === op;
-                const soon = false;
+                const active = (operation as string) === op;
                 return (
                   <button
                     key={op}
                     type="button"
-                    disabled={soon}
+                    onClick={() => {
+                      setOperation(op as any);
+                      mentor.reset();
+                      setPdfExtracted(false);
+                      setForm((p) => ({ ...p, operation: "milling" }));
+                    }}
+                    className="flex-1 rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all"
+                    style={{
+                      backgroundColor: active ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1",
+                      color: active ? "#fff" : "#6366f1",
+                    }}
+                  >
+                    <span>{label}</span>
+                    <span className="text-lg leading-none">{icon}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Second row: operation calculators */}
+            <div className="flex flex-wrap gap-2">
+              {([
+                { op: "milling",       label: "Milling",       icon: "⟳" },
+                { op: "drilling",      label: "Drilling",      icon: "↓" },
+                { op: "reaming",       label: "Reaming",       icon: "◎" },
+                { op: "threadmilling", label: "Thread Milling",icon: "⌇" },
+                { op: "keyseat",       label: "Keyseat",       icon: "⊟" },
+                { op: "dovetail",      label: "Dovetail",      icon: "◇" },
+              ] as const).map(({ op, label, icon }) => {
+                const active = operation === op;
+                return (
+                  <button
+                    key={op}
+                    type="button"
                     onClick={() => {
                       setOperation(op);
                       mentor.reset();
                       setPdfExtracted(false);
                       setForm((p) => ({
                         ...p,
-                        operation: (op === "milling" || op === "drilling" || op === "reaming" || op === "threadmilling" || op === "keyseat" || op === "dovetail") ? op as any : "milling",
+                        operation: op as any,
                         ...(op === "milling" ? { mode: "" } : {}),
                       }));
                     }}
-                    className="rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all disabled:opacity-40 flex-1"
+                    className="rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all flex-1"
                     style={{
                       backgroundColor: active ? "#6366f1" : "transparent",
                       borderColor: "#6366f1",
