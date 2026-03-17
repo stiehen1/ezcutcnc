@@ -1725,9 +1725,9 @@ ${stabSection}
 
       {/* LEFT — INPUT CARD */}
       <Card className="rounded-2xl">
-        <CardHeader className="pt-2 pb-1">
+        <CardHeader className="pt-0 pb-0">
           {/* Top row: Engineering mode left, IN/MM right */}
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-1 pt-2">
             <div>
               {engMode ? (
                 <div className="flex items-center gap-1">
@@ -1755,17 +1755,9 @@ ${stabSection}
               ))}
             </div>
           </div>
-          {/* Bottom row: Logo + title centered */}
-          <div className="flex justify-center items-center gap-4 pb-0">
-            <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-16 w-auto" />
-            <div className="flex flex-col gap-0.5 mt-3">
-              <span className="inline-flex items-center gap-0" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
-                <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
-                <img src="/5 flute - end shot.png" alt="" className="h-16 w-16 object-cover rounded-full flex-shrink-0" style={{ filter: "invert(1)", marginLeft: "-6px" }} />
-              </span>
-              <div className="w-full -mt-2 mb-1" style={{ height: "6px", background: "linear-gradient(to right, #f97316, #fb923c, transparent)", clipPath: "polygon(0 0, 100% 35%, 100% 65%, 0 100%)" }} />
-              <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
-            </div>
+          {/* Bottom row: EZcutCNC logo only */}
+          <div className="flex justify-center items-center py-0">
+            <img src="/EZcutCNC logo - darkback.png" alt="EZcutCNC" className="h-36 w-auto" style={{ marginTop: "-8px", marginBottom: "-8px" }} />
           </div>
         </CardHeader>
 
