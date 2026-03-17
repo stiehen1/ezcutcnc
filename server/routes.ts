@@ -1357,13 +1357,6 @@ export async function registerRoutes(
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-    fileFilter: (_req, file, cb) => {
-      if (file.mimetype === "application/pdf") {
-        cb(null, true);
-      } else {
-        cb(new Error("Only PDF files are accepted"));
-      }
-    },
   });
 
   const EXTRACTION_PROMPT = `You are reading a Core Cutter LLC engineering print (technical drawing). Extract all tool geometry dimensions and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object.
@@ -1391,11 +1384,13 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
   app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {
     try {
+      console.log("PDF extract route hit, file:", req.file?.originalname, "size:", req.file?.size);
       if (!req.file) {
         return res.status(400).json({ error: "No PDF file uploaded" });
       }
 
       const apiKey = process.env.ANTHROPIC_API_KEY;
+      console.log("API key present:", !!apiKey, "length:", apiKey?.length);
       if (!apiKey) {
         return res.status(503).json({ error: "PDF extraction not configured — contact support" });
       }
@@ -1423,7 +1418,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             },
           ],
         }],
-      } as any);
+      });
 
       const text = response.content.find(c => c.type === "text")?.text ?? "";
 
