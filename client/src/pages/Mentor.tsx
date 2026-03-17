@@ -2645,6 +2645,14 @@ ${stabSection}
 
           {/* Reaming Tool Geometry */}
           {operation === "reaming" && (<>
+          {/* PDF Upload for reaming */}
+          <label className={`mt-3 flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-3 cursor-pointer transition-colors ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600 hover:border-zinc-400"}`}>
+            <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+            <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
+              {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+            </span>
+            <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+          </label>
           {/* Mode toggle */}
           <div className="flex gap-2 mt-3">
             {(["print", "known"] as const).map((m) => (
@@ -3209,6 +3217,14 @@ ${stabSection}
 
           {/* Thread Details — thread milling */}
           {operation === "threadmilling" && (<>
+          {/* PDF Upload for thread milling */}
+          <label className={`mt-3 flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-3 cursor-pointer transition-colors ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600 hover:border-zinc-400"}`}>
+            <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+            <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
+              {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+            </span>
+            <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+          </label>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Thread Details</div>
