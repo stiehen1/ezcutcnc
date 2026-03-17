@@ -1403,9 +1403,10 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       const client = new Anthropic({ apiKey });
       const pdfBase64 = req.file.buffer.toString("base64");
 
-      const response = await client.messages.create({
-        model: "claude-opus-4-6",
+      const response = await (client.beta.messages.create as any)({
+        model: "claude-sonnet-4-6",
         max_tokens: 1024,
+        betas: ["pdfs-2024-09-25"],
         messages: [{
           role: "user",
           content: [
@@ -1416,7 +1417,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
                 media_type: "application/pdf",
                 data: pdfBase64,
               },
-            } as any,
+            },
             {
               type: "text",
               text: EXTRACTION_PROMPT,
