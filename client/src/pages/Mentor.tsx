@@ -1761,7 +1761,7 @@ ${stabSection}
             <div className="flex flex-col gap-0.5">
               <span className="inline-flex items-center gap-0" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
                 <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
-                <img src="/5 flute - end shot.png" alt="" className="h-10 w-10 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ mixBlendMode: "multiply" }} />
+                <img src="/5 flute - end shot.png" alt="" className="h-10 w-10 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ filter: "invert(1)" }} />
               </span>
               <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
             </div>
@@ -5982,7 +5982,7 @@ ${stabSection}
           <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-9 w-auto" />
           <span className="inline-flex items-center" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
             <span className="text-xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
-            <img src="/5 flute - end shot.png" alt="" className="h-8 w-8 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ mixBlendMode: "multiply" }} />
+            <img src="/5 flute - end shot.png" alt="" className="h-8 w-8 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ filter: "invert(1)" }} />
           </span>
         </div>
         <div className="text-right text-[11px] text-muted-foreground/60 leading-snug">
