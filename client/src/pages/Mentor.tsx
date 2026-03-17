@@ -313,6 +313,7 @@ export default function Mentor() {
     localStorage.getItem("cc_eng_mode") === "true"
   );
   const [showEngModal, setShowEngModal] = React.useState(false);
+  const [showEngPassword, setShowEngPassword] = React.useState(false);
   const [engPasswordInput, setEngPasswordInput] = React.useState("");
   const [engPasswordError, setEngPasswordError] = React.useState("");
   const [engAuthLoading, setEngAuthLoading] = React.useState(false);
@@ -1706,7 +1707,7 @@ ${stabSection}
     <div className="mx-auto w-full max-w-6xl p-3 sm:p-4">
       {/* App header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
-        <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-8 w-auto" style={{ mixBlendMode: "screen" }} />
+        <img src="/CCLogo-long-whiteback.png" alt="Core Cutter" className="h-8 w-auto" style={{ mixBlendMode: "multiply" }} />
         <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
       </div>
 
@@ -6043,15 +6044,20 @@ ${stabSection}
         <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
           <h2 className="text-base font-semibold text-white mb-1">Engineering Mode</h2>
           <p className="text-xs text-zinc-400 mb-4">Enter the engineering password to access all manual controls.</p>
-          <input
-            type="password"
-            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
-            placeholder="Password"
-            value={engPasswordInput}
-            onChange={e => setEngPasswordInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") enterEngMode(); }}
-            autoFocus
-          />
+          <div className="relative">
+            <input
+              type={showEngPassword ? "text" : "password"}
+              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 pr-9 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
+              placeholder="Password"
+              value={engPasswordInput}
+              onChange={e => setEngPasswordInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") enterEngMode(); }}
+              autoFocus
+            />
+            <button type="button" onClick={() => setShowEngPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white text-xs">
+              {showEngPassword ? "🙈" : "👁️"}
+            </button>
+          </div>
           {engPasswordError && <p className="text-xs text-red-400 mt-1">{engPasswordError}</p>}
           <div className="flex gap-2 mt-3">
             <button
