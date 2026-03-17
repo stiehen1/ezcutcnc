@@ -1687,7 +1687,7 @@ export default function Calculators() {
         <div className="flex items-center gap-4 py-2">
           <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-12 w-auto" />
           <div className="flex flex-col gap-0.5">
-            <span className="text-2xl font-black tracking-[0.2em] uppercase bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent drop-shadow-sm">EZCutCNC</span>
+            <span className="text-3xl font-black uppercase bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>EZcutCNC</span>
             <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
           </div>
         </div>
