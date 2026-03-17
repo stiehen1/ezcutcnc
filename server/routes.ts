@@ -1403,10 +1403,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       const client = new Anthropic({ apiKey });
       const pdfBase64 = req.file.buffer.toString("base64");
 
-      const response = await (client.beta.messages.create as any)({
+      const response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
-        betas: ["pdfs-2024-09-25"],
         messages: [{
           role: "user",
           content: [
@@ -1417,14 +1416,14 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
                 media_type: "application/pdf",
                 data: pdfBase64,
               },
-            },
+            } as any,
             {
               type: "text",
               text: EXTRACTION_PROMPT,
             },
           ],
         }],
-      });
+      } as any);
 
       const text = response.content.find(c => c.type === "text")?.text ?? "";
 
@@ -1443,8 +1442,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
       return res.json({ ok: true, extracted });
     } catch (err: any) {
-      console.error("PDF extraction error:", err?.message ?? err);
-      return res.status(500).json({ error: "Extraction failed — please enter dimensions manually" });
+      console.error("PDF extraction error:", err?.message ?? err, err?.status, err?.error);
+      return res.status(500).json({ error: "Extraction failed — please enter dimensions manually", detail: err?.message ?? String(err) });
     }
   });
 
