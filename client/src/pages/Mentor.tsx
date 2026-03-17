@@ -1725,9 +1725,9 @@ ${stabSection}
 
       {/* LEFT — INPUT CARD */}
       <Card className="rounded-2xl">
-        <CardHeader className="pt-3 pb-2">
+        <CardHeader className="pt-2 pb-1">
           {/* Top row: Engineering mode left, IN/MM right */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1">
             <div>
               {engMode ? (
                 <div className="flex items-center gap-1">
@@ -1756,7 +1756,7 @@ ${stabSection}
             </div>
           </div>
           {/* Bottom row: Logo + title centered */}
-          <div className="flex justify-center items-center gap-4 pb-2">
+          <div className="flex justify-center items-center gap-4 pb-0">
             <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-16 w-auto" />
             <div className="flex flex-col gap-0.5">
               <span className="inline-flex items-center gap-0" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
