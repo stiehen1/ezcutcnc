@@ -1725,9 +1725,9 @@ ${stabSection}
 
       {/* LEFT — INPUT CARD */}
       <Card className="rounded-2xl">
-        <CardHeader className="pt-4 pb-4">
+        <CardHeader className="pt-3 pb-2">
           {/* Top row: Engineering mode left, IN/MM right */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div>
               {engMode ? (
                 <div className="flex items-center gap-1">
