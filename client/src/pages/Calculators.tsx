@@ -1656,7 +1656,13 @@ export default function Calculators() {
     <style>body{font-family:Arial,sans-serif;margin:0;padding:20px;background:#fff;color:#111}
     @media print{body{padding:0}}</style></head><body>
     <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;border-bottom:2px solid #e55a00;padding-bottom:12px;margin-bottom:20px;gap:12px">
-      <img src="${window.location.origin}/CCLogo-long-whiteback.png" alt="Core Cutter" style="height:44px;width:auto">
+      <div style="display:flex;align-items:center;gap:10px">
+        <img src="${window.location.origin}/CCLogo-long-whiteback.png" alt="Core Cutter" style="height:36px;width:auto">
+        <div style="display:flex;flex-direction:column;line-height:1.2">
+          <span style="font-size:16px;font-weight:800;letter-spacing:3px;color:#ea6c00">EZCutCNC</span>
+          <span style="font-size:9px;color:#888;letter-spacing:1px">Speeds • Feeds • Intelligence</span>
+        </div>
+      </div>
       <div style="text-align:center;color:#555;font-size:10px">
         <strong style="font-size:13px;color:#111;display:block">Calculator Results</strong>
         ${now}
@@ -1678,7 +1684,13 @@ export default function Calculators() {
 
       {/* Logo + unit toggle header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-10 w-auto" />
+        <div className="flex items-center gap-3">
+          <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-10 w-auto" />
+          <div className="flex flex-col leading-tight">
+            <span className="text-lg font-bold tracking-widest text-orange-500">EZCutCNC</span>
+            <span className="text-[10px] text-muted-foreground tracking-wider">Speeds • Feeds • Intelligence</span>
+          </div>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"

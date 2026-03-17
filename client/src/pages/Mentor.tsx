@@ -1727,10 +1727,12 @@ ${stabSection}
       <Card className="rounded-2xl">
         <CardHeader className="pt-2 pb-0">
           <div className="relative flex justify-center">
-            <div className="flex flex-col items-center -mt-2 -mb-10">
-              <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-16 w-auto" />
-              <span className="text-2xl font-bold tracking-widest text-orange-500 mt-1">EZCutCNC</span>
-              <span className="text-[10px] text-muted-foreground tracking-wider">Speeds • Feeds • Intelligence</span>
+            <div className="flex items-center gap-3 py-2">
+              <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-10 w-auto" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-lg font-bold tracking-widest text-orange-500">EZCutCNC</span>
+                <span className="text-[10px] text-muted-foreground tracking-wider">Speeds • Feeds • Intelligence</span>
+              </div>
             </div>
             {/* Engineering mode toggle */}
             <div className="absolute left-0 top-0">
