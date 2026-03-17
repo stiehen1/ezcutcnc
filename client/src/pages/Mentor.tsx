@@ -1761,20 +1761,7 @@ ${stabSection}
             <div className="flex flex-col gap-0.5">
               <span className="inline-flex items-center gap-0" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
                 <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
-                <svg viewBox="0 0 24 24" className="h-6 w-6 ml-0.5 mb-0.5 flex-shrink-0" fill="none" stroke="url(#tgt-grad)" strokeWidth="1.8">
-                  <defs>
-                    <linearGradient id="tgt-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#fb923c" />
-                      <stop offset="100%" stopColor="#ea580c" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="12" cy="12" r="7" />
-                  <line x1="12" y1="2" x2="12" y2="6" />
-                  <line x1="12" y1="18" x2="12" y2="22" />
-                  <line x1="2" y1="12" x2="6" y2="12" />
-                  <line x1="18" y1="12" x2="22" y2="12" />
-                  <circle cx="12" cy="12" r="1.5" fill="url(#tgt-grad)" stroke="none" />
-                </svg>
+                <img src="/5 flute - end shot.png" alt="" className="h-10 w-10 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ mixBlendMode: "multiply" }} />
               </span>
               <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
             </div>
@@ -5995,20 +5982,7 @@ ${stabSection}
           <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-9 w-auto" />
           <span className="inline-flex items-center" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
             <span className="text-xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
-            <svg viewBox="0 0 24 24" className="h-5 w-5 ml-0.5 flex-shrink-0" fill="none" stroke="url(#tgt-grad-f)" strokeWidth="1.8">
-              <defs>
-                <linearGradient id="tgt-grad-f" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#fb923c" />
-                  <stop offset="100%" stopColor="#ea580c" />
-                </linearGradient>
-              </defs>
-              <circle cx="12" cy="12" r="7" />
-              <line x1="12" y1="2" x2="12" y2="6" />
-              <line x1="12" y1="18" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="6" y2="12" />
-              <line x1="18" y1="12" x2="22" y2="12" />
-              <circle cx="12" cy="12" r="1.5" fill="url(#tgt-grad-f)" stroke="none" />
-            </svg>
+            <img src="/5 flute - end shot.png" alt="" className="h-8 w-8 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ mixBlendMode: "multiply" }} />
           </span>
         </div>
         <div className="text-right text-[11px] text-muted-foreground/60 leading-snug">
