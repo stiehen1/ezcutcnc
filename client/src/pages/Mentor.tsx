@@ -1757,7 +1757,7 @@ ${stabSection}
           </div>
           {/* Bottom row: Logo + title centered */}
           <div className="flex justify-center items-center gap-4 pb-2">
-            <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-12 w-auto" />
+            <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-16 w-auto" />
             <div className="flex flex-col gap-0.5">
               <span className="text-3xl font-black uppercase bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>EZcutCNC</span>
               <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
