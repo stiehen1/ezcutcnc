@@ -1726,16 +1726,9 @@ ${stabSection}
       {/* LEFT — INPUT CARD */}
       <Card className="rounded-2xl">
         <CardHeader className="pt-5 pb-4">
-          <div className="relative flex justify-center">
-            <div className="flex items-center gap-4 py-2">
-              <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-12 w-auto" />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-2xl font-black tracking-[0.2em] uppercase bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent drop-shadow-sm">EZCutCNC</span>
-                <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
-              </div>
-            </div>
-            {/* Engineering mode toggle */}
-            <div className="absolute left-0 top-0">
+          <div className="grid grid-cols-3 items-center">
+            {/* Left: Engineering mode toggle */}
+            <div>
               {engMode ? (
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
@@ -1745,21 +1738,32 @@ ${stabSection}
                 <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-gray-500 hover:text-gray-300 underline">Engineering Mode</button>
               )}
             </div>
-            <div className="absolute right-0 top-0 flex rounded-md border overflow-hidden text-xs font-semibold">
-              {(["imperial", "metric"] as const).map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => setUnits(u)}
-                  className="px-2.5 py-1 transition-colors"
-                  style={{
-                    backgroundColor: units === u ? "#6366f1" : "transparent",
-                    color: units === u ? "#fff" : undefined,
-                  }}
-                >
-                  {u === "imperial" ? "IN" : "MM"}
-                </button>
-              ))}
+            {/* Center: Logo + title */}
+            <div className="flex justify-center items-center gap-4 py-1">
+              <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-12 w-auto" />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-2xl font-black tracking-[0.2em] uppercase bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZCutCNC</span>
+                <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
+              </div>
+            </div>
+            {/* Right: IN/MM toggle */}
+            <div className="flex justify-end">
+              <div className="flex rounded-md border overflow-hidden text-xs font-semibold">
+                {(["imperial", "metric"] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setUnits(u)}
+                    className="px-2.5 py-1 transition-colors"
+                    style={{
+                      backgroundColor: units === u ? "#6366f1" : "transparent",
+                      color: units === u ? "#fff" : undefined,
+                    }}
+                  >
+                    {u === "imperial" ? "IN" : "MM"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </CardHeader>
