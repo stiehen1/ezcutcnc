@@ -106,7 +106,11 @@ export default function Toolbox() {
         <div className="flex items-center gap-3">
           <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">← Back to Calculator</Link>
         </div>
-        <h1 className="text-base font-bold">My Toolbox</h1>
+        <div className="flex items-center gap-2">
+          <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-6 w-auto" />
+          <span className="text-sm font-bold tracking-widest text-orange-500">EZCutCNC</span>
+          <span className="text-sm font-semibold text-muted-foreground">/ Toolbox</span>
+        </div>
         {step === "items" && (
           <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground">Sign out</button>
         )}

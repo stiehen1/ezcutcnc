@@ -120,7 +120,11 @@ export default function Admin() {
       {/* Header */}
       <div className="border-b border-border px-4 py-3 flex items-center justify-between">
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Calculator</Link>
-        <h1 className="text-base font-bold">Admin Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-6 w-auto" />
+          <span className="text-sm font-bold tracking-widest text-orange-500">EZCutCNC</span>
+          <span className="text-sm font-semibold text-muted-foreground">/ Admin</span>
+        </div>
         <button
           onClick={() => { sessionStorage.removeItem("admin_token"); setAuthed(false); }}
           className="text-xs text-muted-foreground hover:text-foreground"
