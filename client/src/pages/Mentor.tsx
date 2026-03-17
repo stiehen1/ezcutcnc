@@ -1763,7 +1763,7 @@ ${stabSection}
                 <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
                 <img src="/5 flute - end shot.png" alt="" className="h-16 w-16 object-cover rounded-full flex-shrink-0" style={{ filter: "invert(1)", marginLeft: "-6px" }} />
               </span>
-              <div className="h-[2px] w-full bg-gradient-to-r from-orange-500 via-orange-400 to-transparent rounded-full mt-0 mb-1.5" />
+              <div className="h-[2px] w-full bg-gradient-to-r from-orange-500 via-orange-400 to-transparent rounded-full -mt-1 mb-1" />
               <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
             </div>
           </div>
@@ -1771,7 +1771,7 @@ ${stabSection}
 
         <CardContent className="space-y-4 pt-0">
           {/* Operation / Process */}
-          <div className="flex items-center gap-3 my-1">
+          <div className="flex items-center gap-3 my-3">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Operation / Process</div>
             <div className="flex-1 border-t-2 border-orange-500" />
