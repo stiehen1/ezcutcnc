@@ -1294,6 +1294,65 @@ export async function registerRoutes(
     return res.status(401).json({ ok: false, error: "Incorrect password" });
   });
 
+  // ── Admin auth ────────────────────────────────────────────────────────────
+  app.post("/api/admin/auth", (req, res) => {
+    const { password } = req.body;
+    if (password === process.env.ADMIN_PASSWORD) {
+      res.json({ ok: true });
+    } else {
+      res.status(401).json({ ok: false });
+    }
+  });
+
+  // ── Admin stats ───────────────────────────────────────────────────────────
+  app.get("/api/admin/stats", async (req, res) => {
+    const { token } = req.query as { token: string };
+    if (token !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
+    const { pool } = await import("./db");
+
+    const [users, activity, operations] = await Promise.all([
+      // Users: email, signup date, save count, last active
+      pool.query(`
+        SELECT
+          s.email,
+          s.created_at as joined,
+          COUNT(i.id) as save_count,
+          MAX(i.created_at) as last_active
+        FROM toolbox_sessions s
+        LEFT JOIN toolbox_items i ON i.email = s.email
+        GROUP BY s.email, s.created_at
+        ORDER BY s.created_at DESC
+      `),
+      // Recent activity: last 50 saves
+      pool.query(`
+        SELECT id, email, title, type, created_at
+        FROM toolbox_items
+        ORDER BY created_at DESC
+        LIMIT 50
+      `),
+      // Usage by operation type
+      pool.query(`
+        SELECT
+          data->'inputs'->>'operation' as operation,
+          COUNT(*) as count
+        FROM toolbox_items
+        WHERE data->'inputs'->>'operation' IS NOT NULL
+        GROUP BY operation
+        ORDER BY count DESC
+      `),
+    ]);
+
+    res.json({
+      users: users.rows,
+      activity: activity.rows,
+      operations: operations.rows,
+      totals: {
+        users: users.rows.length,
+        saves: activity.rows.length > 0 ? (await pool.query(`SELECT COUNT(*) FROM toolbox_items`)).rows[0].count : 0,
+      },
+    });
+  });
+
   // ── PDF print geometry extraction ─────────────────────────────────────────
   const upload = multer({
     storage: multer.memoryStorage(),
