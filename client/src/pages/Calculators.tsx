@@ -1684,11 +1684,11 @@ export default function Calculators() {
 
       {/* Logo + unit toggle header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-10 w-auto" />
-          <div className="flex flex-col leading-tight">
-            <span className="text-lg font-bold tracking-widest text-orange-500">EZCutCNC</span>
-            <span className="text-[10px] text-muted-foreground tracking-wider">Speeds • Feeds • Intelligence</span>
+        <div className="flex items-center gap-4 py-2">
+          <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-12 w-auto" />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-2xl font-black tracking-[0.2em] uppercase bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent drop-shadow-sm">EZCutCNC</span>
+            <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
