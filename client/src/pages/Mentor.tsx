@@ -1758,7 +1758,7 @@ ${stabSection}
           {/* Bottom row: Logo + title centered */}
           <div className="flex justify-center items-center gap-4 pb-0">
             <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-16 w-auto" />
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5 mt-3">
               <span className="inline-flex items-center gap-0" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
                 <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
                 <img src="/5 flute - end shot.png" alt="" className="h-16 w-16 object-cover rounded-full flex-shrink-0" style={{ filter: "invert(1)", marginLeft: "-6px" }} />
