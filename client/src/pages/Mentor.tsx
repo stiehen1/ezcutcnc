@@ -1771,7 +1771,7 @@ ${stabSection}
 
         <CardContent className="space-y-4 pt-0">
           {/* Operation / Process */}
-          <div className="flex items-center gap-3 my-3">
+          <div className="flex items-center gap-3 mt-1 mb-1">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Operation / Process</div>
             <div className="flex-1 border-t-2 border-orange-500" />
