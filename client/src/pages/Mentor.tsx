@@ -1763,7 +1763,7 @@ ${stabSection}
                 <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
                 <img src="/5 flute - end shot.png" alt="" className="h-16 w-16 object-cover rounded-full flex-shrink-0" style={{ filter: "invert(1)", marginLeft: "-6px" }} />
               </span>
-              <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase -mt-1">Speeds • Feeds • Intelligence</span>
+              <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase -mt-2">Speeds • Feeds • Intelligence</span>
             </div>
           </div>
         </CardHeader>
