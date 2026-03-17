@@ -305,8 +305,108 @@ export default function Mentor() {
 
 
   const [isoCategory, setIsoCategory] = React.useState<IsoCategory>("P");
-  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "feedmilling" | "toolfinder">("milling");
+  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmilling" | "toolfinder">("milling");
   const [units, setUnits] = React.useState<"imperial" | "metric">("imperial");
+
+  // ── Engineering / Customer mode ──────────────────────────────────────────
+  const [engMode, setEngMode] = React.useState<boolean>(() =>
+    localStorage.getItem("cc_eng_mode") === "true"
+  );
+  const [showEngModal, setShowEngModal] = React.useState(false);
+  const [engPasswordInput, setEngPasswordInput] = React.useState("");
+  const [engPasswordError, setEngPasswordError] = React.useState("");
+  const [engAuthLoading, setEngAuthLoading] = React.useState(false);
+
+  const enterEngMode = async () => {
+    setEngAuthLoading(true);
+    setEngPasswordError("");
+    try {
+      const res = await fetch("/api/eng-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: engPasswordInput }),
+      });
+      if (res.ok) {
+        setEngMode(true);
+        localStorage.setItem("cc_eng_mode", "true");
+        setShowEngModal(false);
+        setEngPasswordInput("");
+      } else {
+        setEngPasswordError("Incorrect password");
+      }
+    } catch {
+      setEngPasswordError("Connection error — try again");
+    }
+    setEngAuthLoading(false);
+  };
+
+  const exitEngMode = () => {
+    setEngMode(false);
+    localStorage.removeItem("cc_eng_mode");
+  };
+
+  // ── PDF Print Upload ──────────────────────────────────────────────────────
+  const [pdfUploading, setPdfUploading] = React.useState(false);
+  const [pdfExtracted, setPdfExtracted] = React.useState(false);
+
+  const uploadPrintPdf = async (file: File) => {
+    setPdfUploading(true);
+    setPdfExtracted(false);
+    try {
+      const formData = new FormData();
+      formData.append("pdf", file);
+      const res = await fetch("/api/tool-geometry/extract", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: "Could not read print", description: err.error ?? "Please enter dimensions manually", variant: "destructive" });
+        return;
+      }
+      const data = await res.json();
+      const e = data.extracted ?? {};
+
+      // Map extracted fields to form — only set fields that have real values
+      setForm((p) => {
+        const next = { ...p };
+        if (e.tool_dia > 0) next.tool_dia = e.tool_dia;
+        if (e.flutes > 0) next.flutes = e.flutes;
+        if (e.loc > 0) next.loc = e.loc;
+        if (e.lbs > 0) next.lbs = e.lbs;
+        if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
+        if (e.corner_condition) next.corner_condition = e.corner_condition;
+        if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
+        if (e.shank_dia > 0) next.shank_dia = e.shank_dia;
+        if (e.coating) next.coating = e.coating;
+        if (e.keyseat_arbor_dia > 0) next.keyseat_arbor_dia = e.keyseat_arbor_dia;
+        if (e.dovetail_angle > 0) next.dovetail_angle = e.dovetail_angle;
+        if (e.chamfer_angle > 0) next.chamfer_angle = e.chamfer_angle;
+        if (e.chamfer_tip_dia > 0) next.chamfer_tip_dia = e.chamfer_tip_dia;
+        if (e.drill_step_diameters?.length > 0) {
+          next.drill_step_diameters = e.drill_step_diameters;
+          next.drill_steps = 1;
+        }
+        // Auto-switch operation based on detected tool type
+        const tt = (e.tool_type ?? "").toLowerCase();
+        if (tt === "keyseat") { setOperation("keyseat"); next.operation = "keyseat" as any; }
+        else if (tt === "dovetail") { setOperation("dovetail"); next.operation = "dovetail" as any; }
+        else if (tt === "drill" || tt === "step_drill") { setOperation("drilling"); next.operation = "drilling"; }
+        else if (tt === "reamer") { setOperation("reaming"); next.operation = "reaming"; }
+        else if (tt === "threadmill") { setOperation("threadmilling"); next.operation = "threadmilling"; }
+        else if (tt === "chamfer_mill") {
+          next.tool_type = "chamfer_mill";
+        }
+        return next;
+      });
+      setPdfExtracted(true);
+      mentor.reset();
+      toast({ title: "Print read successfully", description: "Review extracted dimensions below and correct any misreads before running." });
+    } catch {
+      toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
+    }
+    setPdfUploading(false);
+  };
   const metric = units === "metric";
 
   // Conversion factors: imperial → metric
@@ -337,7 +437,7 @@ export default function Mentor() {
 
   // This matches shared/routes.ts input schema keys (or is trivially mappable)
   const INITIAL_FORM = {
-    operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling",
+    operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail",
     mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "",
     material: "steel_alloy",
     tool_dia: 0,
@@ -413,6 +513,12 @@ export default function Mentor() {
     ream_step_diameters: [] as number[],
     ream_step_lengths: [] as number[],
     ream_lead_chamfer: "standard" as "standard" | "long_lead" | "short_lead",
+
+    // Keyseat-specific
+    keyseat_arbor_dia: 0,
+
+    // Dovetail-specific
+    dovetail_angle: 60,
 
     // Thread milling-specific
     thread_standard: "unc" as "unc" | "unf" | "unef" | "metric" | "npt" | "nptf",
@@ -1070,10 +1176,12 @@ ${stabSection}
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
-  const drillResult  = result?.drilling   ?? null;
-  const reamResult   = result?.reaming    ?? null;
-  const threadResult = result?.thread_mill ?? null;
-  const chamferResult = result?.chamfer  ?? null;
+  const drillResult   = result?.drilling   ?? null;
+  const reamResult    = result?.reaming    ?? null;
+  const threadResult  = result?.thread_mill ?? null;
+  const chamferResult = result?.chamfer    ?? null;
+  const keyseatResult = result?.keyseat    ?? null;
+  const dovetailResult = result?.dovetail  ?? null;
 
   // ── Machining Stability Index ─────────────────────────────────────────────
   function calcStabilityIndex(
@@ -1452,7 +1560,7 @@ ${stabSection}
         lines.push("");
         lines.push("ADVISOR NOTES");
         lines.push(DIV);
-        cust.notes.forEach((n, i) => lines.push(`  ${i + 1}. ${n}`));
+        cust.notes.forEach((n: string, i: number) => lines.push(`  ${i + 1}. ${n}`));
       }
     }
 
@@ -1532,6 +1640,17 @@ ${stabSection}
         <CardHeader className="pt-2 pb-0">
           <div className="relative flex justify-center">
             <img src="/vectorink-background-removed.png" alt="EZCutCNC" className="h-52 w-auto -mt-4 -mb-12" />
+            {/* Engineering mode toggle */}
+            <div className="absolute left-0 top-0">
+              {engMode ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
+                  <button type="button" onClick={exitEngMode} className="text-[10px] text-gray-400 hover:text-white underline">Exit</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-gray-500 hover:text-gray-300 underline">Engineering Mode</button>
+              )}
+            </div>
             <div className="absolute right-0 top-0 flex rounded-md border overflow-hidden text-xs font-semibold">
               {(["imperial", "metric"] as const).map((u) => (
                 <button
@@ -1567,6 +1686,8 @@ ${stabSection}
                 { op: "drilling",     label: "Drilling",      icon: "↓" },
                 { op: "reaming",      label: "Reaming",       icon: "◎" },
                 { op: "threadmilling",label: "Thread Milling",icon: "⌇" },
+                { op: "keyseat",      label: "Keyseat",       icon: "⊟" },
+                { op: "dovetail",     label: "Dovetail",      icon: "◇" },
               ] as const).map(({ op, label, icon }) => {
                 const active = operation === op;
                 const soon = false;
@@ -1578,9 +1699,10 @@ ${stabSection}
                     onClick={() => {
                       setOperation(op);
                       mentor.reset();
+                      setPdfExtracted(false);
                       setForm((p) => ({
                         ...p,
-                        operation: (op === "milling" || op === "drilling" || op === "reaming" || op === "threadmilling") ? op as any : "milling",
+                        operation: (op === "milling" || op === "drilling" || op === "reaming" || op === "threadmilling" || op === "keyseat" || op === "dovetail") ? op as any : "milling",
                         ...(op === "milling" ? { mode: "" } : {}),
                       }));
                     }}
@@ -1893,7 +2015,7 @@ ${stabSection}
               <button
                 key={key}
                 type="button"
-                onClick={() => setForm((p) => ({ ...p, tool_type: key, ...(key === "endmill" ? { corner_condition: "square", tool_type: "endmill" } : { corner_condition: "square" }) }))}
+                onClick={() => setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }))}
                 className="rounded px-3 py-1 text-xs font-semibold border transition-all"
                 style={{
                   backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#6366f1" : "transparent",
@@ -1968,6 +2090,26 @@ ${stabSection}
               </div>
             )}
           </div>
+
+          {/* PDF Print Upload — shown in customer mode or as shortcut in eng mode */}
+          {(operation === "milling") && (!skuLocked) && (
+            <div className={`rounded-lg border p-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
+              {pdfExtracted ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print — review fields below</span>
+                  <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center gap-1 cursor-pointer">
+                  <span className="text-xs text-gray-400">{engMode ? "Or upload CC print to auto-fill" : "Upload CC-XXXXX print to auto-fill dimensions"}</span>
+                  <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                  </span>
+                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                </label>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-3" style={{ gridTemplateColumns: form.tool_type === "chamfer_mill" ? "4rem 1fr 1fr" : "4rem 1fr 1fr 1fr" }}>
             <div className="space-y-2">
@@ -2241,6 +2383,24 @@ ${stabSection}
             </div>
           </div>}
           </>) : operation === "drilling" ? (<>
+          {/* PDF Upload for drilling */}
+          {!pdfExtracted && (
+            <div className="rounded-lg border border-dashed border-gray-600 p-3 mb-3">
+              <label className="flex flex-col items-center gap-1 cursor-pointer">
+                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                </span>
+                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+              </label>
+            </div>
+          )}
+          {pdfExtracted && (
+            <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
+              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted — review below</span>
+              <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+            </div>
+          )}
           {/* Drilling tool fields */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
@@ -2287,84 +2447,47 @@ ${stabSection}
           </div>
           {/* Steps selector */}
           <div className="space-y-1.5 mt-3">
-            <FieldLabel hint="Number of step-up diameters on this drill. 0 = standard single-diameter drill. Each step adds a larger diameter above the entry tip. SFM is set by the largest diameter; feed (IPR) is set by the entry (smallest) diameter.">Number of Steps</FieldLabel>
+            <FieldLabel hint="Standard = single diameter drill. Step Drill = enter the largest diameter; SFM is set by the largest diameter, feed (IPR) by the entry (smallest) diameter.">Drill Type</FieldLabel>
             <div className="flex gap-2">
-              {([0, 1, 2, 3] as const).map((n) => (
+              {([0, 1] as const).map((n) => (
                 <button key={n} type="button"
                   onClick={() => {
-                    const newDias = form.drill_step_diameters.slice(0, n);
-                    const newLens = form.drill_step_lengths.slice(0, n);
-                    setStepDiaTexts((prev) => {
-                      const t = [...prev];
-                      t.length = n;
-                      return t.fill("", prev.length, n);
-                    });
-                    setStepLenTexts((prev) => {
-                      const t = [...prev];
-                      t.length = n;
-                      return t.fill("", prev.length, n);
-                    });
-                    setForm((p) => ({ ...p, drill_steps: n, drill_step_diameters: newDias, drill_step_lengths: newLens }));
+                    setStepDiaTexts(n === 0 ? [] : [""]);
+                    setStepLenTexts([]);
+                    setForm((p) => ({ ...p, drill_steps: n, drill_step_diameters: [], drill_step_lengths: [] }));
                   }}
                   className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
                   style={{
                     backgroundColor: form.drill_steps === n ? "#6366f1" : "transparent",
                     borderColor: "#6366f1", color: form.drill_steps === n ? "#fff" : "#6366f1",
                   }}
-                >{n === 0 ? "Standard" : `${n} Step${n > 1 ? "s" : ""}`}</button>
+                >{n === 0 ? "Standard" : "Step Drill"}</button>
               ))}
             </div>
           </div>
 
-          {/* Dynamic step rows */}
+          {/* Step drill — largest diameter only */}
           {form.drill_steps > 0 && (
-            <div className="mt-3 space-y-2">
-              {Array.from({ length: form.drill_steps }).map((_, i) => (
-                <div key={i} className="grid grid-cols-2 gap-3 items-end">
-                  <div className="space-y-1">
-                    <FieldLabel hint={`Step ${i + 1} diameter — larger than entry diameter. SFM is calculated on the largest step diameter.`}>Step {i + 1} Dia (in)</FieldLabel>
-                    <Input
-                      type="text" inputMode="decimal" className="no-spinners"
-                      placeholder="e.g. 0.500"
-                      value={stepDiaTexts[i] ?? ""}
-                      onChange={(e) => setStepDiaTexts((prev) => { const t = [...prev]; t[i] = e.target.value; return t; })}
-                      onBlur={() => {
-                        const n = parseDim(stepDiaTexts[i] ?? "");
-                        if (Number.isFinite(n) && n > 0) {
-                          setForm((p) => {
-                            const dias = [...p.drill_step_diameters];
-                            dias[i] = n;
-                            return { ...p, drill_step_diameters: dias };
-                          });
-                          setStepDiaTexts((prev) => { const t = [...prev]; t[i] = n.toFixed(4); return t; });
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <FieldLabel hint={`Distance from the drill tip to where Step ${i + 1} begins. Measured from the point tip.`}>Step {i + 1} Length from Tip (in)</FieldLabel>
-                    <Input
-                      type="text" inputMode="decimal" className="no-spinners"
-                      placeholder="e.g. 0.375"
-                      value={stepLenTexts[i] ?? ""}
-                      onChange={(e) => setStepLenTexts((prev) => { const t = [...prev]; t[i] = e.target.value; return t; })}
-                      onBlur={() => {
-                        const n = parseDim(stepLenTexts[i] ?? "");
-                        if (Number.isFinite(n) && n > 0) {
-                          setForm((p) => {
-                            const lens = [...p.drill_step_lengths];
-                            lens[i] = n;
-                            return { ...p, drill_step_lengths: lens };
-                          });
-                          setStepLenTexts((prev) => { const t = [...prev]; t[i] = n.toFixed(4); return t; });
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="mt-3">
+              <div className="space-y-1">
+                <FieldLabel hint="Largest diameter on the step drill. SFM and RPM are calculated on this diameter.">Largest Dia (in)</FieldLabel>
+                <Input
+                  type="text" inputMode="decimal" className="no-spinners"
+                  placeholder="e.g. 0.500"
+                  value={stepDiaTexts[0] ?? ""}
+                  onChange={(e) => setStepDiaTexts([e.target.value])}
+                  onBlur={() => {
+                    const n = parseDim(stepDiaTexts[0] ?? "");
+                    if (Number.isFinite(n) && n > 0) {
+                      setForm((p) => ({ ...p, drill_step_diameters: [n] }));
+                      setStepDiaTexts([n.toFixed(4)]);
+                    }
+                  }}
+                />
+              </div>
             </div>
           )}
+
 
           {/* Coolant Fed — drill tool property */}
           <div className="space-y-1.5 mt-3">
@@ -2974,12 +3097,12 @@ ${stabSection}
             const dia = form.tool_dia || 0.5;
             const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
             const wocTooLow = form.woc_pct > 0 && form.woc_pct < minWoc;
-            const docTooLow = form.doc_in > 0 && form.doc_in < dia;
+            const docTooLow = form.doc_xd > 0 && form.doc_xd < 1.0;
             if (!wocTooLow && !docTooLow) return null;
             const geoLabel = form.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated Rougher";
             const reasons = [
               wocTooLow && `WOC ${form.woc_pct.toFixed(1)}% is below ${minWoc}% minimum`,
-              docTooLow && `DOC ${form.doc_in.toFixed(3)}" is below 1×D (${dia.toFixed(3)}")`,
+              docTooLow && `DOC ${form.doc_xd.toFixed(2)}×D is below 1×D minimum`,
             ].filter(Boolean).join(" · ");
             return (
               <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
@@ -3531,6 +3654,112 @@ ${stabSection}
               </div>
             )}
           </div>
+
+          {/* ── Keyseat Tool Geometry ─────────────────────────────────────── */}
+          {(operation === "keyseat" || operation === "dovetail") && (<>
+            <div className="flex items-center gap-3 my-7">
+              <div className="flex-1 border-t-2 border-orange-500" />
+              <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
+              <div className="flex-1 border-t-2 border-orange-500" />
+            </div>
+
+            {/* PDF Upload for keyseat/dovetail */}
+            <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
+              {pdfExtracted ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print — review fields below</span>
+                  <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center gap-1 cursor-pointer">
+                  <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                  <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                  </span>
+                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                </label>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <FieldLabel hint="Cutting diameter (keyseat width for keyseat cutters, max cutting diameter for dovetail cutters).">Cut Dia (in)</FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners"
+                  placeholder="e.g. 0.750"
+                  value={toolDiaText}
+                  onChange={(e) => setToolDiaText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseDim(toolDiaText);
+                    if (Number.isFinite(n) && n > 0) {
+                      setForm((p) => ({ ...p, tool_dia: n }));
+                      setToolDiaText(n.toFixed(4));
+                    }
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel hint="Number of cutting teeth/flutes.">Flutes</FieldLabel>
+                <Input type="number" step="1" className="no-spinners" value={form.flutes || ""} onChange={onNum("flutes")} />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel hint="Length of cut (flute/tooth length in inches).">LOC (in)</FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners"
+                  placeholder="e.g. 0.375"
+                  value={form.loc > 0 ? form.loc.toFixed(3) : ""}
+                  onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, loc: n })); }}
+                />
+              </div>
+            </div>
+
+            {operation === "keyseat" && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <FieldLabel hint="Arbor (neck) diameter — the narrow section between the shank and the cutting teeth. Critical for deflection. Found on the engineering print as the neck or arbor OD.">Arbor/Neck Dia (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.250"
+                    value={form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : ""}
+                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n })); }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Axial depth of cut in multiples of tool diameter. Keyseat cutters typically cut full depth in one pass.">DOC (×D)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 1.0"
+                    value={form.doc_xd > 0 ? form.doc_xd.toFixed(2) : ""}
+                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, doc_xd: n })); }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {operation === "dovetail" && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <FieldLabel hint="Included angle of the dovetail (e.g. 45° or 60°). This is the full included angle, not the half-angle. Affects chip load correction and SFM.">Dovetail Angle (°)</FieldLabel>
+                  <Input type="number" step="5" className="no-spinners"
+                    value={form.dovetail_angle || ""}
+                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, dovetail_angle: n })); }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Axial depth of cut per pass in multiples of tool diameter.">DOC (×D)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.5"
+                    value={form.doc_xd > 0 ? form.doc_xd.toFixed(2) : ""}
+                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, doc_xd: n })); }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 space-y-2">
+              <FieldLabel hint="Helix angle in degrees. From the engineering print. Affects cutting force direction and chip evacuation.">Helix Angle (°)</FieldLabel>
+              <Input type="number" step="1" className="no-spinners"
+                value={form.helix_angle || ""}
+                onChange={(e) => { const n = parseInt(e.target.value); if (Number.isFinite(n) && n >= 0) setForm((p) => ({ ...p, helix_angle: n })); }}
+              />
+            </div>
+          </>)}
 
           {/* Machine Setup */}
           <div className="flex items-center gap-3 my-7">
@@ -4653,7 +4882,7 @@ ${stabSection}
                               <span className="text-zinc-500">Hole Type</span><span>{spec.hole_type}</span>
                               <span className="text-zinc-500">Helix</span><span>{spec.helix}</span>
                               <span className="text-zinc-500">Coating</span><span>{spec.coating}</span>
-                              <span className="text-zinc-500">Coolant</span><span>{spec.coolant}</span>
+                              <span className="text-zinc-500">Coolant</span><span>{spec.coolant_thru}</span>
                               <span className="text-zinc-500">Material</span><span>{spec.material}</span>
                             </div>
                           </div>
@@ -5018,6 +5247,36 @@ ${stabSection}
                 <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-2">
                   <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Chamfer Tips</div>
                   {(chamferResult.tips as string[]).map((tip: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Keyseat info */}
+              {keyseatResult && (
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Keyseat Details</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Engagement</span><span className="ml-2 font-semibold">Full Slot (100% WOC)</span></div>
+                    <div><span className="text-muted-foreground">DOC</span><span className="ml-2 font-semibold">{keyseatResult.doc_in?.toFixed(4)}"</span></div>
+                    {keyseatResult.arbor_dia_in && <div><span className="text-muted-foreground">Arbor Dia</span><span className="ml-2 font-semibold text-orange-400">{keyseatResult.arbor_dia_in.toFixed(4)}"</span></div>}
+                  </div>
+                  {keyseatResult.tips?.map((tip: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Dovetail info */}
+              {dovetailResult && (
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Dovetail Details</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Dovetail Angle</span><span className="ml-2 font-semibold">{dovetailResult.dovetail_angle_deg}°</span></div>
+                    <div><span className="text-muted-foreground">DOC</span><span className="ml-2 font-semibold">{dovetailResult.doc_in?.toFixed(4)}"</span></div>
+                    <div><span className="text-muted-foreground">Lead CTF</span><span className="ml-2 font-semibold">{dovetailResult.lead_ctf?.toFixed(3)}×</span></div>
+                  </div>
+                  {dovetailResult.tips?.map((tip: string, i: number) => (
                     <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
                   ))}
                 </div>
@@ -5514,21 +5773,11 @@ ${stabSection}
                                                 const edps = s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [];
                                                 const dia = form.tool_dia || 0.5;
                                                 const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
-                                                const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_in < dia);
+                                                const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_xd < 1.0);
                                                 if (!edps.length || cbInactive) return null;
                                                 return (
                                                   <span className="ml-2 inline-flex items-center gap-2 flex-wrap">
                                                     <span className="font-semibold text-amber-400">EDP# {edps.join(", ")}</span>
-                                                    {edps.map((edp: string) => (
-                                                      <a key={edp}
-                                                        href={stpUrl(edp)}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
-                                                        title={`Download Core_Cutter_${edp} v1.step`}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                      >⬇ .STP</a>
-                                                    ))}
                                                   </span>
                                                 );
                                               })()}
@@ -5583,6 +5832,41 @@ ${stabSection}
           <div>Powered by Core Cutter LLC</div>
         </div>
       </div>
+
+    {/* Engineering Mode Password Modal */}
+    {showEngModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowEngModal(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">Engineering Mode</h2>
+          <p className="text-xs text-zinc-400 mb-4">Enter the engineering password to access all manual controls.</p>
+          <input
+            type="password"
+            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
+            placeholder="Password"
+            value={engPasswordInput}
+            onChange={e => setEngPasswordInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") enterEngMode(); }}
+            autoFocus
+          />
+          {engPasswordError && <p className="text-xs text-red-400 mt-1">{engPasswordError}</p>}
+          <div className="flex gap-2 mt-3">
+            <button
+              className="flex-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50"
+              onClick={enterEngMode}
+              disabled={engAuthLoading}
+            >
+              {engAuthLoading ? "Checking…" : "Unlock"}
+            </button>
+            <button
+              className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm"
+              onClick={() => { setShowEngModal(false); setEngPasswordInput(""); setEngPasswordError(""); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     </div>
   );

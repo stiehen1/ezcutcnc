@@ -8,6 +8,8 @@ import { writeFile, unlink } from "fs/promises";
 import path from "path";
 import fs from "fs";
 import nodemailer from "nodemailer";
+import multer from "multer";
+import Anthropic from "@anthropic-ai/sdk";
 
 function resolvePython(): string {
   const cwd = process.cwd();
@@ -1246,6 +1248,113 @@ export async function registerRoutes(
   } catch (err) {
     console.warn("Seed/upsert failed (non-fatal):", (err as any)?.message ?? err);
   }
+
+  // ── Engineering mode password check ──────────────────────────────────────
+  app.post("/api/eng-auth", (req, res) => {
+    const { password } = req.body ?? {};
+    const engPassword = process.env.ENG_PASSWORD;
+    if (!engPassword) {
+      return res.status(503).json({ ok: false, error: "Engineering mode not configured" });
+    }
+    if (password === engPassword) {
+      return res.json({ ok: true });
+    }
+    return res.status(401).json({ ok: false, error: "Incorrect password" });
+  });
+
+  // ── PDF print geometry extraction ─────────────────────────────────────────
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype === "application/pdf") {
+        cb(null, true);
+      } else {
+        cb(new Error("Only PDF files are accepted"));
+      }
+    },
+  });
+
+  const EXTRACTION_PROMPT = `You are reading a Core Cutter LLC engineering print (technical drawing). Extract all tool geometry dimensions and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object.
+
+Required fields (use 0 for unknown numbers, null for unknown strings):
+{
+  "tool_type": "endmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
+  "tool_dia": <number, cutting diameter in inches>,
+  "flutes": <integer>,
+  "loc": <number, length of cut / flute length in inches, 0 if unknown>,
+  "lbs": <number, length below shank in inches, 0 if standard>,
+  "helix_angle": <integer degrees, 0 if not shown>,
+  "corner_condition": "square|corner_radius|ball",
+  "corner_radius": <number in inches, 0 if square>,
+  "shank_dia": <number in inches, 0 if same as cutting dia>,
+  "coating": <string or null>,
+  "material": "carbide|hss",
+  "keyseat_arbor_dia": <number, neck/arbor diameter for keyseat cutters, 0 if not applicable>,
+  "dovetail_angle": <number, included dovetail angle in degrees, 0 if not applicable>,
+  "chamfer_angle": <number, included chamfer angle in degrees, 0 if not applicable>,
+  "chamfer_tip_dia": <number in inches, 0 if not applicable>,
+  "thread_tpi": <number, threads per inch for threadmills, 0 if not applicable>,
+  "drill_step_diameters": <array of step diameters in inches for step drills, [] if not applicable>
+}`;
+
+  app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No PDF file uploaded" });
+      }
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({ error: "PDF extraction not configured — contact support" });
+      }
+
+      const client = new Anthropic({ apiKey });
+      const pdfBase64 = req.file.buffer.toString("base64");
+
+      const response = await client.messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 1024,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: pdfBase64,
+              },
+            } as any,
+            {
+              type: "text",
+              text: EXTRACTION_PROMPT,
+            },
+          ],
+        }],
+      });
+
+      const text = response.content.find(c => c.type === "text")?.text ?? "";
+
+      // Strip any markdown code fences if present
+      const cleaned = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+
+      let extracted: Record<string, unknown>;
+      try {
+        extracted = JSON.parse(cleaned);
+      } catch {
+        return res.status(422).json({
+          error: "Could not read print — please enter dimensions manually",
+          raw: text,
+        });
+      }
+
+      return res.json({ ok: true, extracted });
+    } catch (err: any) {
+      console.error("PDF extraction error:", err?.message ?? err);
+      return res.status(500).json({ error: "Extraction failed — please enter dimensions manually" });
+    }
+  });
 
   return httpServer;
 }

@@ -16,7 +16,7 @@ export const errorSchemas = {
 
 export const mentorSchemas = {
   input: z.object({
-    operation: z.enum(["milling", "drilling", "reaming", "threadmilling"]).default("milling"),
+    operation: z.enum(["milling", "drilling", "reaming", "threadmilling", "keyseat", "dovetail"]).default("milling"),
     mode: z.enum(["hem", "traditional", "finish", "face", "slot", "trochoidal", "circ_interp", ""]).default("hem"),
     material: z.string().default("steel"),
 
@@ -105,6 +105,12 @@ export const mentorSchemas = {
     npt_size: z.string().default(""),
     thread_gcode_dialect: z.enum(["fanuc", "siemens"]).default("fanuc"),
     thread_cut_direction: z.enum(["top_down", "bottom_up"]).default("top_down"),
+
+    // Keyseat-specific
+    keyseat_arbor_dia: z.number().min(0).default(0),
+
+    // Dovetail-specific
+    dovetail_angle: z.number().min(0).max(180).default(60),
 
     quiet: z.boolean().default(true),
     debug: z.boolean().default(false),
@@ -252,6 +258,20 @@ export const mentorSchemas = {
       chamfer_angle_deg: z.number(),
       tip_dia_in: z.number(),
       chamfer_depth_in: z.number(),
+    }).nullable().optional(),
+
+    keyseat: z.object({
+      arbor_dia_in: z.number().nullable().optional(),
+      doc_in: z.number(),
+      engagement: z.string(),
+      tips: z.array(z.string()),
+    }).nullable().optional(),
+
+    dovetail: z.object({
+      dovetail_angle_deg: z.number(),
+      doc_in: z.number(),
+      lead_ctf: z.number(),
+      tips: z.array(z.string()),
     }).nullable().optional(),
 
     thread_mill: z.object({

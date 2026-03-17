@@ -2113,6 +2113,368 @@ def run_reaming(payload: dict) -> dict:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# KEYSEAT / DOVETAIL SFM TABLES
+# Full-slot engagement (keyseat) and angled-slot engagement (dovetail).
+# Conservative vs endmill SFM: both tool types see continuous full-width
+# engagement which raises heat and force vs peripheral milling.
+# ─────────────────────────────────────────────────────────────────────────────
+KEYSEAT_SFM = {
+    # Aluminum
+    "Aluminum":          900,
+    "aluminum_wrought":  900,
+    "aluminum_cast":     500,
+    "non_ferrous":       400,
+    # Steel
+    "Steel":             220,
+    "steel_free":        280,
+    "steel_alloy":       200,
+    "steel_tool":        120,
+    "tool_steel_p20":    220,
+    "tool_steel_a2":     180,
+    "tool_steel_h13":    160,
+    "tool_steel_s7":     180,
+    "tool_steel_d2":     130,
+    "hardened_lt55":     160,
+    "hardened_gt55":      70,
+    # Stainless
+    "Stainless":         120,
+    "stainless_fm":      200,
+    "stainless_ferritic":160,
+    "stainless_410":     150,
+    "stainless_420":     130,
+    "stainless_440c":    140,
+    "stainless_304":     120,
+    "stainless_316":     100,
+    "stainless_ph":      130,
+    "stainless_duplex":  100,
+    "stainless_superduplex": 85,
+    "stainless_martensitic": 150,
+    "stainless_austenitic":  120,
+    # Cast iron
+    "Cast Iron":         220,
+    "cast_iron_gray":    260,
+    "cast_iron_ductile": 220,
+    "cast_iron_malleable": 190,
+    # Titanium
+    "Titanium":           90,
+    "titanium_cp":        90,
+    "titanium_64":        80,
+    # Superalloys / Inconel
+    "Inconel":            55,
+    "inconel_625":        55,
+    "inconel_718":        55,
+    "hastelloy_x":        45,
+    "waspaloy":           40,
+    "mp35n":              35,
+    "monel_k500":         60,
+    "hiTemp_fe":          65,
+    "hiTemp_co":          80,
+}
+
+# Dovetail SFM ≈ keyseat × 0.88 — angled engagement increases interrupted-cut
+# impact loading and heat at the edge, warranting a modest SFM reduction.
+DOVETAIL_SFM = {k: round(v * 0.88) for k, v in KEYSEAT_SFM.items()}
+
+
+def run_keyseat(payload: dict) -> dict:
+    """Speed & feed calc for keyseat / flute key cutters.
+    Full-slot engagement: WOC = 100% of cutting diameter.
+    SFM is based on cutting diameter (keyseat width).
+    arbor_dia (neck between shank and teeth) is used for stability notes.
+    """
+    D          = float(payload.get("tool_dia", 0.5) or 0.5)
+    flutes     = int(payload.get("flutes", 4) or 4)
+    loc        = float(payload.get("loc", 0.5) or 0.5)
+    lbs        = float(payload.get("lbs", 0.0) or 0.0)
+    stickout   = float(payload.get("stickout", 2.0) or 2.0)
+    arbor_dia  = float(payload.get("keyseat_arbor_dia", 0.0) or 0.0)
+    doc_xd     = float(payload.get("doc_xd", 1.0) or 1.0)
+    doc_in     = doc_xd * D
+    mat        = str(payload.get("material", "steel_alloy") or "steel_alloy")
+    mat_group  = get_material_group(mat)
+    max_rpm    = float(payload.get("max_rpm", 12000) or 12000)
+    rpm_util   = float(payload.get("rpm_util_pct", 0.95) or 0.95)
+    coolant    = str(payload.get("coolant", "flood") or "flood").lower()
+    toolholder = str(payload.get("toolholder", "er_collet") or "er_collet").lower()
+    _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
+    _drive_eff     = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
+    machine_hp     = float(payload.get("machine_hp", 10.0) or 10.0) * _drive_eff
+
+    # Hardness
+    _hv  = float(payload.get("hardness_value", 0) or 0)
+    _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
+    hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
+
+    # SFM
+    base_sfm   = KEYSEAT_SFM.get(mat, KEYSEAT_SFM.get(mat_group, 150))
+    sfm_target = base_sfm * hardness_sfm_mult(hrc)
+
+    # RPM
+    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    rpm        = min(target_rpm, max_rpm * rpm_util)
+    rpm        = max(1.0, rpm)
+    sfm_actual = (rpm * math.pi * D) / 12.0
+
+    # Chip load — IPT_FRAC × D × 0.75 conservative factor for full slot engagement
+    ipt_frac  = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005))
+    ipt       = ipt_frac * D * 0.75
+    feed_ipm  = rpm * flutes * ipt
+
+    # MRR
+    mrr = feed_ipm * doc_in * D
+
+    # Cutting force — full-slot arc_fraction = 1.0 but staggered tooth (upcut + downcut)
+    # means net radial load is lower than a standard slot mill; use 0.50 radial fraction.
+    _hp_unit   = HP_PER_CUIN.get(mat, HP_PER_CUIN.get(mat_group, 1.0))
+    hp_required = max(0.01, mrr * _hp_unit * hardness_kc_mult(hrc))
+    total_force = (hp_required * 33000.0) / max(1.0, feed_ipm / 12.0)
+    radial_force = total_force * 0.50
+
+    # Deflection
+    rigidity = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
+    if payload.get("dual_contact", False):
+        rigidity *= 1.08
+    deflection = tool_deflection(
+        radial_force, stickout, D, flutes, loc, lbs, arbor_dia if arbor_dia > 0 else None,
+        payload.get("holder_gage_length"), payload.get("holder_nose_dia"),
+    )
+    deflection /= rigidity
+
+    # Stability pct (simplified — no chatter limit model for keyseat, use deflection threshold)
+    # Flag if deflection > 0.001" (0.001" is a practical limit for keyseat finish quality)
+    stability_pct = round((deflection / 0.001) * 100.0, 1)
+
+    # Tool life
+    _coolant_factor = COOLANT_LIFE.get(coolant, 1.0)
+    _base_life      = BASE_LIFE_MIN.get(mat, BASE_LIFE_MIN.get(mat_group, 45.0)) * 0.70  # full-slot penalty
+    _sfm_ratio      = sfm_actual / max(1.0, sfm_target)
+    tool_life_min   = (_base_life / max(0.20, _sfm_ratio ** 0.40)) * _coolant_factor
+
+    # Notes
+    notes = []
+    if arbor_dia > 0 and arbor_dia < D * 0.50:
+        notes.append(
+            f"Arbor diameter ({arbor_dia:.4f}\") is less than 50% of cutting diameter — "
+            f"this narrow neck significantly reduces rigidity. Keep stickout as short as possible."
+        )
+    if deflection > 0.001:
+        notes.append(
+            f"Estimated deflection ({deflection*1000:.1f} thou) exceeds 1.0 thou threshold for keyseat finish. "
+            f"Reduce stickout or use a stiffer toolholder."
+        )
+    if flutes >= 6 and mat_group in ("Aluminum",):
+        notes.append("Staggered-tooth keyseat cutters in aluminum: consider flood coolant or air blast to clear chips from the full-slot cut.")
+
+    tips = [
+        "Keyseat cutters run full-slot engagement — chip evacuation is critical. Use flood coolant or high-pressure air blast.",
+        "Keep stickout to the absolute minimum. The arbor (neck) section is the most flexible part of the tool.",
+        "Climb milling direction: feed so the chip starts thick and ends thin to avoid rubbing at entry.",
+    ]
+    if mat_group in ("Stainless", "Inconel", "Titanium"):
+        tips.append("Use sharp, uncoated or AlTiN-coated tools in this material. Avoid any dwell or pause at the bottom of the cut.")
+
+    return {
+        "customer": {
+            "material":         mat,
+            "diameter":         D,
+            "flutes":           flutes,
+            "rpm":              round(rpm),
+            "sfm":              round(sfm_actual, 1),
+            "sfm_target":       round(sfm_target, 1),
+            "feed_ipm":         round(feed_ipm, 2),
+            "doc_in":           round(doc_in, 4),
+            "woc_in":           round(D, 4),           # full-slot: WOC = cutting diameter
+            "mrr_in3_min":      round(mrr, 3),
+            "spindle_load_pct": round((hp_required / machine_hp) * 100.0, 1) if machine_hp > 0 else 0.0,
+            "hp_required":      round(hp_required, 3),
+            "fpt":              round(ipt, 6),
+            "adj_fpt":          None,
+            "peripheral_feed_ipm": None,
+            "ci_a_e_in":        None,
+            "ci_feed_ratio":    None,
+            "status":           "warning" if stability_pct > 100 else "ok",
+            "status_hint":      "High deflection — reduce stickout" if stability_pct > 100 else None,
+            "risk":             "high" if stability_pct > 175 else ("medium" if stability_pct > 100 else "low"),
+            "notes":            notes if notes else None,
+        },
+        "engineering": {
+            "deflection_in":         round(deflection, 5),
+            "chip_thickness_in":     round(ipt, 6),
+            "chatter_index":         round(stability_pct / 100.0, 3),
+            "teeth_in_cut":          round(flutes * 1.0, 2),  # full-slot: all teeth in cut
+            "helix_wrap_deg":        None,
+            "engagement_continuous": True,
+            "tool_life_min":         round(tool_life_min, 1),
+            "force_lbf":             round(total_force, 2),
+            "torque_inlbf":          round(hp_required * 63025.0 / rpm, 3) if rpm > 0 else None,
+            "torque_capacity_inlbf": SPINDLE_TORQUE_CAPACITY.get(str(payload.get("spindle_taper", "CAT40")), None),
+            "torque_pct":            None,
+        },
+        "stability": {
+            "deflection_in":    round(deflection, 5),
+            "stability_pct":    stability_pct,
+            "suggestions":      [],
+        },
+        "keyseat": {
+            "arbor_dia_in":     arbor_dia if arbor_dia > 0 else None,
+            "doc_in":           round(doc_in, 4),
+            "engagement":       "full_slot",
+            "tips":             tips,
+        },
+        "debug": None,
+    }
+
+
+def run_dovetail(payload: dict) -> dict:
+    """Speed & feed calc for dovetail cutters.
+    SFM based on tool_dia (maximum cutting diameter).
+    dovetail_angle = included angle of the dovetail (e.g. 45° or 60°).
+    """
+    D              = float(payload.get("tool_dia", 0.5) or 0.5)
+    flutes         = int(payload.get("flutes", 4) or 4)
+    loc            = float(payload.get("loc", 0.5) or 0.5)
+    lbs            = float(payload.get("lbs", 0.0) or 0.0)
+    stickout       = float(payload.get("stickout", 2.0) or 2.0)
+    dovetail_angle = float(payload.get("dovetail_angle", 60.0) or 60.0)
+    doc_xd         = float(payload.get("doc_xd", 0.5) or 0.5)
+    doc_in         = doc_xd * D
+    mat            = str(payload.get("material", "steel_alloy") or "steel_alloy")
+    mat_group      = get_material_group(mat)
+    max_rpm        = float(payload.get("max_rpm", 12000) or 12000)
+    rpm_util       = float(payload.get("rpm_util_pct", 0.95) or 0.95)
+    coolant        = str(payload.get("coolant", "flood") or "flood").lower()
+    toolholder     = str(payload.get("toolholder", "er_collet") or "er_collet").lower()
+    _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
+    _drive_eff     = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
+    machine_hp     = float(payload.get("machine_hp", 10.0) or 10.0) * _drive_eff
+
+    # Hardness
+    _hv  = float(payload.get("hardness_value", 0) or 0)
+    _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
+    hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
+
+    # Effective cutting diameter at the widest point of the dovetail
+    # For a dovetail with included angle θ: effective_dia = D (tool_dia IS the max dia)
+    # RPM based on D (max cutting diameter). Note for user display.
+    half_angle_rad = math.radians(dovetail_angle / 2.0)
+
+    # SFM
+    base_sfm   = DOVETAIL_SFM.get(mat, DOVETAIL_SFM.get(mat_group, 130))
+    sfm_target = base_sfm * hardness_sfm_mult(hrc)
+
+    # RPM
+    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    rpm        = min(target_rpm, max_rpm * rpm_util)
+    rpm        = max(1.0, rpm)
+    sfm_actual = (rpm * math.pi * D) / 12.0
+
+    # Chip load — IPT_FRAC × D × 0.70 conservative for dovetail geometry
+    # Lead angle chip-thinning correction: programmed fpt = chip / sin(half_angle)
+    # (same model as chamfer mill). Capped at 2.0×.
+    ipt_frac   = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005))
+    lead_ctf   = min(2.0, 1.0 / max(0.10, math.sin(half_angle_rad)))
+    ipt        = ipt_frac * D * 0.70 * lead_ctf
+    feed_ipm   = rpm * flutes * ipt
+
+    # MRR (approximate: treat as partial slot engagement)
+    mrr = feed_ipm * doc_in * (D * 0.60)
+
+    # HP & force
+    _hp_unit    = HP_PER_CUIN.get(mat, HP_PER_CUIN.get(mat_group, 1.0))
+    hp_required = max(0.01, mrr * _hp_unit * hardness_kc_mult(hrc))
+    total_force = (hp_required * 33000.0) / max(1.0, feed_ipm / 12.0)
+    radial_force = total_force * 0.45   # angled engagement splits force axially/radially
+
+    # Deflection
+    rigidity = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
+    if payload.get("dual_contact", False):
+        rigidity *= 1.08
+    deflection = tool_deflection(
+        radial_force, stickout, D, flutes, loc, lbs, None,
+        payload.get("holder_gage_length"), payload.get("holder_nose_dia"),
+    )
+    deflection /= rigidity
+
+    stability_pct = round((deflection / 0.001) * 100.0, 1)
+
+    # Tool life
+    _coolant_factor = COOLANT_LIFE.get(coolant, 1.0)
+    _base_life      = BASE_LIFE_MIN.get(mat, BASE_LIFE_MIN.get(mat_group, 45.0)) * 0.75
+    _sfm_ratio      = sfm_actual / max(1.0, sfm_target)
+    tool_life_min   = (_base_life / max(0.20, _sfm_ratio ** 0.40)) * _coolant_factor
+
+    notes = []
+    if dovetail_angle < 45:
+        notes.append(
+            f"Shallow dovetail angle ({dovetail_angle}°) — the steep wall creates high side thrust. "
+            f"Take light axial passes and use the minimum stickout possible."
+        )
+    if deflection > 0.001:
+        notes.append(
+            f"Estimated deflection ({deflection*1000:.1f} thou) is high for dovetail geometry. "
+            f"Reduce stickout, take lighter passes, or use a stiffer toolholder."
+        )
+
+    tips = [
+        f"Dovetail angle is {dovetail_angle}° included — chip load corrected for lead angle (÷ sin({dovetail_angle/2:.0f}°)).",
+        "Make multiple light axial passes rather than one full-depth pass. Dovetail walls are unforgiving of deflection.",
+        "Climb milling direction for better finish on the angled walls.",
+        "Keep the tool as short as possible — dovetail cutters are very sensitive to stickout.",
+    ]
+
+    return {
+        "customer": {
+            "material":         mat,
+            "diameter":         D,
+            "flutes":           flutes,
+            "rpm":              round(rpm),
+            "sfm":              round(sfm_actual, 1),
+            "sfm_target":       round(sfm_target, 1),
+            "feed_ipm":         round(feed_ipm, 2),
+            "doc_in":           round(doc_in, 4),
+            "woc_in":           round(D, 4),
+            "mrr_in3_min":      round(mrr, 3),
+            "spindle_load_pct": round((hp_required / machine_hp) * 100.0, 1) if machine_hp > 0 else 0.0,
+            "hp_required":      round(hp_required, 3),
+            "fpt":              round(ipt, 6),
+            "adj_fpt":          None,
+            "peripheral_feed_ipm": None,
+            "ci_a_e_in":        None,
+            "ci_feed_ratio":    None,
+            "status":           "warning" if stability_pct > 100 else "ok",
+            "status_hint":      "High deflection — reduce stickout or take lighter passes" if stability_pct > 100 else None,
+            "risk":             "high" if stability_pct > 175 else ("medium" if stability_pct > 100 else "low"),
+            "notes":            notes if notes else None,
+        },
+        "engineering": {
+            "deflection_in":         round(deflection, 5),
+            "chip_thickness_in":     round(ipt / max(0.1, lead_ctf), 6),  # actual chip thickness before lead CTF
+            "chatter_index":         round(stability_pct / 100.0, 3),
+            "teeth_in_cut":          round(flutes * 0.5, 2),  # approximate: ~half-engagement
+            "helix_wrap_deg":        None,
+            "engagement_continuous": True,
+            "tool_life_min":         round(tool_life_min, 1),
+            "force_lbf":             round(total_force, 2),
+            "torque_inlbf":          round(hp_required * 63025.0 / rpm, 3) if rpm > 0 else None,
+            "torque_capacity_inlbf": SPINDLE_TORQUE_CAPACITY.get(str(payload.get("spindle_taper", "CAT40")), None),
+            "torque_pct":            None,
+        },
+        "stability": {
+            "deflection_in":  round(deflection, 5),
+            "stability_pct":  stability_pct,
+            "suggestions":    [],
+        },
+        "dovetail": {
+            "dovetail_angle_deg": dovetail_angle,
+            "doc_in":             round(doc_in, 4),
+            "lead_ctf":           round(lead_ctf, 3),
+            "tips":               tips,
+        },
+        "debug": None,
+    }
+
+
 def run(payload=None):
     payload = payload or {}
 
@@ -2127,6 +2489,14 @@ def run(payload=None):
     # Route to thread milling engine
     if str(payload.get("operation", "milling")).lower() == "threadmilling":
         return run_thread_mill(payload)
+
+    # Route to keyseat engine
+    if str(payload.get("operation", "milling")).lower() == "keyseat":
+        return run_keyseat(payload)
+
+    # Route to dovetail engine
+    if str(payload.get("operation", "milling")).lower() == "dovetail":
+        return run_dovetail(payload)
 
     # Route to chamfer mill engine
     if str(payload.get("tool_type", "")).lower() == "chamfer_mill":
