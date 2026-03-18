@@ -332,6 +332,95 @@ export default function Mentor() {
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
 
+  // ── Machine state ──────────────────────────────────────────────────────────
+  const [machineQuery, setMachineQuery] = React.useState("");
+  const [machineResults, setMachineResults] = React.useState<any[]>([]);
+  const [machineDropOpen, setMachineDropOpen] = React.useState(false);
+  const [savedMachines, setSavedMachines] = React.useState<any[]>([]);
+  const [showSaveMachineModal, setShowSaveMachineModal] = React.useState(false);
+  const [machineNickname, setMachineNickname] = React.useState("");
+  const [machineShopNo, setMachineShopNo] = React.useState("");
+  const [machineSerial, setMachineSerial] = React.useState("");
+  const [machineSaving, setMachineSaving] = React.useState(false);
+  const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
+  const [activeMachineName, setActiveMachineName] = React.useState("");
+
+  // Search catalog
+  React.useEffect(() => {
+    if (machineQuery.length < 2) { setMachineResults([]); return; }
+    const t = setTimeout(async () => {
+      const r = await fetch(`/api/machines/search?q=${encodeURIComponent(machineQuery)}`);
+      if (r.ok) setMachineResults(await r.json());
+    }, 250);
+    return () => clearTimeout(t);
+  }, [machineQuery]);
+
+  // Load saved machines when toolbox session is active
+  React.useEffect(() => {
+    const e = tbEmail || localStorage.getItem("tb_email") || "";
+    const t = tbToken || localStorage.getItem("tb_token") || "";
+    if (!e || !t) return;
+    fetch(`/api/user-machines?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setSavedMachines)
+      .catch(() => {});
+  }, [tbEmail, tbToken]);
+
+  function applyMachineToForm(m: any) {
+    const dualContact = m.taper?.startsWith("HSK") || m.taper?.startsWith("CAPTO") || m.dual_contact;
+    const drive = m.drive_type ?? "direct";
+    setForm(p => ({
+      ...p,
+      max_rpm: m.max_rpm ?? p.max_rpm,
+      machine_hp: m.spindle_hp ? Number(m.spindle_hp) : p.machine_hp,
+      spindle_taper: m.taper ?? p.spindle_taper,
+      spindle_drive: drive as any,
+      dual_contact: dualContact,
+      machine_type: m.machine_type ?? p.machine_type,
+    }));
+    setActiveMachineId(m.id ?? null);
+    setActiveMachineName(m.nickname ? `${m.nickname}` : `${m.brand} ${m.model}`);
+    setMachineQuery("");
+    setMachineDropOpen(false);
+    setMachineResults([]);
+  }
+
+  async function saveMachine() {
+    const e = tbEmail || localStorage.getItem("tb_email") || "";
+    const t = tbToken || localStorage.getItem("tb_token") || "";
+    if (!e || !t) { setTbShowModal(true); return; }
+    if (!machineNickname.trim()) return;
+    setMachineSaving(true);
+    try {
+      const res = await fetch("/api/user-machines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: e, token: t,
+          nickname: machineNickname.trim(),
+          shop_machine_no: machineShopNo.trim() || null,
+          serial_number: machineSerial.trim() || null,
+          machine_id: activeMachineId,
+          brand: form.max_rpm ? (machineQuery || activeMachineName.split(" ")[0] || null) : null,
+          model: activeMachineName || null,
+          max_rpm: form.max_rpm || null,
+          spindle_hp: form.machine_hp || null,
+          taper: form.spindle_taper,
+          drive_type: form.spindle_drive,
+          dual_contact: form.dual_contact,
+          machine_type: form.machine_type,
+        }),
+      });
+      if (res.ok) {
+        setShowSaveMachineModal(false);
+        setMachineNickname(""); setMachineShopNo(""); setMachineSerial("");
+        // Refresh saved list
+        const r2 = await fetch(`/api/user-machines?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`);
+        if (r2.ok) setSavedMachines(await r2.json());
+      }
+    } finally { setMachineSaving(false); }
+  }
+
   const enterEngMode = async () => {
     setEngAuthLoading(true);
     setEngPasswordError("");
@@ -1179,6 +1268,39 @@ export default function Mentor() {
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>
       </table>` : "";
 
+    const tic = eng?.teeth_in_cut ?? null;
+    const ticZone = tic == null ? null : tic < 1.0 ? "low" : tic >= 1.5 && tic <= 2.5 ? "sweet" : tic > 2.5 ? "high" : "ok";
+    const ticZoneLabel = ticZone === "sweet" ? "Sweet Spot ✓" : ticZone === "ok" ? "Acceptable" : ticZone === "low" ? "Too Low" : "Too High";
+    const ticZoneColor = ticZone === "sweet" ? "#166534" : ticZone === "ok" ? "#854d0e" : ticZone === "low" ? "#991b1b" : "#9a3412";
+    const ticZoneBg   = ticZone === "sweet" ? "#f0fdf4" : ticZone === "ok" ? "#fefce8" : ticZone === "low" ? "#fef2f2" : "#fff7ed";
+    const ticTip = tic == null ? "" : ticZone === "sweet" ? "" :
+      ticZone === "low" ? "Increase WOC% or add a flute to get more teeth engaged." :
+      ticZone === "ok"  ? `Bump WOC% slightly${form.flutes < 7 ? ` or try ${form.flutes + 1} flutes` : ""} to enter the Sweet Spot (1.5–2.5 teeth).` :
+      `Reduce WOC% or use fewer flutes.`;
+    const maxDisplay = 4.0;
+    const pctBar = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
+    const ticGauge = tic != null ? `
+      <div style="margin:8px 0 4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
+          <span style="font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
+        </div>
+        <div style="position:relative;height:14px;border-radius:7px;overflow:hidden;background:#e5e7eb;">
+          <div style="position:absolute;top:0;bottom:0;left:0;width:${pctBar(1.0)};background:#ef4444;"></div>
+          <div style="position:absolute;top:0;bottom:0;left:${pctBar(1.0)};width:calc(${pctBar(1.5)} - ${pctBar(1.0)});background:#eab308;"></div>
+          <div style="position:absolute;top:0;bottom:0;left:${pctBar(1.5)};width:calc(${pctBar(2.5)} - ${pctBar(1.5)});background:#22c55e;"></div>
+          <div style="position:absolute;top:0;bottom:0;left:${pctBar(2.5)};right:0;background:#f97316;"></div>
+          <div style="position:absolute;top:0;bottom:0;width:2px;background:#111;left:calc(${pctBar(tic)} - 1px);"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:8px;margin-top:2px;color:#666;">
+          <span style="color:#ef4444;font-weight:600;">Too Low</span>
+          <span style="color:#eab308;font-weight:600;">Acceptable</span>
+          <span style="color:#22c55e;font-weight:700;">Sweet Spot</span>
+          <span style="color:#f97316;font-weight:600;">Too High</span>
+        </div>
+        ${ticTip ? `<p style="font-size:9px;color:#555;margin-top:4px;">→ ${ticTip}</p>` : ""}
+      </div>` : "";
+
     const engSection = eng ? `
       <h3>Engineering Data</h3>
       <div class="kpi-grid">
@@ -1186,9 +1308,10 @@ export default function Mentor() {
         ${kpiBox("Torque (in-lbf)", eng.torque_in_lbf != null ? eng.torque_in_lbf.toFixed(1) : null)}
         ${kpiBox("Deflection (in)", eng.deflection_in != null ? eng.deflection_in.toFixed(6) : null)}
         ${kpiBox("Chip Thick (in)", eng.chip_thickness_in != null ? eng.chip_thickness_in.toFixed(6) : null)}
-        ${kpiBox("Tooth Engagement", eng.teeth_engaged != null ? eng.teeth_engaged.toFixed(2) : null)}
+        ${kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null)}
       </div>
-      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:2px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee.</p>` : ""}
+      ${ticGauge}
+      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee.</p>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
         const raUin = mil.ra_actual_uin;
@@ -3745,6 +3868,73 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+
+          {/* Machine selector */}
+          <div className="mb-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <FieldLabel hint="Search by brand or model to auto-fill RPM, HP, taper, and drive type. Or enter manually below.">Machine Lookup</FieldLabel>
+              <div className="flex items-center gap-2">
+                {activeMachineName && (
+                  <span className="text-xs text-orange-400 font-semibold border border-orange-400/40 rounded px-2 py-0.5">
+                    {activeMachineName}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="text-[10px] text-zinc-500 hover:text-orange-400 underline underline-offset-2"
+                  onClick={() => setShowSaveMachineModal(true)}
+                >
+                  Save machine
+                </button>
+              </div>
+            </div>
+
+            {/* My Machines dropdown (if toolbox session active) */}
+            {savedMachines.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-1">
+                <span className="text-[10px] text-zinc-500 self-center">My Machines:</span>
+                {savedMachines.map(m => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => applyMachineToForm(m)}
+                    className={`text-xs px-2 py-0.5 rounded border transition-colors ${activeMachineName === m.nickname ? "border-orange-500 bg-orange-500/10 text-orange-400" : "border-zinc-600 text-zinc-300 hover:border-orange-400 hover:text-orange-400"}`}
+                  >
+                    {m.nickname}{m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Catalog search */}
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Search catalog — e.g. Haas VF-2, Mazak, DMG..."
+                value={machineQuery}
+                onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
+                onFocus={() => setMachineDropOpen(true)}
+                onBlur={() => setTimeout(() => setMachineDropOpen(false), 150)}
+                className="text-sm"
+              />
+              {machineDropOpen && machineResults.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl max-h-60 overflow-y-auto">
+                  {machineResults.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onMouseDown={() => applyMachineToForm(m)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 flex items-baseline gap-2"
+                    >
+                      <span className="font-semibold text-orange-400">{m.brand} {m.model}</span>
+                      <span className="text-xs text-zinc-400">{m.max_rpm?.toLocaleString()} RPM · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <FieldLabel hint="Spindle speed ceiling from your machine spec. The engine will not exceed this value.">Max RPM</FieldLabel>
@@ -5994,7 +6184,7 @@ ${stabSection}
                     : null;
 
                   return ([
-                    ["Deflection",   stabilityIndex.defl, "Tool deflection vs. safe limit. 100 = no deflection; drops as stickout, force, or DOC increase. Below 50 means chatter is likely.",     deflResult],
+                    ["Defl Score",   stabilityIndex.defl, "Tool deflection score (higher = better). 100 = well within safe limit; 0 = deflection at or beyond safe limit — chatter very likely. See '% of safe limit' below for the raw deflection figure.",     deflResult],
                     ["Mach Load",    stabilityIndex.load, "Spindle power usage vs. available HP. 100 = very light load; drops as HP required approaches machine limit. Only shown when Machine HP is entered.", loadResult],
                     ["Chip Quality", stabilityIndex.chip, "Chip thickness relative to the minimum needed to cut cleanly (~30% of chipload). Too thin = rubbing instead of cutting, which accelerates wear and heat.", null],
                     ["L/D Ratio",    stabilityIndex.ld,   "Length-to-diameter ratio of tool stickout. Below 3× is ideal; above 5× introduces significant vibration risk. Shorter is always stiffer.", ldResult],
@@ -6024,7 +6214,7 @@ ${stabSection}
                             style={{ width: `${score}%` }}
                           />
                         </div>
-                        <span className={`w-7 text-right font-semibold ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>{score}</span>
+                        <span className={`text-right font-semibold text-xs ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>{score}<span className="text-zinc-600 font-normal">/100</span></span>
                       </>
                     )}
                   </div>
@@ -6249,6 +6439,76 @@ ${stabSection}
           </>)}
           {tbStep === "saving" && (
             <p className="text-sm text-zinc-400 text-center py-4">Saving…</p>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Save Machine Modal */}
+    {showSaveMachineModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowSaveMachineModal(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">Save Machine</h2>
+          <p className="text-xs text-zinc-400 mb-4">Save the current machine settings to your Toolbox for quick recall.</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Nickname <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                placeholder="e.g. Shop Floor VF-2, Cell 3 Mazak"
+                value={machineNickname}
+                onChange={e => setMachineNickname(e.target.value)}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Shop Machine #</label>
+                <input
+                  type="text"
+                  placeholder="e.g. M-12, Cell 3"
+                  value={machineShopNo}
+                  onChange={e => setMachineShopNo(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Serial Number</label>
+                <input
+                  type="text"
+                  placeholder="From machine nameplate"
+                  value={machineSerial}
+                  onChange={e => setMachineSerial(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                />
+              </div>
+            </div>
+            {(form.max_rpm > 0 || form.machine_hp > 0) && (
+              <div className="rounded-md border border-zinc-700 bg-zinc-800/50 px-3 py-2 text-xs text-zinc-400 space-y-0.5">
+                <div className="font-semibold text-zinc-300 mb-1">Current settings being saved:</div>
+                {activeMachineName && <div>Model: <span className="text-white">{activeMachineName}</span></div>}
+                {form.max_rpm > 0 && <div>Max RPM: <span className="text-white">{form.max_rpm.toLocaleString()}</span></div>}
+                {form.machine_hp > 0 && <div>Spindle HP: <span className="text-white">{form.machine_hp}</span></div>}
+                <div>Taper: <span className="text-white">{form.spindle_taper}{form.dual_contact ? " (Dual Contact)" : ""}</span></div>
+                <div>Drive: <span className="text-white">{form.spindle_drive}</span></div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 mt-5">
+            <button
+              type="button"
+              onClick={() => setShowSaveMachineModal(false)}
+              className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-white"
+            >Cancel</button>
+            <button
+              type="button"
+              onClick={saveMachine}
+              disabled={!machineNickname.trim() || machineSaving}
+              className="flex-1 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 py-2 text-sm font-semibold text-white"
+            >{machineSaving ? "Saving…" : "Save Machine"}</button>
+          </div>
+          {(!tbEmail && !localStorage.getItem("tb_email")) && (
+            <p className="text-xs text-amber-400 mt-3 text-center">You'll be asked to sign in to your Toolbox first.</p>
           )}
         </div>
       </div>

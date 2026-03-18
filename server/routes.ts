@@ -1557,6 +1557,80 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json(result.rows);
   });
 
+  // ── Machine catalog search ────────────────────────────────────────────────
+  app.get("/api/machines/search", async (req, res) => {
+    const { q } = req.query as { q: string };
+    if (!q || q.length < 1) return res.json([]);
+    const { pool } = await import("./db");
+    const result = await pool.query(
+      `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control
+       FROM machines
+       WHERE brand ILIKE $1 OR model ILIKE $1 OR (brand || ' ' || model) ILIKE $1
+       ORDER BY brand, model LIMIT 20`,
+      [`%${q}%`]
+    );
+    res.json(result.rows);
+  });
+
+  // ── User machines: save ───────────────────────────────────────────────────
+  app.post("/api/user-machines", async (req, res) => {
+    const { email, token, nickname, shop_machine_no, serial_number, machine_id,
+            brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact,
+            coolant_types, tsc_psi, machine_type, control, notes } = req.body;
+    if (!email || !token || !nickname) return res.status(400).json({ error: "Missing required fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(
+      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const result = await pool.query(
+      `INSERT INTO user_machines (email, nickname, shop_machine_no, serial_number, machine_id,
+         brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact,
+         coolant_types, tsc_psi, machine_type, control, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       RETURNING id`,
+      [email.toLowerCase(), nickname, shop_machine_no || null, serial_number || null,
+       machine_id || null, brand || null, model || null, max_rpm || null,
+       spindle_hp || null, taper || null, drive_type || null,
+       dual_contact ?? false, coolant_types || null, tsc_psi || null,
+       machine_type || null, control || null, notes || null]
+    );
+    res.json({ ok: true, id: result.rows[0].id });
+  });
+
+  // ── User machines: list ───────────────────────────────────────────────────
+  app.get("/api/user-machines", async (req, res) => {
+    const { email, token } = req.query as { email: string; token: string };
+    if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(
+      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const result = await pool.query(
+      `SELECT * FROM user_machines WHERE email = $1 ORDER BY created_at DESC`,
+      [email.toLowerCase()]
+    );
+    res.json(result.rows);
+  });
+
+  // ── User machines: delete ─────────────────────────────────────────────────
+  app.delete("/api/user-machines/:id", async (req, res) => {
+    const { email, token } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(
+      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(`DELETE FROM user_machines WHERE id = $1 AND email = $2`, [id, email.toLowerCase()]);
+    res.json({ ok: true });
+  });
+
   // ── Toolbox: delete item ──────────────────────────────────────────────────
   app.delete("/api/toolbox/items/:id", async (req, res) => {
     const { email, token } = req.body;
