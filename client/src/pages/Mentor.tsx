@@ -920,6 +920,7 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
+      doc_xd: 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -5720,42 +5721,46 @@ ${stabSection}
                 const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
                 const maxDisplay = 4.0;
                 const pct = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
-                const tipsByOp: Record<string, { low: string; high: string }> = {
-                  hem:       { low: `Increase WOC% (try 6–10%)${form.flutes < 5 ? " or add flutes (5–7 fl recommended for HEM)" : form.flutes < 7 ? ` or try ${form.flutes + 1}–7 flutes` : ""}`, high: `Reduce WOC%${form.flutes > 4 ? ` or drop to ${form.flutes - 1} flutes` : ""}` },
-                  slot:      { low: "Slotting uses 2 teeth naturally at 4fl — check flute count", high: "Reduce flutes for slotting — 4fl is standard" },
-                  finish:    { low: "Light WOC is normal for finishing — this is expected", high: "Reduce WOC% for finishing passes" },
-                  default:   { low: "Increase WOC% or add a flute", high: "Reduce WOC% or use fewer flutes" },
+                const tipsByOp: Record<string, { low: string; ok: string; high: string }> = {
+                  hem:       { low: `Increase WOC% (try 6–10%)${form.flutes < 5 ? " or add flutes (5–7 fl recommended for HEM)" : form.flutes < 7 ? ` or try ${form.flutes + 1}–7 flutes` : ""}`, ok: `Try pushing WOC% up slightly${form.flutes < 7 ? ` or adding a flute (try ${form.flutes + 1} fl)` : ""} to reach 1.5–2.5 teeth engaged`, high: `Reduce WOC%${form.flutes > 4 ? ` or drop to ${form.flutes - 1} flutes` : ""}` },
+                  slot:      { low: "Slotting uses 2 teeth naturally at 4fl — check flute count", ok: "Increase flute count to reach the sweet spot", high: "Reduce flutes for slotting — 4fl is standard" },
+                  finish:    { low: "Light WOC is normal for finishing — this is expected", ok: "Finishing WOC is fine — consider a light WOC increase if surface finish allows", high: "Reduce WOC% for finishing passes" },
+                  default:   { low: "Increase WOC% or add a flute to get more teeth engaged", ok: `Bump WOC% slightly${form.flutes < 7 ? ` or try ${form.flutes + 1} flutes` : ""} to enter the Sweet Spot (1.5–2.5 teeth)`, high: "Reduce WOC% or use fewer flutes" },
                 };
                 const tips = tipsByOp[form.mode ?? ""] ?? tipsByOp.default;
                 return (
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2.5 space-y-2">
+                  <div className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2.5 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Tooth Engagement</span>
-                      <span className={`text-xs font-bold ${zone === "sweet" ? "text-green-400" : zone === "ok" ? "text-yellow-400" : zone === "low" ? "text-red-400" : "text-orange-400"}`}>
-                        {tic.toFixed(2)} teeth — {zone === "sweet" ? "Sweet Spot" : zone === "ok" ? "Acceptable" : zone === "low" ? "Too Low" : "Too High"}
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-300">Tooth Engagement</span>
+                      <span className={`text-xs font-bold ${zone === "sweet" ? "text-green-400" : zone === "ok" ? "text-yellow-300" : zone === "low" ? "text-red-400" : "text-orange-400"}`}>
+                        {tic.toFixed(2)} teeth — {zone === "sweet" ? "Sweet Spot ✓" : zone === "ok" ? "Acceptable" : zone === "low" ? "Too Low" : "Too High"}
                       </span>
                     </div>
                     {/* Gauge bar */}
-                    <div className="relative h-4 rounded-full overflow-hidden bg-zinc-800">
-                      {/* Zone colors */}
-                      <div className="absolute inset-y-0 left-0 bg-red-500/70" style={{ width: pct(low) }} />
-                      <div className="absolute inset-y-0 bg-yellow-400/60" style={{ left: pct(low), width: `calc(${pct(sweetLo)} - ${pct(low)})` }} />
-                      <div className="absolute inset-y-0 bg-green-500/70" style={{ left: pct(sweetLo), width: `calc(${pct(sweetHi)} - ${pct(sweetLo)})` }} />
-                      <div className="absolute inset-y-0 bg-orange-500/60" style={{ left: pct(sweetHi), right: 0 }} />
-                      {/* Marker + value label */}
-                      <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: pct(tic) }}>
-                        <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white whitespace-nowrap">{tic.toFixed(2)}</span>
+                    <div className="relative rounded-full overflow-hidden" style={{ height: "18px", background: "#18181b" }}>
+                      {/* Zone colors — fully opaque, vivid */}
+                      <div className="absolute inset-y-0 left-0" style={{ width: pct(low), background: "#ef4444" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(low), width: `calc(${pct(sweetLo)} - ${pct(low)})`, background: "#eab308" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(sweetLo), width: `calc(${pct(sweetHi)} - ${pct(sweetLo)})`, background: "#22c55e" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(sweetHi), right: 0, background: "#f97316" }} />
+                      {/* Marker line */}
+                      <div className="absolute inset-y-0" style={{ left: pct(tic), width: "3px", background: "black", transform: "translateX(-50%)", boxShadow: "0 0 6px rgba(0,0,0,0.9)" }} />
+                      {/* Value label that follows marker */}
+                      <div className="absolute top-0 bottom-0 flex items-center" style={{ left: `calc(${pct(tic)} + 5px)` }}>
+                        <span className="text-[10px] font-black text-black drop-shadow" style={{ textShadow: "0 0 4px rgba(255,255,255,0.8)" }}>{tic.toFixed(2)}</span>
                       </div>
                     </div>
                     {/* Zone labels */}
-                    <div className="relative text-[9px]" style={{ height: "14px" }}>
-                      <span className="absolute text-red-400" style={{ left: "0%", transform: "translateX(10%)" }}>Too Low</span>
-                      <span className="absolute text-yellow-400" style={{ left: `calc((${pct(low)} + ${pct(sweetLo)}) / 2)`, transform: "translateX(-50%)" }}>Acceptable</span>
-                      <span className="absolute text-green-400 font-semibold" style={{ left: `calc((${pct(sweetLo)} + ${pct(sweetHi)}) / 2)`, transform: "translateX(-50%)" }}>Sweet Spot</span>
+                    <div className="relative text-[9px] font-semibold" style={{ height: "14px" }}>
+                      <span className="absolute text-red-400" style={{ left: "0%", transform: "translateX(5%)" }}>Too Low</span>
+                      <span className="absolute text-yellow-300" style={{ left: `calc((${pct(low)} + ${pct(sweetLo)}) / 2)`, transform: "translateX(-50%)" }}>Acceptable</span>
+                      <span className="absolute text-green-400" style={{ left: `calc((${pct(sweetLo)} + ${pct(sweetHi)}) / 2)`, transform: "translateX(-50%)" }}>Sweet Spot</span>
                       <span className="absolute text-orange-400" style={{ left: `calc((${pct(sweetHi)} + 100%) / 2)`, transform: "translateX(-50%)" }}>Too High</span>
                     </div>
-                    {(zone === "low" || zone === "high") && (
-                      <p className="text-[11px] text-zinc-300">{zone === "low" ? `⬆ ${tips.low}` : `⬇ ${tips.high}`}</p>
+                    {zone !== "sweet" && (
+                      <p className="text-[11px] text-zinc-300">
+                        {zone === "low" ? `⬆ ${tips.low}` : zone === "high" ? `⬇ ${tips.high}` : `→ ${tips.ok}`}
+                      </p>
                     )}
                   </div>
                 );
