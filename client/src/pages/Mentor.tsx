@@ -435,6 +435,18 @@ export default function Mentor() {
         localStorage.setItem("cc_eng_mode", "true");
         setShowEngModal(false);
         setEngPasswordInput("");
+        // Auto-connect Toolbox session for admin
+        const d = await res.json();
+        if (d.tb_email && d.tb_token) {
+          setTbEmail(d.tb_email);
+          setTbToken(d.tb_token);
+          setTbStep("saving");
+          localStorage.setItem("tb_email", d.tb_email);
+          localStorage.setItem("tb_token", d.tb_token);
+          // Load saved machines
+          const r2 = await fetch(`/api/user-machines?email=${encodeURIComponent(d.tb_email)}&token=${encodeURIComponent(d.tb_token)}`);
+          if (r2.ok) setSavedMachines(await r2.json());
+        }
       } else {
         setEngPasswordError("Incorrect password");
       }

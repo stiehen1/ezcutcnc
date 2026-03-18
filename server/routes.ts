@@ -1282,16 +1282,30 @@ export async function registerRoutes(
   }
 
   // ── Engineering mode password check ──────────────────────────────────────
-  app.post("/api/eng-auth", (req, res) => {
+  app.post("/api/eng-auth", async (req, res) => {
     const { password } = req.body ?? {};
     const engPassword = process.env.ENG_PASSWORD;
     if (!engPassword) {
       return res.status(503).json({ ok: false, error: "Engineering mode not configured" });
     }
-    if (password === engPassword) {
-      return res.json({ ok: true });
+    if (password !== engPassword) {
+      return res.status(401).json({ ok: false, error: "Incorrect password" });
     }
-    return res.status(401).json({ ok: false, error: "Incorrect password" });
+    // Auto-create a Toolbox session for the admin email so eng mode gets Toolbox access
+    const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
+    if (adminEmail) {
+      const { pool } = await import("./db");
+      const crypto = await import("crypto");
+      const token = crypto.randomBytes(24).toString("hex");
+      await pool.query(
+        `INSERT INTO toolbox_sessions (email, token, created_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (email) DO UPDATE SET token = $2, created_at = now()`,
+        [adminEmail, token]
+      );
+      return res.json({ ok: true, tb_email: adminEmail, tb_token: token });
+    }
+    return res.json({ ok: true });
   });
 
   // ── Admin auth ────────────────────────────────────────────────────────────
