@@ -344,6 +344,7 @@ export default function Mentor() {
   const [machineSaving, setMachineSaving] = React.useState(false);
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
+  const [showManageMachines, setShowManageMachines] = React.useState(false);
 
   // Search catalog
   React.useEffect(() => {
@@ -3903,18 +3904,48 @@ ${stabSection}
 
             {/* My Machines dropdown (if toolbox session active) */}
             {savedMachines.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-1">
-                <span className="text-[10px] text-zinc-500 self-center">My Machines:</span>
-                {savedMachines.map(m => (
+              <div className="space-y-1 mb-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-500">My Machines:</span>
                   <button
-                    key={m.id}
                     type="button"
-                    onClick={() => applyMachineToForm(m)}
-                    className={`text-xs px-2 py-0.5 rounded border transition-colors ${activeMachineName === m.nickname ? "border-orange-500 bg-orange-500/10 text-orange-400" : "border-zinc-600 text-zinc-300 hover:border-orange-400 hover:text-orange-400"}`}
+                    onClick={() => setShowManageMachines(p => !p)}
+                    className="text-[10px] text-zinc-500 hover:text-orange-400 underline underline-offset-2"
                   >
-                    {m.nickname}{m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
+                    {showManageMachines ? "Done" : "Manage"}
                   </button>
-                ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {savedMachines.map(m => (
+                    <div key={m.id} className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => applyMachineToForm(m)}
+                        className={`text-xs px-2 py-0.5 rounded-l border transition-colors ${activeMachineName === m.nickname ? "border-orange-500 bg-orange-500/10 text-orange-400" : "border-zinc-600 text-zinc-300 hover:border-orange-400 hover:text-orange-400"}`}
+                      >
+                        {m.nickname}{m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
+                      </button>
+                      {showManageMachines && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const e = tbEmail || localStorage.getItem("tb_email") || "";
+                            const t = tbToken || localStorage.getItem("tb_token") || "";
+                            if (!e || !t) return;
+                            await fetch(`/api/user-machines/${m.id}`, {
+                              method: "DELETE",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ email: e, token: t }),
+                            });
+                            setSavedMachines(p => p.filter(x => x.id !== m.id));
+                            if (activeMachineName === m.nickname) setActiveMachineName("");
+                          }}
+                          className="text-xs px-1.5 py-0.5 rounded-r border border-l-0 border-red-500/50 text-red-400 hover:bg-red-500/20"
+                        >✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
