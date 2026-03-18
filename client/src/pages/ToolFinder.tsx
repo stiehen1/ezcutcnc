@@ -813,10 +813,8 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     setQpDiaRange(diaRange);
     setQpMinLoc(minLoc);
     if (minLbs != null && minLbs > 0) { setSelLbs(String(minLbs)); setExcludeLbs(false); }
-    // Auto-fill axial depth from QP minLoc/minLbs so Part Feature Match stays coordinated
-    const depthForAxial = minLoc ?? minLbs ?? null;
-    if (depthForAxial != null && depthForAxial > 0) setAxialDepth(depthForAxial.toFixed(3));
-    else setAxialDepth("");
+    // Do NOT auto-fill axial depth from Quick Pick — user should enter their specific depth
+    setAxialDepth("");
     setPartCornerRadius("");
 
     const GEO_LABELS: Record<string, string> = {
@@ -1391,6 +1389,61 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                 <span className="text-xs text-amber-400">Showing first 200 — narrow filters to see more</span>
               )}
             </div>
+            {/* Active filter chips — clickable to clear */}
+            {(selDias.length > 0 || (material && material !== "all") || selFlutes.length > 0 || selCorners.length > 0 || selLbs || selCoatings.length > 0 || selSeries.length > 0 || selGeometries.length > 0) && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[10px] font-semibold text-orange-400 uppercase tracking-wider">Filters:</span>
+                {selDias.map(d => (
+                  <button key={d} onClick={() => setSelDias(v => v.filter(x => x !== d))}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    Ø {d}" <span className="opacity-60">✕</span>
+                  </button>
+                ))}
+                {material && (
+                  <button onClick={() => setMaterial("")}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    {material.toUpperCase()} <span className="opacity-60">✕</span>
+                  </button>
+                )}
+                {selFlutes.map(f => (
+                  <button key={f} onClick={() => setSelFlutes(v => v.filter(x => x !== f))}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    {f}fl <span className="opacity-60">✕</span>
+                  </button>
+                ))}
+                {selCorners.map(c => (
+                  <button key={c} onClick={() => setSelCorners(v => v.filter(x => x !== c))}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    {c} <span className="opacity-60">✕</span>
+                  </button>
+                ))}
+                {selLbs && (
+                  <button onClick={() => setSelLbs("")}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    LBS ≥ {selLbs}" <span className="opacity-60">✕</span>
+                  </button>
+                )}
+                {selCoatings.map(c => (
+                  <button key={c} onClick={() => setSelCoatings(v => v.filter(x => x !== c))}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    {c} <span className="opacity-60">✕</span>
+                  </button>
+                ))}
+                {selSeries.map(s => (
+                  <button key={s} onClick={() => setSelSeries(v => v.filter(x => x !== s))}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    {s} <span className="opacity-60">✕</span>
+                  </button>
+                ))}
+                {selGeometries.map(g => (
+                  <button key={g} onClick={() => setSelGeometries(v => v.filter(x => x !== g))}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 flex items-center gap-1">
+                    {g} <span className="opacity-60">✕</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Part Feature Match active filters */}
             {(axialDepth || partCornerRadius || maxFloorRadius) && (
               <div className="flex flex-wrap items-center gap-1.5 mt-2">

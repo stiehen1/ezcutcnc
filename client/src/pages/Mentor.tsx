@@ -1890,7 +1890,7 @@ ${stabSection}
 
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <select
-                className={`w-full rounded-md border px-3 py-2 text-sm ${!form.mode ? "animate-pulse border-yellow-400 bg-yellow-400/10 text-yellow-300" : "bg-background"}`}
+                className={`w-full rounded-md border px-3 py-2 text-sm ${!form.mode ? "border-zinc-500 bg-zinc-800 text-zinc-300" : "bg-background"}`}
                 aria-label="Milling process"
                 value={form.mode}
                 onChange={(e) => {
@@ -5696,7 +5696,7 @@ ${stabSection}
                             <div>{fmtNum(engineering.teeth_in_cut, 2)} teeth</div>
                             {engineering?.helix_wrap_deg != null && (
                               <div className="text-xs font-normal text-muted-foreground mt-0.5">
-                                {fmtNum(engineering.helix_wrap_deg, 0)}° wrap
+                                {fmtNum(engineering.helix_wrap_deg, 0)}° helix wrap
                                 {engineering?.engagement_continuous
                                   ? " · continuous"
                                   : " · interrupted"}
@@ -5710,6 +5710,51 @@ ${stabSection}
                   </div>
                 </>
               ) : null}
+
+              {/* Tooth Engagement Advisory */}
+              {engineering?.teeth_in_cut != null && (() => {
+                const tic = engineering.teeth_in_cut;
+                const low = 1.0, sweetLo = 1.5, sweetHi = 2.5, high = 3.0;
+                const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
+                const maxDisplay = 4.0;
+                const pct = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
+                const tipsByOp: Record<string, { low: string; high: string }> = {
+                  hem:       { low: "Increase WOC% (try 6–10%) or add flutes (5–7 fl recommended for HEM)", high: "Reduce WOC% or switch to fewer flutes" },
+                  slot:      { low: "Slotting uses 2 teeth naturally at 4fl — check flute count", high: "Reduce flutes for slotting — 4fl is standard" },
+                  finish:    { low: "Light WOC is normal for finishing — this is expected", high: "Reduce WOC% for finishing passes" },
+                  default:   { low: "Increase WOC% or add a flute", high: "Reduce WOC% or use fewer flutes" },
+                };
+                const tips = tipsByOp[form.mode ?? ""] ?? tipsByOp.default;
+                return (
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Tooth Engagement</span>
+                      <span className={`text-xs font-bold ${zone === "sweet" ? "text-green-400" : zone === "ok" ? "text-yellow-400" : zone === "low" ? "text-red-400" : "text-orange-400"}`}>
+                        {tic.toFixed(2)} teeth — {zone === "sweet" ? "Sweet Spot" : zone === "ok" ? "Acceptable" : zone === "low" ? "Too Low" : "Too High"}
+                      </span>
+                    </div>
+                    {/* Gauge bar */}
+                    <div className="relative h-4 rounded-full overflow-hidden bg-zinc-800">
+                      {/* Zone colors */}
+                      <div className="absolute inset-y-0 left-0 bg-red-500/30" style={{ width: pct(low) }} />
+                      <div className="absolute inset-y-0 bg-yellow-400/20" style={{ left: pct(low), width: `calc(${pct(sweetLo)} - ${pct(low)})` }} />
+                      <div className="absolute inset-y-0 bg-green-500/30" style={{ left: pct(sweetLo), width: `calc(${pct(sweetHi)} - ${pct(sweetLo)})` }} />
+                      <div className="absolute inset-y-0 bg-orange-500/20" style={{ left: pct(sweetHi), right: 0 }} />
+                      {/* Marker */}
+                      <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: pct(tic) }} />
+                    </div>
+                    {/* Scale labels */}
+                    <div className="relative text-[9px] text-zinc-500" style={{ height: "12px" }}>
+                      {[{ v: 0, label: "0" }, { v: low, label: "1.0" }, { v: sweetLo, label: "1.5 ✓" }, { v: sweetHi, label: "2.5 ✓" }, { v: high, label: "3.0" }, { v: maxDisplay, label: "4+" }].map(({ v, label }) => (
+                        <span key={v} className="absolute -translate-x-1/2" style={{ left: pct(v) }}>{label}</span>
+                      ))}
+                    </div>
+                    {zone !== "sweet" && (
+                      <p className="text-[11px] text-zinc-300">{zone === "low" ? `⬆ ${tips.low}` : `⬇ ${tips.high}`}</p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Coating — show actual SKU coating if known, otherwise generic recommendation */}
               {form.coating ? (
