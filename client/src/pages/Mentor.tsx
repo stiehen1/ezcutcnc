@@ -3906,7 +3906,7 @@ ${stabSection}
             {savedMachines.length > 0 && (
               <div className="space-y-1 mb-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-zinc-500">My Machines:</span>
+                  <span className="text-[10px] text-zinc-300 font-semibold">My Machines:</span>
                   <button
                     type="button"
                     onClick={() => setShowManageMachines(p => !p)}
