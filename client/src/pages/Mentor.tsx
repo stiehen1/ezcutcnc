@@ -662,10 +662,10 @@ export default function Mentor() {
     };
     // DOC med xD by ISO × flute bucket
     const docTable: Record<string, Record<number, number>> = {
-      P: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
-      M: { 5: 1.25,6: 1.5, 7: 2.0, 9: 2.0, 11: 2.5 },
+      P: { 5: 2.0, 6: 2.5, 7: 2.5, 9: 3.0, 11: 3.0 },
+      M: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
       K: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
-      S: { 5: 1.0, 6: 1.25,7: 1.5, 9: 1.5, 11: 2.0 },
+      S: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
       H: { 5: 0.75,6: 1.0, 7: 1.0, 9: 1.0, 11: 1.25 },
     };
     const wocMed = wocTable[iso]?.[f] ?? wocTable["P"][5];
@@ -905,6 +905,8 @@ export default function Mentor() {
     setSkuDropdownOpen(false);
     setSkuResults([]);
     setSkuLocked(true);
+    setDocText("");
+    setDocPreset(null);
     setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
     setLocText(Number(sku.loc_in).toFixed(3));
     setStickoutText(defaultStickout.toFixed(3));
@@ -5719,7 +5721,7 @@ ${stabSection}
                 const maxDisplay = 4.0;
                 const pct = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
                 const tipsByOp: Record<string, { low: string; high: string }> = {
-                  hem:       { low: "Increase WOC% (try 6–10%) or add flutes (5–7 fl recommended for HEM)", high: "Reduce WOC% or switch to fewer flutes" },
+                  hem:       { low: `Increase WOC% (try 6–10%)${form.flutes < 5 ? " or add flutes (5–7 fl recommended for HEM)" : form.flutes < 7 ? ` or try ${form.flutes + 1}–7 flutes` : ""}`, high: `Reduce WOC%${form.flutes > 4 ? ` or drop to ${form.flutes - 1} flutes` : ""}` },
                   slot:      { low: "Slotting uses 2 teeth naturally at 4fl — check flute count", high: "Reduce flutes for slotting — 4fl is standard" },
                   finish:    { low: "Light WOC is normal for finishing — this is expected", high: "Reduce WOC% for finishing passes" },
                   default:   { low: "Increase WOC% or add a flute", high: "Reduce WOC% or use fewer flutes" },
@@ -5736,20 +5738,23 @@ ${stabSection}
                     {/* Gauge bar */}
                     <div className="relative h-4 rounded-full overflow-hidden bg-zinc-800">
                       {/* Zone colors */}
-                      <div className="absolute inset-y-0 left-0 bg-red-500/30" style={{ width: pct(low) }} />
-                      <div className="absolute inset-y-0 bg-yellow-400/20" style={{ left: pct(low), width: `calc(${pct(sweetLo)} - ${pct(low)})` }} />
-                      <div className="absolute inset-y-0 bg-green-500/30" style={{ left: pct(sweetLo), width: `calc(${pct(sweetHi)} - ${pct(sweetLo)})` }} />
-                      <div className="absolute inset-y-0 bg-orange-500/20" style={{ left: pct(sweetHi), right: 0 }} />
-                      {/* Marker */}
-                      <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: pct(tic) }} />
+                      <div className="absolute inset-y-0 left-0 bg-red-500/70" style={{ width: pct(low) }} />
+                      <div className="absolute inset-y-0 bg-yellow-400/60" style={{ left: pct(low), width: `calc(${pct(sweetLo)} - ${pct(low)})` }} />
+                      <div className="absolute inset-y-0 bg-green-500/70" style={{ left: pct(sweetLo), width: `calc(${pct(sweetHi)} - ${pct(sweetLo)})` }} />
+                      <div className="absolute inset-y-0 bg-orange-500/60" style={{ left: pct(sweetHi), right: 0 }} />
+                      {/* Marker + value label */}
+                      <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: pct(tic) }}>
+                        <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white whitespace-nowrap">{tic.toFixed(2)}</span>
+                      </div>
                     </div>
-                    {/* Scale labels */}
-                    <div className="relative text-[9px] text-zinc-500" style={{ height: "12px" }}>
-                      {[{ v: 0, label: "0" }, { v: low, label: "1.0" }, { v: sweetLo, label: "1.5 ✓" }, { v: sweetHi, label: "2.5 ✓" }, { v: high, label: "3.0" }, { v: maxDisplay, label: "4+" }].map(({ v, label }) => (
-                        <span key={v} className="absolute -translate-x-1/2" style={{ left: pct(v) }}>{label}</span>
-                      ))}
+                    {/* Zone labels */}
+                    <div className="relative text-[9px]" style={{ height: "14px" }}>
+                      <span className="absolute text-red-400" style={{ left: "0%", transform: "translateX(10%)" }}>Too Low</span>
+                      <span className="absolute text-yellow-400" style={{ left: `calc((${pct(low)} + ${pct(sweetLo)}) / 2)`, transform: "translateX(-50%)" }}>Acceptable</span>
+                      <span className="absolute text-green-400 font-semibold" style={{ left: `calc((${pct(sweetLo)} + ${pct(sweetHi)}) / 2)`, transform: "translateX(-50%)" }}>Sweet Spot</span>
+                      <span className="absolute text-orange-400" style={{ left: `calc((${pct(sweetHi)} + 100%) / 2)`, transform: "translateX(-50%)" }}>Too High</span>
                     </div>
-                    {zone !== "sweet" && (
+                    {(zone === "low" || zone === "high") && (
                       <p className="text-[11px] text-zinc-300">{zone === "low" ? `⬆ ${tips.low}` : `⬇ ${tips.high}`}</p>
                     )}
                   </div>
