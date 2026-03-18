@@ -1507,16 +1507,56 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       [email.toLowerCase(), crypto.randomUUID(), otp, expires]
     );
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
+      host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
       port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
+    const fromName = "EZCutCNC by Core Cutter";
+    const fromAddr = process.env.SMTP_USER || "noreply@corecutterusa.com";
     const mailOptions = {
-      from: process.env.SMTP_USER || "noreply@corecutterusa.com",
+      from: `"${fromName}" <${fromAddr}>`,
       to: email,
-      subject: "Your EZCutCNC Toolbox Code",
-      text: `Your verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nEnter it on the EZCutCNC app to access your Toolbox.`,
-      html: `<div style="font-family:sans-serif;max-width:400px"><h2 style="color:#6366f1">EZCutCNC Toolbox</h2><p>Your verification code is:</p><div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6366f1;padding:16px 0">${otp}</div><p style="color:#666">Expires in 10 minutes.</p></div>`,
+      subject: "Your EZCutCNC Toolbox Access Code",
+      text: `Your EZCutCNC Toolbox verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, you can ignore this email.\n\n— Core Cutter LLC\n120 Technology Drive, Gardiner, ME 04345\nsales@corecutterusa.com`,
+      html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <!-- Header -->
+        <tr>
+          <td style="background:#111111;padding:24px 32px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;letter-spacing:4px;color:#ea6c00;">EZCutCNC</div>
+            <div style="font-size:11px;color:#888;margin-top:4px;letter-spacing:1px;">POWERED BY CORE CUTTER LLC</div>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+            <p style="margin:0 0 8px;font-size:15px;color:#111;font-weight:600;">Your Toolbox Access Code</p>
+            <p style="margin:0 0 24px;font-size:13px;color:#555;">Enter this code in the EZCutCNC app to access your Toolbox.</p>
+            <div style="background:#f4f4f5;border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
+              <div style="font-size:42px;font-weight:900;letter-spacing:12px;color:#ea6c00;">${otp}</div>
+            </div>
+            <p style="margin:0 0 4px;font-size:12px;color:#888;">This code expires in <strong>10 minutes</strong>.</p>
+            <p style="margin:0;font-size:12px;color:#888;">If you didn't request this, you can safely ignore this email.</p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f9f9;border-top:1px solid #eee;padding:16px 32px;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#aaa;">Core Cutter LLC · 120 Technology Drive · Gardiner, ME 04345</p>
+            <p style="margin:4px 0 0;font-size:11px;color:#aaa;">sales@corecutterusa.com · (207) 588-7519</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
     };
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
       await transporter.sendMail(mailOptions);
