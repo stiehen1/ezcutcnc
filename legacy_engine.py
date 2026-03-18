@@ -2189,10 +2189,27 @@ def run_keyseat(payload: dict) -> dict:
     lbs        = float(payload.get("lbs", 0.0) or 0.0)
     stickout   = float(payload.get("stickout", 2.0) or 2.0)
     arbor_dia  = float(payload.get("keyseat_arbor_dia", 0.0) or 0.0)
-    doc_xd     = float(payload.get("doc_xd", 1.0) or 1.0)
-    doc_in     = doc_xd * D
     mat        = str(payload.get("material", "steel_alloy") or "steel_alloy")
     mat_group  = get_material_group(mat)
+
+    flute_reach = (D - arbor_dia) / 2.0 if arbor_dia > 0 else D * 0.25
+    final_slot_depth = float(payload.get("final_slot_depth", 0.0) or 0.0)
+    if final_slot_depth > flute_reach:
+        final_slot_depth = flute_reach  # cap at physical flute reach
+
+    # Material toughness factor for pass depth conservatism
+    _mat_factor = {"Aluminum": 1.0, "Steel": 1.5, "Stainless": 1.75,
+                   "Inconel": 2.5, "Titanium": 2.0, "Cast Iron": 1.3}.get(mat_group, 1.5)
+    # Reach penalty: longer reach = more deflection risk
+    _reach_factor = 1.0 + (lbs / (arbor_dia * 8.0)) if (arbor_dia > 0 and lbs > 0) else 1.0
+    # Max safe DOC per pass
+    max_safe_doc = (flute_reach / 2.0) / (_mat_factor * _reach_factor)
+    max_safe_doc = max(0.005, min(max_safe_doc, flute_reach))  # clamp: min 0.005", max flute_reach
+
+    doc_xd     = float(payload.get("doc_xd", 0.0) or 0.0)
+    if doc_xd <= 0:
+        doc_xd = max_safe_doc / D
+    doc_in     = doc_xd * D
     max_rpm    = float(payload.get("max_rpm", 12000) or 12000)
     rpm_util   = float(payload.get("rpm_util_pct", 0.95) or 0.95)
     coolant    = str(payload.get("coolant", "flood") or "flood").lower()
@@ -2266,6 +2283,31 @@ def run_keyseat(payload: dict) -> dict:
     if flutes >= 6 and mat_group in ("Aluminum",):
         notes.append("Staggered-tooth keyseat cutters in aluminum: consider flood coolant or air blast to clear chips from the full-slot cut.")
 
+    # Multi-pass strategy
+    multi_pass = None
+    if final_slot_depth > 0:
+        import math as _math
+        num_passes = max(1, _math.ceil(final_slot_depth / max_safe_doc))
+        depth_per_pass = final_slot_depth / num_passes
+        multi_pass = {
+            "final_slot_depth_in": round(final_slot_depth, 4),
+            "max_safe_doc_in":     round(max_safe_doc, 4),
+            "num_passes":          num_passes,
+            "depth_per_pass_in":   round(depth_per_pass, 4),
+            "aggressive":          doc_in > max_safe_doc,
+        }
+        if num_passes > 1:
+            notes.append(
+                f"Multi-pass strategy recommended: {num_passes} passes of {depth_per_pass:.4f}\" each "
+                f"to reach {final_slot_depth:.4f}\" final slot depth. "
+                f"Max safe pass depth for this tool/material: {max_safe_doc:.4f}\"."
+            )
+        if doc_in > max_safe_doc * 1.25:
+            notes.append(
+                f"⚠ Entered pass depth ({doc_in:.4f}\") exceeds recommended safe limit ({max_safe_doc:.4f}\") "
+                f"for this neck diameter and material. Tool breakage risk is elevated."
+            )
+
     tips = [
         "Keyseat cutters run full-slot engagement — chip evacuation is critical. Use flood coolant or high-pressure air blast.",
         "Keep stickout to the absolute minimum. The arbor (neck) section is the most flexible part of the tool.",
@@ -2312,14 +2354,21 @@ def run_keyseat(payload: dict) -> dict:
             "torque_pct":            None,
         },
         "stability": {
-            "deflection_in":    round(deflection, 5),
-            "stability_pct":    stability_pct,
-            "suggestions":      [],
+            "stickout_in":         round(stickout, 4),
+            "l_over_d":            round(stickout / D, 2) if D > 0 else 0,
+            "deflection_in":       round(deflection, 5),
+            "deflection_limit_in": 0.001,
+            "deflection_pct":      round((deflection / 0.001) * 100.0, 1),
+            "stability_pct":       stability_pct,
+            "suggestions":         [],
         },
         "keyseat": {
             "arbor_dia_in":     arbor_dia if arbor_dia > 0 else None,
             "doc_in":           round(doc_in, 4),
+            "max_safe_doc_in":  round(max_safe_doc, 4),
+            "flute_reach_in":   round(flute_reach, 4),
             "engagement":       "full_slot",
+            "multi_pass":       multi_pass,
             "tips":             tips,
         },
         "debug": None,

@@ -367,7 +367,7 @@ export default function Mentor() {
     if (!e || !t) { setTbShowModal(true); return; }
     setTbSaving(true);
     try {
-      const title = tbTitle || `${form.operation} — ${form.material} — Ø${form.tool_dia}"`;
+      const title = tbTitle || `${pdfToolNumber ? `${pdfToolNumber} — ` : ""}${form.operation} — ${form.material} — Ø${form.tool_dia}"`;
       const r = await fetch("/api/toolbox/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -375,7 +375,7 @@ export default function Mentor() {
           email: e, token: t,
           type: "result",
           title,
-          data: { inputs: form, customer: result?.customer, engineering: result?.engineering },
+          data: { inputs: form, customer: result?.customer, engineering: result?.engineering, tool_number: pdfToolNumber ?? undefined },
         }),
       });
       if (r.status === 401) { setTbShowModal(true); return; }
@@ -434,6 +434,7 @@ export default function Mentor() {
   // ── PDF Print Upload ──────────────────────────────────────────────────────
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfExtracted, setPdfExtracted] = React.useState(false);
+  const [pdfToolNumber, setPdfToolNumber] = React.useState<string | null>(null);
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
@@ -453,13 +454,22 @@ export default function Mentor() {
       const data = await res.json();
       const e = data.extracted ?? {};
 
+      // Reject non-Core Cutter prints
+      if (e.error === "not_core_cutter") {
+        toast({ title: "Unauthorized Print", description: "This print does not appear to be a Core Cutter LLC document. Only Core Cutter prints can be uploaded.", variant: "destructive" });
+        return;
+      }
+      if (e.no_tool_number) {
+        toast({ title: "Concept Tool — No CC Number", description: "No CC-XXXXX number found. Dimensions extracted — note this tool has not yet been assigned a Core Cutter number.", variant: "default" });
+      }
+
       // Map extracted fields to form — only set fields that have real values
       setForm((p) => {
         const next = { ...p };
-        if (e.tool_dia > 0) next.tool_dia = e.tool_dia;
+        if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(String(e.tool_dia)); }
         if (e.flutes > 0) next.flutes = e.flutes;
-        if (e.loc > 0) next.loc = e.loc;
-        if (e.lbs > 0) next.lbs = e.lbs;
+        if (e.loc > 0) { next.loc = e.loc; setLocText(String(e.loc)); }
+        if (e.lbs > 0) { next.lbs = e.lbs; setLbsText(String(e.lbs)); }
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
@@ -472,6 +482,16 @@ export default function Mentor() {
         if (e.drill_step_diameters?.length > 0) {
           next.drill_step_diameters = e.drill_step_diameters;
           next.drill_steps = 1;
+        }
+        if (e.cutting_material) {
+          const matKey = e.cutting_material as string;
+          next.material = matKey as any;
+          const sub = ISO_SUBCATEGORIES.find(s => s.key === matKey);
+          if (sub) {
+            setIsoCategory(sub.iso);
+            next.hardness_value = sub.hardness.value;
+            next.hardness_scale = sub.hardness.scale;
+          }
         }
         // Auto-switch operation based on detected tool type
         const tt = (e.tool_type ?? "").toLowerCase();
@@ -486,8 +506,9 @@ export default function Mentor() {
         return next;
       });
       setPdfExtracted(true);
+      setPdfToolNumber(e.tool_number ?? null);
       mentor.reset();
-      toast({ title: "Print read successfully", description: "Review extracted dimensions below and correct any misreads before running." });
+      toast({ title: "Print read successfully", description: `${e.tool_number ? `Tool ${e.tool_number} — ` : ""}Review extracted dimensions below and correct any misreads before running.` });
     } catch {
       toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
     }
@@ -602,6 +623,7 @@ export default function Mentor() {
 
     // Keyseat-specific
     keyseat_arbor_dia: 0,
+    final_slot_depth: 0,
 
     // Dovetail-specific
     dovetail_angle: 60,
@@ -760,6 +782,7 @@ export default function Mentor() {
   const [toolDiaText, setToolDiaText] = React.useState("");
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
+  const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
@@ -830,6 +853,16 @@ export default function Mentor() {
 
   const [formDirty, setFormDirty] = React.useState(false);
   const [runWarnings, setRunWarnings] = React.useState<string[]>([]);
+
+  // Auto-populate keyseat cut pass depth when both diameters are known
+  React.useEffect(() => {
+    if (operation === "keyseat" && form.tool_dia > 0 && form.keyseat_arbor_dia > 0 && form.doc_xd <= 0) {
+      const fluteReach = (form.tool_dia - form.keyseat_arbor_dia) / 2;
+      const suggestedDoc = fluteReach / 2;
+      setForm((p) => ({ ...p, doc_xd: suggestedDoc / p.tool_dia }));
+    }
+  }, [operation, form.tool_dia, form.keyseat_arbor_dia]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // Mark dirty whenever form changes after a successful run
   React.useEffect(() => {
@@ -954,7 +987,7 @@ export default function Mentor() {
   }
 
   function getMillingCoatings(cat: string): { coatings: string[]; note: string } {
-    if (cat === "N") return { coatings: ["Uncoated", "D-MAX"], note: "non-ferrous / aluminum" };
+    if (cat === "N") return { coatings: ["D-MAX"], note: "non-ferrous / aluminum" };
     if (cat === "P") return { coatings: ["A-MAX", "P-MAX"], note: "steel" };
     if (cat === "K") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "cast iron" };
     if (cat === "M") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "stainless" };
@@ -1037,6 +1070,18 @@ export default function Mentor() {
 
   const result: any = mentor.data;
   const customer = result?.customer ?? null;
+
+  // Auto-cap keyseat pass depth when result flags it as aggressive, then re-run
+  const autoCorrectingRef = React.useRef(false);
+  React.useEffect(() => {
+    const mp = result?.keyseat?.multi_pass;
+    if (mp?.aggressive && mp.max_safe_doc_in > 0 && !autoCorrectingRef.current) {
+      autoCorrectingRef.current = true;
+      setForm((p) => p.tool_dia > 0 ? { ...p, doc_xd: mp.max_safe_doc_in / p.tool_dia } : p);
+      toast({ title: "Pass depth auto-corrected", description: `Set to max safe depth of ${mp.max_safe_doc_in.toFixed(4)}" — re-running.`, variant: "default" });
+      setTimeout(() => { autoCorrectingRef.current = false; }, 2000);
+    }
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const printSummary = () => {
     const r = result;
@@ -1251,6 +1296,7 @@ ${stabSection}
 
 <div class="disclaimer">
   <strong>Disclaimer:</strong> These recommendations are generated by the Core Cutter Engineering Department and are intended as a starting point only. Actual speeds, feeds, and depths of cut should be adjusted based on machine condition, fixturing rigidity, material lot variation, coolant delivery, tool condition, and operator experience. Core Cutter LLC assumes no liability for damages arising from use of these parameters. Always start conservatively and adjust based on observed results. This is not a guarantee of performance.
+  <span style="color:#bbb"> · Developed by S. Tiehen</span>
 </div>
 <script>window.onload = function() { window.print(); };<\/script>
 </body>
@@ -2216,7 +2262,7 @@ ${stabSection}
             <div className={`rounded-lg border p-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print — review fields below</span>
+                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
                   <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                 </div>
               ) : (
@@ -3803,7 +3849,7 @@ ${stabSection}
             <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print — review fields below</span>
+                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
                   <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                 </div>
               ) : (
@@ -3838,11 +3884,12 @@ ${stabSection}
                 <Input type="number" step="1" className="no-spinners" value={form.flutes || ""} onChange={onNum("flutes")} />
               </div>
               <div className="space-y-2">
-                <FieldLabel hint="Length of cut (flute/tooth length in inches).">LOC (in)</FieldLabel>
+                <FieldLabel hint="Length of cut — for keyseat cutters this is the disc width (tooth width).">LOC (in)</FieldLabel>
                 <Input type="text" inputMode="decimal" className="no-spinners"
-                  placeholder="e.g. 0.375"
-                  value={form.loc > 0 ? form.loc.toFixed(3) : ""}
-                  onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, loc: n })); }}
+                  placeholder="e.g. 0.1875"
+                  value={locText}
+                  onChange={(e) => setLocText(e.target.value)}
+                  onBlur={() => { const n = parseDim(locText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, loc: n })); setLocText(n.toFixed(4)); } }}
                 />
               </div>
             </div>
@@ -3858,11 +3905,43 @@ ${stabSection}
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel hint="Axial depth of cut in multiples of tool diameter. Keyseat cutters typically cut full depth in one pass.">DOC (×D)</FieldLabel>
+                  <FieldLabel hint="Reach (TSC) — total distance from shank face to the cutter disc. From the engineering print. Used for deflection calculations.">Reach / TSC (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 1.0"
-                    value={form.doc_xd > 0 ? form.doc_xd.toFixed(2) : ""}
-                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, doc_xd: n })); }}
+                    placeholder="e.g. 1.875"
+                    value={lbsText}
+                    onChange={(e) => setLbsText(e.target.value)}
+                    onBlur={() => { const n = parseDim(lbsText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, lbs: n })); setLbsText(n.toFixed(4)); } }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="How deep the cutter takes each pass in inches. Multi-pass is often safer — neck strength, material toughness, and setup rigidity all affect how much you can take per pass. The engine will suggest a safe starting depth.">Cut Pass Depth (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.125"
+                    value={form.doc_xd > 0 ? (form.doc_xd * form.tool_dia).toFixed(4) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n > 0 && form.tool_dia > 0)
+                        setForm((p) => ({ ...p, doc_xd: n / p.tool_dia }));
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">Final Slot Depth (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
+                    value={finalSlotDepthText}
+                    onChange={(e) => setFinalSlotDepthText(e.target.value)}
+                    onBlur={() => {
+                      let n = parseFloat(finalSlotDepthText);
+                      if (!Number.isFinite(n) || n <= 0) { setForm((p) => ({ ...p, final_slot_depth: 0 })); setFinalSlotDepthText(""); return; }
+                      const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
+                      if (n > maxDepth) {
+                        n = maxDepth;
+                        toast({ title: "Final slot depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by flute reach (cut dia − neck dia) / 2.`, variant: "destructive" });
+                      }
+                      setForm((p) => ({ ...p, final_slot_depth: n }));
+                      setFinalSlotDepthText(n.toFixed(4));
+                    }}
                   />
                 </div>
               </div>
@@ -5069,6 +5148,14 @@ ${stabSection}
                   </div>
                 );
               })()}
+
+              {/* Save to Toolbox */}
+              <div className="flex items-center gap-2 mt-3">
+                <button onClick={saveToToolbox} disabled={tbSaving} className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50">
+                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
+                </button>
+                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
+              </div>
             </>
           ) : drillResult ? (
             /* ── DRILLING OUTPUT ─────────────────────────────────── */
@@ -5360,6 +5447,14 @@ ${stabSection}
                   </div>
                 );
               })()}
+
+              {/* Save to Toolbox */}
+              <div className="flex items-center gap-2 mt-3">
+                <button onClick={saveToToolbox} disabled={tbSaving} className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50">
+                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
+                </button>
+                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
+              </div>
             </>
           ) : (
             <>
@@ -5388,20 +5483,6 @@ ${stabSection}
                 </div>
               )}
 
-              {/* Keyseat info */}
-              {keyseatResult && (
-                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-2">
-                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Keyseat Details</div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                    <div><span className="text-muted-foreground">Engagement</span><span className="ml-2 font-semibold">Full Slot (100% WOC)</span></div>
-                    <div><span className="text-muted-foreground">DOC</span><span className="ml-2 font-semibold">{keyseatResult.doc_in?.toFixed(4)}"</span></div>
-                    {keyseatResult.arbor_dia_in && <div><span className="text-muted-foreground">Arbor Dia</span><span className="ml-2 font-semibold text-orange-400">{keyseatResult.arbor_dia_in.toFixed(4)}"</span></div>}
-                  </div>
-                  {keyseatResult.tips?.map((tip: string, i: number) => (
-                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
-                  ))}
-                </div>
-              )}
 
               {/* Dovetail info */}
               {dovetailResult && (
@@ -5581,17 +5662,51 @@ ${stabSection}
                 <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
               </div>
 
-              {/* Save to Toolbox */}
-              <div className="flex items-center gap-2 mt-3">
-                <button
-                  onClick={saveToToolbox}
-                  disabled={tbSaving}
-                  className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50"
-                >
-                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
-                </button>
-                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
-              </div>
+              {/* Engineering */}
+              {engineering ? (
+                <>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <Kpi label={UL("Force (lbf)", "Force (N)")} hint="Estimated radial cutting force at the tool tip. Drives deflection and chatter. Increases with chip load, DOC, and material hardness. Key input to the stability model." value={UC(engineering?.force_lbf, 4.44822, 0)} />
+                    <Kpi
+                      label={UL("Torque (in-lbf)", "Torque (N·m)")}
+                      hint="Cutting torque derived from HP and RPM (T = HP × 63,025 / RPM). The % shown is cutting torque vs. your spindle taper's interface grip capacity — not the machine's motor torque limit. It indicates toolholder pullout risk, not spindle overload."
+                      value={
+                        <>
+                          {UC(engineering?.torque_inlbf, 0.112985, metric ? 2 : 1)}
+                          {engineering?.torque_pct != null ? (
+                            <span className={`ml-1 text-xs font-normal ${engineering.torque_pct > 90 ? "text-red-400" : engineering.torque_pct > 70 ? "text-amber-400" : "text-muted-foreground"}`}>
+                              ({fmtNum(engineering.torque_pct, 0)}% cap)
+                            </span>
+                          ) : null}
+                        </>
+                      }
+                    />
+                    <Kpi label={UL("Deflection (in)", "Deflection (mm)")} hint="Estimated tool tip deflection under radial cutting force, modeled as a cantilever beam. Excessive deflection causes dimensional error, chatter, and poor surface finish. The stability limit is shown in the Stability Check section." value={UC(engineering?.deflection_in, 25.4, metric ? 4 : 6)} />
+                    <Kpi label={UL("Chip Thick (in)", "Chip Thick (mm)")} hint="Effective chip thickness after radial chip thinning (RCTF). At low WOC, the actual chip is thinner than the programmed FPT — the engine boosts feed to compensate. Must exceed the minimum chip thickness to avoid rubbing." value={UC(engineering?.chip_thickness_in, 25.4, metric ? 4 : 6)} />
+                    <Kpi
+                      label="Tooth Engagement"
+                      hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
+                      value={
+                        engineering?.teeth_in_cut != null ? (
+                          <div className="leading-snug">
+                            <div>{fmtNum(engineering.teeth_in_cut, 2)} teeth</div>
+                            {engineering?.helix_wrap_deg != null && (
+                              <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                                {fmtNum(engineering.helix_wrap_deg, 0)}° wrap
+                                {engineering?.engagement_continuous
+                                  ? " · continuous"
+                                  : " · interrupted"}
+                              </div>
+                            )}
+                          </div>
+                        ) : "—"
+                      }
+                    />
+                    <Kpi label="Chatter" hint="Chatter index — a relative indicator combining deflection, RPM, and workholding compliance. Lower is better. This is an internal diagnostic value; use the Rigidity & Chatter Audit section for actionable guidance." value={fmtNum(engineering?.chatter_index, 3)} />
+                  </div>
+                </>
+              ) : null}
 
               {/* Coating — show actual SKU coating if known, otherwise generic recommendation */}
               {form.coating ? (
@@ -5647,8 +5762,72 @@ ${stabSection}
                 );
               })()}
 
-              {/* Chip-clearance warnings */}
-              {customer.notes && (customer.notes as string[]).length > 0 ? (
+              {/* Keyseat Details + Tips */}
+              {keyseatResult && (
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Keyseat Details</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Engagement</span><span className="ml-2 font-semibold">Full Slot (100% WOC)</span></div>
+                    <div><span className="text-muted-foreground">Pass Depth</span><span className="ml-2 font-semibold">{keyseatResult.doc_in?.toFixed(4)}"</span></div>
+                    {keyseatResult.max_safe_doc_in && <div><span className="text-muted-foreground">Max Safe DOC</span><span className="ml-2 font-semibold text-amber-400">{keyseatResult.max_safe_doc_in.toFixed(4)}"</span></div>}
+                    {keyseatResult.flute_reach_in && <div><span className="text-muted-foreground">Flute Reach</span><span className="ml-2 font-semibold">{keyseatResult.flute_reach_in.toFixed(4)}"</span></div>}
+                    {keyseatResult.arbor_dia_in && <div><span className="text-muted-foreground">Arbor Dia</span><span className="ml-2 font-semibold text-orange-400">{keyseatResult.arbor_dia_in.toFixed(4)}"</span></div>}
+                  </div>
+                  {keyseatResult.tips?.map((tip: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Stability / Strength Audit — keyseat structured panel */}
+              {operation === "keyseat" && customer.notes && (customer.notes as string[]).length > 0 ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 text-base">⚠</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-amber-400">Stability / Strength Audit</span>
+                  </div>
+                  <ul className="space-y-2">
+                    {(customer.notes as string[]).map((note, i) => {
+                      const isWarning = note.startsWith("⚠");
+                      return (
+                        <li key={i} className={`flex gap-2 text-xs leading-relaxed ${isWarning ? "text-red-300 font-semibold" : "text-amber-200"}`}>
+                          <span className="mt-0.5 shrink-0">{isWarning ? "🔴" : "•"}</span>
+                          <span>{note.replace(/^⚠\s*/, "")}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {keyseatResult?.multi_pass && keyseatResult.multi_pass.num_passes > 1 && (
+                    <div className="mt-3 space-y-2">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Recommended Pass Strategy</div>
+                      {Array.from({ length: keyseatResult.multi_pass.num_passes }, (_, i) => {
+                        const d = keyseatResult.multi_pass.depth_per_pass_in;
+                        const total = keyseatResult.multi_pass.final_slot_depth_in;
+                        const cumPct = Math.min(100, ((i + 1) * d / total) * 100);
+                        const isLast = i === keyseatResult.multi_pass.num_passes - 1;
+                        return (
+                          <div key={i} className="space-y-0.5">
+                            <div className="flex justify-between text-[10px]">
+                              <span className={`font-semibold ${isLast ? "text-green-400" : "text-amber-300"}`}>Pass {i + 1}{isLast ? " — Final" : ""}</span>
+                              <span className="font-mono text-muted-foreground">+{d.toFixed(4)}" → <span className={isLast ? "text-green-400 font-bold" : "text-foreground"}>{((i + 1) * d).toFixed(4)}"</span></span>
+                            </div>
+                            <div className="h-4 w-full rounded bg-zinc-800 overflow-hidden border border-amber-500/20">
+                              <div
+                                className={`h-full rounded transition-all ${isLast ? "bg-green-500/70" : "bg-amber-500/60"}`}
+                                style={{ width: `${cumPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="flex justify-between text-[10px] pt-1 border-t border-amber-500/20">
+                        <span className="text-muted-foreground">Total Depth</span>
+                        <span className="font-mono font-bold text-green-400">{keyseatResult.multi_pass.final_slot_depth_in.toFixed(4)}"</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : operation !== "keyseat" && customer.notes && (customer.notes as string[]).length > 0 ? (
                 <div className={`rounded-xl border p-3 text-sm space-y-1 ${
                   customer.risk === "warning"
                     ? "border-red-500/40 bg-red-500/8 text-red-300"
@@ -5668,52 +5847,17 @@ ${stabSection}
                 </div>
               ) : null}
 
-              {/* Engineering */}
-              {engineering ? (
-                <>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    <Kpi label={UL("Force (lbf)", "Force (N)")} hint="Estimated radial cutting force at the tool tip. Drives deflection and chatter. Increases with chip load, DOC, and material hardness. Key input to the stability model." value={UC(engineering?.force_lbf, 4.44822, 0)} />
-                    <Kpi
-                      label={UL("Torque (in-lbf)", "Torque (N·m)")}
-                      hint="Cutting torque derived from HP and RPM (T = HP × 63,025 / RPM). The % shown is cutting torque vs. your spindle taper's interface grip capacity — not the machine's motor torque limit. It indicates toolholder pullout risk, not spindle overload."
-                      value={
-                        <>
-                          {UC(engineering?.torque_inlbf, 0.112985, metric ? 2 : 1)}
-                          {engineering?.torque_pct != null ? (
-                            <span className={`ml-1 text-xs font-normal ${engineering.torque_pct > 90 ? "text-red-400" : engineering.torque_pct > 70 ? "text-amber-400" : "text-muted-foreground"}`}>
-                              ({fmtNum(engineering.torque_pct, 0)}% cap)
-                            </span>
-                          ) : null}
-                        </>
-                      }
-                    />
-                    <Kpi label={UL("Deflection (in)", "Deflection (mm)")} hint="Estimated tool tip deflection under radial cutting force, modeled as a cantilever beam. Excessive deflection causes dimensional error, chatter, and poor surface finish. The stability limit is shown in the Stability Check section." value={UC(engineering?.deflection_in, 25.4, metric ? 4 : 6)} />
-                    <Kpi label={UL("Chip Thick (in)", "Chip Thick (mm)")} hint="Effective chip thickness after radial chip thinning (RCTF). At low WOC, the actual chip is thinner than the programmed FPT — the engine boosts feed to compensate. Must exceed the minimum chip thickness to avoid rubbing." value={UC(engineering?.chip_thickness_in, 25.4, metric ? 4 : 6)} />
-                    <Kpi
-                      label="Tooth Engagement"
-                      hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
-                      value={
-                        engineering?.teeth_in_cut != null ? (
-                          <div className="leading-snug">
-                            <div>{fmtNum(engineering.teeth_in_cut, 2)} teeth</div>
-                            {engineering?.helix_wrap_deg != null && (
-                              <div className="text-xs font-normal text-muted-foreground mt-0.5">
-                                {fmtNum(engineering.helix_wrap_deg, 0)}° wrap
-                                {engineering?.engagement_continuous
-                                  ? " · continuous"
-                                  : " · interrupted"}
-                              </div>
-                            )}
-                          </div>
-                        ) : "—"
-                      }
-                    />
-
-                    <Kpi label="Chatter" hint="Chatter index — a relative indicator combining deflection, RPM, and workholding compliance. Lower is better. This is an internal diagnostic value; use the Rigidity & Chatter Audit section for actionable guidance." value={fmtNum(engineering?.chatter_index, 3)} />
-                  </div>
-                </>
-              ) : null}
+              {/* Save to Toolbox */}
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={saveToToolbox}
+                  disabled={tbSaving}
+                  className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50"
+                >
+                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
+                </button>
+                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
+              </div>
 
             </>
           )}
@@ -5969,6 +6113,7 @@ ${stabSection}
       {/* Disclaimer */}
       <div className="mt-6 px-1 text-[11px] text-muted-foreground/60 leading-relaxed border-t border-border pt-4">
         The speeds and feeds shown are recommended starting values only. Actual results will vary depending on the machine, setup rigidity, tooling, coolant, and material condition — adjust parameters as necessary. Core Cutter LLC accepts no responsibility for application results.
+        <span className="ml-2 text-muted-foreground/60">· Developed by S. Tiehen</span>
       </div>
 
       {/* Footer branding */}

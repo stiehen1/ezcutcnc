@@ -1359,14 +1359,47 @@ export async function registerRoutes(
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   });
 
-  const EXTRACTION_PROMPT = `You are reading a Core Cutter LLC engineering print (technical drawing). Extract all tool geometry dimensions and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object.
+  const EXTRACTION_PROMPT = `You are reading a Core Cutter LLC engineering print (technical drawing).
+
+FIRST — verify this is a genuine Core Cutter LLC print:
+1. Look for "CORE CUTTER" or "Core Cutter" or "CORE CUTTER, LLC" in the title block, header, or logo area.
+2. Look for a tool number in the format "CC-XXXXX" (e.g. CC-12650) in the title block (labeled "TOOL #").
+
+If you do NOT find "Core Cutter" on the print, return ONLY:
+{"error": "not_core_cutter"}
+
+If you find "Core Cutter" but NO "CC-XXXXX" tool number, still extract all dimensions but include:
+{"tool_number": null, "no_tool_number": true, ...rest of fields}
+
+If both are present, extract the tool number as "tool_number" (e.g. "CC-12650") along with all tool geometry dimensions, and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object.
+
+CRITICAL RULES — READ CAREFULLY:
+
+1. ALL dimensions on Core Cutter prints have tolerances. You MUST extract the NOMINAL (base) value only and discard all tolerance information:
+   - "Ø0.750-.0001/.0004" → 0.750
+   - "1.875+.06/.00" → 1.875
+   - "Ø0.250+.000/-.005" → 0.250
+   - "4.00±.05" → 4.00
+   - ".1875±.001" → 0.1875
+   The nominal value is always the FIRST number before any +, -, or ± symbol.
+
+2. tool_dia is ALWAYS the largest Ø dimension on the cutter body — it appears labeled on both the left and right ends of the tool profile. It is NEVER 0 and NEVER left blank. On keyseat cutters it is the disc/wheel diameter (the big cutting part).
+
+3. For KEYSEAT cutters specifically:
+   - loc = the disc WIDTH (thickness of the cutting wheel, e.g. ".1875±.001" → 0.1875)
+   - lbs = the REACH/TSC dimension (distance from shank face to cutter, e.g. "1.875+.06/.00 TSC" → 1.875)
+   For all other tool types: loc = flute/cutting length, lbs = length below shank if necked.
+
+4. keyseat_arbor_dia is the small narrow neck connecting the cutter disc to the shank.
+
+5. shank_dia is the large cylindrical body at the far end (shank) of the tool.
 
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
   "tool_type": "endmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
-  "tool_dia": <number, cutting diameter in inches>,
+  "tool_dia": <number, cutting diameter in inches — nominal value only, ignore tolerances>,
   "flutes": <integer>,
-  "loc": <number, length of cut / flute length in inches, 0 if unknown>,
+  "loc": <number, length of cut / flute length / TSC in inches — nominal value only, 0 if unknown>,
   "lbs": <number, length below shank in inches, 0 if standard>,
   "helix_angle": <integer degrees, 0 if not shown>,
   "corner_condition": "square|corner_radius|ball",
@@ -1379,7 +1412,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "chamfer_angle": <number, included chamfer angle in degrees, 0 if not applicable>,
   "chamfer_tip_dia": <number in inches, 0 if not applicable>,
   "thread_tpi": <number, threads per inch for threadmills, 0 if not applicable>,
-  "drill_step_diameters": <array of step diameters in inches for step drills, [] if not applicable>
+  "drill_step_diameters": <array of step diameters in inches for step drills, [] if not applicable>,
+  "cutting_material": <string, the workpiece material this tool is designed for — look for "CUTTING=" or "FOR:" in the notes section. Map to one of: "aluminum_wrought", "steel_alloy", "steel_free", "stainless_304", "stainless_316", "stainless_ph", "cast_iron", "inconel_718", "inconel_625", "titanium", "hardened_lt55", "hardened_gt55" — use null if not specified>
 }`;
 
   app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {
@@ -1428,6 +1462,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       let extracted: Record<string, unknown>;
       try {
         extracted = JSON.parse(cleaned);
+        console.log("Extracted:", JSON.stringify(extracted));
       } catch {
         return res.status(422).json({
           error: "Could not read print — please enter dimensions manually",
