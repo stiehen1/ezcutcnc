@@ -1916,7 +1916,7 @@ ${stabSection}
         <CardHeader className="pt-0 pb-0">
           {/* Top row: Engineering mode left, IN/MM right */}
           <div className="flex items-center justify-between mb-1 pt-2">
-            <div>
+            <div className="flex items-center gap-3">
               {engMode ? (
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
@@ -1924,6 +1924,22 @@ ${stabSection}
                 </div>
               ) : (
                 <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-gray-500 hover:text-gray-300 underline">Engineering Mode</button>
+              )}
+              {/* Toolbox sign-in / status */}
+              {tbEmail && tbToken ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">🗂</span>
+                  <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
+                  <span className="text-[10px] text-zinc-500">· {tbEmail}</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTbShowModal(true)}
+                  className="text-[10px] text-zinc-500 hover:text-orange-400 underline"
+                >
+                  🗂 Sign in to Toolbox
+                </button>
               )}
             </div>
             <div className="flex rounded-md border overflow-hidden text-xs font-semibold">
