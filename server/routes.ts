@@ -1292,11 +1292,9 @@ export async function registerRoutes(
       return res.status(401).json({ ok: false, error: "Incorrect password" });
     }
     // Auto-create a Toolbox session for the admin email so eng mode gets Toolbox access
-    console.log("[eng-auth] ADMIN_EMAIL =", process.env.ADMIN_EMAIL);
     const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
     if (adminEmail) {
       const { pool } = await import("./db");
-      const crypto = await import("crypto");
       const token = crypto.randomBytes(24).toString("hex");
       await pool.query(
         `INSERT INTO toolbox_sessions (email, token, created_at)
