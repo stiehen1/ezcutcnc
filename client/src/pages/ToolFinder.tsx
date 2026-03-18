@@ -402,11 +402,12 @@ const QP_DOCS = [
   { label: "Deep     (> 1.5×D)", desc: "HEM/trochoidal roughing · Slotting requires reduced neck tool", docXd: 2.0 },
 ];
 
-function QuickPick({ onApply, onOperationPick, onClear, applied }: {
+function QuickPick({ onApply, onOperationPick, onClear, applied, summary }: {
   onApply: (mat: string, toolType: string, geo: string | null, diaRange: { min: number; max: number }, minLoc: number | null, summary: string[], mode: string, minLbs?: number | null) => void;
   onOperationPick: (toolType: string) => void;
   onClear: () => void;
   applied: boolean;
+  summary?: string[];
 }) {
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState(0);
@@ -450,7 +451,23 @@ function QuickPick({ onApply, onOperationPick, onClear, applied }: {
           <span className="rounded-lg bg-yellow-400 p-1.5 text-white text-base leading-none">⚡</span>
           <div>
             <h2 className="font-bold text-base leading-tight">Quick Pick</h2>
-            <p className="text-xs text-yellow-400/80">{applied ? "Filters applied — refine your choice below or start over" : "Answer 3 questions — we'll set the filters for you"}</p>
+            {applied && !open && summary && summary.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1 mt-1">
+                {summary.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setOpen(true)}
+                    className="rounded border border-yellow-400/50 bg-yellow-400/10 px-2 py-0.5 text-[11px] text-yellow-200 font-medium hover:bg-yellow-400/25 hover:border-yellow-400 transition-colors"
+                    title="Click to change Quick Pick selections"
+                  >
+                    {s} ✏
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-yellow-400/80">{applied ? "Filters applied — refine below or start over" : "Answer 3 questions — we'll set the filters for you"}</p>
+            )}
           </div>
         </div>
         <button
@@ -462,9 +479,10 @@ function QuickPick({ onApply, onOperationPick, onClear, applied }: {
               : "border-yellow-400/60 bg-background text-yellow-400 hover:bg-yellow-400 hover:text-zinc-900"
           }`}
         >
-          {open ? "✕ Close" : applied ? "✓ APPLIED! — Refine choice below" : "Help me choose →"}
+          {open ? "✕ Close" : applied ? "✓ Applied" : "Help me choose →"}
         </button>
       </div>
+
 
       {open && (
         <div className="mt-4 space-y-4">
@@ -636,8 +654,23 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       .then((d: Options) => setOptions({
         ...d,
         diameters: d.diameters.map(Number),
-        locs: d.locs.map(Number),
-        lbsLengths: (d.lbsLengths ?? []).map(Number),
+        locs: (() => {
+          const all = d.locs.map(Number).sort((a, b) => a - b);
+          const depth = axialDepth ? parseFloat(axialDepth) : 0;
+          if (!depth || isNaN(depth)) return all;
+          // Only show the shortest LOC that meets the depth, plus the next one up
+          const idx = all.findIndex(l => l >= depth);
+          if (idx === -1) return all;
+          return all.slice(idx, idx + 2);
+        })(),
+        lbsLengths: (() => {
+          const all = (d.lbsLengths ?? []).map(Number).filter(n => n > 0).sort((a, b) => a - b);
+          const depth = axialDepth ? parseFloat(axialDepth) : 0;
+          if (!depth || isNaN(depth)) return all;
+          const idx = all.findIndex(l => l >= depth);
+          if (idx === -1) return all;
+          return all.slice(idx, idx + 2);
+        })(),
         flutes: d.flutes.map(Number),
         chamferLengths: (d.chamferLengths ?? []).map(Number),
         chamferAngles: (d.chamferAngles ?? []).map(Number),
@@ -845,6 +878,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       {/* ── Quick Pick ── */}
       <QuickPick
         onApply={applyQuickPick}
+        summary={qpTip?.summary}
         onOperationPick={tt => { if (tt) setSelToolTypes([tt]); else setSelToolTypes([]); }}
         onClear={() => {
           setQpTip(null);

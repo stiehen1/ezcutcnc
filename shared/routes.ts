@@ -108,6 +108,7 @@ export const mentorSchemas = {
 
     // Keyseat-specific
     keyseat_arbor_dia: z.number().min(0).default(0),
+    final_slot_depth: z.number().min(0).default(0),
 
     // Dovetail-specific
     dovetail_angle: z.number().min(0).max(180).default(60),
@@ -263,7 +264,16 @@ export const mentorSchemas = {
     keyseat: z.object({
       arbor_dia_in: z.number().nullable().optional(),
       doc_in: z.number(),
+      max_safe_doc_in: z.number().optional(),
+      flute_reach_in: z.number().optional(),
       engagement: z.string(),
+      multi_pass: z.object({
+        num_passes: z.number(),
+        depth_per_pass_in: z.number(),
+        final_slot_depth_in: z.number(),
+        max_safe_doc_in: z.number(),
+        aggressive: z.boolean(),
+      }).nullable().optional(),
       tips: z.array(z.string()),
     }).nullable().optional(),
 

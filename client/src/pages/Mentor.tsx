@@ -1724,10 +1724,11 @@ ${stabSection}
   }
 
   // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
-  const ALL_OPS = ["toolfinder","feedmilling","milling","drilling","reaming","threadmilling"] as const;
+  const ALL_OPS = ["toolfinder","feedmilling","milling","drilling","reaming","threadmilling","keyseat","dovetail"] as const;
   const OP_LABELS: Record<string, string> = {
     toolfinder: "Tool Finder", feedmilling: "Calculators",
     milling: "Milling", drilling: "Drilling", reaming: "Reaming", threadmilling: "Thread Milling",
+    keyseat: "Keyseat", dovetail: "Dovetail",
   };
   function SharedTabBar() {
     return (
@@ -3926,8 +3927,10 @@ ${stabSection}
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">Final Slot Depth (in)</FieldLabel>
-                  <Input type="text" inputMode="decimal" className="no-spinners"
+                  <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">
+                    <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Slot Depth (in)</span>
+                  </FieldLabel>
+                  <Input type="text" inputMode="decimal" className={`no-spinners ${form.final_slot_depth === 0 ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : "border-zinc-600"}`}
                     placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
                     value={finalSlotDepthText}
                     onChange={(e) => setFinalSlotDepthText(e.target.value)}
@@ -5797,35 +5800,48 @@ ${stabSection}
                       );
                     })}
                   </ul>
-                  {keyseatResult?.multi_pass && keyseatResult.multi_pass.num_passes > 1 && (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Recommended Pass Strategy</div>
-                      {Array.from({ length: keyseatResult.multi_pass.num_passes }, (_, i) => {
-                        const d = keyseatResult.multi_pass.depth_per_pass_in;
-                        const total = keyseatResult.multi_pass.final_slot_depth_in;
-                        const cumPct = Math.min(100, ((i + 1) * d / total) * 100);
-                        const isLast = i === keyseatResult.multi_pass.num_passes - 1;
-                        return (
-                          <div key={i} className="space-y-0.5">
-                            <div className="flex justify-between text-[10px]">
-                              <span className={`font-semibold ${isLast ? "text-green-400" : "text-amber-300"}`}>Pass {i + 1}{isLast ? " — Final" : ""}</span>
-                              <span className="font-mono text-muted-foreground">+{d.toFixed(4)}" → <span className={isLast ? "text-green-400 font-bold" : "text-foreground"}>{((i + 1) * d).toFixed(4)}"</span></span>
+                  {keyseatResult?.multi_pass && keyseatResult.multi_pass.num_passes > 1 && (() => {
+                    const mp = keyseatResult.multi_pass;
+                    const n = mp.num_passes;
+                    const d = mp.depth_per_pass_in;
+                    const total = mp.final_slot_depth_in;
+                    const passes = Array.from({ length: n }, (_, i) => ({
+                      label: n === 1 ? "Pass 1 (single pass)" : i < n - 1 ? `Pass ${i + 1} (roughing)` : `Pass ${n} (finish)`,
+                      doc: d,
+                      cumulative: (i + 1) * d,
+                    }));
+                    const matLower = form.material.toLowerCase();
+                    const reasons: string[] = [];
+                    if (keyseatResult.arbor_dia_in && keyseatResult.arbor_dia_in / (form.tool_dia || 1) < 0.5)
+                      reasons.push("narrow neck relative to cutter — reduced rigidity");
+                    if (["steel","stainless","inconel","titanium","hastelloy","waspaloy"].some(k => matLower.includes(k)))
+                      reasons.push("tough material — multi-pass preserves tool life");
+                    return (
+                      <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-800/40 px-3 py-2.5 text-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Pass Strategy</p>
+                          <span className="text-muted-foreground font-medium">{n} passes</span>
+                        </div>
+                        {reasons.length > 0 && (
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            <span className="text-zinc-500">Why: </span>{reasons.join(", ")}.
+                          </p>
+                        )}
+                        <div className="space-y-1">
+                          {passes.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between text-[11px]">
+                              <span className="text-zinc-400">{p.label}</span>
+                              <span className="font-medium text-foreground tabular-nums">{p.doc.toFixed(4)}" DOC</span>
                             </div>
-                            <div className="h-4 w-full rounded bg-zinc-800 overflow-hidden border border-amber-500/20">
-                              <div
-                                className={`h-full rounded transition-all ${isLast ? "bg-green-500/70" : "bg-amber-500/60"}`}
-                                style={{ width: `${cumPct}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div className="flex justify-between text-[10px] pt-1 border-t border-amber-500/20">
-                        <span className="text-muted-foreground">Total Depth</span>
-                        <span className="font-mono font-bold text-green-400">{keyseatResult.multi_pass.final_slot_depth_in.toFixed(4)}"</span>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed">
+                          Total slot depth: <span className="text-foreground font-medium">{total.toFixed(4)}"</span>
+                          {` · max safe pass depth: `}<span className="text-foreground font-medium">{mp.max_safe_doc_in.toFixed(4)}"</span>
+                        </p>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ) : operation !== "keyseat" && customer.notes && (customer.notes as string[]).length > 0 ? (
                 <div className={`rounded-xl border p-3 text-sm space-y-1 ${
