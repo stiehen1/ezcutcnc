@@ -1,0 +1,28 @@
+brand,model,max_rpm,spindle_hp,taper,drive_type,dual_contact,coolant_types,tsc_psi,x_travel_in,y_travel_in,z_travel_in,machine_type,control,notes
+,,,,,,,,,,,,,,
+INSTRUCTIONS:
+brand            = Machine manufacturer (Haas / Mazak / DMG Mori / Okuma / Fanuc / Doosan / Hurco / Brother / Makino / Kitamura / etc.)
+model            = Exact model name as printed on the machine (VF-2SS / NMV 3000 / etc.)
+max_rpm          = Spindle max RPM — check machine nameplate or spindle spec sheet
+spindle_hp       = Nameplate spindle HP (continuous rating — not peak)
+taper            = CAT40 | CAT50 | BT30 | BT40 | BT50 | HSK32 | HSK63 | HSK100 | CAPTO C5 | CAPTO C6
+drive_type       = direct | belt | gear
+dual_contact     = true | false  (BBT / HSK / Capto = true; standard CAT = false)
+coolant_types    = comma-separated list in braces: {flood} or {flood,tsc} or {flood,tsc,mist} or {flood,mist,air}
+tsc_psi          = Through-spindle coolant pressure in PSI (leave blank if no TSC)
+x_travel_in      = X-axis travel in inches
+y_travel_in      = Y-axis travel in inches
+z_travel_in      = Z-axis travel in inches
+machine_type     = vmc | hmc | 5axis | lathe | turning_center | mill_turn
+control          = Haas | Fanuc | Siemens | Mazatrol | Okuma OSP | Heidenhain | Hurco WinMax | Brother | Mitsubishi
+notes            = Any shop-relevant notes (e.g. "40-taper BBT dual contact option installed")
+,,,,,,,,,,,,,,
+EXAMPLE ROWS (delete before importing):
+Haas,VF-2,8100,30,CAT40,direct,false,{flood},, 30, 20, 25,vmc,Haas,
+Haas,VF-2SS,12000,30,CAT40,direct,false,"{flood,tsc}",1000,30,20,25,vmc,Haas,High-speed spindle option
+Mazak,VCN-430A,12000,25,CAT40,direct,false,"{flood,tsc}",1000,17,17,20,vmc,Mazatrol,
+DMG Mori,DMU 50,14000,28,HSK63,direct,true,"{flood,tsc}",1000,20,18,18,5axis,Heidenhain,Dual contact standard on HSK
+Brother,Speedio S700X1,16000,10,BT30,direct,false,"{flood,mist}",,28,16,12,vmc,Brother,High-speed tapping center
+,,,,,,,,,,,,,,
+DATA TO FILL IN (add one machine per row below):
+brand,model,max_rpm,spindle_hp,taper,drive_type,dual_contact,coolant_types,tsc_psi,x_travel_in,y_travel_in,z_travel_in,machine_type,control,notes
