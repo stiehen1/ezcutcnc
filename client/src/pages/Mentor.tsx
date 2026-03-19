@@ -571,7 +571,17 @@ export default function Mentor() {
         if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(String(e.tool_dia)); }
         if (e.flutes > 0) next.flutes = e.flutes;
         if (e.loc > 0) { next.loc = e.loc; setLocText(String(e.loc)); }
-        if (e.lbs > 0) { next.lbs = e.lbs; setLbsText(String(e.lbs)); }
+        if (e.lbs > 0) {
+          const tt = (e.tool_type ?? "").toLowerCase();
+          if (tt === "threadmill") {
+            // For thread mills, lbs = TSC = reach/neck length
+            next.thread_neck_length = e.lbs;
+            setTmNeckText(String(e.lbs));
+          } else {
+            next.lbs = e.lbs;
+            setLbsText(String(e.lbs));
+          }
+        }
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
