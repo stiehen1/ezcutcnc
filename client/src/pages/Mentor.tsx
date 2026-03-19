@@ -1127,11 +1127,7 @@ export default function Mentor() {
         form.material === "hardened_gt55" ||
         (form.hardness_scale === "hrc" && form.hardness_value >= 50);
       if (fl >= 6) {
-        setRunWarnings([`Slotting with ${fl} flutes will pack chips and break the tool. Use 2–4 flutes for full slotting, or 5 flutes at 50% WOC maximum.`]);
-        return;
-      }
-      if (fl === 5 && form.woc_pct > 50) {
-        setRunWarnings([`5-flute slotting is limited to 50% WOC (1/2×D) for chip clearance. Reduce WOC to 50% or use a 4-flute tool for full slotting.`]);
+        setRunWarnings([`Slotting with ${fl} flutes will pack chips and break the tool. Use 2–5 flutes for full slotting.`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
