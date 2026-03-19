@@ -6011,7 +6011,18 @@ ${stabSection}
                 return (
                   <div className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2.5 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-300">Tooth Engagement</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-300 flex items-center gap-1">
+                        Tooth Engagement
+                        <span className="group relative cursor-pointer">
+                          <span className="text-zinc-500 hover:text-zinc-300 text-[10px]">ⓘ</span>
+                          <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border border-zinc-600 bg-zinc-800 p-3 text-[11px] text-zinc-300 leading-relaxed shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                            <p className="font-bold text-white mb-1">Why tooth engagement matters</p>
+                            <p className="mb-1"><span className="text-red-400 font-semibold">Too low (&lt;1.0):</span> Edge rubs on re-entry, work-hardening the surface. Chip load spikes unevenly — built-up edge and poor finish result.</p>
+                            <p className="mb-1"><span className="text-orange-400 font-semibold">Too high (&gt;3.0):</span> Chips pack in the flutes, heat spikes, torque overloads spindle. Multiple teeth in simultaneous contact drives chatter.</p>
+                            <p><span className="text-green-400 font-semibold">Sweet spot (1.5–2.5):</span> One tooth always cutting while the previous clears. Smooth, continuous force — this is why HEM works so well.</p>
+                          </div>
+                        </span>
+                      </span>
                       <span className={`text-xs font-bold ${zone === "sweet" ? "text-green-400" : zone === "ok" ? "text-yellow-300" : zone === "low" ? "text-red-400" : "text-orange-400"}`}>
                         {tic.toFixed(2)} teeth — {zone === "sweet" ? "Sweet Spot ✓" : zone === "ok" ? "Acceptable" : zone === "low" ? "Too Low" : "Too High"}
                       </span>
