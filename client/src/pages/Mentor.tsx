@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { ISO_CATEGORIES, ISO_SUBCATEGORIES, MATERIAL_NOTES, MATERIAL_HARDNESS_RANGE, type IsoCategory } from "@shared/materials";
+import { COATINGS, getCoatingDef, coatingIncompatible } from "@shared/coatings";
 
 // ── Thread TPI / pitch lookup tables (mirrors engine/physics.py) ─────────────
 const UN_TPI: Record<string, Record<number, number>> = {
@@ -6222,12 +6223,28 @@ ${stabSection}
               })()}
 
               {/* Coating — show actual SKU coating if known, otherwise generic recommendation */}
-              {form.coating ? (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs">
-                  <span className="text-muted-foreground">Tool Coating:</span>
-                  <span className="font-bold text-orange-400 border border-orange-400/40 rounded px-1.5 py-0.5">{form.coating}</span>
-                </div>
-              ) : (() => { const cr = getMillingCoatings(isoCategory); return (
+              {form.coating ? (() => {
+                const def = getCoatingDef(form.coating);
+                const incompatible = coatingIncompatible(form.coating, isoCategory);
+                return (
+                  <div className="flex flex-col gap-1 px-1 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-muted-foreground">Tool Coating:</span>
+                      <span className="font-bold text-orange-400 border border-orange-400/40 rounded px-1.5 py-0.5">{form.coating}</span>
+                      {def && (
+                        <span className="text-muted-foreground">
+                          {def.chemistry} · {def.max_temp_c ? `${def.max_temp_c}°C` : "uncoated"} · {def.sfm_mult >= 1 ? "+" : ""}{Math.round((def.sfm_mult - 1) * 100)}% SFM vs AlTiN
+                        </span>
+                      )}
+                    </div>
+                    {incompatible && (
+                      <div className="text-amber-400 font-medium">
+                        ⚠ {form.coating} is not recommended for {isoCategory}-category materials — coating reacts at cutting temperatures. Switch to A-Max or T-Max.
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (() => { const cr = getMillingCoatings(isoCategory); return (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs">
                   <span className="text-muted-foreground">Recommended Coating{cr.coatings.length > 1 ? "s" : ""}:</span>
                   {cr.coatings.map(c => (

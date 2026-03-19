@@ -263,6 +263,27 @@ COATING_LIFE_MULT: dict[str, dict[str, float]] = {
     "uncoated": {"aluminum": 1.00, "default": 0.85},  # aluminum baseline is uncoated; ferrous baseline is A-MAX
 }
 
+# SFM multiplier by coating — relative to AlTiN (A-Max) baseline = 1.00
+# Applied in calc_state() to base_sfm after material lookup, before hardness penalty
+# D-Max on ferrous: 0.90 (incompatible — warns in UI, penalizes here)
+COATING_SFM_MULT: dict[str, dict[str, float]] = {
+    "t-max":    {"default": 1.10},
+    "a-max":    {"default": 1.00},
+    "p-max":    {"steel": 1.05, "stainless": 1.03, "default": 1.02},
+    "c-max":    {"stainless": 1.07, "steel": 1.05, "default": 1.03},
+    "d-max":    {"aluminum": 1.20, "default": 0.90},  # penalty on ferrous — wrong coating
+    "uncoated": {"aluminum": 1.00, "default": 0.85},
+}
+
+def _coating_sfm_factor(coating: str, material_group: str) -> float:
+    """Return the SFM multiplier for a given coating + material group pairing."""
+    key = (coating or "").strip().lower()
+    grp = (material_group or "").strip().lower()
+    tbl = COATING_SFM_MULT.get(key)
+    if tbl is None:
+        return 1.0  # unknown/blank → no adjustment (assume A-Max baseline)
+    return tbl.get(grp, tbl.get("default", 1.0))
+
 def _coating_life_factor(coating: str, material_group: str) -> float:
     """Return the tool-life multiplier for a given coating + material group pairing."""
     key = (coating or "").strip().lower()
@@ -2821,6 +2842,10 @@ def run(payload=None):
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)
+
+    # Apply coating SFM multiplier — T-Max +10%, D-Max on ferrous -10%, etc.
+    _coating_key = str(data.get("coating") or "").strip()
+    base_sfm *= _coating_sfm_factor(_coating_key, material_group)
 
     target_rpm = (base_sfm * 3.82) / data["diameter"]
     rpm_cap = data["max_rpm"] * data["rpm_util_pct"]
