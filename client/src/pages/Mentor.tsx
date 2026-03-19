@@ -1918,7 +1918,7 @@ ${stabSection}
           <div className="flex items-start justify-between pt-1 pb-1 gap-3">
             {/* Logo */}
             <img
-              src="/EZCutCNC_dark_stacked v2.png"
+              src="/EZCutCNC_dark_horizontal.png"
               alt="EZcutCNC"
               className="h-20 w-auto flex-shrink-0"
             />
