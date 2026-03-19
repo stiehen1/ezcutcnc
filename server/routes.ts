@@ -569,6 +569,8 @@ export async function registerRoutes(
           : excludeCB
             ? `AND LOWER(COALESCE(s.geometry, 'standard')) != 'chipbreaker'`
           : ``;
+        // BLK suffix = unfinished blanks (no neck ground yet) — never suggest these
+        const noBLK = `AND s.edp NOT ILIKE '%-BLK'`;
         for (const s of stability.suggestions) {
           const lookupFlutes = s.suggested_flutes ?? s.lookup_flutes;
         if ((s.type === "tool" || s.type === "diameter") && lookupFlutes && s.lookup_dia) {
@@ -585,6 +587,7 @@ export async function registerRoutes(
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                    ${cbClause}
+                   ${noBLK}
                    ORDER BY s.edp`,
                   [derivedBase + "%"]
                 );
@@ -621,6 +624,7 @@ export async function registerRoutes(
                      AND LOWER(s.corner_condition) = LOWER($3)
                      AND COALESCE(s.loc_in, 0) >= $4
                      ${cbClause}
+                     ${noBLK}
                    ORDER BY s.loc_in ASC, s.edp`,
                   [flutes, dia, cornerStr, loc]
                 );
@@ -638,6 +642,7 @@ export async function registerRoutes(
                        AND COALESCE(s.loc_in, 0) >= $3
                        AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                        ${cbClause}
+                       ${noBLK}
                      ORDER BY s.loc_in ASC, s.edp`,
                     [flutes, dia, loc]
                   );
@@ -654,6 +659,7 @@ export async function registerRoutes(
                          AND ABS(s.cutting_diameter_in - $2) < 0.001
                          AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause}
+                         ${noBLK}
                          AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                            SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                            FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -662,6 +668,7 @@ export async function registerRoutes(
                              AND ABS(s2.cutting_diameter_in - $2) < 0.001
                              AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                              ${cbClause.replace(/\bs\./g, "s2.")}
+                             ${noBLK.replace(/\bs\./g, "s2.")}
                          )
                        ORDER BY s.edp`,
                       [flutes, dia, loc]
@@ -682,6 +689,7 @@ export async function registerRoutes(
                    AND ABS(s.cutting_diameter_in - $2) < 0.001
                    AND LOWER(s.corner_condition) = LOWER($3)
                    ${cbClause}
+                   ${noBLK}
                    AND ABS(COALESCE(s.loc_in, 0) - $4) = (
                      SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $4))
                      FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -690,6 +698,7 @@ export async function registerRoutes(
                        AND ABS(s2.cutting_diameter_in - $2) < 0.001
                        AND LOWER(s2.corner_condition) = LOWER($3)
                        ${cbClause.replace(/\bs\./g, "s2.")}
+                       ${noBLK.replace(/\bs\./g, "s2.")}
                    )
                  ORDER BY s.edp`,
                 [flutes, dia, cornerStr, loc]
@@ -707,6 +716,7 @@ export async function registerRoutes(
                      AND ABS(s.cutting_diameter_in - $2) < 0.001
                      AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                      ${cbClause}
+                     ${noBLK}
                      AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                        SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -715,6 +725,7 @@ export async function registerRoutes(
                          AND ABS(s2.cutting_diameter_in - $2) < 0.001
                          AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause.replace(/\bs\./g, "s2.")}
+                         ${noBLK.replace(/\bs\./g, "s2.")}
                      )
                    ORDER BY s.edp`,
                   [flutes, dia, loc]
