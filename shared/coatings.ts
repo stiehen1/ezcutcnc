@@ -75,7 +75,7 @@ export const COATINGS: CoatingDef[] = [
     sfm_mult: 0.85,
     max_temp_c: null,
     chemistry: "Sub-micron grain carbide substrate",
-    description: "Uncoated sub-micron grain carbide. Best for non-ferrous materials where coating adhesion or built-up edge is a concern. Reduce SFM ~15% vs A-Max baseline on ferrous.",
+    description: "Uncoated sub-micron grain carbide, 10% cobalt binder. Best for non-ferrous materials where coating adhesion or built-up edge is a concern. Reduce SFM ~15% vs A-Max baseline on ferrous.",
     best_iso: ["N"],
     avoid_iso: [],
     color: "text-zinc-500",
