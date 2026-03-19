@@ -1126,8 +1126,17 @@ export default function Mentor() {
       const isHardened50Plus =
         form.material === "hardened_gt55" ||
         (form.hardness_scale === "hrc" && form.hardness_value >= 50);
+      // Flute count limits for traditional slotting
       if (fl >= 6) {
-        setRunWarnings([`Slotting with ${fl} flutes will pack chips and break the tool. Use 2–5 flutes for full slotting.`]);
+        setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
+        return;
+      }
+      if (fl === 5 && form.doc_xd > 0.5) {
+        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool for 1×D DOC.`]);
+        return;
+      }
+      if (fl <= 4 && form.doc_xd > 1.0) {
+        setRunWarnings([`Slotting DOC is limited to 1×D maximum. Reduce axial depth.`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
