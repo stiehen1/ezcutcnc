@@ -1920,7 +1920,8 @@ ${stabSection}
             <img
               src="/EZCutCNC_dark_horizontal.png"
               alt="EZcutCNC"
-              className="h-20 w-auto flex-shrink-0"
+              className="h-28 w-auto flex-shrink-0"
+              style={{ mixBlendMode: "screen" }}
             />
             {/* Right controls — stacked vertically */}
             <div className="flex flex-col items-end gap-1.5 pt-4">
