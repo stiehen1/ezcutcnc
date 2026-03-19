@@ -1289,18 +1289,33 @@ export default function Mentor() {
       </div>` : "";
 
     const em = result?.entry_moves;
-    const entrySection = (mil && em) ? `
-      <h3>Entry Moves</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
-        <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
+    const emFeedPct = em?.entry_feed_pct ?? 50;
+    const emCaution = em?.entry_caution ?? null;
+    const sweepRows = (em && entryTypes.includes("sweep")) ? `
+        <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#16a34a;border-bottom:1px solid #16a34a40;">Sweep / Roll-in ★ Recommended</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Arc Radius (min)</td><td style="font-weight:600;">${(em.sweep_arc_radius_min_in ?? (form.tool_dia ?? 0) * 0.50).toFixed(4)}"</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Arc Radius (rec)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_arc_radius_rec_in ?? (form.tool_dia ?? 0) * 0.75).toFixed(4)}"</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (after arc)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM</td></tr>` : "";
+    const rampRows = (em && entryTypes.includes("ramp")) ? `
+        <tr><td colspan="2" style="padding:${sweepRows ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Max Ramp Angle</td><td style="font-weight:600;">≤${em.ramp_angle_deg}°</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(0.5–1°, chip-thinning)</span></td></tr>
-        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(0.5–1°, chip-thinning)</span></td></tr>` : "";
+    const helixRows = (em && entryTypes.includes("helical")) ? `
+        <tr><td colspan="2" style="padding:${(sweepRows || rampRows) ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Min Bore Dia</td><td style="font-weight:600;">≥${em.helix_bore_min_in.toFixed(4)}"</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Ideal Bore Dia</td><td style="font-weight:600;">${em.helix_bore_ideal_low.toFixed(4)}" – ${em.helix_bore_ideal_high.toFixed(4)}"</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>` : "";
+    const straightRows = (em && entryTypes.includes("straight")) ? `
+        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight-In Entry</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>` : "";
+    const entrySection = (mil && em && (sweepRows || rampRows || helixRows || straightRows)) ? `
+      <h3>Entry Moves</h3>
+      ${emCaution ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:${emCaution === "high_hardness" ? "#450a0a" : "#451a03"};color:${emCaution === "high_hardness" ? "#fca5a5" : "#fcd34d"};">⚠ ${emCaution === "high_hardness" ? `Hard material (≥55 HRC): entry feed reduced to ${emFeedPct}% — do not skip arc lead-in.` : `Medium-hard material: entry feed reduced to ${emFeedPct}% of full feed.`}</p>` : ""}
+      <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
+        ${sweepRows}${rampRows}${helixRows}${straightRows}
       </table>` : "";
 
     const tic = eng?.teeth_in_cut ?? null;
