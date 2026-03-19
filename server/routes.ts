@@ -1407,6 +1407,14 @@ CRITICAL RULES — READ CAREFULLY:
 
 5. shank_dia is the large cylindrical body at the far end (shank) of the tool.
 
+6. For THREAD MILLS specifically:
+   - tool_dia = the CUTTING diameter (the thread form OD, e.g. "Ø0.745+.000/-.002" → 0.745)
+   - loc = the LOC (length of cut / flute length, labeled "LOC", e.g. ".127 LOC" → 0.127)
+   - lbs = the TSC dimension (reach from shank face to cutting zone, e.g. "1.00+.06/-.00 TSC" → 1.00)
+   - shank_dia = the large shank OD (e.g. "Ø0.750-.0001/.0004" → 0.750)
+   - thread_tpi = threads per inch if shown; 0 if not labeled (single-profile mills show thread angle only)
+   - The neck diameter (smaller Ø between shank and cutter, e.g. "Ø0.525") maps to keyseat_arbor_dia for deflection modeling
+
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
   "tool_type": "endmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
@@ -1469,8 +1477,11 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
       const text = response.content.find(c => c.type === "text")?.text ?? "";
 
-      // Strip any markdown code fences if present
-      const cleaned = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+      // Extract JSON — find first { to last } to handle any surrounding text
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const cleaned = jsonMatch ? jsonMatch[0] : text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+      console.log("Raw Claude response:", text.substring(0, 500));
+      console.log("Cleaned for parse:", cleaned.substring(0, 500));
 
       let extracted: Record<string, unknown>;
       try {
