@@ -900,6 +900,7 @@ export default function Mentor() {
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
   const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
+  const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep", "ramp", "helical"]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
@@ -4152,6 +4153,38 @@ ${stabSection}
             </div>
           </>)}
 
+          {/* Entry Type Preferences — milling only */}
+          {(operation === "milling") && (
+            <div className="mt-5 space-y-2">
+              <FieldLabel hint="Select which entry strategies to show in results. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
+                Entry Type Preferences
+              </FieldLabel>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: true },
+                  { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
+                  { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: false },
+                  { key: "straight", label: "Straight-In",     color: "text-amber-400 border-amber-500/60",  recommended: false },
+                ].map(({ key, label, color, recommended }) => {
+                  const checked = entryTypes.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== key) : [...p, key])}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
+                    >
+                      <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 ${checked ? "bg-current border-current" : "border-zinc-600"}`}>
+                        {checked && <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 10 10" fill="currentColor"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                      </span>
+                      {label}{recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Machine Power */}
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
@@ -6214,30 +6247,91 @@ ${stabSection}
               {/* Entry Moves */}
               {result?.entry_moves && (() => {
                 const em = result.entry_moves;
+                const caution = em.entry_caution;
+                const feedPct = em.entry_feed_pct ?? 50;
+                const cautionBanner = caution ? (
+                  <div className={`col-span-2 rounded px-2 py-1.5 text-xs leading-snug mb-1 ${caution === "high_hardness" ? "bg-red-950/60 border border-red-500/40 text-red-300" : "bg-amber-950/60 border border-amber-500/40 text-amber-300"}`}>
+                    {caution === "high_hardness"
+                      ? `⚠ Hard material (≥55 HRC / high-carbide): entry feed reduced to ${feedPct}% of full feed. Edge shock at entry is the #1 cause of first-tooth failure in this material — do not skip the arc lead-in.`
+                      : `⚠ Medium-hard material: entry feed reduced to ${feedPct}% of full feed. Avoid straight-in perpendicular entry.`}
+                  </div>
+                ) : null;
                 return (
                   <div className="rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-3 py-2.5 space-y-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400">Entry Moves</p>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400">Entry Moves</p>
+                      <span className="text-[9px] text-zinc-500">★ = recommended</span>
+                    </div>
+
+                    {caution && <div className="grid grid-cols-2">{cautionBanner}</div>}
+
+                    <div className="space-y-3 text-xs">
+
+                      {/* Sweep / Roll-in */}
+                      {entryTypes.includes("sweep") && em.sweep_arc_radius_rec_in != null && (
+                        <div>
+                          <div className="flex items-center gap-1.5 border-b border-green-500/20 pb-1 mb-1.5">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-green-400">Sweep / Roll-in ★</span>
+                            <span className="text-[9px] text-green-600 ml-1">Recommended — arc builds engagement gradually</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                            <div><span className="text-zinc-500">Arc Radius (min)</span><span className="ml-2 font-medium">{em.sweep_arc_radius_min_in!.toFixed(4)}"</span></div>
+                            <div><span className="text-zinc-500">Arc Radius (rec)</span><span className="ml-2 font-medium text-green-300">{em.sweep_arc_radius_rec_in.toFixed(4)}"</span></div>
+                            <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.sweep_entry_ipm!.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
+                            <div><span className="text-zinc-500">Full Feed (after arc)</span><span className="ml-2 font-medium text-green-300">{em.sweep_full_ipm!.toFixed(1)} IPM</span></div>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes.</p>
+                        </div>
+                      )}
+
                       {/* Ramp */}
-                      <div className="col-span-2 border-b border-indigo-500/20 pb-1 mb-0.5">
-                        <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Ramp Entry</span>
-                      </div>
-                      <div><span className="text-zinc-500">Max Ramp Angle</span><span className="ml-2 font-medium text-foreground">≤{em.ramp_angle_deg}°</span></div>
-                      <div><span className="text-zinc-500">Standard Feed</span><span className="ml-2 font-medium text-foreground">{em.standard_ramp_ipm.toFixed(1)} IPM</span></div>
-                      <div className="col-span-2 whitespace-nowrap"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500 font-normal">(0.5–1°, chip-thinning)</span></span></div>
+                      {entryTypes.includes("ramp") && (
+                        <div>
+                          <div className="border-b border-indigo-500/20 pb-1 mb-1.5">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Ramp Entry</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                            <div><span className="text-zinc-500">Max Ramp Angle</span><span className="ml-2 font-medium">≤{em.ramp_angle_deg}°</span></div>
+                            <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
+                            <div className="col-span-2"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">(0.5–1°, chip-thinning)</span></span></div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Helical */}
-                      <div className="col-span-2 border-b border-indigo-500/20 pb-1 mb-0.5 mt-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Helical Entry</span>
-                      </div>
-                      <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium text-foreground">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
-                      <div><span className="text-zinc-500">Ideal Bore Dia</span><span className="ml-2 font-medium text-foreground">{em.helix_bore_ideal_low.toFixed(4)}" – {em.helix_bore_ideal_high.toFixed(4)}"</span></div>
-                      <div><span className="text-zinc-500">Standard Feed</span><span className="ml-2 font-medium text-foreground">{em.standard_helix_ipm.toFixed(1)} IPM · {em.helix_pitch_in.toFixed(5)}" / rev @ {em.helix_angle_deg.toFixed(2)}°</span></div>
-                      <div><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_helix_ipm.toFixed(1)} IPM · {(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev @ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</span></div>
+                      {entryTypes.includes("helical") && (
+                        <div>
+                          <div className="border-b border-indigo-500/20 pb-1 mb-1.5">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Helical Entry</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                            <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
+                            <div><span className="text-zinc-500">Ideal Bore Dia</span><span className="ml-2 font-medium">{em.helix_bore_ideal_low.toFixed(4)}" – {em.helix_bore_ideal_high.toFixed(4)}"</span></div>
+                            <div><span className="text-zinc-500">Standard Feed</span><span className="ml-2 font-medium">{em.standard_helix_ipm.toFixed(1)} IPM · {em.helix_pitch_in.toFixed(5)}" / rev @ {em.helix_angle_deg.toFixed(2)}°</span></div>
+                            <div><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_helix_ipm.toFixed(1)} IPM · {(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev @ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</span></div>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 mt-1">Advanced entry uses chip-thinning at light engagement. Use tangent arc lead-in into bore; step to full feed once engagement stabilizes.</p>
+                        </div>
+                      )}
+
+                      {/* Straight-in */}
+                      {entryTypes.includes("straight") && (
+                        <div>
+                          <div className="border-b border-amber-500/30 pb-1 mb-1.5">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight-In Entry</span>
+                            <span className="text-[9px] text-amber-600 ml-2">Not recommended</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                            <div className="col-span-2"><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{em.straight_entry_ipm?.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}% until full engagement)</span></span></div>
+                          </div>
+                          <p className="text-[10px] text-amber-600/80 mt-1">⚠ Full WOC engages instantly — maximum edge shock. Use only when part geometry prevents arc or ramp approach. Run at {feedPct}% feed minimum; increase to full only after tool is fully engaged.</p>
+                        </div>
+                      )}
+
+                      {entryTypes.length === 0 && (
+                        <p className="text-xs text-zinc-500 italic">No entry types selected — check at least one above.</p>
+                      )}
                     </div>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">
-                      Advanced entry uses chip-thinning optimization at light engagement. Use tangent arc / sweep lead-in; step to full feed once engagement stabilizes.
-                    </p>
                   </div>
                 );
               })()}

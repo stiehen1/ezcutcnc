@@ -3762,8 +3762,36 @@ def run(payload=None):
     else:
         ramp_angle = 3.0
 
-    standard_ramp_feed = feed_ipm * 0.50
-    standard_helix_feed = feed_ipm * 0.65
+    # Hardness-aware entry feed multiplier
+    # Hard materials: edge shock at entry is the #1 cause of first-tooth failure
+    _entry_hrc  = float(data.get("hardness_hrc", 0) or 0)
+    _entry_mat  = str(data.get("material", material_group) or "").lower()
+    _hard_keys  = ("hardened_gt55", "cpm_10v")
+    _medium_keys = ("hardened_lt55", "tool_steel_d2", "tool_steel_a2",
+                    "stainless_440c", "tool_steel_h13", "tool_steel_s7")
+    if _entry_hrc >= 55 or _entry_mat in _hard_keys:
+        entry_feed_mult = 0.25   # 25% — very hard; edge shock is severe
+        entry_caution   = "high_hardness"
+    elif _entry_hrc >= 40 or _entry_mat in _medium_keys:
+        entry_feed_mult = 0.35   # 35% — medium-hard tool steels
+        entry_caution   = "medium_hardness"
+    else:
+        entry_feed_mult = 0.50   # 50% — standard recommendation
+        entry_caution   = None
+
+    standard_ramp_feed  = feed_ipm * entry_feed_mult
+    standard_helix_feed = feed_ipm * (entry_feed_mult + 0.15)  # helix slightly higher (continuous chip)
+
+    # Sweep / roll-in arc entry calculations
+    # Tangential arc = chip builds 0 → full WOC gradually; preferred over straight-in.
+    # Arc radius: 0.5D min, 0.75D recommended.
+    sweep_arc_radius_min_in = round(diameter * 0.50, 4)
+    sweep_arc_radius_rec_in = round(diameter * 0.75, 4)
+    sweep_entry_ipm         = round(feed_ipm * entry_feed_mult, 2)  # same conservative mult as ramp
+    sweep_full_ipm          = round(feed_ipm, 2)   # transition to full feed once arc completes
+
+    # Straight / perpendicular entry (not recommended — included for reference)
+    straight_entry_ipm = round(feed_ipm * entry_feed_mult, 2)
     # Advanced light ramp (dynamic chip-thinning)
     chip_ratio = float(state.get("chip_ratio", 1.0) or 1.0)
 
@@ -4676,18 +4704,28 @@ def run(payload=None):
         },
         "stability": _stability,
         "entry_moves": {
-            "ramp_angle_deg":        round(locals().get("ramp_angle", 3.0), 1),
-            "standard_ramp_ipm":     round(locals().get("standard_ramp_feed", 0.0), 2),
-            "standard_helix_ipm":    round(locals().get("standard_helix_feed", 0.0), 2),
-            "advanced_ramp_ipm":     round(locals().get("advanced_feed", 0.0), 2),
-            "advanced_helix_ipm":    round(locals().get("advanced_helix_feed", 0.0), 2),
-            "helix_bore_min_in":     round(locals().get("helix_bore", 0.0), 4),
-            "helix_bore_ideal_low":  round(locals().get("diameter", 0.0) * 1.30, 4),
-            "helix_bore_ideal_high": round(locals().get("diameter", 0.0) * 1.60, 4),
-            "helix_pitch_in":        round(locals().get("pitch", 0.0), 5),
-            "helix_angle_deg":       round(locals().get("angle_deg", 0.0), 2),
-            "adv_helix_pitch_in":    round(locals().get("adv_pitch", 0.0), 5),
-            "adv_helix_angle_deg":   round(locals().get("adv_angle_deg", 0.0), 2),
+            "ramp_angle_deg":           round(locals().get("ramp_angle", 3.0), 1),
+            "standard_ramp_ipm":        round(locals().get("standard_ramp_feed", 0.0), 2),
+            "standard_helix_ipm":       round(locals().get("standard_helix_feed", 0.0), 2),
+            "advanced_ramp_ipm":        round(locals().get("advanced_feed", 0.0), 2),
+            "advanced_helix_ipm":       round(locals().get("advanced_helix_feed", 0.0), 2),
+            "helix_bore_min_in":        round(locals().get("helix_bore", 0.0), 4),
+            "helix_bore_ideal_low":     round(locals().get("diameter", 0.0) * 1.30, 4),
+            "helix_bore_ideal_high":    round(locals().get("diameter", 0.0) * 1.60, 4),
+            "helix_pitch_in":           round(locals().get("pitch", 0.0), 5),
+            "helix_angle_deg":          round(locals().get("angle_deg", 0.0), 2),
+            "adv_helix_pitch_in":       round(locals().get("adv_pitch", 0.0), 5),
+            "adv_helix_angle_deg":      round(locals().get("adv_angle_deg", 0.0), 2),
+            # Sweep / roll-in arc entry
+            "sweep_arc_radius_min_in":  locals().get("sweep_arc_radius_min_in", 0.0),
+            "sweep_arc_radius_rec_in":  locals().get("sweep_arc_radius_rec_in", 0.0),
+            "sweep_entry_ipm":          locals().get("sweep_entry_ipm", 0.0),
+            "sweep_full_ipm":           locals().get("sweep_full_ipm", 0.0),
+            # Straight / perpendicular entry
+            "straight_entry_ipm":       locals().get("straight_entry_ipm", 0.0),
+            # Entry caution level: null | "medium_hardness" | "high_hardness"
+            "entry_caution":            locals().get("entry_caution", None),
+            "entry_feed_pct":           round(locals().get("entry_feed_mult", 0.50) * 100),
         },
         "debug": None
     }
