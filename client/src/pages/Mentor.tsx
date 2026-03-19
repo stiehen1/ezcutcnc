@@ -1900,7 +1900,7 @@ ${stabSection}
     <div className="mx-auto w-full max-w-6xl p-3 sm:p-4">
       {/* App header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
-        <img src="/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" className="h-12 w-auto" style={{ mixBlendMode: "screen" }} />
+        <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-10 w-auto" style={{ mixBlendMode: "screen" }} />
         <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
       </div>
 
