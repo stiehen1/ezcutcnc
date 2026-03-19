@@ -1109,7 +1109,9 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
     # Rigidity factor reduces deflection — stiffer holder/interface = less tip movement
     deflection /= rigidity
     _wh_factor = WORKHOLDING_COMPLIANCE.get(data.get("workholding", "vise"), 1.0)
-    chatter = deflection * rpm / 10000 * _wh_factor
+    # Slotting (100% WOC) has interrupted cut with force reversals — 2× chatter multiplier
+    _slot_mult = 2.0 if float(data.get("woc_pct", 0) or 0) >= 99.0 else 1.0
+    chatter = deflection * rpm / 10000 * _wh_factor * _slot_mult
 
     chip = h_eff
     hmin = minimum_chip_thickness(material_group)
