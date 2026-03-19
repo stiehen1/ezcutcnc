@@ -1923,60 +1923,51 @@ ${stabSection}
               className="h-24 w-auto flex-shrink-0"
               style={{ mixBlendMode: "screen" }}
             />
-            {/* Right controls */}
-            <div className="flex flex-col items-end gap-2">
-              {/* Top: Toolbox + IN/MM */}
-              <div className="flex items-center gap-2">
-                {tbEmail && tbToken ? (
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-orange-500/40 bg-orange-500/10">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="7" width="20" height="14" rx="2"/>
-                      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                      <line x1="12" y1="12" x2="12" y2="16"/>
-                      <line x1="10" y1="14" x2="14" y2="14"/>
-                    </svg>
-                    <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setTbShowModal(true)}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-zinc-700 hover:border-orange-500/60 hover:bg-orange-500/10 transition-colors group"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500 group-hover:text-orange-400">
-                      <rect x="2" y="7" width="20" height="14" rx="2"/>
-                      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                      <line x1="12" y1="12" x2="12" y2="16"/>
-                      <line x1="10" y1="14" x2="14" y2="14"/>
-                    </svg>
-                    <span className="text-[10px] text-zinc-500 group-hover:text-orange-400">Toolbox</span>
-                  </button>
-                )}
-                <div className="flex rounded-md border overflow-hidden text-xs font-semibold">
-                  {(["imperial", "metric"] as const).map((u) => (
-                    <button
-                      key={u}
-                      type="button"
-                      onClick={() => setUnits(u)}
-                      className="px-2.5 py-1 transition-colors"
-                      style={{
-                        backgroundColor: units === u ? "#6366f1" : "transparent",
-                        color: units === u ? "#fff" : undefined,
-                      }}
-                    >
-                      {u === "imperial" ? "IN" : "MM"}
-                    </button>
-                  ))}
+            {/* Right controls — all on one line */}
+            <div className="flex items-center gap-2">
+              {/* Toolbox */}
+              {tbEmail && tbToken ? (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-orange-500/40 bg-orange-500/10">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="7" width="20" height="14" rx="2"/>
+                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                    <line x1="12" y1="12" x2="12" y2="16"/>
+                    <line x1="10" y1="14" x2="14" y2="14"/>
+                  </svg>
+                  <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
                 </div>
+              ) : (
+                <button type="button" onClick={() => setTbShowModal(true)} className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-zinc-700 hover:border-orange-500/60 hover:bg-orange-500/10 transition-colors group">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500 group-hover:text-orange-400">
+                    <rect x="2" y="7" width="20" height="14" rx="2"/>
+                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                    <line x1="12" y1="12" x2="12" y2="16"/>
+                    <line x1="10" y1="14" x2="14" y2="14"/>
+                  </svg>
+                  <span className="text-[10px] text-zinc-500 group-hover:text-orange-400">Toolbox</span>
+                </button>
+              )}
+              {/* Divider */}
+              <div className="w-px h-4 bg-zinc-700" />
+              {/* IN/MM toggle */}
+              <div className="flex rounded-md border overflow-hidden text-xs font-semibold">
+                {(["imperial", "metric"] as const).map((u) => (
+                  <button key={u} type="button" onClick={() => setUnits(u)} className="px-2.5 py-1 transition-colors"
+                    style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : undefined }}>
+                    {u === "imperial" ? "IN" : "MM"}
+                  </button>
+                ))}
               </div>
-              {/* Bottom: Engineering mode */}
+              {/* Divider */}
+              <div className="w-px h-4 bg-zinc-700" />
+              {/* Engineering mode */}
               {engMode ? (
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
                   <button type="button" onClick={exitEngMode} className="text-[10px] text-gray-400 hover:text-white underline">Exit</button>
                 </div>
               ) : (
-                <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-gray-500 hover:text-gray-300 underline">Engineering Mode</button>
+                <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-gray-500 hover:text-gray-300 underline">Eng Mode</button>
               )}
             </div>
           </div>
