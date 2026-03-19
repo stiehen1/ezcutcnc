@@ -4095,14 +4095,23 @@ ${stabSection}
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel hint="Axial depth of cut per pass in inches.">Cut Pass Depth (in)</FieldLabel>
+                  <FieldLabel hint="Axial depth of cut per pass in inches. Cannot exceed (cutter dia − neck dia) / 2 — the physical flute reach limit.">Cut Pass Depth (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 0.050"
+                    placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.050"}
                     value={form.doc_xd > 0 && form.tool_dia > 0 ? (form.doc_xd * form.tool_dia).toFixed(4) : ""}
                     onChange={(e) => {
                       const n = parseFloat(e.target.value);
                       if (Number.isFinite(n) && n > 0 && form.tool_dia > 0)
                         setForm((p) => ({ ...p, doc_xd: n / p.tool_dia }));
+                    }}
+                    onBlur={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (!Number.isFinite(n) || n <= 0) return;
+                      const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
+                      if (n > maxDepth) {
+                        setForm((p) => ({ ...p, doc_xd: maxDepth / p.tool_dia }));
+                        toast({ title: "Cut pass depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by (cutter dia − neck dia) / 2.`, variant: "destructive" });
+                      }
                     }}
                   />
                 </div>
