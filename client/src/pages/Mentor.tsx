@@ -1390,9 +1390,10 @@ export default function Mentor() {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Core Cutter Machining Summary</title>
+<title></title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 24px 32px; }
   .header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; gap: 12px; }
   .header img { height: 44px; width: auto; justify-self: start; }
@@ -1416,8 +1417,7 @@ export default function Mentor() {
   .suggestions li { margin-bottom: 3px; }
   .edp { color: #b45309; font-weight: 700; }
   .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
-  @media print { body { padding: 12px 18px; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { body { padding: 12px 18px; } }
 </style>
 </head>
 <body>
