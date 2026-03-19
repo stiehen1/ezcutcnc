@@ -1394,10 +1394,10 @@ export default function Mentor() {
 <body>
 <div class="header">
   <div style="display:flex;align-items:center;gap:10px">
-    <img src="${window.location.origin}/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" style="height:48px;width:auto">
+    <img src="${window.location.origin}/CCLogo-long-blackback.png" alt="Core Cutter" style="height:40px;width:auto">
   </div>
   <div class="header-center">
-    <strong>EZCutCNC — Machining Parameter Summary</strong>
+    <strong>Core Cutter Machining Summary</strong>
     ${now}<br>
     ${opLabel}${mil && modeLabel !== opLabel ? ` · ${modeLabel}` : ""}
   </div>
