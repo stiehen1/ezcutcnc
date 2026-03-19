@@ -280,7 +280,16 @@ export const mentorSchemas = {
     dovetail: z.object({
       dovetail_angle_deg: z.number(),
       doc_in: z.number(),
+      max_safe_doc_in: z.number().optional(),
+      flute_reach_in: z.number().optional(),
       lead_ctf: z.number(),
+      multi_pass: z.object({
+        num_passes: z.number(),
+        depth_per_pass_in: z.number(),
+        final_slot_depth_in: z.number(),
+        max_safe_doc_in: z.number(),
+        aggressive: z.boolean(),
+      }).nullable().optional(),
       tips: z.array(z.string()),
     }).nullable().optional(),
 

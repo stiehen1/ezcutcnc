@@ -11,6 +11,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "tool_steel_h13":      "Hot-work die steel (44–48 HRC typical). Work-hardens at the cut if the tool rubs — keep feed up and never let the tool dwell. AlTiN or AlCrN coating required.",
   "tool_steel_s7":       "Shock-resistant and tough, but less abrasive than D2 — more forgiving on cutting edges. Good for punches and dies where impact resistance matters.",
   "tool_steel_d2":       "The most abrasive common tool steel. High chromium carbide content eats edges fast — conservative SFM, reduced chip load, and expect shorter tool life.",
+  "cpm_10v":             "PM high-vanadium wear steel (A11). Vanadium carbides are harder than carbide binders — treat this as an abrasion problem, not a heat problem. Lower SFM than D2, moderate chip load (don't baby it — rubbing on vanadium carbides accelerates edge breakdown faster than correct chip load). HEM with 5–15% WOC is the preferred strategy; AlTiN or AlCrN coating required.",
   // M — Stainless Steel
   "stainless_fm":        "303 and 416 are the sulfur-added free-machining grades — the easiest stainless to cut by a wide margin. Fast, clean chips; runs significantly faster than 304.",
   "stainless_ferritic":  "Machines more like carbon steel than austenitic SS — far less work-hardening and gumminess. A good option when corrosion resistance is needed without the headaches of 304/316.",
@@ -66,6 +67,7 @@ export const ISO_SUBCATEGORIES = [
   { iso: "P" as IsoCategory, key: "tool_steel_h13",        label: "H13 Tool Steel",                            hardness: { value: 44, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_s7",         label: "S7 Tool Steel",                             hardness: { value: 38, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_d2",         label: "D2 Tool Steel",                             hardness: { value: 58, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "cpm_10v",               label: "CPM 10V / A11 (PM Tool Steel)",               hardness: { value: 60, scale: "hrc" as const } },
   // M — Stainless Steel
   { iso: "M" as IsoCategory, key: "stainless_fm",          label: "303 / 416 Free-Machining Stainless",          hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_ferritic",    label: "Ferritic Stainless (409 / 430 / 441)",         hardness: { value: 80, scale: "hrb" as const } },
@@ -113,6 +115,7 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "tool_steel_h13":  { min: 44, max: 54,  scale: "hrc", note: "H13 die steel typical working range is 44–54 HRC. Below 44 is annealed or under-tempered." },
   "tool_steel_s7":   { min: 54, max: 60,  scale: "hrc", note: "S7 shock-resistant tool steel is hardened 54–60 HRC in service." },
   "tool_steel_d2":   { min: 58, max: 64,  scale: "hrc", note: "D2 tool steel hardened range is 58–64 HRC. It's rarely machined at lower hardness." },
+  "cpm_10v":         { min: 58, max: 64,  scale: "hrc", note: "CPM 10V / A11 is typically used at 58–64 HRC. Below 55 HRC is annealed stock — machinability improves substantially but is still worse than D2 due to vanadium carbide abrasion." },
   // M — Stainless
   "stainless_fm":        { min: 65, max: 95,  scale: "hrb", note: "303/416 free-machining stainless ranges 65–95 HRB — sulfur additives prevent heat-treat hardening." },
   "stainless_ferritic":  { min: 65, max: 95,  scale: "hrb", note: "Ferritic stainless (409/430/441) cannot be hardened by heat treatment — HRB scale only." },

@@ -4068,6 +4068,7 @@ ${stabSection}
             )}
 
             {operation === "dovetail" && (
+              <>
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="space-y-2">
                   <FieldLabel hint="Included angle of the dovetail V-form. This is the FULL included angle — if the print shows 45° on one side of the V, enter 90°. Affects chip load correction and SFM.">Dovetail Angle (°)</FieldLabel>
@@ -4116,6 +4117,29 @@ ${stabSection}
                   />
                 </div>
               </div>
+              {/* Final Slot Depth — multi-pass strategy */}
+              <div className="mt-3 space-y-2">
+                <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">
+                  <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Slot Depth (in)</span>
+                </FieldLabel>
+                <Input type="text" inputMode="decimal" className={`no-spinners ${form.final_slot_depth === 0 ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : "border-zinc-600"}`}
+                  placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
+                  value={finalSlotDepthText}
+                  onChange={(e) => setFinalSlotDepthText(e.target.value)}
+                  onBlur={() => {
+                    let n = parseFloat(finalSlotDepthText);
+                    if (!Number.isFinite(n) || n <= 0) { setForm((p) => ({ ...p, final_slot_depth: 0 })); setFinalSlotDepthText(""); return; }
+                    const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
+                    if (n > maxDepth) {
+                      n = maxDepth;
+                      toast({ title: "Final slot depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by flute reach (cut dia − neck dia) / 2.`, variant: "destructive" });
+                    }
+                    setForm((p) => ({ ...p, final_slot_depth: n }));
+                    setFinalSlotDepthText(n.toFixed(4));
+                  }}
+                />
+              </div>
+              </>
             )}
 
             <div className="mt-3 space-y-2">
@@ -5843,12 +5867,54 @@ ${stabSection}
                     <div><span className="text-muted-foreground">Dovetail Angle</span><span className="ml-2 font-semibold">{dovetailResult.dovetail_angle_deg}°</span></div>
                     <div><span className="text-muted-foreground">DOC</span><span className="ml-2 font-semibold">{dovetailResult.doc_in?.toFixed(4)}"</span></div>
                     <div><span className="text-muted-foreground">Lead CTF</span><span className="ml-2 font-semibold">{dovetailResult.lead_ctf?.toFixed(3)}×</span></div>
+                    {dovetailResult.max_safe_doc_in != null && (
+                      <div><span className="text-muted-foreground">Max Safe DOC</span><span className="ml-2 font-semibold">{dovetailResult.max_safe_doc_in.toFixed(4)}"</span></div>
+                    )}
+                    {dovetailResult.flute_reach_in != null && (
+                      <div><span className="text-muted-foreground">Flute Reach</span><span className="ml-2 font-semibold">{dovetailResult.flute_reach_in.toFixed(4)}"</span></div>
+                    )}
                   </div>
                   {dovetailResult.tips?.map((tip: string, i: number) => (
                     <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
                   ))}
                 </div>
               )}
+
+              {/* Dovetail multi-pass strategy card */}
+              {dovetailResult?.multi_pass && (() => {
+                const mp = dovetailResult.multi_pass;
+                const n = mp.num_passes;
+                const d = mp.depth_per_pass_in;
+                const total = mp.final_slot_depth_in;
+                const passes = Array.from({ length: n }, (_, i) => ({
+                  label: n === 1 ? "Pass 1 (single pass)" : i < n - 1 ? `Pass ${i + 1} (roughing)` : `Pass ${n} (finish)`,
+                  doc: d,
+                }));
+                return (
+                  <div className={`mb-3 rounded-xl border px-4 py-3 space-y-2 ${mp.aggressive ? "border-red-500/40 bg-red-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}>
+                    <div className={`text-xs font-bold uppercase tracking-widest ${mp.aggressive ? "text-red-400" : "text-yellow-400"}`}>
+                      Multi-Pass Strategy{mp.aggressive ? " ⚠ Aggressive DOC" : ""}
+                    </div>
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-1">
+                      <div><span className="text-muted-foreground">Total Depth</span><span className="ml-2 font-semibold">{total.toFixed(4)}"</span></div>
+                      <div><span className="text-muted-foreground">Passes</span><span className="ml-2 font-semibold">{n}</span></div>
+                      <div><span className="text-muted-foreground">Depth/Pass</span><span className="ml-2 font-semibold">{d.toFixed(4)}"</span></div>
+                    </div>
+                    <div className="space-y-1">
+                      {passes.map((p, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${i === n - 1 && n > 1 ? "bg-green-400" : "bg-yellow-400"}`} />
+                          <span className="text-zinc-300">{p.label}</span>
+                          <span className="ml-auto text-zinc-400">{p.doc.toFixed(4)}"</span>
+                        </div>
+                      ))}
+                    </div>
+                    {mp.aggressive && (
+                      <p className="text-xs text-red-400 leading-relaxed">⚠ Current pass depth exceeds recommended safe limit. Consider reducing Cut Pass Depth to {mp.max_safe_doc_in.toFixed(4)}" or less.</p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Customer KPIs (single grid, auto-flows) */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

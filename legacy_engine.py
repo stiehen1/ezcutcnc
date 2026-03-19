@@ -147,6 +147,7 @@ BASE_SFM = {
     "tool_steel_h13": 220,  # H13 tool steel: 180–260 SFM; 220 SFM confirmed
     "tool_steel_s7":  240,  # S7 tool steel: 190–270 SFM; 240 SFM confirmed
     "tool_steel_d2":  180,  # D2 tool steel: 140–220 SFM; 180 SFM confirmed (high carbide, abrasive)
+    "cpm_10v":        120,  # CPM 10V / A11: PM high-vanadium wear steel. Vanadium carbides are abrasive, not thermal — 100–140 SFM; machinability ~half of D2. HEM = 2× = 240 SFM.
     "hardened_lt55": 240,   # Carbide endmill in hardened tool steel 35–54 HRC (e.g. H13 45 HRC → 240 SFM confirmed)
     "hardened_gt55": 100,  # Carbide in very hard steel ≥55 HRC (CBN territory starts ~60 HRC)
 }
@@ -203,6 +204,7 @@ HP_PER_CUIN = {
     "tool_steel_h13": 1.10,
     "tool_steel_s7":  1.10,
     "tool_steel_d2":  1.20,  # Higher carbide content — more unit power
+    "cpm_10v":        1.30,  # CPM 10V: vanadium carbides harder than tool binder phases = higher cutting force
     "hardened_lt55": 1.35,
     "hardened_gt55": 1.50,
 }
@@ -294,6 +296,7 @@ BASE_LIFE_MIN = {
     "inconel":               18.0,
     "hardened_lt55":         38.0,
     "hardened_gt55":         20.0,
+    "cpm_10v":               30.0,  # CPM 10V: abrasive wear shortens tool life significantly vs D2
     "steel":      75.0,
     "stainless":  50.0,
     "cast iron":  90.0,
@@ -493,6 +496,7 @@ IPT_FRAC = {
     "tool_steel_h13": 0.0040,  # H13: .0020 IPT on 0.5" → 0.40%×D confirmed
     "tool_steel_s7":  0.0044,  # S7: .0022 IPT on 0.5" → 0.44%×D confirmed
     "tool_steel_d2":  0.0032,  # D2: .0016 IPT on 0.5" → 0.32%×D confirmed (abrasive, conservative)
+    "cpm_10v":        0.0030,  # CPM 10V: 0.30%×D — slightly below D2; can't go too light (rubbing on vanadium carbides accelerates wear)
     "hardened_lt55": 0.0045,  # H13/D2/A2 hardened 35–54 HRC: 0.0036/0.750" = 0.0048×D; conservative 0.0045 confirmed
     "hardened_gt55": 0.0012,  # ≥55 HRC — light chip load, avoid rubbing
 }
@@ -512,6 +516,7 @@ HEM_IPT_MULT = {
     "tool_steel_h13": 1.5,
     "tool_steel_s7":  1.5,
     "tool_steel_d2":  1.4,   # D2 — minimal HEM boost; abrasive/hard
+    "cpm_10v":        1.4,   # CPM 10V — same as D2; vanadium carbide abrasion limits HEM chip load upside
     "Stainless": 2.0,
     "stainless_fm":          2.0,
     "stainless_ferritic":    2.0,
@@ -600,6 +605,7 @@ _ISO_KEY_TO_GROUP = {
     "tool_steel_h13": "Steel",
     "tool_steel_s7":  "Steel",
     "tool_steel_d2":  "Steel",
+    "cpm_10v":        "Steel",
     "hardened_lt55": "Steel",
     "hardened_gt55": "Steel",
 }
@@ -1247,7 +1253,7 @@ DRILL_SFM = {
     "monel_k500": 35, "hastelloy_x": 22, "waspaloy": 18, "mp35n": 15,
     "hardened_lt55": 50, "hardened_gt55": 30,
     "tool_steel_p20": 75, "tool_steel_a2": 60, "tool_steel_h13": 55,
-    "tool_steel_s7": 60, "tool_steel_d2": 45,
+    "tool_steel_s7": 60, "tool_steel_d2": 45, "cpm_10v": 30,
     # Legacy group fallbacks
     "Aluminum": 350, "Non-Ferrous": 250, "Steel": 100, "Stainless": 80,
     "Cast Iron": 120, "Titanium": 50, "Inconel": 25, "Plastics": 150,
@@ -1271,7 +1277,7 @@ DRILL_IPR_BASE = {
     "monel_k500": 0.0025, "hastelloy_x": 0.0018, "waspaloy": 0.0015, "mp35n": 0.0013,
     "hardened_lt55": 0.002, "hardened_gt55": 0.001,
     "tool_steel_p20": 0.0035, "tool_steel_a2": 0.0028, "tool_steel_h13": 0.0025,
-    "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022,
+    "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022, "cpm_10v": 0.0018,
     # Legacy group fallbacks
     "Aluminum": 0.009, "Non-Ferrous": 0.007, "Steel": 0.004, "Stainless": 0.0042,
     "Cast Iron": 0.005, "Titanium": 0.003, "Inconel": 0.0015, "Plastics": 0.006,
@@ -2137,6 +2143,7 @@ KEYSEAT_SFM = {
     "tool_steel_h13":    160,
     "tool_steel_s7":     180,
     "tool_steel_d2":     130,
+    "cpm_10v":            90,  # CPM 10V keyseat: full-slot = high abrasive exposure; very conservative
     "hardened_lt55":     160,
     "hardened_gt55":      70,
     # Stainless
@@ -2386,12 +2393,27 @@ def run_dovetail(payload: dict) -> dict:
     flutes         = int(payload.get("flutes", 4) or 4)
     loc            = float(payload.get("loc", 0.5) or 0.5)
     lbs            = float(payload.get("lbs", 0.0) or 0.0)
+    arbor_dia      = float(payload.get("keyseat_arbor_dia", 0.0) or 0.0)
     stickout       = float(payload.get("stickout", 2.0) or 2.0)
     dovetail_angle = float(payload.get("dovetail_angle", 60.0) or 60.0)
     doc_xd         = float(payload.get("doc_xd", 0.5) or 0.5)
     doc_in         = doc_xd * D
+    final_slot_depth = float(payload.get("final_slot_depth", 0.0) or 0.0)
+    flute_reach    = (D - arbor_dia) / 2.0 if arbor_dia > 0 else D / 2.0
+    if final_slot_depth > flute_reach:
+        final_slot_depth = flute_reach
     mat            = str(payload.get("material", "steel_alloy") or "steel_alloy")
     mat_group      = get_material_group(mat)
+
+    # Material toughness factor for pass depth conservatism
+    _mat_factor = {"Aluminum": 1.0, "Steel": 1.5, "Stainless": 1.75,
+                   "Inconel": 2.5, "Titanium": 2.0, "Cast Iron": 1.3}.get(mat_group, 1.5)
+    # Reach penalty: longer reach (lbs) relative to arbor dia = more flex risk
+    _reach_factor = 1.0 + (lbs / (arbor_dia * 8.0)) if (arbor_dia > 0 and lbs > 0) else 1.0
+    # Max safe DOC per pass (dovetail: slightly more conservative than keyseat due to angled forces)
+    max_safe_doc = (flute_reach / 2.0) / (_mat_factor * _reach_factor * 1.15)
+    max_safe_doc = max(0.005, min(max_safe_doc, flute_reach))  # clamp: min 0.005", max flute_reach
+
     max_rpm        = float(payload.get("max_rpm", 12000) or 12000)
     rpm_util       = float(payload.get("rpm_util_pct", 0.95) or 0.95)
     coolant        = str(payload.get("coolant", "flood") or "flood").lower()
@@ -2467,6 +2489,30 @@ def run_dovetail(payload: dict) -> dict:
             f"Reduce stickout, take lighter passes, or use a stiffer toolholder."
         )
 
+    # Multi-pass strategy
+    multi_pass = None
+    if final_slot_depth > 0:
+        num_passes = max(1, math.ceil(final_slot_depth / max_safe_doc))
+        depth_per_pass = final_slot_depth / num_passes
+        multi_pass = {
+            "final_slot_depth_in": round(final_slot_depth, 4),
+            "max_safe_doc_in":     round(max_safe_doc, 4),
+            "num_passes":          num_passes,
+            "depth_per_pass_in":   round(depth_per_pass, 4),
+            "aggressive":          doc_in > max_safe_doc,
+        }
+        if num_passes > 1:
+            notes.append(
+                f"Multi-pass strategy recommended: {num_passes} passes of {depth_per_pass:.4f}\" each "
+                f"to reach {final_slot_depth:.4f}\" final slot depth. "
+                f"Max safe pass depth for this tool/material: {max_safe_doc:.4f}\"."
+            )
+        if doc_in > max_safe_doc * 1.25:
+            notes.append(
+                f"⚠ Entered pass depth ({doc_in:.4f}\") exceeds recommended safe limit ({max_safe_doc:.4f}\") "
+                f"for this dovetail neck diameter and material. Tool breakage risk is elevated."
+            )
+
     tips = [
         f"Dovetail angle is {dovetail_angle}° included — chip load corrected for lead angle (÷ sin({dovetail_angle/2:.0f}°)).",
         "Make multiple light axial passes rather than one full-depth pass. Dovetail walls are unforgiving of deflection.",
@@ -2519,7 +2565,10 @@ def run_dovetail(payload: dict) -> dict:
         "dovetail": {
             "dovetail_angle_deg": dovetail_angle,
             "doc_in":             round(doc_in, 4),
+            "max_safe_doc_in":    round(max_safe_doc, 4),
+            "flute_reach_in":     round(flute_reach, 4),
             "lead_ctf":           round(lead_ctf, 3),
+            "multi_pass":         multi_pass,
             "tips":               tips,
         },
         "debug": None,
@@ -2767,7 +2816,8 @@ def run(payload=None):
     # Apply hardness SFM reduction — skip for Inconel/HRSA (hardness is intrinsic, not a variable)
     _hrc = float(data.get("hardness_hrc", 0) or 0)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
-                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2")
+                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+                        "cpm_10v")
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)
