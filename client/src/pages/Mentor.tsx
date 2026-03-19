@@ -1330,7 +1330,7 @@ export default function Mentor() {
         ${kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null)}
       </div>
       ${ticGauge}
-      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee.</p>` : ""}
+      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.</p>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
         const raUin = mil.ra_actual_uin;
