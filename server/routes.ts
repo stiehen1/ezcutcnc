@@ -614,7 +614,7 @@ export async function registerRoutes(
               // is shorter than the job needs (e.g. 606711 LOC=0.9375" < 1.0" DOC wins over
               // 606111 LOC=1.25" when using closest-LOC logic — wrong choice).
               if (s.type === "diameter") {
-                // Primary: matching corner, LOC >= required, shortest sufficient LOC first
+                // Primary: matching corner, tools at the minimum sufficient LOC only (all coating variants)
                 const qd1 = await pool.query(
                   `SELECT s.edp FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
@@ -622,28 +622,48 @@ export async function registerRoutes(
                      AND s.flutes = $1
                      AND ABS(s.cutting_diameter_in - $2) < 0.001
                      AND LOWER(s.corner_condition) = LOWER($3)
-                     AND COALESCE(s.loc_in, 0) >= $4
+                     AND COALESCE(s.loc_in, 0) = (
+                       SELECT MIN(COALESCE(s2.loc_in, 0))
+                       FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                       WHERE u2.is_current = TRUE
+                         AND s2.flutes = $1
+                         AND ABS(s2.cutting_diameter_in - $2) < 0.001
+                         AND LOWER(s2.corner_condition) = LOWER($3)
+                         AND COALESCE(s2.loc_in, 0) >= $4
+                         ${cbClause.replace(/\bs\./g, "s2.")}
+                         ${noBLK.replace(/\bs\./g, "s2.")}
+                     )
                      ${cbClause}
                      ${noBLK}
-                   ORDER BY s.loc_in ASC, s.edp`,
+                   ORDER BY s.edp`,
                   [flutes, dia, cornerStr, loc]
                 );
                 if (qd1.rows.length > 0) {
                   s.suggested_edps = qd1.rows.map((r: any) => r.edp);
                   s.suggested_edp  = s.suggested_edps[0];
                 } else {
-                  // Fallback: ignore corner, LOC >= required
+                  // Fallback: ignore corner, tools at minimum sufficient LOC only
                   const qd2 = await pool.query(
                     `SELECT s.edp FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND s.flutes = $1
                        AND ABS(s.cutting_diameter_in - $2) < 0.001
-                       AND COALESCE(s.loc_in, 0) >= $3
+                       AND COALESCE(s.loc_in, 0) = (
+                         SELECT MIN(COALESCE(s2.loc_in, 0))
+                         FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                         WHERE u2.is_current = TRUE
+                           AND s2.flutes = $1
+                           AND ABS(s2.cutting_diameter_in - $2) < 0.001
+                           AND COALESCE(s2.loc_in, 0) >= $3
+                           AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
+                           ${cbClause.replace(/\bs\./g, "s2.")}
+                           ${noBLK.replace(/\bs\./g, "s2.")}
+                       )
                        AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                        ${cbClause}
                        ${noBLK}
-                     ORDER BY s.loc_in ASC, s.edp`,
+                     ORDER BY s.edp`,
                     [flutes, dia, loc]
                   );
                   if (qd2.rows.length > 0) {
