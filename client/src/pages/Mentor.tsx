@@ -3950,14 +3950,153 @@ ${stabSection}
           </>)}
 
 
-          {/* Machine Power — not shown for keyseat/dovetail (rendered after their tool geometry) */}
-          {operation !== "keyseat" && operation !== "dovetail" && (
+          {/* ── Keyseat / Dovetail Tool Geometry ─────────────────────────────────────── */}
+          {(operation === "keyseat" || operation === "dovetail") && (<>
+            <div className="flex items-center gap-3 my-7">
+              <div className="flex-1 border-t-2 border-orange-500" />
+              <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
+              <div className="flex-1 border-t-2 border-orange-500" />
+            </div>
+
+            {/* PDF Upload for keyseat/dovetail */}
+            <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
+              {pdfExtracted ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                  <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center gap-1 cursor-pointer">
+                  <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                  <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                  </span>
+                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                </label>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <FieldLabel hint="Cutting diameter (keyseat width for keyseat cutters, max cutting diameter for dovetail cutters).">Cut Dia (in)</FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners"
+                  placeholder="e.g. 0.750"
+                  value={toolDiaText}
+                  onChange={(e) => setToolDiaText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseDim(toolDiaText);
+                    if (Number.isFinite(n) && n > 0) {
+                      setForm((p) => ({ ...p, tool_dia: n }));
+                      setToolDiaText(n.toFixed(4));
+                    }
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel hint="Number of cutting teeth/flutes.">Flutes</FieldLabel>
+                <Input type="number" step="1" className="no-spinners" value={form.flutes || ""} onChange={onNum("flutes")} />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel hint="Length of cut — for keyseat cutters this is the disc width (tooth width).">LOC (in)</FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners"
+                  placeholder="e.g. 0.1875"
+                  value={locText}
+                  onChange={(e) => setLocText(e.target.value)}
+                  onBlur={() => { const n = parseDim(locText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, loc: n })); setLocText(n.toFixed(4)); } }}
+                />
+              </div>
+            </div>
+
+            {operation === "keyseat" && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <FieldLabel hint="Arbor (neck) diameter — the narrow section between the shank and the cutting teeth. Critical for deflection. Found on the engineering print as the neck or arbor OD.">Arbor/Neck Dia (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.250"
+                    value={form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : ""}
+                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n })); }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Reach (TSC) — total distance from shank face to the cutter disc. From the engineering print. Used for deflection calculations.">Reach / TSC (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 1.875"
+                    value={lbsText}
+                    onChange={(e) => setLbsText(e.target.value)}
+                    onBlur={() => { const n = parseDim(lbsText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, lbs: n })); setLbsText(n.toFixed(4)); } }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="How deep the cutter takes each pass in inches. Multi-pass is often safer — neck strength, material toughness, and setup rigidity all affect how much you can take per pass. The engine will suggest a safe starting depth.">Cut Pass Depth (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.125"
+                    value={form.doc_xd > 0 ? (form.doc_xd * form.tool_dia).toFixed(4) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n > 0 && form.tool_dia > 0)
+                        setForm((p) => ({ ...p, doc_xd: n / p.tool_dia }));
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">
+                    <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Slot Depth (in)</span>
+                  </FieldLabel>
+                  <Input type="text" inputMode="decimal" className={`no-spinners ${form.final_slot_depth === 0 ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : "border-zinc-600"}`}
+                    placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
+                    value={finalSlotDepthText}
+                    onChange={(e) => setFinalSlotDepthText(e.target.value)}
+                    onBlur={() => {
+                      let n = parseFloat(finalSlotDepthText);
+                      if (!Number.isFinite(n) || n <= 0) { setForm((p) => ({ ...p, final_slot_depth: 0 })); setFinalSlotDepthText(""); return; }
+                      const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
+                      if (n > maxDepth) {
+                        n = maxDepth;
+                        toast({ title: "Final slot depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by flute reach (cut dia − neck dia) / 2.`, variant: "destructive" });
+                      }
+                      setForm((p) => ({ ...p, final_slot_depth: n }));
+                      setFinalSlotDepthText(n.toFixed(4));
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {operation === "dovetail" && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <FieldLabel hint="Included angle of the dovetail (e.g. 45° or 60°). This is the full included angle, not the half-angle. Affects chip load correction and SFM.">Dovetail Angle (°)</FieldLabel>
+                  <Input type="number" step="5" className="no-spinners"
+                    value={form.dovetail_angle || ""}
+                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, dovetail_angle: n })); }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Axial depth of cut per pass in multiples of tool diameter.">DOC (×D)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.5"
+                    value={form.doc_xd > 0 ? form.doc_xd.toFixed(2) : ""}
+                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, doc_xd: n })); }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 space-y-2">
+              <FieldLabel hint="Helix angle in degrees. From the engineering print. Affects cutting force direction and chip evacuation.">Helix Angle (°)</FieldLabel>
+              <Input type="number" step="1" className="no-spinners"
+                value={form.helix_angle || ""}
+                onChange={(e) => { const n = parseInt(e.target.value); if (Number.isFinite(n) && n >= 0) setForm((p) => ({ ...p, helix_angle: n })); }}
+              />
+            </div>
+          </>)}
+
+          {/* Machine Power */}
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
-          )}
 
           {/* Machine selector */}
           <div className="mb-4 space-y-2">
@@ -4150,156 +4289,6 @@ ${stabSection}
               </div>
             )}
           </div>
-
-          {/* ── Keyseat Tool Geometry ─────────────────────────────────────── */}
-          {(operation === "keyseat" || operation === "dovetail") && (<>
-            <div className="flex items-center gap-3 my-7">
-              <div className="flex-1 border-t-2 border-orange-500" />
-              <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
-              <div className="flex-1 border-t-2 border-orange-500" />
-            </div>
-
-            {/* PDF Upload for keyseat/dovetail */}
-            <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
-              {pdfExtracted ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
-                  <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center gap-1 cursor-pointer">
-                  <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-                  <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
-                  </span>
-                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-                </label>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <FieldLabel hint="Cutting diameter (keyseat width for keyseat cutters, max cutting diameter for dovetail cutters).">Cut Dia (in)</FieldLabel>
-                <Input type="text" inputMode="decimal" className="no-spinners"
-                  placeholder="e.g. 0.750"
-                  value={toolDiaText}
-                  onChange={(e) => setToolDiaText(e.target.value)}
-                  onBlur={() => {
-                    const n = parseDim(toolDiaText);
-                    if (Number.isFinite(n) && n > 0) {
-                      setForm((p) => ({ ...p, tool_dia: n }));
-                      setToolDiaText(n.toFixed(4));
-                    }
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <FieldLabel hint="Number of cutting teeth/flutes.">Flutes</FieldLabel>
-                <Input type="number" step="1" className="no-spinners" value={form.flutes || ""} onChange={onNum("flutes")} />
-              </div>
-              <div className="space-y-2">
-                <FieldLabel hint="Length of cut — for keyseat cutters this is the disc width (tooth width).">LOC (in)</FieldLabel>
-                <Input type="text" inputMode="decimal" className="no-spinners"
-                  placeholder="e.g. 0.1875"
-                  value={locText}
-                  onChange={(e) => setLocText(e.target.value)}
-                  onBlur={() => { const n = parseDim(locText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, loc: n })); setLocText(n.toFixed(4)); } }}
-                />
-              </div>
-            </div>
-
-            {operation === "keyseat" && (
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="space-y-2">
-                  <FieldLabel hint="Arbor (neck) diameter — the narrow section between the shank and the cutting teeth. Critical for deflection. Found on the engineering print as the neck or arbor OD.">Arbor/Neck Dia (in)</FieldLabel>
-                  <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 0.250"
-                    value={form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : ""}
-                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n })); }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <FieldLabel hint="Reach (TSC) — total distance from shank face to the cutter disc. From the engineering print. Used for deflection calculations.">Reach / TSC (in)</FieldLabel>
-                  <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 1.875"
-                    value={lbsText}
-                    onChange={(e) => setLbsText(e.target.value)}
-                    onBlur={() => { const n = parseDim(lbsText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, lbs: n })); setLbsText(n.toFixed(4)); } }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <FieldLabel hint="How deep the cutter takes each pass in inches. Multi-pass is often safer — neck strength, material toughness, and setup rigidity all affect how much you can take per pass. The engine will suggest a safe starting depth.">Cut Pass Depth (in)</FieldLabel>
-                  <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 0.125"
-                    value={form.doc_xd > 0 ? (form.doc_xd * form.tool_dia).toFixed(4) : ""}
-                    onChange={(e) => {
-                      const n = parseFloat(e.target.value);
-                      if (Number.isFinite(n) && n > 0 && form.tool_dia > 0)
-                        setForm((p) => ({ ...p, doc_xd: n / p.tool_dia }));
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">
-                    <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Slot Depth (in)</span>
-                  </FieldLabel>
-                  <Input type="text" inputMode="decimal" className={`no-spinners ${form.final_slot_depth === 0 ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : "border-zinc-600"}`}
-                    placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
-                    value={finalSlotDepthText}
-                    onChange={(e) => setFinalSlotDepthText(e.target.value)}
-                    onBlur={() => {
-                      let n = parseFloat(finalSlotDepthText);
-                      if (!Number.isFinite(n) || n <= 0) { setForm((p) => ({ ...p, final_slot_depth: 0 })); setFinalSlotDepthText(""); return; }
-                      const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
-                      if (n > maxDepth) {
-                        n = maxDepth;
-                        toast({ title: "Final slot depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by flute reach (cut dia − neck dia) / 2.`, variant: "destructive" });
-                      }
-                      setForm((p) => ({ ...p, final_slot_depth: n }));
-                      setFinalSlotDepthText(n.toFixed(4));
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {operation === "dovetail" && (
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="space-y-2">
-                  <FieldLabel hint="Included angle of the dovetail (e.g. 45° or 60°). This is the full included angle, not the half-angle. Affects chip load correction and SFM.">Dovetail Angle (°)</FieldLabel>
-                  <Input type="number" step="5" className="no-spinners"
-                    value={form.dovetail_angle || ""}
-                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, dovetail_angle: n })); }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <FieldLabel hint="Axial depth of cut per pass in multiples of tool diameter.">DOC (×D)</FieldLabel>
-                  <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 0.5"
-                    value={form.doc_xd > 0 ? form.doc_xd.toFixed(2) : ""}
-                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, doc_xd: n })); }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="mt-3 space-y-2">
-              <FieldLabel hint="Helix angle in degrees. From the engineering print. Affects cutting force direction and chip evacuation.">Helix Angle (°)</FieldLabel>
-              <Input type="number" step="1" className="no-spinners"
-                value={form.helix_angle || ""}
-                onChange={(e) => { const n = parseInt(e.target.value); if (Number.isFinite(n) && n >= 0) setForm((p) => ({ ...p, helix_angle: n })); }}
-              />
-            </div>
-          </>)}
-
-          {/* Machine Power header — for keyseat/dovetail shown here after tool geometry */}
-          {(operation === "keyseat" || operation === "dovetail") && (
-          <div className="flex items-center gap-3 my-7">
-            <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
-            <div className="flex-1 border-t-2 border-orange-500" />
-          </div>
-          )}
 
           {/* Machine Setup */}
           <div className="flex items-center gap-3 my-7">
