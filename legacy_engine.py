@@ -147,7 +147,7 @@ BASE_SFM = {
     "tool_steel_h13": 220,  # H13 tool steel: 180–260 SFM; 220 SFM confirmed
     "tool_steel_s7":  240,  # S7 tool steel: 190–270 SFM; 240 SFM confirmed
     "tool_steel_d2":  180,  # D2 tool steel: 140–220 SFM; 180 SFM confirmed (high carbide, abrasive)
-    "cpm_10v":        120,  # CPM 10V / A11: PM high-vanadium wear steel. Vanadium carbides are abrasive, not thermal — 100–140 SFM; machinability ~half of D2. HEM = 2× = 240 SFM.
+    "cpm_10v":        85,   # CPM 10V / A11: PM high-vanadium wear steel. Vanadium carbides (~80 HRC) harder than carbide binder — treat as abrasion problem. Assumes premium TiAlSiN HiPIMS coating (e.g. Cemecon Inoxicon); standard AlTiN ~70 SFM. HEM = 2× = 170 SFM.
     "hardened_lt55": 240,   # Carbide endmill in hardened tool steel 35–54 HRC (e.g. H13 45 HRC → 240 SFM confirmed)
     "hardened_gt55": 100,  # Carbide in very hard steel ≥55 HRC (CBN territory starts ~60 HRC)
 }
@@ -2143,7 +2143,7 @@ KEYSEAT_SFM = {
     "tool_steel_h13":    160,
     "tool_steel_s7":     180,
     "tool_steel_d2":     130,
-    "cpm_10v":            90,  # CPM 10V keyseat: full-slot = high abrasive exposure; very conservative
+    "cpm_10v":            60,  # CPM 10V keyseat: full-slot = high abrasive exposure; very conservative
     "hardened_lt55":     160,
     "hardened_gt55":      70,
     # Stainless
