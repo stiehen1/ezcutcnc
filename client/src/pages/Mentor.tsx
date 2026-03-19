@@ -571,7 +571,16 @@ export default function Mentor() {
         if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(String(e.tool_dia)); }
         if (e.flutes > 0) next.flutes = e.flutes;
         if (e.loc > 0) { next.loc = e.loc; setLocText(String(e.loc)); }
-        if (e.lbs > 0) { next.lbs = e.lbs; setLbsText(String(e.lbs)); }
+        if (e.lbs > 0) {
+          next.lbs = e.lbs;
+          setLbsText(String(e.lbs));
+          // For thread mills, TSC (lbs) = reach — use as default stickout
+          if ((e.tool_type ?? "").toLowerCase() === "threadmill") {
+            next.stickout = e.lbs;
+            setStickoutText(String(e.lbs));
+            setTmStickoutText(String(e.lbs));
+          }
+        }
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
@@ -2730,7 +2739,7 @@ ${stabSection}
           )}
           {pdfExtracted && (
             <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
-              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted — review below</span>
+              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
               <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
@@ -2979,13 +2988,22 @@ ${stabSection}
           {/* Reaming Tool Geometry */}
           {operation === "reaming" && (<>
           {/* PDF Upload for reaming */}
-          <label className={`mt-3 flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-3 cursor-pointer transition-colors ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600 hover:border-zinc-400"}`}>
-            <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-            <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
-              {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
-            </span>
-            <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-          </label>
+          <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
+            {pdfExtracted ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center gap-1 cursor-pointer">
+                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                </span>
+                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+              </label>
+            )}
+          </div>
           {/* Mode toggle */}
           <div className="flex gap-2 mt-3">
             {(["print", "known"] as const).map((m) => (
@@ -3571,13 +3589,22 @@ ${stabSection}
           {/* Thread Details — thread milling */}
           {operation === "threadmilling" && (<>
           {/* PDF Upload for thread milling */}
-          <label className={`mt-3 flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-3 cursor-pointer transition-colors ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600 hover:border-zinc-400"}`}>
-            <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-            <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
-              {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
-            </span>
-            <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-          </label>
+          <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
+            {pdfExtracted ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center gap-1 cursor-pointer">
+                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                </span>
+                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+              </label>
+            )}
+          </div>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Thread Details</div>
