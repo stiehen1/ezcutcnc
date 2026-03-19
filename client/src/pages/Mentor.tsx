@@ -1915,7 +1915,7 @@ ${stabSection}
       <Card className="rounded-2xl">
         <CardHeader className="pt-0 pb-0">
           {/* Header: logo left, controls right */}
-          <div className="flex items-center justify-between pt-1 pb-1 gap-3">
+          <div className="flex items-start justify-between pt-1 pb-1 gap-3">
             {/* Logo */}
             <img
               src="/EZCutCNC_dark_stacked v2.png"
@@ -1923,7 +1923,7 @@ ${stabSection}
               className="h-20 w-auto flex-shrink-0"
             />
             {/* Right controls — stacked vertically */}
-            <div className="flex flex-col items-end gap-1.5">
+            <div className="flex flex-col items-end gap-1.5 pt-4">
               {/* IN/MM toggle — top */}
               <div className="flex rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold">
                 {(["imperial", "metric"] as const).map((u) => (
