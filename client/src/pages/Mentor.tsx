@@ -1320,12 +1320,8 @@ export default function Mentor() {
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
           <span style="font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
         </div>
-        <div style="position:relative;height:14px;border-radius:7px;overflow:hidden;background:#e5e7eb;">
-          <div style="position:absolute;top:0;bottom:0;left:0;width:${pctBar(1.0)};background:#ef4444;"></div>
-          <div style="position:absolute;top:0;bottom:0;left:${pctBar(1.0)};width:calc(${pctBar(1.5)} - ${pctBar(1.0)});background:#eab308;"></div>
-          <div style="position:absolute;top:0;bottom:0;left:${pctBar(1.5)};width:calc(${pctBar(2.5)} - ${pctBar(1.5)});background:#22c55e;"></div>
-          <div style="position:absolute;top:0;bottom:0;left:${pctBar(2.5)};right:0;background:#f97316;"></div>
-          <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);"></div>
+        <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#ef4444 0%,#ef4444 ${pctBar(1.0)},#eab308 ${pctBar(1.0)},#eab308 ${pctBar(1.5)},#22c55e ${pctBar(1.5)},#22c55e ${pctBar(2.5)},#f97316 ${pctBar(2.5)},#f97316 100%);">
+          <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);border-radius:2px;"></div>
         </div>
         <div style="position:relative;height:14px;">
           <div style="position:absolute;transform:translateX(-50%);left:${pctBar(tic)};font-size:9px;font-weight:700;color:#111;white-space:nowrap;">${tic.toFixed(2)}</div>
