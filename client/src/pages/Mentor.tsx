@@ -1329,11 +1329,11 @@ export default function Mentor() {
         <div style="position:relative;height:14px;">
           <div style="position:absolute;transform:translateX(-50%);left:${pctBar(tic)};font-size:9px;font-weight:700;color:#111;white-space:nowrap;">${tic.toFixed(2)}</div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:8px;margin-top:2px;color:#666;">
-          <span style="color:#ef4444;font-weight:600;">Too Low</span>
-          <span style="color:#eab308;font-weight:600;">Acceptable</span>
-          <span style="color:#22c55e;font-weight:700;">Sweet Spot</span>
-          <span style="color:#f97316;font-weight:600;">Too High</span>
+        <div style="position:relative;height:14px;font-size:8px;margin-top:2px;">
+          <span style="position:absolute;left:calc(${pctBar(0.5)});transform:translateX(-50%);color:#ef4444;font-weight:600;white-space:nowrap;">Too Low</span>
+          <span style="position:absolute;left:calc((${pctBar(1.0)} + ${pctBar(1.5)}) / 2);transform:translateX(-50%);color:#eab308;font-weight:600;white-space:nowrap;">Acceptable</span>
+          <span style="position:absolute;left:calc((${pctBar(1.5)} + ${pctBar(2.5)}) / 2);transform:translateX(-50%);color:#22c55e;font-weight:700;white-space:nowrap;">Sweet Spot</span>
+          <span style="position:absolute;left:calc((${pctBar(2.5)} + 100%) / 2);transform:translateX(-50%);color:#f97316;font-weight:600;white-space:nowrap;">Too High</span>
         </div>
         ${ticTip ? `<p style="font-size:9px;color:#555;margin-top:4px;">→ ${ticTip}</p>` : ""}
       </div>` : "";
