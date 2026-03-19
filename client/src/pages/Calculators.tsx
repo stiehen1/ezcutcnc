@@ -1685,7 +1685,7 @@ export default function Calculators() {
       {/* Logo + unit toggle header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4 py-2">
-          <img src="/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" className="h-16 w-auto" style={{ mixBlendMode: "screen" }} />
+          <img src="/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" className="h-24 w-auto" style={{ mixBlendMode: "screen" }} />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
         <button
