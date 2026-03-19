@@ -1207,7 +1207,7 @@ export default function Mentor() {
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const MODE_LABELS: Record<string, string> = {
       hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
-      face: "Planar Milling (Facing)", slot: "Slotting — Traditional", trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
+      face: "Planar Milling (Facing)", slot: "Slotting — Traditional", trochoidal: "Trochoidal", circ_interp: "Bore Enlargement",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
     const opLabel = operation === "milling" ? (MODE_LABELS[form.mode] ?? baseOpLabel) : baseOpLabel;
@@ -1528,7 +1528,7 @@ ${stabSection}
     const modeLabel: Record<string, string> = {
       hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
       face: "Planar Milling (Facing)", slot: "Slotting — Traditional",
-      trochoidal: "Trochoidal", circ_interp: "Circular Interpolation",
+      trochoidal: "Trochoidal", circ_interp: "Bore Enlargement",
     };
     const isRoughing = form.mode === "hem" || form.mode === "traditional" || form.mode === "trochoidal";
 
@@ -2091,7 +2091,7 @@ ${stabSection}
                 }}
               >
                 <option value="" disabled>— Select Process —</option>
-                <option value="circ_interp">Circular Interpolation</option>
+                <option value="circ_interp">Bore Enlargement</option>
                 <option value="finish">Finishing</option>
                 <option value="face">Planar Milling (Facing)</option>
                 <option value="hem">HEM Roughing</option>
@@ -2101,7 +2101,7 @@ ${stabSection}
               </select>
             )}
 
-            {/* Circular Interpolation hole dimensions */}
+            {/* Bore Enlargement hole dimensions */}
             {form.mode === "circ_interp" && (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
