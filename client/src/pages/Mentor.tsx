@@ -6268,21 +6268,28 @@ ${stabSection}
                     <div className="space-y-3 text-xs">
 
                       {/* Sweep / Roll-in */}
-                      {entryTypes.includes("sweep") && em.sweep_arc_radius_rec_in != null && (
-                        <div>
-                          <div className="flex items-center gap-1.5 border-b border-green-500/20 pb-1 mb-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-green-400">Sweep / Roll-in ★</span>
-                            <span className="text-[9px] text-green-600 ml-1">Recommended — arc builds engagement gradually</span>
+                      {entryTypes.includes("sweep") && (() => {
+                        const dia = form.tool_dia ?? 0;
+                        const radMin = (em.sweep_arc_radius_min_in != null && em.sweep_arc_radius_min_in > 0) ? em.sweep_arc_radius_min_in : dia * 0.50;
+                        const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : dia * 0.75;
+                        const entryFeed = (em.sweep_entry_ipm != null && em.sweep_entry_ipm > 0) ? em.sweep_entry_ipm : (em.standard_ramp_ipm ?? 0);
+                        const fullFeed  = (em.sweep_full_ipm  != null && em.sweep_full_ipm  > 0) ? em.sweep_full_ipm  : (result?.milling?.feed_ipm ?? 0);
+                        return (
+                          <div>
+                            <div className="flex items-center gap-1.5 border-b border-green-500/20 pb-1 mb-1.5">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-green-400">Sweep / Roll-in ★</span>
+                              <span className="text-[9px] text-green-600 ml-1">Recommended — arc builds engagement gradually</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                              <div><span className="text-zinc-500">Arc Radius (min)</span><span className="ml-2 font-medium">{radMin.toFixed(4)}"</span></div>
+                              <div><span className="text-zinc-500">Arc Radius (rec)</span><span className="ml-2 font-medium text-green-300">{radRec.toFixed(4)}"</span></div>
+                              <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{entryFeed.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
+                              <div><span className="text-zinc-500">Full Feed (after arc)</span><span className="ml-2 font-medium text-green-300">{fullFeed.toFixed(1)} IPM</span></div>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes.</p>
                           </div>
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                            <div><span className="text-zinc-500">Arc Radius (min)</span><span className="ml-2 font-medium">{em.sweep_arc_radius_min_in!.toFixed(4)}"</span></div>
-                            <div><span className="text-zinc-500">Arc Radius (rec)</span><span className="ml-2 font-medium text-green-300">{em.sweep_arc_radius_rec_in.toFixed(4)}"</span></div>
-                            <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.sweep_entry_ipm!.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
-                            <div><span className="text-zinc-500">Full Feed (after arc)</span><span className="ml-2 font-medium text-green-300">{em.sweep_full_ipm!.toFixed(1)} IPM</span></div>
-                          </div>
-                          <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes.</p>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Ramp */}
                       {entryTypes.includes("ramp") && (
