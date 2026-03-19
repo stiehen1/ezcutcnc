@@ -1685,14 +1685,7 @@ export default function Calculators() {
       {/* Logo + unit toggle header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4 py-2">
-          <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-12 w-auto" />
-          <div className="flex flex-col gap-0.5">
-            <span className="inline-flex items-center" style={{ fontFamily: "'Oxanium', sans-serif", letterSpacing: "0.1em" }}>
-              <span className="text-3xl font-black bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">EZcutCNC</span>
-              <img src="/5 flute - end shot.png" alt="" className="h-10 w-10 object-cover rounded-full ml-1.5 flex-shrink-0" style={{ filter: "invert(1)" }} />
-            </span>
-            <span className="text-[10px] font-medium text-muted-foreground tracking-[0.15em] uppercase">Speeds • Feeds • Intelligence</span>
-          </div>
+          <img src="/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" className="h-16 w-auto" style={{ mixBlendMode: "screen" }} />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
         <button
