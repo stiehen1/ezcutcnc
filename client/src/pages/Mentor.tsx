@@ -900,7 +900,7 @@ export default function Mentor() {
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
   const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
-  const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep", "ramp", "helical"]);
+  const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
