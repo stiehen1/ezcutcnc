@@ -4474,8 +4474,8 @@ def run(payload=None):
     _doc_xd = float(data.get("doc_xd", 1.0) or 1.0)
     _is_aluminum_grp = material_group in ("Aluminum",)
     _is_steel_grp = material_group in ("Steel",)
-    for _nf in [_cur_flutes + 1, _cur_flutes + 2]:
-        if _nf > 12:
+    for _nf in [_cur_flutes + 1]:
+        if _nf > 7:
             break
         # Chip-clearance gate — use the same FLUTE_WOC_LIMITS table
         _nf_slot_xd, _nf_max_woc = flute_woc_limits(_nf)
