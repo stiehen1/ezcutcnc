@@ -3950,12 +3950,14 @@ ${stabSection}
           </>)}
 
 
-          {/* Machine Power */}
+          {/* Machine Power — not shown for keyseat/dovetail (rendered after their tool geometry) */}
+          {operation !== "keyseat" && operation !== "dovetail" && (
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+          )}
 
           {/* Machine selector */}
           <div className="mb-4 space-y-2">
@@ -4289,6 +4291,15 @@ ${stabSection}
               />
             </div>
           </>)}
+
+          {/* Machine Power header — for keyseat/dovetail shown here after tool geometry */}
+          {(operation === "keyseat" || operation === "dovetail") && (
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          )}
 
           {/* Machine Setup */}
           <div className="flex items-center gap-3 my-7">
