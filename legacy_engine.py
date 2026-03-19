@@ -251,7 +251,7 @@ def _coolant_fluid_mult(payload):
 # T-MAX (AlTiCrN): heat-resistant — stainless 10–20% per shop data → 1.12 midpoint
 # A-MAX (AlTiN): baseline ferrous production coating — reference 1.0
 # P-MAX (TiAlN/TiSiN): strong in steel, mild elsewhere
-# C-MAX (CrN/nano): good in stainless and abrasive materials
+# C-MAX (AlCrN HiPIMS): Cemecon CC800 HiPIMS — 1,100°C; good in stainless, steel, abrasive
 # D-MAX (DLC/diamond-like): non-ferrous only — significant life gain in aluminum
 # Uncoated: baseline for non-ferrous tools without D-MAX
 COATING_LIFE_MULT: dict[str, dict[str, float]] = {
