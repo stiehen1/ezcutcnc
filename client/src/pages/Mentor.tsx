@@ -1449,7 +1449,7 @@ export default function Mentor() {
   ${row("Corner Condition", form.corner_condition === "corner_radius" ? `CR ${form.corner_radius?.toFixed(4)}"` : form.corner_condition)}
   ${row("Flute Geometry", form.geometry ?? "standard")}
   ${form.stickout > 0 ? row("Tool Stickout (in)", `${form.stickout.toFixed(3)}"`) : ""}
-  ${row("Machine", `${form.machine_type?.toUpperCase()} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
+  ${row("Machine", `${activeMachineName ? activeMachineName + " · " : ""}${form.machine_type?.toUpperCase()} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
   ${row("Coolant", form.coolant?.replace(/_/g," "))}
   ${(() => {
     if (!drill && !ream) {
