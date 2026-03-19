@@ -252,7 +252,7 @@ def _coolant_fluid_mult(payload):
 # A-MAX (AlTiN Arc): Balzers Latuma — Arc PVD, 35 GPa, 1,000°C — baseline ferrous reference 1.0
 # P-MAX (AlCrN Arc): Balzers BALINIT ALCRONA EVO — Arc PVD, 44 GPa, 1,100°C — same chemistry as C-Max, Arc vs HiPIMS
 # C-MAX (AlCrN HiPIMS): Cemecon CC800 HiPIMS — 1,100°C; good in stainless, steel, abrasive
-# D-MAX (DLC/diamond-like): non-ferrous only — significant life gain in aluminum
+# D-MAX (ta-C): Balzers BALINIT MAYURA — ta-C, >65 GPa, <0.10 friction, >500°C; non-ferrous only
 # Uncoated: baseline for non-ferrous tools without D-MAX
 COATING_LIFE_MULT: dict[str, dict[str, float]] = {
     "t-max":    {"default": 1.15},
