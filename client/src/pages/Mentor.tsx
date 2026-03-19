@@ -5992,8 +5992,8 @@ ${stabSection}
                 </>
               ) : null}
 
-              {/* Tooth Engagement Advisory */}
-              {engineering?.teeth_in_cut != null && (() => {
+              {/* Tooth Engagement Advisory — hidden for slotting (always pegged) */}
+              {engineering?.teeth_in_cut != null && form.mode !== "slot" && (() => {
                 const tic = engineering.teeth_in_cut;
                 const low = 1.0, sweetLo = 1.5, sweetHi = 2.5, high = 3.0;
                 const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
