@@ -574,14 +574,19 @@ export default function Mentor() {
         if (e.lbs > 0) {
           const tt = (e.tool_type ?? "").toLowerCase();
           if (tt === "threadmill") {
-            // For thread mills, lbs = TSC = reach/neck length
             next.thread_neck_length = e.lbs;
             setTmNeckText(String(e.lbs));
+          } else if (tt === "dovetail" || tt === "keyseat") {
+            // lbs = TSC/reach for dovetail and keyseat
+            next.lbs = e.lbs;
+            setLbsText(e.lbs.toFixed(4));
           } else {
             next.lbs = e.lbs;
             setLbsText(String(e.lbs));
           }
         }
+        // Always set helix_angle — 0 is valid (straight flute)
+        if (e.helix_angle !== undefined) next.helix_angle = Number(e.helix_angle);
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
@@ -738,7 +743,7 @@ export default function Mentor() {
     final_slot_depth: 0,
 
     // Dovetail-specific
-    dovetail_angle: 60,
+    dovetail_angle: 0,
 
     // Thread milling-specific
     thread_standard: "unc" as "unc" | "unf" | "unef" | "metric" | "npt" | "nptf",
@@ -4065,27 +4070,50 @@ ${stabSection}
             {operation === "dovetail" && (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="space-y-2">
-                  <FieldLabel hint="Included angle of the dovetail (e.g. 45° or 60°). This is the full included angle, not the half-angle. Affects chip load correction and SFM.">Dovetail Angle (°)</FieldLabel>
+                  <FieldLabel hint="Included angle of the dovetail V-form. This is the FULL included angle — if the print shows 45° on one side of the V, enter 90°. Affects chip load correction and SFM.">Dovetail Angle (°)</FieldLabel>
                   <Input type="number" step="5" className="no-spinners"
+                    placeholder="e.g. 60"
                     value={form.dovetail_angle || ""}
                     onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, dovetail_angle: n })); }}
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel hint="Axial depth of cut per pass in multiples of tool diameter.">DOC (×D)</FieldLabel>
+                  <FieldLabel hint="Reach (TSC) — distance from shank face to the cutting zone. From the engineering print, labeled TSC.">Reach / TSC (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 0.5"
-                    value={form.doc_xd > 0 ? form.doc_xd.toFixed(2) : ""}
-                    onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, doc_xd: n })); }}
+                    placeholder="e.g. 0.625"
+                    value={lbsText}
+                    onChange={(e) => setLbsText(e.target.value)}
+                    onBlur={() => { const n = parseDim(lbsText); if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, lbs: n })); setLbsText(n.toFixed(4)); } }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Neck diameter — the narrow section between the shank and the cutting head. Used for deflection modeling.">Neck Dia (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.200"
+                    value={form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : ""}
+                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n })); }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Axial depth of cut per pass in inches.">Cut Pass Depth (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.050"
+                    value={form.doc_xd > 0 && form.tool_dia > 0 ? (form.doc_xd * form.tool_dia).toFixed(4) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n > 0 && form.tool_dia > 0)
+                        setForm((p) => ({ ...p, doc_xd: n / p.tool_dia }));
+                    }}
                   />
                 </div>
               </div>
             )}
 
             <div className="mt-3 space-y-2">
-              <FieldLabel hint="Helix angle in degrees. From the engineering print. Affects cutting force direction and chip evacuation.">Helix Angle (°)</FieldLabel>
+              <FieldLabel hint="Helix angle in degrees. Enter 0 for straight flute tools. Affects cutting force direction and chip evacuation.">Helix Angle (°) — 0 = straight flute</FieldLabel>
               <Input type="number" step="1" className="no-spinners"
-                value={form.helix_angle || ""}
+                placeholder="0"
+                value={form.helix_angle !== undefined ? form.helix_angle : ""}
                 onChange={(e) => { const n = parseInt(e.target.value); if (Number.isFinite(n) && n >= 0) setForm((p) => ({ ...p, helix_angle: n })); }}
               />
             </div>

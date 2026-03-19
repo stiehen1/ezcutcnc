@@ -1403,7 +1403,12 @@ CRITICAL RULES — READ CAREFULLY:
    - lbs = the REACH/TSC dimension (distance from shank face to cutter, e.g. "1.875+.06/.00 TSC" → 1.875)
    For all other tool types: loc = flute/cutting length, lbs = length below shank if necked.
 
-4. keyseat_arbor_dia is the small narrow neck connecting the cutter disc to the shank.
+4. For DOVETAIL cutters specifically:
+   - dovetail_angle = the INCLUDED angle of the dovetail V-form. This is the FULL angle, NOT the half-angle. If the print shows 30° on one side of the V, the included angle is 60°. If it shows 45° on one side, the included is 90°. Look for the angle labeled at the V-groove or cutting tip — use the largest angle shown at the cutting form as the included angle.
+   - lbs = the REACH/TSC dimension (distance from shank face to cutter zone, labeled TSC, e.g. ".625+.06/-.00 TSC" → 0.625)
+   - keyseat_arbor_dia = the narrow neck diameter between the shank and the cutting head (e.g. "Ø0.200" neck → 0.200)
+
+5. keyseat_arbor_dia is the small narrow neck connecting the cutter disc/head to the shank — applies to both keyseat AND dovetail cutters.
 
 5. shank_dia is the large cylindrical body at the far end (shank) of the tool.
 
