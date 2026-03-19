@@ -1973,7 +1973,7 @@ ${stabSection}
           </div>
           {/* Bottom row: EZcutCNC logo only */}
           <div className="flex justify-center items-center py-0">
-            <img src="/EZcutCNC logo - darkback.png" alt="EZcutCNC" className="h-36 w-auto" style={{ marginTop: "-8px", marginBottom: "-8px" }} />
+            <img src="/EZCutCNC_dark_stacked v2.png" alt="EZcutCNC" className="h-36 w-auto" style={{ marginTop: "-8px", marginBottom: "-8px" }} />
           </div>
         </CardHeader>
 
