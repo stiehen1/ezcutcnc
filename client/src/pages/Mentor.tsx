@@ -4965,8 +4965,8 @@ ${stabSection}
                 )}
               </div>
 
-              {/* Core Cutter Recommends — thread mill quote card */}
-              {(() => {
+              {/* Core Cutter Recommends — thread mill quote card (Engineering Mode only) */}
+              {engMode && (() => {
                 const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
                 const cr = getCoatingRec(isoCategory);
                 const tpiLabel = form.thread_tpi
