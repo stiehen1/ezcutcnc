@@ -606,14 +606,74 @@ export async function registerRoutes(
                 ? corner
                 : String(parseFloat(cr.toFixed(4)));  // "0.03", "0.06", etc.
 
-              // Find the closest LOC, then return standard (non-necked) tools first.
-              // For diameter suggestions, prefer lbs_in=0 (standard shank) — necked tools
-              // only make sense when the feature requires extra reach, not just a diameter change.
-              const standardLbsClause = s.type === "diameter"
-                ? `AND COALESCE(s.lbs_in, 0) = 0` : ``;
-              const standardLbsClause2 = s.type === "diameter"
-                ? `AND COALESCE(s2.lbs_in, 0) = 0` : ``;
-
+              // For diameter suggestions: prefer tools where LOC >= required DOC (sufficient reach),
+              // sorted by shortest sufficient LOC first. This avoids necked tools whose LOC
+              // is shorter than the job needs (e.g. 606711 LOC=0.9375" < 1.0" DOC wins over
+              // 606111 LOC=1.25" when using closest-LOC logic — wrong choice).
+              if (s.type === "diameter") {
+                // Primary: matching corner, LOC >= required, shortest sufficient LOC first
+                const qd1 = await pool.query(
+                  `SELECT s.edp FROM skus s
+                   JOIN sku_uploads u ON s.upload_id = u.id
+                   WHERE u.is_current = TRUE
+                     AND s.flutes = $1
+                     AND ABS(s.cutting_diameter_in - $2) < 0.001
+                     AND LOWER(s.corner_condition) = LOWER($3)
+                     AND COALESCE(s.loc_in, 0) >= $4
+                     ${cbClause}
+                   ORDER BY s.loc_in ASC, s.edp`,
+                  [flutes, dia, cornerStr, loc]
+                );
+                if (qd1.rows.length > 0) {
+                  s.suggested_edps = qd1.rows.map((r: any) => r.edp);
+                  s.suggested_edp  = s.suggested_edps[0];
+                } else {
+                  // Fallback: ignore corner, LOC >= required
+                  const qd2 = await pool.query(
+                    `SELECT s.edp FROM skus s
+                     JOIN sku_uploads u ON s.upload_id = u.id
+                     WHERE u.is_current = TRUE
+                       AND s.flutes = $1
+                       AND ABS(s.cutting_diameter_in - $2) < 0.001
+                       AND COALESCE(s.loc_in, 0) >= $3
+                       AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+                       ${cbClause}
+                     ORDER BY s.loc_in ASC, s.edp`,
+                    [flutes, dia, loc]
+                  );
+                  if (qd2.rows.length > 0) {
+                    s.suggested_edps = qd2.rows.map((r: any) => r.edp);
+                    s.suggested_edp  = s.suggested_edps[0];
+                  } else {
+                    // Last resort: closest LOC regardless of length
+                    const qd3 = await pool.query(
+                      `SELECT s.edp FROM skus s
+                       JOIN sku_uploads u ON s.upload_id = u.id
+                       WHERE u.is_current = TRUE
+                         AND s.flutes = $1
+                         AND ABS(s.cutting_diameter_in - $2) < 0.001
+                         AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+                         ${cbClause}
+                         AND ABS(COALESCE(s.loc_in, 0) - $3) = (
+                           SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
+                           FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                           WHERE u2.is_current = TRUE
+                             AND s2.flutes = $1
+                             AND ABS(s2.cutting_diameter_in - $2) < 0.001
+                             AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
+                             ${cbClause.replace(/\bs\./g, "s2.")}
+                         )
+                       ORDER BY s.edp`,
+                      [flutes, dia, loc]
+                    );
+                    if (qd3.rows.length > 0) {
+                      s.suggested_edps = qd3.rows.map((r: any) => r.edp);
+                      s.suggested_edp  = s.suggested_edps[0];
+                    }
+                  }
+                }
+              } else {
+              // Non-diameter suggestions: find the closest LOC
               const q2 = await pool.query(
                 `SELECT s.edp FROM skus s
                  JOIN sku_uploads u ON s.upload_id = u.id
@@ -622,7 +682,6 @@ export async function registerRoutes(
                    AND ABS(s.cutting_diameter_in - $2) < 0.001
                    AND LOWER(s.corner_condition) = LOWER($3)
                    ${cbClause}
-                   ${standardLbsClause}
                    AND ABS(COALESCE(s.loc_in, 0) - $4) = (
                      SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $4))
                      FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -631,7 +690,6 @@ export async function registerRoutes(
                        AND ABS(s2.cutting_diameter_in - $2) < 0.001
                        AND LOWER(s2.corner_condition) = LOWER($3)
                        ${cbClause.replace(/\bs\./g, "s2.")}
-                       ${standardLbsClause2}
                    )
                  ORDER BY s.edp`,
                 [flutes, dia, cornerStr, loc]
@@ -640,7 +698,7 @@ export async function registerRoutes(
                 s.suggested_edps = q2.rows.map((r: any) => r.edp);
                 s.suggested_edp  = s.suggested_edps[0];
               } else {
-                // Fallback: ignore corner, just match flutes + dia + closest LOC (still prefer non-necked for diameter suggestions)
+                // Fallback: ignore corner, just match flutes + dia + closest LOC
                 const q3 = await pool.query(
                   `SELECT s.edp FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
@@ -649,7 +707,6 @@ export async function registerRoutes(
                      AND ABS(s.cutting_diameter_in - $2) < 0.001
                      AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                      ${cbClause}
-                     ${standardLbsClause}
                      AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                        SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -658,7 +715,6 @@ export async function registerRoutes(
                          AND ABS(s2.cutting_diameter_in - $2) < 0.001
                          AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause.replace(/\bs\./g, "s2.")}
-                         ${standardLbsClause2}
                      )
                    ORDER BY s.edp`,
                   [flutes, dia, loc]
@@ -666,34 +722,9 @@ export async function registerRoutes(
                 if (q3.rows.length > 0) {
                   s.suggested_edps = q3.rows.map((r: any) => r.edp);
                   s.suggested_edp  = s.suggested_edps[0];
-                } else if (s.type === "diameter") {
-                  // Last fallback: allow necked tools if absolutely nothing standard found
-                  const q4 = await pool.query(
-                    `SELECT s.edp FROM skus s
-                     JOIN sku_uploads u ON s.upload_id = u.id
-                     WHERE u.is_current = TRUE
-                       AND s.flutes = $1
-                       AND ABS(s.cutting_diameter_in - $2) < 0.001
-                       AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
-                       ${cbClause}
-                       AND ABS(COALESCE(s.loc_in, 0) - $3) = (
-                         SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
-                         FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
-                         WHERE u2.is_current = TRUE
-                           AND s2.flutes = $1
-                           AND ABS(s2.cutting_diameter_in - $2) < 0.001
-                           AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
-                           ${cbClause.replace(/\bs\./g, "s2.")}
-                       )
-                     ORDER BY s.lbs_in ASC NULLS FIRST, s.edp`,
-                    [flutes, dia, loc]
-                  );
-                  if (q4.rows.length > 0) {
-                    s.suggested_edps = q4.rows.map((r: any) => r.edp);
-                    s.suggested_edp  = s.suggested_edps[0];
-                  }
                 }
               }
+              } // end non-diameter branch
             } catch (_) { /* catalog unavailable — skip enrichment */ }
           }
         }
