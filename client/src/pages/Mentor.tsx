@@ -839,7 +839,7 @@ export default function Mentor() {
       finish:     { low: 0.1, med: 0.25, high: 0.5 },
       face:       { low: 0.03,med: 0.08, high: 0.15 },
       trochoidal: { low: 1.0, med: 1.5,  high: 2.0 },
-      slot:       { low: 0.25,med: 0.5,  high: 1.0 },
+      slot:       { low: flutes === 5 ? 0.15 : 0.25, med: flutes === 5 ? 0.30 : 0.5, high: flutes === 5 ? 0.5 : 1.0 },
       circ_interp:{ low: 0.25,med: 0.5,  high: 1.0 },
     };
     return {
@@ -871,7 +871,7 @@ export default function Mentor() {
     finish:      { low: 0.1, med: 0.25, high: 0.5 },
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
-    slot:        { low: 0.25, med: form.flutes === 5 ? 0.25 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
+    slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
     circ_interp: { low: 0.25,med: 0.5,  high: 1.0 },
   };
   const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
