@@ -571,16 +571,7 @@ export default function Mentor() {
         if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(String(e.tool_dia)); }
         if (e.flutes > 0) next.flutes = e.flutes;
         if (e.loc > 0) { next.loc = e.loc; setLocText(String(e.loc)); }
-        if (e.lbs > 0) {
-          next.lbs = e.lbs;
-          setLbsText(String(e.lbs));
-          // For thread mills, TSC (lbs) = reach — use as default stickout
-          if ((e.tool_type ?? "").toLowerCase() === "threadmill") {
-            next.stickout = e.lbs;
-            setStickoutText(String(e.lbs));
-            setTmStickoutText(String(e.lbs));
-          }
-        }
+        if (e.lbs > 0) { next.lbs = e.lbs; setLbsText(String(e.lbs)); }
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
