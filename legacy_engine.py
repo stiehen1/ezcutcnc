@@ -4468,14 +4468,24 @@ def run(payload=None):
     #   Steel slot → max 4 flutes standard; 5-fl only at ≤0.5×D DOC
     _flute_core_map = {2:0.60, 3:0.65, 4:0.70, 5:0.75, 6:0.80, 7:0.82,
                        8:0.84, 9:0.86, 10:0.87, 11:0.88, 12:0.89}
+    # Catalog-available flute counts by cutting diameter (Core Cutter standard endmills)
+    _dia_flute_catalog = {
+        1.000: [2,3,4,5,6,7,9,11],
+        0.750: [2,3,4,5,6,7,9],
+    }
+    # Default for all other diameters (up to 5/8" and smaller)
+    _dia_key = round(_d * 32) / 32  # round to nearest 1/32"
+    _avail_flutes = _dia_flute_catalog.get(_dia_key, [2,3,4,5,6,7])
     _cur_flutes = int(data.get("flutes", 4) or 4)
     _cur_cr = _flute_core_map.get(_cur_flutes, 0.70)
     _is_slotting = float(data.get("woc_pct", 0) or 0) >= 90.0
     _doc_xd = float(data.get("doc_xd", 1.0) or 1.0)
     _is_aluminum_grp = material_group in ("Aluminum",)
     _is_steel_grp = material_group in ("Steel",)
-    for _nf in [_cur_flutes + 1]:
-        if _nf > 7:
+    # Next 1-2 available flute counts above current from catalog
+    _next_flutes = [f for f in _avail_flutes if f > _cur_flutes][:2]
+    for _nf in _next_flutes:
+        if _nf > max(_avail_flutes):
             break
         # Chip-clearance gate — use the same FLUTE_WOC_LIMITS table
         _nf_slot_xd, _nf_max_woc = flute_woc_limits(_nf)
