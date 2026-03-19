@@ -687,7 +687,7 @@ export default function Mentor() {
     chamfer_tip_dia: 0,
     chamfer_depth: 0,
 
-    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65",
+    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
     machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
     toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "shell_mill_arbor" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
     dual_contact: false,
@@ -4418,14 +4418,14 @@ ${stabSection}
                           const thReset = isLatheLike && !(latheSafe as readonly string[]).includes(p.toolholder) ? "er_collet" as const : p.toolholder;
                           // spindle taper default per machine type
                           const defaultTaper = (
-                            isLathe    ? "VDI40"  :
-                            isMillTurn ? "HSK63"  :
+                            isLathe    ? "VDI40"      :
+                            isMillTurn ? "CAPTO C6"  :
                             key === "5axis" ? "HSK63" :
                             "CAT40"
                           ) as typeof p.spindle_taper;
                           // if current taper isn't valid for new machine type, reset to default
                           const latheTapers  = ["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const;
-                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK63","HSK100"] as const;
+                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK63","HSK100","CAPTO C6","CAPTO C8"] as const;
                           const taperReset =
                             isLathe && !(latheTapers as readonly string[]).includes(p.spindle_taper)  ? defaultTaper :
                             !isLathe && !(millingTapers as readonly string[]).includes(p.spindle_taper) ? defaultTaper :
@@ -4469,7 +4469,7 @@ ${stabSection}
                   : form.machine_type === "hmc"
                   ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100"] as const)
                   : (form.machine_type === "5axis" || form.machine_type === "mill_turn")
-                  ? (["CAT40","BT40","HSK63","HSK100"] as const)
+                  ? (["CAT40","BT40","HSK63","HSK100","CAPTO C6","CAPTO C8"] as const)
                   : /* vmc */ (["CAT30","CAT40","CAT50","BT30","BT40","HSK63","HSK100"] as const)
                 ).map((t) => {
                   const taperLabel: Record<string, string> = { CAT30: "CV30", CAT40: "CV40", CAT50: "CV50" };
@@ -4491,7 +4491,7 @@ ${stabSection}
                 })}
               </div>
               {/* Dual Contact — only relevant for CAT/BT tapers; HSK is inherently dual contact; VDI/BMT N/A */}
-              {!form.spindle_taper.startsWith("HSK") && !form.spindle_taper.startsWith("VDI") && !form.spindle_taper.startsWith("BMT") && (
+              {!form.spindle_taper.startsWith("HSK") && !form.spindle_taper.startsWith("VDI") && !form.spindle_taper.startsWith("BMT") && !form.spindle_taper.startsWith("CAPTO") && (
                 <div className="flex items-center gap-2 pt-1">
                   <Tooltip>
                     <TooltipTrigger asChild>
