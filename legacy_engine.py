@@ -4472,7 +4472,11 @@ def run(payload=None):
     _geo = str(data.get("geometry") or "standard").lower()
     _is_cb = "chipbreaker" in _geo
     _dia_key = round(_d * 32) / 32  # round to nearest 1/32"
-    if _is_cb:
+    _is_vrx = "truncated" in _geo or "rougher" in _geo
+    if _is_vrx:
+        # Truncated rougher (VRX): 4 and 5 flutes only, all diameters
+        _avail_flutes = [4, 5]
+    elif _is_cb:
         # Chipbreaker: min 3 flutes; same diameter breakdowns
         _dia_flute_catalog = {
             1.000: [3,4,5,6,7,9,11],
@@ -4480,7 +4484,7 @@ def run(payload=None):
         }
         _avail_flutes = _dia_flute_catalog.get(_dia_key, [3,4,5,6,7])
     else:
-        # Standard / truncated rougher
+        # Standard
         _dia_flute_catalog = {
             1.000: [2,3,4,5,6,7,9,11],
             0.750: [2,3,4,5,6,7,9],
