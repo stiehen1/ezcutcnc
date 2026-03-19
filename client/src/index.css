@@ -4,6 +4,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Placeholder text clearly dimmer than real values */
+input::placeholder,
+textarea::placeholder {
+  color: #4b5563 !important;
+  opacity: 1;
+  font-style: italic;
+}
+
 @layer utilities {
   .no-spinners::-webkit-inner-spin-button,
   .no-spinners::-webkit-outer-spin-button {
