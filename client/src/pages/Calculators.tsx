@@ -1792,11 +1792,8 @@ export default function Calculators() {
     <MetricCtx.Provider value={metric}>
     <div className="space-y-6 pb-10">
 
-      {/* Logo + unit toggle header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4 py-2">
-          <img src="/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" className="h-24 w-auto" style={{ mixBlendMode: "screen" }} />
-        </div>
+      {/* Unit toggle + print header */}
+      <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
