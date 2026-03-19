@@ -4474,8 +4474,11 @@ def run(payload=None):
     _dia_key = round(_d * 32) / 32  # round to nearest 1/32"
     _is_vrx = "truncated" in _geo or "rougher" in _geo
     if _is_vrx:
-        # Truncated rougher (VRX): 4 and 5 flutes only, all diameters
-        _avail_flutes = [4, 5]
+        # Truncated rougher (VRX): only offered in 1/2" and 3/4"; 4 and 5 flutes only
+        if _dia_key not in (0.375, 0.500, 0.750):
+            _avail_flutes = []  # VRX not available at this diameter — no flute suggestion
+        else:
+            _avail_flutes = [4, 5]
     elif _is_cb:
         # Chipbreaker: min 3 flutes; same diameter breakdowns
         _dia_flute_catalog = {
