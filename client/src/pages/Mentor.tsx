@@ -1320,8 +1320,8 @@ export default function Mentor() {
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
           <span style="font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
         </div>
-        <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#ef4444 0%,#ef4444 ${pctBar(1.0)},#eab308 ${pctBar(1.0)},#eab308 ${pctBar(1.5)},#22c55e ${pctBar(1.5)},#22c55e ${pctBar(2.5)},#f97316 ${pctBar(2.5)},#f97316 100%);">
-          <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);border-radius:2px;"></div>
+        <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#ef4444 0%,#ef4444 ${pctBar(1.0)},#eab308 ${pctBar(1.0)},#eab308 ${pctBar(1.5)},#22c55e ${pctBar(1.5)},#22c55e ${pctBar(2.5)},#f97316 ${pctBar(2.5)},#f97316 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+          <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
         <div style="position:relative;height:14px;">
           <div style="position:absolute;transform:translateX(-50%);left:${pctBar(tic)};font-size:9px;font-weight:700;color:#111;white-space:nowrap;">${tic.toFixed(2)}</div>
@@ -1401,7 +1401,8 @@ export default function Mentor() {
   .suggestions li { margin-bottom: 3px; }
   .edp { color: #b45309; font-weight: 700; }
   .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
-  @media print { body { padding: 12px 18px; } }
+  @media print { body { padding: 12px 18px; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 </style>
 </head>
 <body>
