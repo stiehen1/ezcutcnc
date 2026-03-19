@@ -3280,6 +3280,26 @@ ${stabSection}
                 if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
                 return null;
               })()}
+              {/* Bore enlargement arc engagement advisory */}
+              {form.mode === "circ_interp" && form.woc_pct > 0 && form.tool_dia > 0 && (() => {
+                const wocIn = (form.woc_pct / 100) * form.tool_dia;
+                const arg = Math.max(-1, Math.min(1, 1 - (2 * wocIn) / form.tool_dia));
+                const arcDeg = 2 * Math.acos(arg) * (180 / Math.PI);
+                const zone = arcDeg < 90 ? { label: "Light", color: "#4ade80" }
+                  : arcDeg < 150 ? { label: "Moderate", color: "#facc15" }
+                  : arcDeg <= 180 ? { label: "Heavy", color: "#fb923c" }
+                  : { label: "Too High", color: "#f87171" };
+                return (
+                  <div className="mt-1 space-y-1">
+                    <p className="text-[10px]" style={{ color: zone.color }}>
+                      Arc engagement: {arcDeg.toFixed(1)}° — <strong>{zone.label}</strong>
+                    </p>
+                    {arcDeg > 150 && (
+                      <p className="text-[10px] text-amber-400">⚠ Consider multiple radial passes for this bore enlargement</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div className="flex-1 min-w-0 space-y-2">
               <div className="flex items-center justify-between">

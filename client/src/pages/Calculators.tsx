@@ -1517,6 +1517,118 @@ function ChordSagitta() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Bore Enlargement
+// ─────────────────────────────────────────────────────────────────
+function BoreEnlargement() {
+  const metric = useMetric();
+  const dU = metric ? "mm" : "in";
+
+  const [toolDia,    setToolDia]    = React.useState("");
+  const [existingDia, setExistingDia] = React.useState("");
+  const [targetDia,  setTargetDia]  = React.useState("");
+  const [wocPerPass, setWocPerPass] = React.useState("");
+
+  const td = metric ? n(toolDia)/25.4    : n(toolDia);
+  const ed = metric ? n(existingDia)/25.4: n(existingDia);
+  const tg = metric ? n(targetDia)/25.4  : n(targetDia);
+  const wocRaw = metric ? n(wocPerPass)/25.4 : n(wocPerPass);
+
+  const totalStock = (ed > 0 && tg > ed) ? (tg - ed) / 2 : null;
+
+  // Auto WOC: 6% of tool dia if not set
+  const autoWoc = td > 0 ? td * 0.06 : null;
+  const woc = wocRaw > 0 ? wocRaw : (autoWoc ?? 0);
+
+  type PassRow = { pass: number; boreDia: number; woc: number; arc: number; zone: string; zoneColor: string; feedMult: number };
+  const passes: PassRow[] = [];
+  if (totalStock !== null && totalStock > 0 && woc > 0 && td > 0) {
+    let currentBore = ed;
+    let pass = 0;
+    while (currentBore < tg - 0.0001 && pass < 50) {
+      pass++;
+      const thisWoc = Math.min(woc, tg - currentBore) / 2; // radial only
+      const stepWoc = Math.min(woc, (tg - currentBore) / 2);
+      if (stepWoc <= 0) break;
+      const newBore = Math.min(currentBore + 2 * stepWoc, tg);
+      const arg = Math.max(-1, Math.min(1, 1 - (2 * stepWoc) / td));
+      const arcDeg = 2 * Math.acos(arg) * (180 / Math.PI);
+      const zone = arcDeg < 90   ? { label: "Light",    color: "#4ade80" }
+        : arcDeg < 150  ? { label: "Moderate",  color: "#facc15" }
+        : arcDeg <= 180 ? { label: "Heavy",     color: "#fb923c" }
+        : { label: "Too High", color: "#f87171" };
+      const feedMult = arcDeg < 90 ? 1.0 : arcDeg < 150 ? 0.75 : arcDeg <= 180 ? 0.55 : 0.40;
+      passes.push({ pass, boreDia: newBore, woc: stepWoc, arc: arcDeg, zone: zone.label, zoneColor: zone.color, feedMult });
+      currentBore = newBore;
+    }
+  }
+
+  const hasHighArc = passes.some(p => p.arc > 180);
+  const displayWoc = wocRaw > 0 ? wocRaw : autoWoc;
+
+  usePrintRegister("Bore Enlargement", "Arcs & Contours", passes.length > 0 ? [
+    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: `Existing Hole Dia (${dU})`, value: existingDia },
+    { label: `Target Hole Dia (${dU})`, value: targetDia },
+    { label: `WOC per Pass (${dU})`, value: displayWoc ? (metric ? (displayWoc*25.4).toFixed(3) : displayWoc.toFixed(4)) : "—" },
+    { label: "Total Radial Stock", value: totalStock ? `${(metric ? totalStock*25.4 : totalStock).toFixed(metric?3:4)} ${dU}` : "—", highlight: true },
+    { label: "Passes Required", value: String(passes.length), highlight: true },
+  ] : null);
+
+  return (
+    <CalcCard title="Bore Enlargement" category="Arcs & Contours"
+      onClear={() => { setToolDia(""); setExistingDia(""); setTargetDia(""); setWocPerPass(""); }}>
+      <p className="text-[10px] text-gray-500 -mt-1">
+        Circular interpolation bore enlargement. Shows arc engagement and feed multiplier per radial pass.
+      </p>
+      <Row label="Tool Diameter" hint="Cutting diameter of the end mill used for circular interpolation."><NumIn value={toolDia} onChange={setToolDia} unit={dU} /></Row>
+      <Row label="Existing Hole Ø" hint="Diameter of the existing pre-drilled or bored hole the tool enters. Must be larger than the tool diameter."><NumIn value={existingDia} onChange={setExistingDia} unit={dU} /></Row>
+      <Row label="Target Hole Ø" hint="Final bore diameter needed after circular interpolation."><NumIn value={targetDia} onChange={setTargetDia} unit={dU} /></Row>
+      <Row label="WOC per Pass" hint="Radial step (width of cut) per circular orbit. Leave blank to use auto (6% of tool dia — light engagement)."><NumIn value={wocPerPass} onChange={setWocPerPass} unit={dU} placeholder="auto" /></Row>
+
+      {totalStock !== null && (
+        <Result label={`Total Radial Stock (${dU})`} value={(metric ? totalStock*25.4 : totalStock).toFixed(metric?3:4)} highlight />
+      )}
+      {displayWoc !== null && wocRaw === 0 && (
+        <p className="text-[10px] text-gray-500">Auto WOC: {(metric ? displayWoc*25.4 : displayWoc).toFixed(metric?3:4)} {dU} (6% of tool dia)</p>
+      )}
+
+      {passes.length > 0 && (
+        <div className="border-t border-[#2d2d4a] pt-2 space-y-1">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-gray-400">Pass breakdown</span>
+            <span className="text-[10px] font-semibold text-white">{passes.length} pass{passes.length !== 1 ? "es" : ""}</span>
+          </div>
+          {/* Table header */}
+          <div className="grid text-[9px] text-gray-500 font-semibold px-1" style={{ gridTemplateColumns: "2rem 1fr 1fr 2.5rem 3.5rem 2.5rem" }}>
+            <span>#</span>
+            <span>Bore Ø</span>
+            <span>WOC</span>
+            <span>Arc°</span>
+            <span>Zone</span>
+            <span>Feed×</span>
+          </div>
+          {passes.map((p) => (
+            <div key={p.pass}
+              className="grid items-center px-2 py-1 rounded text-[10px]"
+              style={{ gridTemplateColumns: "2rem 1fr 1fr 2.5rem 3.5rem 2.5rem", background: "#0d1b2a" }}>
+              <span className="text-gray-500">{p.pass}</span>
+              <span className="font-mono text-white">{(metric ? p.boreDia*25.4 : p.boreDia).toFixed(metric?3:4)}</span>
+              <span className="font-mono text-gray-300">{(metric ? p.woc*25.4 : p.woc).toFixed(metric?3:4)}</span>
+              <span className="font-mono text-gray-300">{p.arc.toFixed(1)}</span>
+              <span className="font-semibold" style={{ color: p.zoneColor }}>{p.zone}</span>
+              <span className="font-mono text-gray-300">{p.feedMult.toFixed(2)}×</span>
+            </div>
+          ))}
+          {hasHighArc && (
+            <p className="text-[10px] text-red-400 pt-1">⚠ Arc &gt;180° — reduce WOC per pass or use more passes</p>
+          )}
+        </div>
+      )}
+    </CalcCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Corner Radius Clearance
 // ─────────────────────────────────────────────────────────────────
 function CornerClearance() {
@@ -1574,7 +1686,7 @@ function CornerClearance() {
 const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
   { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement"] },
   { heading: "Surface Finish",  color: "#10b981", ids: ["cusp","eff-dia","surf-finish","ballnose-vel"] },
-  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bolt-circle","chord-sag","corner-clear"] },
+  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","bolt-circle","chord-sag","corner-clear"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
   { heading: "Power & MRR",     color: "#f43f5e", ids: ["mrr"] },
   { heading: "Materials",       color: "#a78bfa", ids: ["hardness","mat-cond"] },
@@ -1593,6 +1705,7 @@ const CALC_MAP: Record<string, React.ReactNode> = {
   "ballnose-vel": <BallNoseVelocity />,
   "arc-feed":     <FeedArcCorrection />,
   "helix-entry":  <HelixEntry />,
+  "bore-enlarge": <BoreEnlargement />,
   "bolt-circle":  <BoltCircle />,
   "chord-sag":    <ChordSagitta />,
   "corner-clear": <CornerClearance />,
@@ -1622,6 +1735,7 @@ export default function Calculators() {
     "ballnose-vel": "ball nose velocity sfm dead zone tilt lead angle contact effective diameter",
     "arc-feed":     "feed correction arc inside outside concave convex",
     "helix-entry":  "helix entry ramp angle pitch helical interpolation pocket plunge",
+    "bore-enlarge": "bore enlargement circular interpolation radial pass arc engagement woc feed multiplier",
     "bolt-circle":  "bolt circle hole pattern xy coordinates bcd radius",
     "chord-sag":    "chord sagitta arc height curved surface depth",
     "corner-clear": "corner radius clearance tool fits pocket inside corner",
