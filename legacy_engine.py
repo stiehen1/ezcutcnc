@@ -432,13 +432,13 @@ HELIX_FORCE_FACTOR = {35: 1.00, 38: 0.95, 45: 0.90}
 # CMH chamfer mill series — shear angle on the flank (like helix on an endmill).
 # Distributes cutting load progressively, reduces instantaneous force, spreads heat.
 # Update CMH_SHEAR_ANGLE_DEG once a physical measurement is taken off a production tool.
-CMH_SHEAR_ANGLE_DEG  = 15.0   # degrees (conservative default — measure and confirm)
+CMH_SHEAR_ANGLE_DEG  = 30.0   # degrees — confirmed from production CMH geometry
 # SFM bonus: shear angle lowers force → less heat per unit area → can sustain higher SFM.
-# Interpolated from HELIX_FORCE_FACTOR slope: 10° shear ≈ +6%, 15° ≈ +10%, 20° ≈ +14%.
-CMH_SFM_MULT         = 1.10   # +10% SFM vs CMS/baseline
+# Interpolated from HELIX_FORCE_FACTOR slope: 15° ≈ +10%, 30° ≈ +15%, 45° ≈ +20%.
+CMH_SFM_MULT         = 1.15   # +15% SFM vs CMS/baseline at 30° shear
 # Force factor: same physics as HELIX_FORCE_FACTOR — shear reduces Kc.
-# At 15° shear: 1.00 - (15/45)*(1.00-0.90) = 0.967
-CMH_FORCE_FACTOR     = round(1.0 - (CMH_SHEAR_ANGLE_DEG / 45.0) * 0.10, 4)  # ~0.967
+# At 30° shear: 1.00 - (30/45)*(1.00-0.90) = 0.933
+CMH_FORCE_FACTOR     = round(1.0 - (CMH_SHEAR_ANGLE_DEG / 45.0) * 0.10, 4)  # ~0.933
 # Minimum chip fraction: below this × base_ipt, CMH tip flat rubs instead of cutting.
 CMH_MIN_CHIP_FRAC    = 0.30   # 30% of base ipt_frac × body_dia
 
