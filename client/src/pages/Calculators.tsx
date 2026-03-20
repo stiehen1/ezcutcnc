@@ -1681,6 +1681,187 @@ function CornerClearance() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Entry Angle & Load Spike Warning
+// ─────────────────────────────────────────────────────────────────
+function EntryLoadSpike() {
+  const metric = useMetric();
+  const dU = metric ? "mm" : "in";
+
+  const [dia,        setDia]        = React.useState("");
+  const [woc,        setWoc]        = React.useState("");
+  const [entryType,  setEntryType]  = React.useState<"radial"|"ramp"|"arc">("radial");
+  const [leadRadius, setLeadRadius] = React.useState("");
+
+  const D  = metric ? n(dia) / 25.4 : n(dia);
+  const ae = metric ? n(woc) / 25.4 : n(woc);
+  const lr = metric ? n(leadRadius) / 25.4 : n(leadRadius);
+  const IN = metric ? 25.4 : 1;
+
+  const valid = D > 0 && ae > 0 && ae <= D;
+
+  // Steady-state engagement angle (degrees) — same formula as EngagementAngle calc
+  const engRad       = valid ? Math.acos(Math.max(-1, Math.min(1, 1 - 2 * ae / D))) : 0;
+  const engDeg       = engRad * 180 / Math.PI;
+
+  // Entry type multiplier k: scales how abruptly the tool picks up load
+  //   radial straight: k=1.0 — instant full chip, worst case
+  //   ramp (1–5°):    k=0.5 — axial ramp softens it but radial shock remains
+  //   tangential arc: k=0.15 — gradual pick-up, near-smooth
+  const entryK: Record<string,number> = { radial: 1.0, ramp: 0.50, arc: 0.15 };
+  const k = entryK[entryType] ?? 1.0;
+
+  // Load spike multiplier: 1 + k × (engagement_angle / 180°)
+  // At slot (180°): radial=2.0×, ramp=1.5×, arc=1.15×
+  // At 25% WOC (90°): radial=1.5×, ramp=1.25×, arc=1.075×
+  const spikeMult = valid ? 1 + k * (engDeg / 180) : 0;
+
+  // Effective spike if arc lead-in radius is specified
+  const arcEngRad   = lr > 0 && D > 0 ? Math.acos(Math.max(-1, Math.min(1, 1 - 2 * Math.min(lr, D/2) / D))) : engRad;
+  const arcSpike    = entryType === "arc" && lr > 0
+    ? 1 + entryK.arc * (arcEngRad * 180 / Math.PI) / 180
+    : spikeMult;
+
+  // Risk level
+  const spike = entryType === "arc" && lr > 0 ? arcSpike : spikeMult;
+  const risk  = spike < 1.25 ? "low" : spike < 1.55 ? "medium" : "high";
+  const riskColor = { low: "#4ade80", medium: "#fbbf24", high: "#f87171" }[risk];
+  const riskLabel = { low: "Low — entry is controlled", medium: "Moderate — consider a lead-in arc", high: "High — lead-in arc strongly recommended" }[risk];
+
+  // Recommended minimum lead-in arc radius to bring spike below 1.2×
+  // 1 + 0.15 × (acos(1 - 2r/D)×180/π / 180) < 1.20
+  // acos(1 - 2r/D) < 0.20×π → 1 - 2r/D > cos(0.2π) ≈ 0.809 → r < D×(1-0.809)/2 ≈ 0.0955×D
+  const recLeadRad = D > 0 ? D * 0.10 : 0;   // ~10% of tool dia keeps spike < 1.2× with arc entry
+
+  usePrintRegister("Entry Load Spike", "Arcs & Contours", valid ? [
+    { label: `Tool Diameter (${dU})`, value: (D * IN).toFixed(metric?3:4) },
+    { label: `WOC (${dU})`,           value: (ae * IN).toFixed(metric?3:4) },
+    { label: "Entry Type",            value: { radial:"Straight Radial", ramp:"Ramp", arc:"Arc Lead-In" }[entryType] },
+    { label: "Engagement Angle",      value: `${engDeg.toFixed(1)}°` },
+    { label: "Load Spike Multiplier", value: `${spike.toFixed(2)}×`, highlight: true },
+    { label: "Risk",                  value: riskLabel },
+    { label: `Rec. Lead-In Radius (${dU})`, value: (recLeadRad * IN).toFixed(metric?3:4) },
+  ] : null);
+
+  return (
+    <CalcCard title="Entry Angle & Load Spike" category="Arcs & Contours"
+      onClear={() => { setDia(""); setWoc(""); setLeadRadius(""); setEntryType("radial"); }}>
+      <p className="text-[10px] text-gray-500 -mt-1">
+        When a tool first contacts material, instantaneous load spikes above steady-state. Entry method and arc lead-in radius determine how severe the spike is.
+      </p>
+
+      <Row label="Tool Diameter" hint="Cutting diameter of the tool.">
+        <NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric?"12.7":"0.500"} />
+      </Row>
+      <Row label="Radial WOC" hint="Width of cut the tool will be at once in full engagement. Determines steady-state engagement angle and the load the tool ramps into at entry.">
+        <NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric?"3.175":"0.125"} />
+      </Row>
+      {ae > D && D > 0 && <p className="text-[11px] text-red-400">⚠ WOC cannot exceed tool diameter.</p>}
+
+      {valid && (
+        <div className="rounded bg-[#0d1b2a] border border-[#2d2d4a] px-3 py-2 flex justify-between text-[11px]">
+          <span className="text-gray-400">Steady-state engagement angle</span>
+          <span className="font-mono font-semibold text-white">{engDeg.toFixed(1)}°
+            <span className="text-gray-500 ml-1">({(ae/D*100).toFixed(0)}% WOC)</span>
+          </span>
+        </div>
+      )}
+
+      {/* Entry type */}
+      <Row label="Entry Method" hint="How the tool enters the cut. Straight radial is the most aggressive — the tool hits full chip thickness instantly. Arc lead-in gradually picks up material.">
+        <div className="flex gap-1 flex-wrap">
+          {([["radial","Straight Radial"],["ramp","Ramp"],["arc","Arc Lead-In"]] as const).map(([k,label]) => (
+            <button key={k} type="button" onClick={() => setEntryType(k)}
+              className="px-2 py-1 rounded text-[11px] font-semibold border transition-colors"
+              style={{ borderColor: entryType===k?"#f97316":"#3f3f5a", backgroundColor: entryType===k?"#f97316":"transparent", color: entryType===k?"#fff":"#9ca3af" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </Row>
+
+      {entryType === "arc" && (
+        <Row label="Lead-In Radius" hint="Radius of the tangential arc used to enter the cut. Larger = smoother pick-up = lower spike. Minimum recommended: 10% of tool diameter.">
+          <NumIn value={leadRadius} onChange={setLeadRadius} unit={dU} placeholder={metric?(D*IN*0.10).toFixed(2).toString():(D*0.10).toFixed(4).toString()} />
+        </Row>
+      )}
+
+      {valid && (
+        <>
+          {/* Spike result */}
+          <div className="rounded-lg border px-3 py-2.5 space-y-1.5"
+            style={{ borderColor: riskColor + "55", backgroundColor: riskColor + "11" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold" style={{ color: riskColor }}>Load Spike Multiplier</span>
+              <span className="text-lg font-mono font-bold" style={{ color: riskColor }}>{spike.toFixed(2)}×</span>
+            </div>
+            <div className="text-[10px]" style={{ color: riskColor }}>{riskLabel}</div>
+            {entryType !== "arc" && (
+              <div className="text-[10px] text-gray-500 border-t border-white/10 pt-1.5 mt-1">
+                Steady-state cutting force = 1.00× — spike is {((spike-1)*100).toFixed(0)}% above that at first contact.
+              </div>
+            )}
+            {entryType === "arc" && lr > 0 && (
+              <div className="text-[10px] text-gray-500 border-t border-white/10 pt-1.5 mt-1">
+                Arc lead-in gradually picks up chip — first contact arc is {(arcEngRad*180/Math.PI).toFixed(1)}° ({((arcSpike-1)*100).toFixed(0)}% above steady-state).
+              </div>
+            )}
+          </div>
+
+          {/* Spike bar */}
+          <div>
+            <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+              <span>1.00× (steady state)</span>
+              <span>2.00× (slot entry)</span>
+            </div>
+            <div className="h-2 rounded-full bg-[#1a1a2e] relative overflow-hidden">
+              {/* Background zones */}
+              <div className="absolute inset-y-0 left-0 w-[25%] bg-green-900/40 rounded-l-full" />
+              <div className="absolute inset-y-0 left-[25%] w-[30%] bg-yellow-900/40" />
+              <div className="absolute inset-y-0 left-[55%] right-0 bg-red-900/40 rounded-r-full" />
+              {/* Spike marker */}
+              <div className="absolute top-0 bottom-0 w-1 rounded-full -ml-0.5 transition-all"
+                style={{ left: `${Math.min(98, (spike - 1) * 100)}%`, backgroundColor: riskColor }} />
+            </div>
+            <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+              <span>Safe</span><span>Moderate</span><span>High risk</span>
+            </div>
+          </div>
+
+          {/* Recommendation */}
+          <div className="rounded bg-[#0d1b2a] border border-[#2d2d4a] px-3 py-2 space-y-1 text-[11px]">
+            <div className="text-gray-400 font-semibold mb-1">Recommendation</div>
+            {entryType === "radial" && risk !== "low" && (
+              <p className="text-amber-400">
+                Use a tangential arc lead-in of ≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} radius.
+                This reduces the spike from {spikeMult.toFixed(2)}× to &lt;1.20× — the difference between a controlled entry and a shock load.
+              </p>
+            )}
+            {entryType === "ramp" && risk !== "low" && (
+              <p className="text-amber-400">
+                Ramp reduces axial impact but still has a radial engagement spike of {spikeMult.toFixed(2)}×.
+                Combine with a tangential arc lead-in (≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU}) for full control.
+              </p>
+            )}
+            {entryType === "arc" && lr > 0 && lr < recLeadRad && (
+              <p className="text-amber-400">
+                Increase lead-in radius to ≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} for spike &lt; 1.20×.
+              </p>
+            )}
+            {risk === "low" && (
+              <p className="text-green-400">Entry is controlled — spike is within safe range for carbide tooling.</p>
+            )}
+            <p className="text-gray-500 mt-1">
+              Chamfer mills: always enter via helical/circular interpolation (G02/G03), not straight plunge.
+              Even a small lead-in arc dramatically extends tool life on the first contact.
+            </p>
+          </div>
+        </>
+      )}
+    </CalcCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Chamfer Mill Calculator
 // ─────────────────────────────────────────────────────────────────
 function ChamferMill() {
@@ -1858,7 +2039,7 @@ function ChamferMill() {
 const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
   { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement"] },
   { heading: "Surface Finish",  color: "#10b981", ids: ["cusp","eff-dia","surf-finish","ballnose-vel"] },
-  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","bolt-circle","chord-sag","corner-clear","chamfer-mill"] },
+  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","bolt-circle","chord-sag","corner-clear","chamfer-mill","entry-spike"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
   { heading: "Power & MRR",     color: "#f43f5e", ids: ["mrr"] },
   { heading: "Materials",       color: "#a78bfa", ids: ["hardness","mat-cond"] },
@@ -1882,6 +2063,7 @@ const CALC_MAP: Record<string, React.ReactNode> = {
   "chord-sag":    <ChordSagitta />,
   "corner-clear": <CornerClearance />,
   "chamfer-mill": <ChamferMill />,
+  "entry-spike":  <EntryLoadSpike />,
   "tap-drill":   <TapDrill />,
   "drill-point":  <DrillPointDepth />,
   "drill-torque": <DrillingTorque />,
@@ -1913,6 +2095,7 @@ export default function Calculators() {
     "chord-sag":    "chord sagitta arc height curved surface depth",
     "corner-clear": "corner radius clearance tool fits pocket inside corner",
     "chamfer-mill": "chamfer mill effective diameter depth engagement chip thinning feed adjustment fpt angled flank",
+    "entry-spike":  "entry angle load spike tool entry ramp arc lead-in radial engagement shock force first contact chamfer",
     "tap-drill":   "tap drill size thread engagement percent metric inch",
     "drill-point":  "drill point depth tip angle 118 135",
     "drill-torque": "drilling torque in-lbs nm hp kw rpm spindle power",
