@@ -2341,8 +2341,9 @@ ${stabSection}
                   {cat.iso} <span className="font-normal opacity-80">{cat.label}</span>
                 </button>
               ))}
-              <div className="flex items-center gap-1.5 flex-1 min-w-36 pl-2 border-l border-zinc-600">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 shrink-0">Grade</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 shrink-0">Grade</span>
               <select
                 className="flex-1 rounded-md border border-orange-500/40 bg-background px-2 py-1 text-xs text-orange-200"
                 value={form.material}
@@ -2362,7 +2363,6 @@ ${stabSection}
                   <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
               </select>
-              </div>
             </div>
 
             {/* Hardness — ferrous only (P, M, K, H, S) */}
