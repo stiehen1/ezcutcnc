@@ -1484,6 +1484,53 @@ ${stabSection}
     w.focus();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
+
+  const downloadPDF = async () => {
+    if (!result) return;
+    // Re-use same HTML but strip the auto-print script
+    const printBtn = document.querySelector("[data-print-trigger]") as HTMLButtonElement | null;
+    // Generate the HTML by temporarily patching window.open to capture it
+    let capturedHtml = "";
+    const origOpen = window.open.bind(window);
+    (window as any).open = (url: string) => {
+      // fetch the blob content
+      fetch(url).then(r => r.text()).then(t => { capturedHtml = t; });
+      return { focus: () => {} };
+    };
+    printSummary();
+    (window as any).open = origOpen;
+    // Wait a tick for fetch
+    await new Promise(r => setTimeout(r, 300));
+    if (!capturedHtml) return;
+    const bodyMatch = capturedHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    const styleMatch = capturedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    if (!bodyMatch) return;
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;background:#fff;font-family:Arial,sans-serif;font-size:11px;color:#111;";
+    if (styleMatch) {
+      const styleEl = document.createElement("style");
+      styleEl.textContent = styleMatch[1];
+      wrapper.appendChild(styleEl);
+    }
+    const content = document.createElement("div");
+    content.innerHTML = bodyMatch[1].replace(/<script[\s\S]*?<\/script>/gi, "");
+    wrapper.appendChild(content);
+    document.body.appendChild(wrapper);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
+      const date = new Date().toISOString().slice(0, 10);
+      await html2pdf().set({
+        margin: [8, 8, 8, 8],
+        filename: `CoreCutter_${edp}_${date}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+      }).from(wrapper).save();
+    } finally {
+      document.body.removeChild(wrapper);
+    }
+  };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
   const drillResult   = result?.drilling   ?? null;
@@ -4871,7 +4918,14 @@ ${stabSection}
                   onClick={printSummary}
                   className="text-[11px] font-semibold px-3 py-1 rounded border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 transition-colors leading-tight"
                 >
-                  ⬇ Print / Save PDF
+                  🖨 Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadPDF}
+                  className="text-[11px] font-semibold px-3 py-1 rounded border border-green-500/50 text-green-400 hover:bg-green-500/10 transition-colors leading-tight"
+                >
+                  ⬇ Download PDF
                 </button>
               </div>
             )}
