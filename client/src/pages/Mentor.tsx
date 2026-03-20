@@ -2766,8 +2766,8 @@ ${stabSection}
                         <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
                       </div>
                       <svg viewBox="0 0 260 100" width="100%" height="88" className="block mt-1">
-                        {/* Horizontal centerline (CL) at bottom */}
-                        <line x1="5" y1="72" x2="252" y2="72" stroke="#3f3f46" strokeWidth="1" strokeDasharray="4,3"/>
+                        {/* Horizontal centerline (CL) at bottom — long-short-long drafting linetype */}
+                        <line x1="5" y1="72" x2="252" y2="72" stroke="#3f3f46" strokeWidth="1" strokeDasharray="12,3,3,3"/>
                         <text x="248" y="70" fontSize="7" fill="#3f3f46" textAnchor="end">CL</text>
                         {/* Tool body — shank portion */}
                         <line x1="22" y1="16" x2="105" y2="16" stroke="#71717a" strokeWidth="2"/>
