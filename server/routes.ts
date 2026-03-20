@@ -106,6 +106,24 @@ export async function registerRoutes(
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
 
+  // ── Leads table ───────────────────────────────────────────────────────────
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS leads (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        operation TEXT,
+        material TEXT,
+        machine_name TEXT,
+        results_text TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  } catch (err: any) {
+    console.warn("[Leads migration]", err?.message ?? err);
+  }
+
   app.get(api.snippets.list.path, async (req, res) => {
     const snippets = await storage.getSnippets();
     res.json(snippets);
@@ -1064,6 +1082,83 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Thread Mill Quote] Email send failed:", err?.message);
       return res.status(500).json({ message: "Quote logged but email delivery failed. We'll follow up." });
+    }
+  });
+
+  // ── Email Results (lead capture) ─────────────────────────────────────────
+  app.post("/api/results/email", async (req, res) => {
+    try {
+      const { email, operation, material, machine_name, results_text } = (req.body ?? {}) as {
+        email?: string; operation?: string; material?: string;
+        machine_name?: string; results_text?: string;
+      };
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Valid email address required." });
+      }
+
+      // Store lead in DB regardless of email delivery
+      try {
+        const { pool } = await import("./db");
+        await pool.query(
+          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
+          [email.toLowerCase().trim(), operation ?? null, material ?? null, machine_name ?? null, results_text ?? null]
+        );
+      } catch (dbErr: any) {
+        console.warn("[Results Email] DB insert failed:", dbErr?.message);
+      }
+
+      const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
+      const smtpUser = process.env.SMTP_USER || "";
+      const smtpPass = process.env.SMTP_PASS || "";
+      const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+
+      if (!smtpUser || !smtpPass) {
+        console.log("[Results Email] Lead captured (SMTP not configured):", email, operation, material);
+        return res.json({ ok: true });
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+        auth: { user: smtpUser, pass: smtpPass },
+      });
+
+      // Send results to user
+      await transporter.sendMail({
+        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        to: email,
+        subject: "Your Core Cutter Speeds & Feeds Results",
+        text: [
+          "Here are your machining parameters from the Core Cutter Machining Advisor.",
+          "",
+          results_text ?? "(no results attached)",
+          "",
+          "─────────────────────────────────────",
+          "Questions? Contact us at sales@corecutterusa.com",
+          "corecuttertool.com",
+        ].join("\n"),
+      }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
+
+      // Notify sales
+      await transporter.sendMail({
+        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        to,
+        subject: `New Lead — ${operation ?? "unknown op"} · ${material ?? "unknown material"} — ${email}`,
+        text: [
+          `Email: ${email}`,
+          `Operation: ${operation ?? "—"}`,
+          `Material: ${material ?? "—"}`,
+          `Machine: ${machine_name ?? "—"}`,
+          "",
+          results_text ?? "(no results)",
+        ].join("\n"),
+      }).catch((e: any) => console.warn("[Results Email] Sales notify failed:", e?.message));
+
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[Results Email]", err?.message);
+      return res.status(500).json({ error: "Failed to process request." });
     }
   });
 

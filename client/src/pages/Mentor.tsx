@@ -338,6 +338,11 @@ export default function Mentor() {
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
 
+  // ── Email results (lead capture) ──────────────────────────────────────────
+  const [erEmail, setErEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [erStatus, setErStatus] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [erError, setErError] = React.useState("");
+
   // ── Machine state ──────────────────────────────────────────────────────────
   const [machineQuery, setMachineQuery] = React.useState("");
   const [machineResults, setMachineResults] = React.useState<any[]>([]);
@@ -1196,6 +1201,8 @@ export default function Mentor() {
     }
 
     setRunWarnings([]);
+    setErStatus("idle");
+    setErError("");
     try {
       await mentor.mutateAsync({
         ...form,
@@ -1598,7 +1605,7 @@ ${stabSection}
   );
 
   const [camCopied, setCamCopied] = React.useState(false);
-  function copyCamParams() {
+  function buildResultsText(): string | null {
     const L = (label: string, value: string) => `${(label + ":").padEnd(18)} ${value}`;
     const DIV = "────────────────────────────────────────";
     const cust   = result?.customer;
@@ -1935,14 +1942,52 @@ ${stabSection}
       }
     }
 
-    if (lines.filter(l => l.startsWith("TOOL")).length === 0) return;
+    if (lines.filter(l => l.startsWith("TOOL")).length === 0) return null;
     lines.push("");
     lines.push("════════════════════════════════════════");
     lines.push("Core Cutter Tool  |  corecuttertool.com");
-    navigator.clipboard.writeText(lines.join("\n")).then(() => {
+    return lines.join("\n");
+  }
+
+  function copyCamParams() {
+    const text = buildResultsText();
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
       setCamCopied(true);
       setTimeout(() => setCamCopied(false), 2000);
     });
+  }
+
+  async function emailResults() {
+    if (!erEmail.trim()) { setErError("Enter your email address."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(erEmail.trim())) { setErError("Enter a valid email address."); return; }
+    setErStatus("sending");
+    setErError("");
+    const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? undefined;
+    try {
+      const resp = await fetch("/api/results/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: erEmail.trim(),
+          operation,
+          material: matLabel,
+          machine_name: activeMachineName || undefined,
+          results_text: buildResultsText() ?? undefined,
+        }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        setErError((d as any).error ?? "Something went wrong — try again.");
+        setErStatus("error");
+      } else {
+        setErStatus("sent");
+        localStorage.setItem("er_email", erEmail.trim().toLowerCase());
+      }
+    } catch {
+      setErError("Network error — check your connection.");
+      setErStatus("error");
+    }
   }
 
   // Optional: gate engineering even if toggle is on but no data returned
@@ -6992,6 +7037,47 @@ ${stabSection}
 
       </div>
       </div>} {/* end grid */}
+
+      {/* Email Results — lead capture */}
+      {mentor.data && erStatus !== "sent" && (
+        <div className="mt-5 rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-4 py-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-zinc-200 leading-snug">
+                Email me these results
+              </p>
+              <p className="text-xs text-zinc-500 leading-snug mt-0.5">
+                Get a copy sent to your inbox — no account required.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="email"
+                placeholder="your@email.com"
+                value={erEmail}
+                onChange={e => { setErEmail(e.target.value); setErError(""); setErStatus("idle"); }}
+                onKeyDown={e => { if (e.key === "Enter") emailResults(); }}
+                className="w-52 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
+                disabled={erStatus === "sending"}
+              />
+              <button
+                onClick={emailResults}
+                disabled={erStatus === "sending" || !erEmail.trim()}
+                className="rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 px-3 py-1.5 text-sm font-medium text-white transition-colors whitespace-nowrap"
+              >
+                {erStatus === "sending" ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </div>
+          {erError && <p className="mt-1 text-xs text-red-400">{erError}</p>}
+        </div>
+      )}
+      {mentor.data && erStatus === "sent" && (
+        <div className="mt-5 rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 flex items-center gap-2 text-sm text-emerald-300">
+          <span className="text-base">✓</span>
+          <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
+        </div>
+      )}
 
       {/* Disclaimer */}
       <div className="mt-6 px-1 text-[11px] text-muted-foreground/60 leading-relaxed border-t border-border pt-4">
