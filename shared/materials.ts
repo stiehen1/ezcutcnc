@@ -1,8 +1,9 @@
 export const MATERIAL_NOTES: Record<string, string> = {
   // N — Non-Ferrous
-  "aluminum_wrought":    "Excellent machinability — run aggressive SFM and chip loads. Sharp flutes and flood coolant prevent built-up edge, the main failure mode in aluminum.",
-  "aluminum_cast":       "Abrasive silicon particles wear edges faster than wrought. Reduce chip load for high-silicon grades (A390); coated or PCD tooling extends life in production.",
-  "non_ferrous":         "Soft but gummy — copper especially smears and grabs the edge. High feed, sharp polished flutes; never dwell or let the tool rub.",
+  "aluminum_wrought":    "Excellent machinability — 6061/6082/5052 are the \"easy\" aluminum grades. Run aggressive SFM with healthy chip load; too light a feed causes built-up edge and welding faster than too heavy. Sharp polished flutes, flood or strong air/mist, climb milling. Uncoated or DLC carbide preferred — TiAlN coatings can stick to aluminum at high temperature.",
+  "aluminum_wrought_hs": "High-strength 7075/2024 series — stronger and harder than 6061 (~150 HB vs ~95 HB), cutting forces are higher and tool wear is noticeably faster. Run ~20% lower SFM and slightly lighter chip load than 6061. Rigidity matters more: thin walls and long stickouts will chatter and deform. Sharp tools and good chip evacuation still mandatory; polished carbide or DLC, no TiAlN coatings.",
+  "aluminum_cast":       "Silicon particles are the enemy — more Si means more abrasion and shorter tool life. A356/A357 (7% Si) are more forgiving; A380 (8.5% Si) and especially A390 (17% Si high-silicon) eat edges fast. Reduce SFM and chip load vs. wrought, monitor edge condition closely, and shorten change intervals in high-Si grades. PCD tooling cost-justified in high-volume production.",
+  "non_ferrous":         "Copper and brass are soft but gummy — copper especially smears and welds to the edge at low chip load. High feed, sharp polished flutes, no dwells. Leaded brass (C360) is much friendlier than copper; bronze varies widely by alloy and lead content.",
   // P — Steel
   "steel_free":          "Easiest steel to machine. Sulfur additives break chips cleanly at high SFM — run it fast, push the feed, and tool wear is minimal.",
   "steel_alloy":         "Tough alloy steel (4140, 4340) that responds well to high chip loads. Variable-pitch geometry and TiAlN coating control chatter and heat.",
@@ -58,8 +59,9 @@ export type IsoCategory = (typeof ISO_CATEGORIES)[number]["iso"];
 
 export const ISO_SUBCATEGORIES = [
   // N — Non-Ferrous (hardness not applicable)
-  { iso: "N" as IsoCategory, key: "aluminum_wrought",      label: "Wrought Aluminum (6061, 7075)",           hardness: { value: 0,  scale: "hrb" as const } },
-  { iso: "N" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A360, A380, A390)",         hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N" as IsoCategory, key: "aluminum_wrought",      label: "Wrought Aluminum — General (6061, 6082, 5052, 6xxx/5xxx)", hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N" as IsoCategory, key: "aluminum_wrought_hs",   label: "Wrought Aluminum — High Strength (7075, 2024, 7xxx/2xxx)", hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A356, A380, A390, high-Si)", hardness: { value: 0,  scale: "hrb" as const } },
   { iso: "N" as IsoCategory, key: "non_ferrous",           label: "Copper / Brass / Bronze",                  hardness: { value: 0,  scale: "hrb" as const } },
   // P — Steel
   { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (1018, 1215, 12L14)", hardness: { value: 80, scale: "hrb" as const } },
@@ -158,14 +160,39 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
 // catalog material keys. Used for Level-1 (instant) material matching.
 // Keys are lowercase — normalize input before lookup.
 export const MATERIAL_ALIASES: Record<string, string> = {
-  // ── Aluminum ──────────────────────────────────────────────────────────────
-  "6061": "aluminum_wrought", "6061-t6": "aluminum_wrought", "7075": "aluminum_wrought",
-  "7075-t6": "aluminum_wrought", "2024": "aluminum_wrought", "2024-t3": "aluminum_wrought",
-  "6063": "aluminum_wrought", "5052": "aluminum_wrought", "5083": "aluminum_wrought",
-  "7050": "aluminum_wrought", "2014": "aluminum_wrought", "6082": "aluminum_wrought",
-  "mic-6": "aluminum_cast", "a360": "aluminum_cast", "a380": "aluminum_cast",
-  "a390": "aluminum_cast", "356": "aluminum_cast", "a356": "aluminum_cast",
-  "380": "aluminum_cast",
+  // ── Wrought Aluminum — General (6xxx / 5xxx / 1xxx) ──────────────────────
+  "6061": "aluminum_wrought", "6061-t6": "aluminum_wrought", "6061-t651": "aluminum_wrought",
+  "6063": "aluminum_wrought", "6063-t5": "aluminum_wrought", "6063-t6": "aluminum_wrought",
+  "6082": "aluminum_wrought", "6082-t6": "aluminum_wrought",
+  "6262": "aluminum_wrought", "6101": "aluminum_wrought",
+  "5052": "aluminum_wrought", "5052-h32": "aluminum_wrought",
+  "5083": "aluminum_wrought", "5086": "aluminum_wrought", "5251": "aluminum_wrought",
+  "5454": "aluminum_wrought", "5754": "aluminum_wrought",
+  "1100": "aluminum_wrought", "1050": "aluminum_wrought", "1060": "aluminum_wrought",
+  "1350": "aluminum_wrought",  // electrical grade
+  "mic-6": "aluminum_wrought", "atp-5": "aluminum_wrought",  // cast tooling plate — machines like wrought
+  "tooling plate": "aluminum_wrought", "cast tooling plate": "aluminum_wrought",
+  // ── Wrought Aluminum — High Strength (7xxx / 2xxx) ───────────────────────
+  "7075": "aluminum_wrought_hs", "7075-t6": "aluminum_wrought_hs", "7075-t651": "aluminum_wrought_hs",
+  "7075-t7351": "aluminum_wrought_hs",
+  "7050": "aluminum_wrought_hs", "7050-t7451": "aluminum_wrought_hs",
+  "7055": "aluminum_wrought_hs", "7068": "aluminum_wrought_hs",
+  "7049": "aluminum_wrought_hs", "7150": "aluminum_wrought_hs",
+  "2024": "aluminum_wrought_hs", "2024-t3": "aluminum_wrought_hs",
+  "2024-t351": "aluminum_wrought_hs", "2024-t4": "aluminum_wrought_hs",
+  "2014": "aluminum_wrought_hs", "2014-t6": "aluminum_wrought_hs",
+  "2219": "aluminum_wrought_hs", "2011": "aluminum_wrought_hs",
+  "2618": "aluminum_wrought_hs",  // piston alloy
+  "7075 aluminum": "aluminum_wrought_hs", "2024 aluminum": "aluminum_wrought_hs",
+  // ── Cast Aluminum ────────────────────────────────────────────────────────
+  "a360": "aluminum_cast", "a380": "aluminum_cast", "a390": "aluminum_cast",
+  "a356": "aluminum_cast", "a356-t6": "aluminum_cast", "356": "aluminum_cast",
+  "a357": "aluminum_cast",  // premium structural casting (lower Fe, higher Mg)
+  "319": "aluminum_cast",   // engine blocks — copper-bearing
+  "380": "aluminum_cast",   "a383": "aluminum_cast", "a413": "aluminum_cast",
+  "lm4": "aluminum_cast",   "lm25": "aluminum_cast",  // UK BS designation
+  "en ac-46000": "aluminum_cast", "en ac-42100": "aluminum_cast",  // EN casting grades
+  "a380.0": "aluminum_cast", "a356.0": "aluminum_cast",
   // ── Copper / Brass ────────────────────────────────────────────────────────
   "copper": "non_ferrous", "brass": "non_ferrous", "bronze": "non_ferrous",
   "c360": "non_ferrous", "c260": "non_ferrous", "c932": "non_ferrous",

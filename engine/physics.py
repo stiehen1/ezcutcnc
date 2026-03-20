@@ -730,7 +730,7 @@ def recommend_drill_cycle(
 # Base SFM — solid carbide, flood external, non-coolant-fed baseline
 # Midpoints of manufacturer carbide reamer charts
 REAM_SFM = {
-    "aluminum_wrought": 700, "aluminum_cast": 550, "non_ferrous": 300,
+    "aluminum_wrought": 700, "aluminum_wrought_hs": 560, "aluminum_cast": 550, "non_ferrous": 300,
     "steel_free": 275, "steel_alloy": 175, "steel_tool": 75,
     "stainless_martensitic": 85, "stainless_fm": 90,
     "stainless_austenitic": 185, "stainless_ph": 75,
@@ -747,7 +747,7 @@ REAM_SFM = {
 # Non-coolant-fed SFM multiplier by material group
 # Tougher/chip-sensitive materials penalised more heavily without internal coolant
 _REAM_NON_CF_MULT = {
-    "aluminum_wrought": 0.96, "aluminum_cast": 0.95, "non_ferrous": 0.97,
+    "aluminum_wrought": 0.96, "aluminum_wrought_hs": 0.96, "aluminum_cast": 0.95, "non_ferrous": 0.97,
     "steel_free": 0.95, "steel_alloy": 0.93, "steel_tool": 0.93,
     "stainless_martensitic": 0.92, "stainless_fm": 0.93,
     "stainless_austenitic": 0.92, "stainless_ph": 0.92,

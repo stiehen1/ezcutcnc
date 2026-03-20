@@ -109,7 +109,8 @@ BASE_SFM = {
     "Inconel": 180,
     "Titanium": 160,
     # ISO subcategory keys (conventional milling base; catalog-validated conservative midpoints)
-    "aluminum_wrought": 1400,
+    "aluminum_wrought":    1400,  # 6061/6082/5052/6xxx — shop-validated 1400 SFM conventional
+    "aluminum_wrought_hs": 1100,  # 7075/2024/7xxx/2xxx — ~20% lower; harder/stronger, sharper tools needed
     "aluminum_cast": 650,
     "non_ferrous": 550,
     "steel_free": 425,              # A36/low-carbon structural (was 375)
@@ -168,7 +169,8 @@ HP_PER_CUIN = {
     "Inconel":    1.55,
     "Titanium":   1.15,
     # ISO subcategory keys
-    "aluminum_wrought": 0.28,
+    "aluminum_wrought":    0.28,
+    "aluminum_wrought_hs": 0.30,   # 7075/2024 — slightly higher unit force than 6061
     "aluminum_cast":    0.32,
     "non_ferrous":      0.35,
     "steel_free":       0.75,
@@ -298,7 +300,8 @@ def _coating_life_factor(coating: str, material_group: str) -> float:
     return tbl.get(grp, tbl.get("default", 1.0))
 
 BASE_LIFE_MIN = {
-    "aluminum_wrought": 180.0,
+    "aluminum_wrought":    180.0,
+    "aluminum_wrought_hs": 140.0,  # 7075/2024 — shorter tool life than 6061
     "aluminum_cast":    130.0,
     "non_ferrous":      110.0,
     "steel_free":        90.0,
@@ -483,7 +486,8 @@ IPT_FRAC = {
     "Inconel": 0.003,
     "Titanium": 0.0035,
     # ISO subcategory keys
-    "aluminum_wrought": 0.0125,   # 6061 chipbreaker: 1.25%×D confirmed
+    "aluminum_wrought":    0.0125,  # 6061 chipbreaker: 1.25%×D confirmed
+    "aluminum_wrought_hs": 0.0100,  # 7075/2024: lighter chip load — stronger alloy, more demanding on edges
     "aluminum_cast":    0.010,
     "non_ferrous":      0.008,
     "steel_free":       0.007,    # A36/low-carbon structural
@@ -532,7 +536,8 @@ IPT_FRAC = {
 # Calibrated: 304 SS HEM 1.2%×D adj at 7% WOC → 2.0×; Inconel 718 HEM 1.5%×D adj at 5% → 2.4×.
 HEM_IPT_MULT = {
     "Aluminum": 2.0,
-    "aluminum_wrought": 2.0,
+    "aluminum_wrought":    2.0,
+    "aluminum_wrought_hs": 2.0,   # 7075/2024 — HEM strategy same as 6061
     "aluminum_cast": 2.0,
     "Steel": 2.0,
     "steel_alloy": 2.0,
@@ -596,7 +601,8 @@ EDGE_RADIUS = {
 # MATERIAL GROUPING
 # ================================
 _ISO_KEY_TO_GROUP = {
-    "aluminum_wrought": "Aluminum",
+    "aluminum_wrought":    "Aluminum",
+    "aluminum_wrought_hs": "Aluminum",
     "aluminum_cast": "Aluminum",
     "non_ferrous": "Non-Ferrous",
     "steel_free": "Steel",
@@ -1268,7 +1274,7 @@ def hem_typical_woc_range_pct(material_group, flutes):
 
 # SFM for solid carbide drills (base — flood coolant, 135° point)
 DRILL_SFM = {
-    "aluminum_wrought": 400, "aluminum_cast": 350, "non_ferrous": 250,
+    "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "steel_free": 150, "steel_alloy": 100, "steel_tool": 70,
     # Base = flood external coolant, non-coolant-fed drill. coolant_fed × 1.15 bonus brings these up to through-coolant target.
     # stainless_304 validated: 60 SFM non-coolant-fed → 69 SFM coolant-fed ≈ 70 reference target.
@@ -1292,7 +1298,7 @@ DRILL_SFM = {
 
 # IPR base for 0.5" diameter solid carbide drill — scales with dia^0.6
 DRILL_IPR_BASE = {
-    "aluminum_wrought": 0.010, "aluminum_cast": 0.008, "non_ferrous": 0.007,
+    "aluminum_wrought": 0.010, "aluminum_wrought_hs": 0.009, "aluminum_cast": 0.008, "non_ferrous": 0.007,
     "steel_free": 0.006, "steel_alloy": 0.004, "steel_tool": 0.003,
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
@@ -2161,7 +2167,8 @@ def run_reaming(payload: dict) -> dict:
 KEYSEAT_SFM = {
     # Aluminum
     "Aluminum":          900,
-    "aluminum_wrought":  900,
+    "aluminum_wrought":    900,
+    "aluminum_wrought_hs": 700,   # 7075/2024 keyseat: lower full-slot SFM — stronger alloy
     "aluminum_cast":     500,
     "non_ferrous":       400,
     # Steel
@@ -4407,7 +4414,7 @@ def run(payload=None):
                 _hem_dia = _slot_width * 0.75
             # Flute recommendation by material group
             _mat_grp_hem = get_material_group(str(data.get("material", "") or ""))
-            if _mat_grp_hem in ("Aluminum", "aluminum_wrought", "aluminum_cast", "Non-Ferrous"):
+            if _mat_grp_hem in ("Aluminum", "aluminum_wrought", "aluminum_wrought_hs", "aluminum_cast", "Non-Ferrous"):
                 _hem_flutes = "3 or 5-flute"
             elif _mat_grp_hem in ("Inconel", "Titanium", "Stainless",
                                    "stainless_austenitic", "stainless_ph", "inconel_718",
