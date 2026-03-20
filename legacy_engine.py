@@ -1564,6 +1564,20 @@ def run_chamfer_mill(payload: dict) -> dict:
     if flutes <= 2:
         tips.append("More flutes (4–6) improve finish quality on chamfer mills — light chip load per tooth reduces edge burnishing.")
     tips.append("Keep chip load per tooth consistent — verify actual SFM at D_eff matches target before adjusting feed.")
+    # Saddling tip — always shown: position chamfer in middle of cutting edge, not at extremes
+    tips.append(
+        "Saddle the tool: position your chamfer depth so it engages the middle third of the cutting edge length (L2), "
+        "not at the tip or the top shoulder. The middle of the flank is the strongest zone — "
+        "running at the very tip risks chipping the point, running at the top risks corner breakdown. "
+        "If the chamfer only needs a shallow depth, shift the tool Z up so contact lands mid-flank."
+    )
+    # Z-oscillation tip — always shown: up-down motion distributes wear, prevents notching
+    tips.append(
+        "Z-oscillate to distribute wear: program a slow Z-shift (up and down within the available flank length) "
+        "while feeding around the part. This spreads the contact line across the full cutting edge "
+        "instead of notching a single groove — the same principle as Z-shifting a turning insert. "
+        "Even 0.010–0.020\" of Z travel significantly extends tool life on production runs."
+    )
 
     return {
         "customer": {
