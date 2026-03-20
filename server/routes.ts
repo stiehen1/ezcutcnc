@@ -1814,7 +1814,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
   // ── Material match: Level 1 alias + Level 3 AI ───────────────────────────
   app.post("/api/materials/match", async (req, res) => {
-    const { input } = req.body as { input: string };
+    try {
+    const { input } = (req.body ?? {}) as { input?: string };
     if (!input || input.trim().length < 2) return res.status(400).json({ error: "Input too short" });
 
     // Level 1 — alias lookup: try full string, then each word/token, then pairs
@@ -1866,6 +1867,9 @@ ${catalogList}`
       return res.json({ key: parsed.key, label: sub?.label ?? parsed.key, confidence: parsed.confidence, source: "ai", note: parsed.note ?? null });
     } catch (e) {
       return res.status(500).json({ error: "AI matching failed" });
+    }
+    } catch (e) {
+      return res.status(500).json({ error: "Match request failed" });
     }
   });
 
