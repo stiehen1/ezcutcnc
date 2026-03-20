@@ -2095,7 +2095,39 @@ ${stabSection}
       {/* App header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
         <img src="/CCLogo-long-blackback TRANSPARENT-01.png" alt="Core Cutter" className="h-10 w-auto" />
-        <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
+        <div className="flex items-center gap-3">
+          {/* Toolbox */}
+          {tbEmail && tbToken ? (
+            <a href="/toolbox" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+              </svg>
+              <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
+              {tbItemCount !== null && tbItemCount > 0 && (
+                <span className="text-[9px] font-bold bg-orange-500 text-white rounded-full px-1.5 py-0.5 leading-none">{tbItemCount}</span>
+              )}
+            </a>
+          ) : (
+            <button type="button" onClick={() => setTbShowModal(true)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-600 hover:border-orange-500/60 hover:bg-orange-500/10 transition-colors group">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400 group-hover:text-orange-400">
+                <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+              </svg>
+              <span className="text-[10px] text-zinc-300 group-hover:text-orange-400">Toolbox</span>
+            </button>
+          )}
+          {/* Eng Mode */}
+          {engMode ? (
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
+              <button type="button" onClick={exitEngMode} className="text-[10px] text-gray-400 hover:text-white underline">Exit</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-zinc-500 hover:text-white underline">Eng Mode</button>
+          )}
+          <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
+        </div>
       </div>
 
       {operation === "toolfinder" && (
@@ -2124,51 +2156,14 @@ ${stabSection}
               className="h-24 w-auto flex-shrink-0"
               style={{ mixBlendMode: "screen" }}
             />
-            {/* Right controls — stacked vertically */}
-            <div className="flex flex-col items-end gap-1.5 pt-4">
-              {/* IN/MM toggle — top */}
-              <div className="flex rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold">
-                {(["imperial", "metric"] as const).map((u) => (
-                  <button key={u} type="button" onClick={() => setUnits(u)} className="px-3 py-1 transition-colors"
-                    style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : "#9ca3af" }}>
-                    {u === "imperial" ? "IN" : "MM"}
-                  </button>
-                ))}
-              </div>
-              {/* Toolbox — middle */}
-              {tbEmail && tbToken ? (
-                <a href="/toolbox" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="7" width="20" height="14" rx="2"/>
-                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                    <line x1="12" y1="12" x2="12" y2="16"/>
-                    <line x1="10" y1="14" x2="14" y2="14"/>
-                  </svg>
-                  <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
-                  {tbItemCount !== null && tbItemCount > 0 && (
-                    <span className="text-[9px] font-bold bg-orange-500 text-white rounded-full px-1.5 py-0.5 leading-none">{tbItemCount}</span>
-                  )}
-                </a>
-              ) : (
-                <button type="button" onClick={() => setTbShowModal(true)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-600 hover:border-orange-500/60 hover:bg-orange-500/10 transition-colors group">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400 group-hover:text-orange-400">
-                    <rect x="2" y="7" width="20" height="14" rx="2"/>
-                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                    <line x1="12" y1="12" x2="12" y2="16"/>
-                    <line x1="10" y1="14" x2="14" y2="14"/>
-                  </svg>
-                  <span className="text-[10px] text-zinc-300 group-hover:text-orange-400">Toolbox</span>
+            {/* IN/MM toggle */}
+            <div className="flex rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold mt-4">
+              {(["imperial", "metric"] as const).map((u) => (
+                <button key={u} type="button" onClick={() => setUnits(u)} className="px-3 py-1 transition-colors"
+                  style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : "#9ca3af" }}>
+                  {u === "imperial" ? "IN" : "MM"}
                 </button>
-              )}
-              {/* Eng Mode — bottom */}
-              {engMode ? (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
-                  <button type="button" onClick={exitEngMode} className="text-[10px] text-gray-400 hover:text-white underline">Exit</button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-zinc-400 hover:text-white underline">Eng Mode</button>
-              )}
+              ))}
             </div>
           </div>
         </CardHeader>
