@@ -2085,7 +2085,7 @@ ${stabSection}
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-3 sm:p-4">
+    <div className="mx-auto w-full max-w-6xl p-3 sm:p-4 overflow-x-hidden">
       {/* App header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
         <img src="/CCLogo-long-blackback TRANSPARENT-01.png" alt="Core Cutter" className="h-10 w-auto" />
@@ -2115,7 +2115,7 @@ ${stabSection}
             <img
               src="/EZCutCNC_dark_horizontal.png"
               alt="EZcutCNC"
-              className="h-28 w-auto flex-shrink-0"
+              className="h-28 w-auto max-w-[220px] flex-shrink-0"
               style={{ mixBlendMode: "screen" }}
             />
             {/* Right controls — stacked vertically */}
