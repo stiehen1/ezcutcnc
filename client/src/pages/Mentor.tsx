@@ -6343,6 +6343,55 @@ ${stabSection}
               )}
 
 
+              {/* Chamfer multi-pass strategy card */}
+              {result?.multi_pass && form.tool_type === "chamfer_mill" && (() => {
+                const mp = result.multi_pass as any;
+                if (mp.single_pass_ok) return (
+                  <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 flex items-center gap-2">
+                    <span className="text-emerald-400 text-sm">✓</span>
+                    <span className="text-xs text-emerald-300 font-semibold">Single pass OK</span>
+                    <span className="text-xs text-muted-foreground">— depth is within single-pass limit for this tool/material</span>
+                  </div>
+                );
+                const nRough: number = mp.num_rough_passes;
+                const dRough: number = mp.rough_depth_per_pass;
+                const dFull: number  = mp.finish_depth_in;
+                const dAllow: number = mp.finish_allowance_in;
+                const passes = [
+                  ...Array.from({ length: nRough }, (_, i) => ({
+                    label: `Pass ${i + 1} — Roughing`,
+                    depth: dRough * (i + 1),
+                    isFinish: false,
+                  })),
+                  { label: `Pass ${nRough + 1} — Finish`, depth: dFull, isFinish: true },
+                ];
+                return (
+                  <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 space-y-2">
+                    <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Multi-Pass Chamfer Strategy</div>
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-1">
+                      <div><span className="text-muted-foreground">Total depth</span><span className="ml-2 font-semibold">{dFull.toFixed(4)}"</span></div>
+                      <div><span className="text-muted-foreground">Total passes</span><span className="ml-2 font-semibold">{mp.num_passes}</span></div>
+                      <div><span className="text-muted-foreground">Finish allowance</span><span className="ml-2 font-semibold">{dAllow.toFixed(3)}"</span></div>
+                    </div>
+                    <div className="space-y-1">
+                      {passes.map((p, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.isFinish ? "bg-green-400" : "bg-amber-400"}`} />
+                          <span className="text-zinc-300 flex-1">{p.label}</span>
+                          <span className="text-zinc-400">to {p.depth.toFixed(4)}"</span>
+                          {!p.isFinish && <span className="text-zinc-600 text-[10px]">({dRough.toFixed(4)}"/pass)</span>}
+                          {p.isFinish && <span className="text-emerald-500 text-[10px]">(full depth)</span>}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      WOC grows proportionally with depth — single-pass on large chamfers risks poor finish and accelerated wear.
+                      Use helical interpolation (G02/G03) for each pass for best surface quality.
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Dovetail info */}
               {dovetailResult && (
                 <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-2">

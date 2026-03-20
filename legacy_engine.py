@@ -1455,6 +1455,47 @@ def run_chamfer_mill(payload: dict) -> dict:
     _drive_eff     = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     machine_hp     = float(payload.get("machine_hp", 10.0) or 10.0) * _drive_eff
 
+    # ── Multi-pass strategy ────────────────────────────────────────────────────
+    # Chamfer WOC grows with depth (50% engagement for CMS at any depth) — aggressive
+    # single-pass cuts degrade finish and tool life as material removal grows quadratically.
+    # Max safe single-pass depth: 15% of body dia (10% for hard materials).
+    # Always leave a finish allowance for the final pass.
+    _hard_mat = mat_group in ("Stainless", "Inconel", "Titanium", "Hardened")
+    _max_rough_depth = body_dia * (0.10 if _hard_mat else 0.15)
+    _finish_allow    = 0.015 if _hard_mat else 0.010
+    multi_pass = None
+    if chamfer_depth > 0:
+        if chamfer_depth <= _max_rough_depth + _finish_allow:
+            # Single pass — shallow enough
+            multi_pass = {
+                "num_passes":           1,
+                "depth_per_pass_in":    round(chamfer_depth, 4),
+                "finish_depth_in":      round(chamfer_depth, 4),
+                "rough_depth_per_pass": None,
+                "num_rough_passes":     0,
+                "finish_allowance_in":  0.0,
+                "single_pass_ok":       True,
+            }
+        else:
+            _rough_total    = chamfer_depth - _finish_allow
+            _num_rough      = max(1, math.ceil(_rough_total / _max_rough_depth))
+            _depth_per_rough = round(_rough_total / _num_rough, 4)
+            multi_pass = {
+                "num_passes":           _num_rough + 1,
+                "depth_per_pass_in":    _depth_per_rough,
+                "finish_depth_in":      round(chamfer_depth, 4),
+                "rough_depth_per_pass": _depth_per_rough,
+                "num_rough_passes":     _num_rough,
+                "finish_allowance_in":  round(_finish_allow, 4),
+                "single_pass_ok":       False,
+            }
+            notes.append(
+                f"Multi-pass recommended: {_num_rough} roughing pass{'es' if _num_rough > 1 else ''} "
+                f"of {_depth_per_rough:.4f}\" each, then 1 finish pass to {chamfer_depth:.4f}\" full depth "
+                f"({_finish_allow:.3f}\" finish allowance). "
+                f"WOC is {_woc_as_pct*100:.0f}% of D_eff — force scales with depth, single-pass risks poor finish."
+            )
+
     # Tool life — light engagement means chamfer mills outlast endmills significantly
     # Use same base life as endmills × 1.5 bonus for shallow radial engagement
     _base_life = BASE_LIFE_MIN.get(_mat_key, BASE_LIFE_MIN.get(mat_group, 60.0)) * 1.5
@@ -1547,6 +1588,7 @@ def run_chamfer_mill(payload: dict) -> dict:
             "torque_pct":             None,
         },
         "stability": None,
+        "multi_pass": multi_pass,
         "chamfer": {
             "d_eff_in":          round(d_eff, 4),
             "chamfer_angle_deg": chamfer_angle,
