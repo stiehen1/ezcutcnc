@@ -2208,6 +2208,36 @@ export default function Calculators() {
 
   const visible = (id: string) => !q || TITLES[id]?.toLowerCase().includes(q);
   const printRegistry = React.useRef<Map<string, PrintEntry>>(new Map());
+  const [textCopied, setTextCopied] = React.useState(false);
+
+  function copyAsText() {
+    const entries = Array.from(printRegistry.current.values());
+    if (entries.length === 0) { alert("No calculator results to copy yet — enter some values first."); return; }
+    const now = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    const divider = "─".repeat(44);
+    const lines: string[] = [
+      "EZCutCNC — Calculator Results",
+      `Generated: ${now}`,
+      divider,
+      "",
+    ];
+    for (const e of entries) {
+      lines.push(`[${e.category}]  ${e.title}`);
+      const maxLabel = Math.max(...e.rows.map(r => r.label.length));
+      for (const r of e.rows) {
+        const pad = ".".repeat(Math.max(2, maxLabel - r.label.length + 3));
+        lines.push(`  ${r.label} ${pad} ${r.highlight ? "► " : "  "}${r.value}`);
+      }
+      lines.push("");
+    }
+    lines.push(divider);
+    lines.push("Produced with EZCutCNC by Core Cutter LLC  |  corecuttertool.com");
+    lines.push(`© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.`);
+    navigator.clipboard.writeText(lines.join("\n")).then(() => {
+      setTextCopied(true);
+      setTimeout(() => setTextCopied(false), 2500);
+    });
+  }
 
   function printCalcPdf() {
     const entries = Array.from(printRegistry.current.values());
@@ -2258,6 +2288,11 @@ export default function Calculators() {
           onClick={printCalcPdf}
           className="px-3 py-1.5 rounded text-xs font-semibold border border-orange-600 text-orange-400 hover:bg-orange-900/30 transition-colors"
         >Print / Save PDF</button>
+        <button
+          type="button"
+          onClick={copyAsText}
+          className="px-3 py-1.5 rounded text-xs font-semibold border border-indigo-600 text-indigo-400 hover:bg-indigo-900/30 transition-colors"
+        >{textCopied ? "✓ Copied!" : "Copy as Text"}</button>
         <div className="flex items-center gap-1 rounded-lg border border-[#2d2d4a] p-0.5" style={{ background: "#16213e" }}>
           <button
             type="button"
