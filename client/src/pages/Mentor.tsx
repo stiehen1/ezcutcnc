@@ -1258,8 +1258,8 @@ export default function Mentor() {
     const now = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const MODE_LABELS: Record<string, string> = {
-      hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
-      face: "Planar Milling (Facing)", slot: "Slotting — Traditional", trochoidal: "Trochoidal", circ_interp: "Bore Enlargement",
+      hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
+      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
     const opLabel = operation === "milling" ? (MODE_LABELS[form.mode] ?? baseOpLabel) : baseOpLabel;
@@ -1639,9 +1639,9 @@ ${stabSection}
       standard: "Standard", chipbreaker: "Chipbreaker (CB)", truncated_rougher: "VXR Rougher",
     };
     const modeLabel: Record<string, string> = {
-      hem: "HEM Roughing", traditional: "Traditional Roughing", finish: "Finishing",
-      face: "Planar Milling (Facing)", slot: "Slotting — Traditional",
-      trochoidal: "Trochoidal", circ_interp: "Bore Enlargement",
+      hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
+      face: "Facing (Planar Milling)", slot: "Slotting",
+      trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation",
     };
     const isRoughing = form.mode === "hem" || form.mode === "traditional" || form.mode === "trochoidal";
 
@@ -2278,17 +2278,16 @@ ${stabSection}
                 }}
               >
                 <option value="" disabled>— Select Process —</option>
-                <option value="circ_interp">Bore Enlargement</option>
+                <option value="hem">Roughing — HEM  (incl. Trochoidal / Dynamic / Adaptive)</option>
+                <option value="traditional">Roughing — Traditional</option>
                 <option value="finish">Finishing</option>
-                <option value="face">Planar Milling (Facing)</option>
-                <option value="hem">HEM Roughing</option>
-                <option value="slot">Slotting — Traditional</option>
-                <option value="traditional">Traditional Roughing</option>
-                <option value="trochoidal">Trochoidal</option>
+                <option value="face">Facing (Planar Milling)</option>
+                <option value="slot">Slotting</option>
+                <option value="circ_interp">Circular Interpolation</option>
               </select>
             )}
 
-            {/* Bore Enlargement hole dimensions */}
+            {/* Circular Interpolation hole dimensions */}
             {form.mode === "circ_interp" && (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
