@@ -306,6 +306,10 @@ export default function Mentor() {
 
 
   const [isoCategory, setIsoCategory] = React.useState<IsoCategory>("P");
+  const [matSearchInput, setMatSearchInput]   = React.useState("");
+  const [matSearchLoading, setMatSearchLoading] = React.useState(false);
+  const [matMatchResult, setMatMatchResult]   = React.useState<{ key: string; label: string; confidence: string; source: string; note: string | null } | null>(null);
+  const [matMatchError, setMatMatchError]     = React.useState<string | null>(null);
   const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmilling" | "toolfinder">("milling");
   const [units, setUnits] = React.useState<"imperial" | "metric">("imperial");
 
@@ -2240,6 +2244,76 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Material</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+          {/* Grade search */}
+          <div className="mb-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={matSearchInput}
+                onChange={e => { setMatSearchInput(e.target.value); setMatMatchResult(null); setMatMatchError(null); }}
+                onKeyDown={async e => {
+                  if (e.key !== "Enter") return;
+                  if (!matSearchInput.trim()) return;
+                  setMatSearchLoading(true); setMatMatchResult(null); setMatMatchError(null);
+                  try {
+                    const r = await fetch("/api/materials/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: matSearchInput.trim() }) });
+                    const data = await r.json();
+                    if (!r.ok || !data.key) { setMatMatchError(data.note ?? "No match found — try selecting the material manually."); }
+                    else {
+                      setMatMatchResult(data);
+                      const sub = ISO_SUBCATEGORIES.find(s => s.key === data.key);
+                      if (sub) {
+                        setIsoCategory(sub.iso);
+                        setForm(p => ({ ...p, material: sub.key, hardness_value: sub.hardness.value, hardness_scale: sub.hardness.scale }));
+                      }
+                    }
+                  } catch { setMatMatchError("Match request failed."); }
+                  finally { setMatSearchLoading(false); }
+                }}
+                placeholder='Search by grade name — e.g. "4140", "17-4 PH", "Inconel 718"'
+                className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
+              />
+              <button
+                type="button"
+                disabled={matSearchLoading || !matSearchInput.trim()}
+                onClick={async () => {
+                  if (!matSearchInput.trim()) return;
+                  setMatSearchLoading(true); setMatMatchResult(null); setMatMatchError(null);
+                  try {
+                    const r = await fetch("/api/materials/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: matSearchInput.trim() }) });
+                    const data = await r.json();
+                    if (!r.ok || !data.key) { setMatMatchError(data.note ?? "No match found — try selecting the material manually."); }
+                    else {
+                      setMatMatchResult(data);
+                      const sub = ISO_SUBCATEGORIES.find(s => s.key === data.key);
+                      if (sub) {
+                        setIsoCategory(sub.iso);
+                        setForm(p => ({ ...p, material: sub.key, hardness_value: sub.hardness.value, hardness_scale: sub.hardness.scale }));
+                      }
+                    }
+                  } catch { setMatMatchError("Match request failed."); }
+                  finally { setMatSearchLoading(false); }
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 disabled:opacity-40 transition-colors"
+              >
+                {matSearchLoading ? "Matching…" : "Match"}
+              </button>
+            </div>
+            {matMatchResult && (
+              <div className={`mt-1.5 text-xs rounded px-2.5 py-1.5 border ${matMatchResult.confidence === "high" ? "border-green-500/40 bg-green-500/10 text-green-300" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-300"}`}>
+                {matMatchResult.confidence === "high" ? "✓" : "⚠"} Running as <strong>{matMatchResult.label}</strong>
+                {matMatchResult.source === "ai" && " (AI match)"}
+                {matMatchResult.confidence !== "high" && " — closest available. Verify with your tooling supplier."}
+                {matMatchResult.note && <span className="block opacity-75 mt-0.5">{matMatchResult.note}</span>}
+              </div>
+            )}
+            {matMatchError && (
+              <div className="mt-1.5 text-xs rounded px-2.5 py-1.5 border border-red-500/40 bg-red-500/10 text-red-300">
+                ✗ {matMatchError}
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
             <div className="flex flex-wrap gap-1.5 items-center">
               {ISO_CATEGORIES.map((cat) => (

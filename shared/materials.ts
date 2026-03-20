@@ -147,6 +147,138 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "hardened_gt55":  { min: 55, max: 68,  scale: "hrc", note: "Use this category for hardened steels 55–68 HRC. CBN tooling is preferred above 60 HRC." },
 };
 
+// ── Material Aliases ─────────────────────────────────────────────────────────
+// Maps common grade names, trade names, UNS numbers, and DIN numbers to
+// catalog material keys. Used for Level-1 (instant) material matching.
+// Keys are lowercase — normalize input before lookup.
+export const MATERIAL_ALIASES: Record<string, string> = {
+  // ── Aluminum ──────────────────────────────────────────────────────────────
+  "6061": "aluminum_wrought", "6061-t6": "aluminum_wrought", "7075": "aluminum_wrought",
+  "7075-t6": "aluminum_wrought", "2024": "aluminum_wrought", "2024-t3": "aluminum_wrought",
+  "6063": "aluminum_wrought", "5052": "aluminum_wrought", "5083": "aluminum_wrought",
+  "7050": "aluminum_wrought", "2014": "aluminum_wrought", "6082": "aluminum_wrought",
+  "mic-6": "aluminum_cast", "a360": "aluminum_cast", "a380": "aluminum_cast",
+  "a390": "aluminum_cast", "356": "aluminum_cast", "a356": "aluminum_cast",
+  "380": "aluminum_cast",
+  // ── Copper / Brass ────────────────────────────────────────────────────────
+  "copper": "non_ferrous", "brass": "non_ferrous", "bronze": "non_ferrous",
+  "c360": "non_ferrous", "c260": "non_ferrous", "c932": "non_ferrous",
+  "naval brass": "non_ferrous", "red brass": "non_ferrous",
+  // ── Free Machining Steel ──────────────────────────────────────────────────
+  "1018": "steel_free", "1020": "steel_free", "1045": "steel_free",
+  "1215": "steel_free", "12l14": "steel_free", "1144": "steel_free",
+  "1117": "steel_free", "b1112": "steel_free", "free machining": "steel_free",
+  // ── Alloy Steel ───────────────────────────────────────────────────────────
+  "4140": "steel_alloy", "4130": "steel_alloy", "4340": "steel_alloy",
+  "8620": "steel_alloy", "4142": "steel_alloy", "4150": "steel_alloy",
+  "4145": "steel_alloy", "4320": "steel_alloy", "9310": "steel_alloy",
+  "e4340": "steel_alloy", "300m": "steel_alloy", "4037": "steel_alloy",
+  "52100": "steel_alloy", "1.7225": "steel_alloy", "42crmo4": "steel_alloy",
+  "en19": "steel_alloy", "en24": "steel_alloy", "en36": "steel_alloy",
+  "alloy steel": "steel_alloy", "cr-mo steel": "steel_alloy",
+  // ── P20 Tool Steel ────────────────────────────────────────────────────────
+  "p20": "tool_steel_p20", "p-20": "tool_steel_p20", "1.2311": "tool_steel_p20",
+  "1.2312": "tool_steel_p20", "718 mold": "tool_steel_p20", "nak80": "tool_steel_p20",
+  "prehardened mold": "tool_steel_p20", "4130 prehardened": "tool_steel_p20",
+  // ── A2 Tool Steel ─────────────────────────────────────────────────────────
+  "a2": "tool_steel_a2", "a-2": "tool_steel_a2", "1.2363": "tool_steel_a2",
+  "x100crmov5": "tool_steel_a2",
+  // ── H13 Tool Steel ────────────────────────────────────────────────────────
+  "h13": "tool_steel_h13", "h-13": "tool_steel_h13", "1.2344": "tool_steel_h13",
+  "skd61": "tool_steel_h13", "h11": "tool_steel_h13", "1.2343": "tool_steel_h13",
+  "dac": "tool_steel_h13", "dievar": "tool_steel_h13", "hotvar": "tool_steel_h13",
+  "hot work steel": "tool_steel_h13",
+  // ── S7 Tool Steel ─────────────────────────────────────────────────────────
+  "s7": "tool_steel_s7", "s-7": "tool_steel_s7", "shock steel": "tool_steel_s7",
+  // ── D2 Tool Steel ─────────────────────────────────────────────────────────
+  "d2": "tool_steel_d2", "d-2": "tool_steel_d2", "1.2379": "tool_steel_d2",
+  "skd11": "tool_steel_d2", "cr12mov": "tool_steel_d2", "x155crvmo12-1": "tool_steel_d2",
+  // ── CPM 10V ───────────────────────────────────────────────────────────────
+  "cpm10v": "cpm_10v", "cpm-10v": "cpm_10v", "a11": "cpm_10v",
+  "10v": "cpm_10v", "cpm 10v": "cpm_10v",
+  // ── 303 / 416 Free-Machining Stainless ───────────────────────────────────
+  "303": "stainless_fm", "303se": "stainless_fm", "416": "stainless_fm",
+  "1.4305": "stainless_fm", "free machining stainless": "stainless_fm",
+  // ── Ferritic Stainless ────────────────────────────────────────────────────
+  "409": "stainless_ferritic", "430": "stainless_ferritic", "434": "stainless_ferritic",
+  "436": "stainless_ferritic", "441": "stainless_ferritic", "439": "stainless_ferritic",
+  "1.4016": "stainless_ferritic", "1.4510": "stainless_ferritic",
+  // ── 410 Martensitic ───────────────────────────────────────────────────────
+  "410": "stainless_410", "410s": "stainless_410", "414": "stainless_410",
+  "greek ascoloy": "stainless_410", "1.4006": "stainless_410",
+  // ── 420 Martensitic ───────────────────────────────────────────────────────
+  "420": "stainless_420", "420hc": "stainless_420", "1.4028": "stainless_420",
+  "1.4034": "stainless_420",
+  // ── 440C ─────────────────────────────────────────────────────────────────
+  "440c": "stainless_440c", "440": "stainless_440c", "440a": "stainless_440c",
+  "440b": "stainless_440c", "1.4125": "stainless_440c",
+  // ── 304 Austenitic ────────────────────────────────────────────────────────
+  "304": "stainless_304", "304l": "stainless_304", "321": "stainless_304",
+  "347": "stainless_304", "18-8": "stainless_304", "1.4301": "stainless_304",
+  "1.4307": "stainless_304", "1.4541": "stainless_304", "a2 stainless": "stainless_304",
+  // ── 316 Mo-Bearing ────────────────────────────────────────────────────────
+  "316": "stainless_316", "316l": "stainless_316", "316ti": "stainless_316",
+  "317": "stainless_316", "1.4401": "stainless_316", "1.4404": "stainless_316",
+  "a4 stainless": "stainless_316", "marine grade": "stainless_316",
+  // ── PH Stainless ──────────────────────────────────────────────────────────
+  "17-4": "stainless_ph", "17-4ph": "stainless_ph", "17-4 ph": "stainless_ph",
+  "15-5": "stainless_ph", "15-5ph": "stainless_ph", "13-8mo": "stainless_ph",
+  "ph13-8mo": "stainless_ph", "630": "stainless_ph", "s17400": "stainless_ph",
+  "1.4542": "stainless_ph", "17-7": "stainless_ph",
+  // ── Duplex ────────────────────────────────────────────────────────────────
+  "2205": "stainless_duplex", "s31803": "stainless_duplex", "s32205": "stainless_duplex",
+  "1.4462": "stainless_duplex", "2304": "stainless_duplex",
+  // ── Super Duplex ──────────────────────────────────────────────────────────
+  "2507": "stainless_superduplex", "s32750": "stainless_superduplex",
+  "s32760": "stainless_superduplex", "zeron 100": "stainless_superduplex",
+  "1.4410": "stainless_superduplex",
+  // ── Gray Cast Iron ────────────────────────────────────────────────────────
+  "gray iron": "cast_iron_gray", "grey iron": "cast_iron_gray",
+  "gg25": "cast_iron_gray", "gg30": "cast_iron_gray", "fc250": "cast_iron_gray",
+  "class 40": "cast_iron_gray",
+  // ── Ductile / Nodular Iron ────────────────────────────────────────────────
+  "ductile iron": "cast_iron_ductile", "nodular iron": "cast_iron_ductile",
+  "ggg40": "cast_iron_ductile", "ggg50": "cast_iron_ductile",
+  "ggg60": "cast_iron_ductile", "65-45-12": "cast_iron_ductile",
+  // ── CP Titanium ───────────────────────────────────────────────────────────
+  "cp titanium": "titanium_cp", "grade 2": "titanium_cp", "grade 4": "titanium_cp",
+  "commercially pure titanium": "titanium_cp",
+  // ── Ti-6Al-4V ─────────────────────────────────────────────────────────────
+  "ti-6al-4v": "titanium_64", "ti64": "titanium_64", "6al-4v": "titanium_64",
+  "grade 5": "titanium_64", "grade 23": "titanium_64", "ti-6-4": "titanium_64",
+  "titanium 6-4": "titanium_64",
+  // ── A-286 / Fe Superalloy ─────────────────────────────────────────────────
+  "a-286": "hiTemp_fe", "a286": "hiTemp_fe", "incoloy 800": "hiTemp_fe",
+  "incoloy 901": "hiTemp_fe", "v57": "hiTemp_fe",
+  // ── Stellite / Co Superalloy ──────────────────────────────────────────────
+  "stellite": "hiTemp_co", "stellite 6": "hiTemp_co", "stellite 12": "hiTemp_co",
+  "haynes 25": "hiTemp_co", "l605": "hiTemp_co",
+  // ── Monel ─────────────────────────────────────────────────────────────────
+  "monel": "monel_k500", "monel k500": "monel_k500", "monel k-500": "monel_k500",
+  "k500": "monel_k500", "uns n05500": "monel_k500", "monel 400": "monel_k500",
+  // ── Inconel 625 ───────────────────────────────────────────────────────────
+  "625": "inconel_625", "inconel 625": "inconel_625", "in625": "inconel_625",
+  "uns n06625": "inconel_625", "hastelloy c-276": "inconel_625",
+  "hastelloy c276": "inconel_625", "c-276": "inconel_625",
+  // ── Inconel 718 ───────────────────────────────────────────────────────────
+  "718": "inconel_718", "inconel 718": "inconel_718", "in718": "inconel_718",
+  "uns n07718": "inconel_718", "allvac 718": "inconel_718",
+  // ── Hastelloy X / Mid-Tier Ni ─────────────────────────────────────────────
+  "hastelloy x": "hastelloy_x", "haynes 230": "hastelloy_x",
+  "inconel x-750": "hastelloy_x", "inconel 725": "hastelloy_x",
+  "rene 88": "hastelloy_x", "uns n06002": "hastelloy_x",
+  // ── Waspaloy ─────────────────────────────────────────────────────────────
+  "waspaloy": "waspaloy", "haynes 282": "waspaloy", "rene 41": "waspaloy",
+  "uns n07001": "waspaloy",
+  // ── MP35N ─────────────────────────────────────────────────────────────────
+  "mp35n": "mp35n", "uns r30035": "mp35n",
+};
+
+export function matchMaterialAlias(input: string): string | null {
+  const key = input.trim().toLowerCase();
+  return MATERIAL_ALIASES[key] ?? null;
+}
+
 export function getIsoForKey(key: string): IsoCategory | null {
   const found = ISO_SUBCATEGORIES.find((s) => s.key === key);
   return found ? found.iso : null;

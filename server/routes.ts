@@ -1811,5 +1811,54 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json({ ok: true });
   });
 
+  // ── Material match: Level 1 alias + Level 3 AI ───────────────────────────
+  app.post("/api/materials/match", async (req, res) => {
+    const { input } = req.body as { input: string };
+    if (!input || input.trim().length < 2) return res.status(400).json({ error: "Input too short" });
+
+    const { matchMaterialAlias, ISO_SUBCATEGORIES } = await import("@shared/materials");
+
+    // Level 1 — instant alias lookup
+    const aliasMatch = matchMaterialAlias(input);
+    if (aliasMatch) {
+      const sub = ISO_SUBCATEGORIES.find(s => s.key === aliasMatch);
+      return res.json({ key: aliasMatch, label: sub?.label ?? aliasMatch, confidence: "high", source: "alias", note: null });
+    }
+
+    // Level 3 — Claude AI matching
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "AI matching unavailable" });
+
+    const catalogList = ISO_SUBCATEGORIES.map(s => `${s.key}: ${s.label}`).join("\n");
+    try {
+      const client = new Anthropic({ apiKey });
+      const msg = await client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 256,
+        messages: [{
+          role: "user",
+          content: `You are a materials engineering expert. A machinist entered this material name: "${input}"
+
+Match it to the CLOSEST entry from this catalog. Reply with ONLY a JSON object — no explanation:
+{"key":"<catalog_key>","confidence":"high|medium|low","note":"<one sentence why, or null if obvious>"}
+
+If truly unmatchable, reply: {"key":null,"confidence":"low","note":"<brief reason>"}
+
+CATALOG:
+${catalogList}`
+        }]
+      });
+      const text = (msg.content[0] as any).text.trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON in response");
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!parsed.key) return res.json({ key: null, confidence: "low", source: "ai", note: parsed.note ?? "No close match found in catalog." });
+      const sub = ISO_SUBCATEGORIES.find(s => s.key === parsed.key);
+      return res.json({ key: parsed.key, label: sub?.label ?? parsed.key, confidence: parsed.confidence, source: "ai", note: parsed.note ?? null });
+    } catch (e) {
+      return res.status(500).json({ error: "AI matching failed" });
+    }
+  });
+
   return httpServer;
 }
