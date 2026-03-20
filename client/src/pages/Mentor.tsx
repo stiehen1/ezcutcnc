@@ -2765,38 +2765,37 @@ ${stabSection}
                         <span className="text-zinc-400">Max Chamfer Depth</span>
                         <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
                       </div>
-                      <svg viewBox="0 0 260 108" width="100%" height="92" className="block mt-1">
-                        {/* Center axis (dashed vertical) */}
-                        <line x1="38" y1="4" x2="38" y2="104" stroke="#3f3f46" strokeWidth="1" strokeDasharray="4,3"/>
-                        {/* CMS: point at TOP, OD at BOTTOM */}
-                        {/* CMH: flat tip at TOP, OD at BOTTOM */}
-                        {/* Tip region at top */}
-                        {isCms && <polygon points="38,18 33,26 43,26" fill="#f97316" opacity="0.85"/>}
-                        {!isCms && <>
-                          <line x1="38" y1="18" x2="62" y2="18" stroke="#52525b" strokeWidth="2.5"/>
-                          <text x="50" y="13" fontSize="7" fill="#52525b" textAnchor="middle">flat tip</text>
-                        </>}
-                        {/* Chamfer cutting edge (orange) — from tip (top) down to OD (bottom) */}
-                        <line x1={isCms ? 38 : 62} y1="18" x2="148" y2="84" stroke="#f97316" strokeWidth="2.5"/>
-                        {/* OD line at bottom */}
-                        <line x1="38" y1="84" x2="148" y2="84" stroke="#71717a" strokeWidth="2"/>
-                        {/* OD label */}
-                        <text x="93" y="96" fontSize="8" fill="#71717a" textAnchor="middle">← OD →</text>
-                        {/* Depth ref lines (dashed blue) */}
-                        <line x1={isCms ? 38 : 62} y1="18" x2="166" y2="18" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="3,2"/>
-                        <line x1="148" y1="84" x2="166" y2="84" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="3,2"/>
-                        {/* Depth arrow */}
-                        <line x1="164" y1="20" x2="164" y2="82" stroke="#3b82f6" strokeWidth="1.5"/>
-                        <polygon points="164,20 161,28 167,28" fill="#3b82f6"/>
-                        <polygon points="164,82 161,74 167,74" fill="#3b82f6"/>
-                        {/* d= label */}
-                        <text x="170" y="55" fontSize="8.5" fill="#60a5fa" fontFamily="monospace">d={maxDepth.toFixed(3)}"</text>
-                        {/* L label — centered on hypotenuse, rotated along it */}
-                        <text x="93" y="51" fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform="rotate(31,93,51)">L={skuChamferEdgeLength.toFixed(3)}"</text>
-                        {/* Axis label */}
-                        <text x="14" y="55" fontSize="7" fill="#3f3f46" textAnchor="middle" transform="rotate(-90,14,55)">axis</text>
-                        {/* Series label */}
-                        <text x="38" y="106" fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting (point tip)" : "CMH — non-center cutting (flat tip)"}</text>
+                      <svg viewBox="0 0 260 100" width="100%" height="88" className="block mt-1">
+                        {/* Horizontal centerline (CL) at bottom */}
+                        <line x1="5" y1="72" x2="252" y2="72" stroke="#3f3f46" strokeWidth="1" strokeDasharray="4,3"/>
+                        <text x="248" y="70" fontSize="7" fill="#3f3f46" textAnchor="end">CL</text>
+                        {/* Tool body — shank portion */}
+                        <line x1="22" y1="16" x2="105" y2="16" stroke="#71717a" strokeWidth="2"/>
+                        <line x1="22" y1="16" x2="22" y2="72" stroke="#71717a" strokeWidth="1.5"/>
+                        <line x1="105" y1="16" x2="105" y2="72" stroke="#71717a" strokeWidth="1.5"/>
+                        {/* OD bracket on far left */}
+                        <line x1="11" y1="16" x2="11" y2="72" stroke="#666" strokeWidth="1"/>
+                        <polygon points="11,16 8,23 14,23" fill="#666"/>
+                        <polygon points="11,72 8,65 14,65" fill="#666"/>
+                        <text x="6" y="47" fontSize="7.5" fill="#888" textAnchor="middle" transform="rotate(-90,6,47)">OD</text>
+                        {/* Chamfer cutting edge (orange) — horizontal tool, shank left, tip right */}
+                        <line x1="105" y1="16" x2={isCms ? 200 : 178} y2="72" stroke="#f97316" strokeWidth="2.5"/>
+                        {/* CMS: point on CL */}
+                        {isCms && <polygon points="200,72 192,65 192,72" fill="#f97316" opacity="0.85"/>}
+                        {/* CMH: flat face (gray vertical stub at tip) */}
+                        {!isCms && <line x1="178" y1="55" x2="178" y2="72" stroke="#52525b" strokeWidth="2.5"/>}
+                        {/* Depth ref tick lines */}
+                        <line x1="105" y1="72" x2="105" y2="86" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
+                        <line x1={isCms ? 200 : 178} y1="72" x2={isCms ? 200 : 178} y2="86" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
+                        {/* Depth arrow (horizontal) */}
+                        <line x1="105" y1="84" x2={isCms ? 200 : 178} y2="84" stroke="#3b82f6" strokeWidth="1.5"/>
+                        <polygon points="105,84 112,81 112,87" fill="#3b82f6"/>
+                        <polygon points={`${isCms?200:178},84 ${isCms?193:171},81 ${isCms?193:171},87`} fill="#3b82f6"/>
+                        <text x={isCms ? 152 : 141} y="96" fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle">d={maxDepth.toFixed(3)}"</text>
+                        {/* L label centered on cutting edge, rotated along it */}
+                        <text x={isCms ? 152 : 141} y="40" fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${isCms?30:36},${isCms?152:141},40)`}>L={skuChamferEdgeLength.toFixed(3)}"</text>
+                        {/* Series label top right */}
+                        <text x="108" y="10" fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting" : "CMH — non-center (flat tip)"}</text>
                       </svg>
                     </div>
                   );
