@@ -2761,7 +2761,7 @@ ${stabSection}
                       <div className="flex items-center justify-between">
                         <span className="text-orange-400">Cutting Edge Length</span>
                         <span className="font-mono font-semibold text-orange-400">{skuChamferEdgeLength.toFixed(4)}"</span>
-                        <span className="text-zinc-500">→</span>
+                        <span className="text-zinc-600">|</span>
                         <span className="text-blue-400">Max Chamfer Depth</span>
                         <span className="font-mono font-semibold text-blue-400">{maxDepth.toFixed(4)}"</span>
                       </div>
