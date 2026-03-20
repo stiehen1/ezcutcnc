@@ -129,6 +129,7 @@ BASE_SFM = {
     "stainless_austenitic":  180,   # legacy fallback → stainless_304
     "cast_iron_gray": 375,
     "cast_iron_ductile": 325,
+    "cast_iron_cgi": 260,       # Compacted Graphite Iron — 30-50% shorter tool life than gray; run slower
     "cast_iron_malleable": 275,
     "titanium_cp":  250,            # CP Titanium Grade 1–4
     "titanium_64":  180,            # Ti-6Al-4V Grade 5 (180 SFM conventional confirmed)
@@ -187,6 +188,7 @@ HP_PER_CUIN = {
     "stainless_austenitic":  1.10,   # legacy fallback
     "cast_iron_gray":        0.60,
     "cast_iron_ductile":     0.70,
+    "cast_iron_cgi":         0.75,   # CGI: higher forces than gray — partial graphite lubrication only
     "cast_iron_malleable":   0.65,
     "titanium_cp":           1.00,
     "titanium_64":           1.15,
@@ -501,6 +503,7 @@ IPT_FRAC = {
     "stainless_austenitic":  0.0034,  # legacy fallback
     "cast_iron_gray":        0.0055,
     "cast_iron_ductile":     0.005,
+    "cast_iron_cgi":         0.0045,  # CGI: slightly lighter chip load than gray — more demanding on edges
     "cast_iron_malleable":   0.005,
     "titanium_cp":           0.004,
     "titanium_64":           0.0035,  # Ti 6Al-4V conventional est
@@ -557,6 +560,7 @@ HEM_IPT_MULT = {
     "Cast Iron": 1.5,
     "cast_iron_gray": 1.5,
     "cast_iron_ductile": 1.5,
+    "cast_iron_cgi": 1.4,         # CGI: slightly conservative HEM boost vs gray
     "cast_iron_malleable": 1.5,
     "Titanium": 2.0,
     "titanium_64": 2.0,
@@ -612,6 +616,7 @@ _ISO_KEY_TO_GROUP = {
     "stainless_austenitic":  "Stainless",   # legacy fallback
     "cast_iron_gray":        "Cast Iron",
     "cast_iron_ductile":     "Cast Iron",
+    "cast_iron_cgi":         "Cast Iron",
     "cast_iron_malleable":   "Cast Iron",
     "titanium_cp":           "Titanium",
     "titanium_64":           "Titanium",
@@ -1272,7 +1277,7 @@ DRILL_SFM = {
     "stainless_martensitic": 74, "stainless_fm": 87, "stainless_ferritic": 78,
     "stainless_ph": 52, "stainless_duplex": 48, "stainless_superduplex": 39,
     "stainless_austenitic": 57,
-    "cast_iron_gray": 130, "cast_iron_ductile": 110, "cast_iron_malleable": 120,
+    "cast_iron_gray": 130, "cast_iron_ductile": 110, "cast_iron_cgi": 100, "cast_iron_malleable": 120,
     "titanium_cp": 60, "titanium_64": 45,
     "hiTemp_fe": 30, "hiTemp_co": 25,
     "inconel_625": 25, "inconel_718": 20,
@@ -1296,7 +1301,7 @@ DRILL_IPR_BASE = {
     "stainless_martensitic": 0.0059, "stainless_fm": 0.0064, "stainless_ferritic": 0.0059,
     "stainless_ph": 0.0044, "stainless_duplex": 0.0047, "stainless_superduplex": 0.0040,
     "stainless_austenitic": 0.0050,
-    "cast_iron_gray": 0.006, "cast_iron_ductile": 0.005, "cast_iron_malleable": 0.005,
+    "cast_iron_gray": 0.006, "cast_iron_ductile": 0.005, "cast_iron_cgi": 0.0048, "cast_iron_malleable": 0.005,
     "titanium_cp": 0.004, "titanium_64": 0.003,
     "hiTemp_fe": 0.002, "hiTemp_co": 0.0015,
     "inconel_625": 0.002, "inconel_718": 0.0015,
@@ -2190,6 +2195,7 @@ KEYSEAT_SFM = {
     "Cast Iron":         220,
     "cast_iron_gray":    260,
     "cast_iron_ductile": 220,
+    "cast_iron_cgi":     190,
     "cast_iron_malleable": 190,
     # Titanium
     "Titanium":           90,

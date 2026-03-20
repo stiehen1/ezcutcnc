@@ -24,9 +24,10 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "stainless_duplex":    "High-strength dual-phase SS — stronger than 304 and less prone to stress corrosion. Still work-hardens and punishes rubbing; needs a rigid setup and consistent engagement.",
   "stainless_superduplex": "The most demanding common stainless grade. Very high strength means it loads the tool hard — conservative SFM, consistent chip load, and the best rigidity you can get.",
   // K — Cast Iron
-  "cast_iron_gray":      "Excellent machinability — graphite flakes lubricate the cut naturally. Machine dry or with mist; flood coolant risks thermal cracking on the part.",
-  "cast_iron_ductile":   "Tougher than gray iron with longer, more ductile chips. Slight SFM reduction; same preference for dry or mist cutting.",
-  "cast_iron_malleable": "Good machinability with clean chip break. More abrasive on edges than gray iron; standard uncoated or TiN carbide handles it well.",
+  "cast_iron_gray":      "Excellent machinability — graphite flakes act as a built-in solid lubricant, giving low cutting forces and short, crumbly chips. Machine dry with air blast; flood coolant turns graphite dust into abrasive slurry and risks thermal cracking. Abrasive flank wear is the dominant tool failure — AlTiN coated carbide preferred over uncoated. Break any chilled or skin-hardened surface carefully; white iron inclusions will chip edges instantly.",
+  "cast_iron_ductile":   "Machines more like tough alloy steel than gray iron — graphite nodules don't lubricate the cut, so forces are higher and chips are longer. Ferritic grades (65-45-12, GGG-40/50) are more forgiving; pearlitic/high-strength grades (80-55-06, GGG-70/80) need SFM reductions of 15–25% and stronger edge preps. Coolant recommended, especially for drilling and tapping. Foundry practice affects machinability significantly — same grade from different suppliers can behave noticeably differently.",
+  "cast_iron_cgi":       "Compacted Graphite Iron (vermicular iron) — graphite between flakes and nodules. Higher strength than gray iron but far harder on tools: expect 30–50% shorter tool life than gray at the same SFM. Used in diesel engine blocks (EGR-era Duramax, Powerstroke, modern HD diesel) where thin walls and high cylinder pressure demand it. Run dry with air blast, drop SFM ~20–30% from gray iron, AlTiN or AlCrN coating required. The graphite partial-lubrication effect is reduced vs. gray — treat it closer to ductile iron for tooling choices.",
+  "cast_iron_malleable": "Iron castings heat-treated to convert white iron carbides into irregular graphite nodules — better ductility and impact resistance than gray iron. Good machinability with clean, broken chips due to the graphite nodule structure. More abrasive than gray iron; AlTiN coated carbide recommended over uncoated. Whiteheart (GTW) and blackheart (GTB) behave similarly in the cut.",
   // S — Superalloys / Titanium
   "titanium_cp":         "Springy and prone to galling — the tool wants to weld to the workpiece at low feed. High chip load at low SFM; TSC or flood coolant is not optional. Grade 1 is softest, Grade 4 is toughest — both behave the same way in the cut.",
   "titanium_64":         "Heat-trapping, work-hardening, and notch-sensitive. Sharp geometry, high chip load, high-pressure coolant; never slow down or dwell mid-cut. Beta alloys (Ti-5553, Ti-10-2-3) run conservative end of the range.",
@@ -81,9 +82,10 @@ export const ISO_SUBCATEGORIES = [
   { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_superduplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 28, scale: "hrc" as const } },
   // K — Cast Iron
-  { iso: "K" as IsoCategory, key: "cast_iron_gray",        label: "Gray Cast Iron (GG10, GG20, GG30)",           hardness: { value: 92, scale: "hrb" as const } },
-  { iso: "K" as IsoCategory, key: "cast_iron_ductile",     label: "Ductile Cast Iron (GGG-40, GGG-50, GGG-60)",  hardness: { value: 90, scale: "hrb" as const } },
-  { iso: "K" as IsoCategory, key: "cast_iron_malleable",   label: "Malleable Cast Iron (GTS-35-10, GTS-45-06)",  hardness: { value: 82, scale: "hrb" as const } },
+  { iso: "K" as IsoCategory, key: "cast_iron_gray",        label: "Gray Cast Iron (Class 30/40, GG20/25, HT200/250)",        hardness: { value: 92, scale: "hrb" as const } },
+  { iso: "K" as IsoCategory, key: "cast_iron_ductile",     label: "Ductile / Nodular Iron (65-45-12, GGG-40/50/60)",         hardness: { value: 90, scale: "hrb" as const } },
+  { iso: "K" as IsoCategory, key: "cast_iron_cgi",         label: "Compacted Graphite Iron / CGI (GJV-300/400)",             hardness: { value: 95, scale: "hrb" as const } },
+  { iso: "K" as IsoCategory, key: "cast_iron_malleable",   label: "Malleable Cast Iron (GTW/GTB, GTS-35-10)",                hardness: { value: 82, scale: "hrb" as const } },
   // S — Superalloys / Titanium
   { iso: "S" as IsoCategory, key: "titanium_cp",           label: "CP Titanium Grade 1–4",                       hardness: { value: 80, scale: "hrb" as const } },
   { iso: "S" as IsoCategory, key: "titanium_64",           label: "Ti-6Al-4V (Grade 5)",                         hardness: { value: 36, scale: "hrc" as const } },
@@ -130,9 +132,10 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "stainless_duplex":    { min: 18, max: 25,  scale: "hrc", note: "Duplex 2205 max 217 HB (~22 HRC) — not heat-treatable, but work-hardens significantly." },
   "stainless_superduplex": { min: 22, max: 32, scale: "hrc", note: "Super duplex 2507 typical 22–32 HRC as-annealed — not heat-treatable beyond solution anneal." },
   // K — Cast Iron
-  "cast_iron_gray":     { min: 80, max: 105, scale: "hrb", note: "Gray cast iron ranges 80–105 HRB depending on grade. Not heat-treatable to HRC levels." },
-  "cast_iron_ductile":  { min: 82, max: 108, scale: "hrb", note: "Ductile iron ranges 82–108 HRB. Some grades can be surface hardened." },
-  "cast_iron_malleable":{ min: 78, max: 105, scale: "hrb", note: "Malleable cast iron ranges 78–105 HRB." },
+  "cast_iron_gray":     { min: 80, max: 111, scale: "hrb", note: "Gray iron ranges 80–111 HRB (150–241 HB). Class 20–25 ≈ 80–90 HRB; Class 40–60 ≈ 95–111 HRB. Not heat-treatable." },
+  "cast_iron_ductile":  { min: 82, max: 110, scale: "hrb", note: "Ductile iron 65-45-12 / GGG-50 ≈ 90–99 HRB (187–217 HB). High-strength grades 100-70-03 / GGG-70 can reach 21–26 HRC (241–270 HB)." },
+  "cast_iron_cgi":      { min: 85, max: 110, scale: "hrb", note: "Compacted Graphite Iron (GJV-300/400) typically 160–240 HB = 85–110 HRB. Not heat-treatable by grade definition." },
+  "cast_iron_malleable":{ min: 78, max: 105, scale: "hrb", note: "Malleable iron ranges 78–105 HRB. Blackheart (GTB) tends toward the lower end; whiteheart (GTW) toward the upper." },
   // S — Superalloys / Titanium
   "titanium_cp":    { min: 65, max: 92,  scale: "hrb", note: "CP Titanium Grade 1–4 ranges 65–92 HRB — not heat-treatable to HRC levels." },
   "titanium_64":    { min: 30, max: 42,  scale: "hrc", note: "Ti-6Al-4V solution treated and aged ranges 30–42 HRC." },
@@ -245,12 +248,66 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "1.4410": "stainless_superduplex",
   // ── Gray Cast Iron ────────────────────────────────────────────────────────
   "gray iron": "cast_iron_gray", "grey iron": "cast_iron_gray",
-  "gg25": "cast_iron_gray", "gg30": "cast_iron_gray", "fc250": "cast_iron_gray",
-  "class 40": "cast_iron_gray",
+  "gray cast iron": "cast_iron_gray", "grey cast iron": "cast_iron_gray",
+  // ASTM A48 classes
+  "class 20": "cast_iron_gray", "class 25": "cast_iron_gray", "class 30": "cast_iron_gray",
+  "class 35": "cast_iron_gray", "class 40": "cast_iron_gray", "class 45": "cast_iron_gray",
+  "class 50": "cast_iron_gray", "class 55": "cast_iron_gray", "class 60": "cast_iron_gray",
+  // EN / ISO GJL grades
+  "gjl-100": "cast_iron_gray", "gjl-150": "cast_iron_gray", "gjl-200": "cast_iron_gray",
+  "gjl-250": "cast_iron_gray", "gjl-300": "cast_iron_gray", "gjl-350": "cast_iron_gray",
+  "en-gjl-150": "cast_iron_gray", "en-gjl-200": "cast_iron_gray",
+  "en-gjl-250": "cast_iron_gray", "en-gjl-300": "cast_iron_gray",
+  // DIN grades
+  "gg10": "cast_iron_gray", "gg15": "cast_iron_gray", "gg20": "cast_iron_gray",
+  "gg25": "cast_iron_gray", "gg30": "cast_iron_gray", "gg35": "cast_iron_gray", "gg40": "cast_iron_gray",
+  // Chinese HT grades
+  "ht100": "cast_iron_gray", "ht150": "cast_iron_gray", "ht200": "cast_iron_gray",
+  "ht250": "cast_iron_gray", "ht300": "cast_iron_gray", "ht350": "cast_iron_gray",
+  // JIS FC grades
+  "fc100": "cast_iron_gray", "fc150": "cast_iron_gray", "fc200": "cast_iron_gray",
+  "fc250": "cast_iron_gray", "fc300": "cast_iron_gray", "fc350": "cast_iron_gray",
+  // Indian FG grades
+  "fg200": "cast_iron_gray", "fg260": "cast_iron_gray", "fg300": "cast_iron_gray",
   // ── Ductile / Nodular Iron ────────────────────────────────────────────────
   "ductile iron": "cast_iron_ductile", "nodular iron": "cast_iron_ductile",
-  "ggg40": "cast_iron_ductile", "ggg50": "cast_iron_ductile",
-  "ggg60": "cast_iron_ductile", "65-45-12": "cast_iron_ductile",
+  "spheroidal graphite iron": "cast_iron_ductile", "sg iron": "cast_iron_ductile",
+  // ASTM A536 grades
+  "60-40-18": "cast_iron_ductile", "65-45-12": "cast_iron_ductile",
+  "80-55-06": "cast_iron_ductile",
+  "100-70-03": "cast_iron_ductile", "120-90-02": "cast_iron_ductile",
+  // EN / ISO GJS grades
+  "gjs-400-15": "cast_iron_ductile", "gjs-400-18": "cast_iron_ductile",
+  "gjs-450-10": "cast_iron_ductile", "gjs-500-7": "cast_iron_ductile",
+  "gjs-600-3": "cast_iron_ductile",  "gjs-700-2": "cast_iron_ductile",
+  "gjs-800-2": "cast_iron_ductile",
+  "en-gjs-400-15": "cast_iron_ductile", "en-gjs-450-10": "cast_iron_ductile",
+  "en-gjs-500-7": "cast_iron_ductile", "en-gjs-600-3": "cast_iron_ductile",
+  // DIN GGG grades
+  "ggg40": "cast_iron_ductile", "ggg45": "cast_iron_ductile", "ggg50": "cast_iron_ductile",
+  "ggg60": "cast_iron_ductile", "ggg70": "cast_iron_ductile", "ggg80": "cast_iron_ductile",
+  // Chinese QT grades
+  "qt400-15": "cast_iron_ductile", "qt450-10": "cast_iron_ductile",
+  "qt500-7": "cast_iron_ductile",   "qt600-3": "cast_iron_ductile",
+  "qt700-2": "cast_iron_ductile",   "qt800-2": "cast_iron_ductile", "qt900-2": "cast_iron_ductile",
+  // JIS FCD grades
+  "fcd400": "cast_iron_ductile", "fcd450": "cast_iron_ductile", "fcd500": "cast_iron_ductile",
+  "fcd600": "cast_iron_ductile", "fcd700": "cast_iron_ductile",
+  // ── Compacted Graphite Iron / CGI ─────────────────────────────────────────
+  "cgi": "cast_iron_cgi",
+  "compacted graphite iron": "cast_iron_cgi", "compacted graphite": "cast_iron_cgi",
+  "vermicular iron": "cast_iron_cgi", "vermicular graphite iron": "cast_iron_cgi",
+  "gjv-300": "cast_iron_cgi", "gjv-350": "cast_iron_cgi", "gjv-400": "cast_iron_cgi",
+  "gjv-450": "cast_iron_cgi", "gjv-500": "cast_iron_cgi",
+  "en-gjv-300": "cast_iron_cgi", "en-gjv-400": "cast_iron_cgi", "en-gjv-450": "cast_iron_cgi",
+  "rt300": "cast_iron_cgi",   // old DIN designation for vermicular iron
+  // ── Malleable Cast Iron ───────────────────────────────────────────────────
+  "malleable iron": "cast_iron_malleable", "malleable cast iron": "cast_iron_malleable",
+  "whiteheart": "cast_iron_malleable",    "blackheart": "cast_iron_malleable",
+  "gtw": "cast_iron_malleable",           "gtb": "cast_iron_malleable",
+  "gts-35-10": "cast_iron_malleable",     "gts-45-06": "cast_iron_malleable",
+  "gts-55-04": "cast_iron_malleable",     "gts-65-02": "cast_iron_malleable",
+  "m3210": "cast_iron_malleable", "m5003": "cast_iron_malleable", "m7002": "cast_iron_malleable",
   // ── CP Titanium (Grade 1–4 + near-alpha Grade 9) ──────────────────────────
   "cp titanium": "titanium_cp", "commercially pure titanium": "titanium_cp",
   "grade 1": "titanium_cp", "grade 2": "titanium_cp",
