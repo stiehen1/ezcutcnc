@@ -343,6 +343,20 @@ export default function Mentor() {
   const [erStatus, setErStatus] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
   const [erError, setErError] = React.useState("");
 
+  // ── Email gate (lock all outputs behind email) ─────────────────────────
+  const [erGateOpen, setErGateOpen] = React.useState(false);
+  const [erGatePending, setErGatePending] = React.useState<"copy" | "print" | "pdf" | "stp" | null>(null);
+  const [erGateStpUrl, setErGateStpUrl] = React.useState("");
+  const [erGateInput, setErGateInput] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [erGateError, setErGateError] = React.useState("");
+
+  // ── Contact modal ("Don't know which tool?") ──────────────────────────
+  const [showContactModal, setShowContactModal] = React.useState(false);
+  const [contactName, setContactName] = React.useState("");
+  const [contactEmail, setContactEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [contactMsg, setContactMsg] = React.useState("");
+  const [contactStatus, setContactStatus] = React.useState<"idle" | "sending" | "sent">("idle");
+
   // ── Machine state ──────────────────────────────────────────────────────────
   const [machineQuery, setMachineQuery] = React.useState("");
   const [machineResults, setMachineResults] = React.useState<any[]>([]);
@@ -1990,6 +2004,42 @@ ${stabSection}
     }
   }
 
+  function runGatedAction(action: "copy" | "print" | "pdf" | "stp", stpHref?: string) {
+    if (action === "copy") copyCamParams();
+    else if (action === "print") printSummary();
+    else if (action === "pdf") downloadPDF();
+    else if (action === "stp" && stpHref) window.open(stpHref, "_blank");
+  }
+
+  function requireEmail(action: "copy" | "print" | "pdf" | "stp", stpHref?: string) {
+    const email = erEmail || localStorage.getItem("er_email") || "";
+    if (email || engMode) {
+      runGatedAction(action, stpHref);
+    } else {
+      setErGatePending(action);
+      if (stpHref) setErGateStpUrl(stpHref);
+      setErGateOpen(true);
+    }
+  }
+
+  async function submitContactModal() {
+    if (!contactEmail.trim()) return;
+    setContactStatus("sending");
+    try {
+      await fetch("/api/contact/tool-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: contactName.trim(), email: contactEmail.trim(), message: contactMsg.trim() }),
+      });
+      localStorage.setItem("er_email", contactEmail.trim().toLowerCase());
+      setErEmail(contactEmail.trim().toLowerCase());
+      setErGateInput(contactEmail.trim().toLowerCase());
+      setContactStatus("sent");
+    } catch {
+      setContactStatus("idle");
+    }
+  }
+
   // Optional: gate engineering even if toggle is on but no data returned
 
   // ── Tool Finder → apply SKU and switch to milling ────────────────────────
@@ -2590,13 +2640,12 @@ ${stabSection}
               <p className="mt-1 text-[11px] text-orange-400 flex items-center gap-2 flex-wrap">
                 <span>Auto-filled from {edpText} — fields populated from catalog.{" "}
                 <button type="button" onClick={clearSku} className="underline hover:text-orange-600">Clear</button></span>
-                <a
-                  href={stpUrl(edpText)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => requireEmail("stp", stpUrl(edpText))}
                   className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
                   title={`Download Core_Cutter_${edpText} v1.step`}
-                >⬇ .STP</a>
+                >⬇ .STP</button>
               </p>
             )}
             {skuDropdownOpen && skuResults.length > 0 && (
@@ -5106,11 +5155,20 @@ ${stabSection}
 
           {/* Actions */}
           {!engMode && !skuLocked && !pdfExtracted && (
-            <p className="text-xs text-amber-400 mb-2">
-              {operation === "milling"
-                ? "Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."
-                : "Upload a CC print PDF to run the calculator."}
-            </p>
+            <div className="mb-2">
+              <p className="text-xs text-amber-400">
+                {operation === "milling"
+                  ? "Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."
+                  : "Upload a CC print PDF to run the calculator."}
+              </p>
+              <button
+                type="button"
+                onClick={() => { setShowContactModal(true); setContactStatus("idle"); }}
+                className="mt-1 text-xs text-zinc-400 hover:text-orange-400 underline underline-offset-2 transition-colors"
+              >
+                Not sure which tool? Contact us →
+              </button>
+            </div>
           )}
           <div className="flex gap-2">
             <Button
@@ -5159,21 +5217,21 @@ ${stabSection}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={copyCamParams}
+                  onClick={() => requireEmail("copy")}
                   className="text-[11px] font-semibold px-3 py-1 rounded border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 transition-colors leading-tight"
                 >
                   {camCopied ? "Copied ✓" : "Copy CAM Parameters"}
                 </button>
                 <button
                   type="button"
-                  onClick={printSummary}
+                  onClick={() => requireEmail("print")}
                   className="text-[11px] font-semibold px-3 py-1 rounded border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 transition-colors leading-tight"
                 >
                   🖨 Print / Save PDF
                 </button>
                 <button
                   type="button"
-                  onClick={downloadPDF}
+                  onClick={() => requireEmail("pdf")}
                   className="text-[11px] font-semibold px-3 py-1 rounded border border-green-500/50 text-green-400 hover:bg-green-500/10 transition-colors leading-tight"
                 >
                   ⬇ Download PDF
@@ -7096,6 +7154,95 @@ ${stabSection}
           <div>Powered by Core Cutter LLC</div>
         </div>
       </div>
+
+    {/* Email Gate Modal */}
+    {erGateOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setErGateOpen(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">Enter your email to continue</h2>
+          <p className="text-xs text-zinc-400 mb-4">
+            {erGatePending === "stp" ? "We'll unlock the STEP file download." : erGatePending === "copy" ? "We'll unlock copy & all exports." : "We'll unlock PDF export & all outputs."}
+            {" "}One-time per device — auto-fills after.
+          </p>
+          <input
+            type="email"
+            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
+            placeholder="your@email.com"
+            value={erGateInput}
+            onChange={e => { setErGateInput(e.target.value); setErGateError(""); }}
+            onKeyDown={e => {
+              if (e.key === "Enter") {
+                const v = erGateInput.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
+                localStorage.setItem("er_email", v.toLowerCase());
+                setErEmail(v.toLowerCase());
+                setErGateOpen(false);
+                if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
+                setErGatePending(null);
+              }
+            }}
+            autoFocus
+          />
+          {erGateError && <p className="text-xs text-red-400 mt-1">{erGateError}</p>}
+          <div className="flex gap-2 mt-3">
+            <button
+              className="flex-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-medium"
+              onClick={() => {
+                const v = erGateInput.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
+                localStorage.setItem("er_email", v.toLowerCase());
+                setErEmail(v.toLowerCase());
+                setErGateOpen(false);
+                if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
+                setErGatePending(null);
+              }}
+            >
+              Continue
+            </button>
+            <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setErGateOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Contact Modal — "Not sure which tool?" */}
+    {showContactModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowContactModal(false); setContactStatus("idle"); }}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+          {contactStatus === "sent" ? (
+            <>
+              <div className="text-emerald-400 text-2xl mb-2">✓</div>
+              <h2 className="text-base font-semibold text-white mb-1">Message received!</h2>
+              <p className="text-xs text-zinc-400 mb-4">Our team will reach out at <span className="text-white">{contactEmail}</span> with a recommendation.</p>
+              <button className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setShowContactModal(false); setContactStatus("idle"); }}>Close</button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-base font-semibold text-white mb-1">Not sure which tool you need?</h2>
+              <p className="text-xs text-zinc-400 mb-4">Tell us what you're trying to cut and we'll point you to the right tool.</p>
+              <div className="space-y-2">
+                <input type="text" placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
+                <input type="email" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
+                <textarea placeholder="What are you trying to cut? Material, depth, finish requirements…" value={contactMsg} onChange={e => setContactMsg(e.target.value)} rows={3}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500 resize-none" />
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  className="flex-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-medium"
+                  disabled={contactStatus === "sending" || !contactEmail.trim()}
+                  onClick={submitContactModal}
+                >
+                  {contactStatus === "sending" ? "Sending…" : "Send Request"}
+                </button>
+                <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setShowContactModal(false); setContactStatus("idle"); }}>Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
 
     {/* Toolbox auth modal */}
     {tbShowModal && (

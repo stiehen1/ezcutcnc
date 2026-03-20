@@ -634,6 +634,42 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
   const [results, setResults]   = React.useState<SkuRow[] | null>(null);
   const [searching, setSearching] = React.useState(false);
   const [searchErr, setSearchErr] = React.useState<string | null>(null);
+
+  // ── Email gate ─────────────────────────────────────────────────────────
+  const [tfGateOpen, setTfGateOpen] = React.useState(false);
+  const [tfGateStpUrl, setTfGateStpUrl] = React.useState("");
+  const [tfGateInput, setTfGateInput] = React.useState(() => localStorage.getItem("er_email") || "");
+  const [tfGateError, setTfGateError] = React.useState("");
+
+  function tfRequireStp(url: string) {
+    const email = localStorage.getItem("er_email") || "";
+    if (email) { window.open(url, "_blank"); return; }
+    setTfGateStpUrl(url);
+    setTfGateOpen(true);
+  }
+
+  // ── Contact modal ───────────────────────────────────────────────────────
+  const [showTfContact, setShowTfContact] = React.useState(false);
+  const [tfContactName, setTfContactName] = React.useState("");
+  const [tfContactEmail, setTfContactEmail] = React.useState(() => localStorage.getItem("er_email") || "");
+  const [tfContactMsg, setTfContactMsg] = React.useState("");
+  const [tfContactStatus, setTfContactStatus] = React.useState<"idle" | "sending" | "sent">("idle");
+
+  async function submitTfContact() {
+    if (!tfContactEmail.trim()) return;
+    setTfContactStatus("sending");
+    try {
+      await fetch("/api/contact/tool-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: tfContactName.trim(), email: tfContactEmail.trim(), message: tfContactMsg.trim() }),
+      });
+      localStorage.setItem("er_email", tfContactEmail.trim().toLowerCase());
+      setTfContactStatus("sent");
+    } catch {
+      setTfContactStatus("idle");
+    }
+  }
   const [qpTip, setQpTip] = React.useState<{ summary: string[]; geo: string | null; mode: string; isoMat: string } | null>(null);
   const [qpDiaRange, setQpDiaRange] = React.useState<{ min: number; max: number } | null>(null);
   const [qpMinLoc,   setQpMinLoc]   = React.useState<number | null>(null);
@@ -871,6 +907,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
   }
 
   return (
+    <>
     <div className="space-y-4">
 
       {/* ── Quick Pick ── */}
@@ -1382,7 +1419,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">
                 {results.length === 0
-                  ? "No tools found — adjust filters and try again"
+                  ? "No tools found — adjust filters or contact us"
                   : `${results.length} tool${results.length !== 1 ? "s" : ""} found`}
               </span>
               {results.length === 200 && (
@@ -1466,6 +1503,20 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               </div>
             )}
           </div>
+
+          {results.length === 0 && (
+            <div className="px-4 py-6 text-center">
+              <p className="text-sm text-zinc-400 mb-1">Can't find what you need?</p>
+              <p className="text-xs text-zinc-500 mb-4">Tell us what you're trying to cut — we'll recommend the right tool or build a custom one.</p>
+              <button
+                type="button"
+                onClick={() => { setShowTfContact(true); setTfContactStatus("idle"); }}
+                className="rounded-lg bg-orange-600 hover:bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors"
+              >
+                Contact Us →
+              </button>
+            </div>
+          )}
 
           {results.length > 0 && (
             <div className="overflow-x-auto">
@@ -1556,15 +1607,14 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                         </td>
                       </>}
                       <td className="px-2 py-2 text-center">
-                        <a
-                          href={stpUrl(row.edp)}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => tfRequireStp(stpUrl(row.edp))}
                           className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border border-emerald-600 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors whitespace-nowrap"
                           title={`Download ${row.edp} v1.step`}
                         >
                           ⬇ .STP
-                        </a>
+                        </button>
                       </td>
                       <td className="px-2 py-2">
                         <button
@@ -1584,5 +1634,87 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
         </div>
       )}
     </div>
+    {/* STP Email Gate Modal */}
+    {tfGateOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTfGateOpen(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">Enter your email to download</h2>
+          <p className="text-xs text-zinc-400 mb-4">One-time per device — auto-fills next time.</p>
+          <input
+            type="email"
+            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
+            placeholder="your@email.com"
+            value={tfGateInput}
+            onChange={e => { setTfGateInput(e.target.value); setTfGateError(""); }}
+            onKeyDown={e => {
+              if (e.key === "Enter") {
+                const v = tfGateInput.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setTfGateError("Enter a valid email address."); return; }
+                localStorage.setItem("er_email", v.toLowerCase());
+                setTfGateOpen(false);
+                window.open(tfGateStpUrl, "_blank");
+              }
+            }}
+            autoFocus
+          />
+          {tfGateError && <p className="text-xs text-red-400 mt-1">{tfGateError}</p>}
+          <div className="flex gap-2 mt-3">
+            <button
+              className="flex-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-medium"
+              onClick={() => {
+                const v = tfGateInput.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setTfGateError("Enter a valid email address."); return; }
+                localStorage.setItem("er_email", v.toLowerCase());
+                setTfGateOpen(false);
+                window.open(tfGateStpUrl, "_blank");
+              }}
+            >
+              Download
+            </button>
+            <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setTfGateOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Contact Modal */}
+    {showTfContact && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowTfContact(false); setTfContactStatus("idle"); }}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+          {tfContactStatus === "sent" ? (
+            <>
+              <div className="text-emerald-400 text-2xl mb-2">✓</div>
+              <h2 className="text-base font-semibold text-white mb-1">Message received!</h2>
+              <p className="text-xs text-zinc-400 mb-4">Our team will reach out at <span className="text-white">{tfContactEmail}</span> with a recommendation.</p>
+              <button className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setShowTfContact(false); setTfContactStatus("idle"); }}>Close</button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-base font-semibold text-white mb-1">Not sure which tool you need?</h2>
+              <p className="text-xs text-zinc-400 mb-4">Tell us what you're trying to cut and we'll point you to the right tool.</p>
+              <div className="space-y-2">
+                <input type="text" placeholder="Your name" value={tfContactName} onChange={e => setTfContactName(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
+                <input type="email" placeholder="your@email.com *" value={tfContactEmail} onChange={e => setTfContactEmail(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
+                <textarea placeholder="What are you trying to cut? Material, depth, finish requirements…" value={tfContactMsg} onChange={e => setTfContactMsg(e.target.value)} rows={3}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500 resize-none" />
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  className="flex-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-medium"
+                  disabled={tfContactStatus === "sending" || !tfContactEmail.trim()}
+                  onClick={submitTfContact}
+                >
+                  {tfContactStatus === "sending" ? "Sending…" : "Send Request"}
+                </button>
+                <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setShowTfContact(false); setTfContactStatus("idle"); }}>Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }

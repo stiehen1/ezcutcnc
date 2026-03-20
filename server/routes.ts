@@ -1162,6 +1162,57 @@ export async function registerRoutes(
     }
   });
 
+  // ── Tool Request Contact ──────────────────────────────────────────────────
+  app.post("/api/contact/tool-request", async (req, res) => {
+    try {
+      const { name, email, message } = (req.body ?? {}) as { name?: string; email?: string; message?: string };
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Valid email address required." });
+      }
+
+      // Store as lead
+      try {
+        const { pool } = await import("./db");
+        await pool.query(
+          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
+          [email.toLowerCase().trim(), "tool_request", null, null, `Name: ${name ?? "—"}\n\n${message ?? ""}`.trim()]
+        );
+      } catch (dbErr: any) {
+        console.warn("[Tool Request] DB insert failed:", dbErr?.message);
+      }
+
+      const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
+      const smtpUser = process.env.SMTP_USER || "";
+      const smtpPass = process.env.SMTP_PASS || "";
+      const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+
+      console.log("[Tool Request]", { name, email, message });
+
+      if (!smtpUser || !smtpPass) {
+        return res.json({ ok: true });
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+        auth: { user: smtpUser, pass: smtpPass },
+      });
+
+      await transporter.sendMail({
+        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        to,
+        replyTo: email,
+        subject: `Tool Request — ${name ?? email}`,
+        text: [`Name:    ${name ?? "—"}`, `Email:   ${email}`, ``, message ?? "(no message)", ``, `Submitted via EZCutCNC Tool Finder`].join("\n"),
+      }).catch((e: any) => console.warn("[Tool Request] Email failed:", e?.message));
+
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[Tool Request]", err?.message);
+      return res.status(500).json({ error: "Failed to send request." });
+    }
+  });
+
   // Seed data — wrapped in try/catch so a Neon cold-start ECONNRESET doesn't crash the server
   let snippets: Awaited<ReturnType<typeof storage.getSnippets>> = [];
   try {
