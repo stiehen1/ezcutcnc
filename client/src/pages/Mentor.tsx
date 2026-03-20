@@ -5218,23 +5218,23 @@ ${stabSection}
                 <button
                   type="button"
                   onClick={() => requireEmail("copy")}
-                  className="text-[11px] font-semibold px-3 py-1 rounded border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 transition-colors leading-tight"
+                  className="text-[11px] font-semibold px-3 py-1 rounded border border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors leading-tight whitespace-nowrap"
                 >
-                  {camCopied ? "Copied ✓" : "Copy CAM Parameters"}
+                  {camCopied ? "Copied ✓" : "Copy Parameters"}
                 </button>
                 <button
                   type="button"
                   onClick={() => requireEmail("print")}
-                  className="text-[11px] font-semibold px-3 py-1 rounded border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 transition-colors leading-tight"
+                  className="text-[11px] font-semibold px-3 py-1 rounded border border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors leading-tight whitespace-nowrap"
                 >
-                  🖨 Print / Save PDF
+                  Print PDF
                 </button>
                 <button
                   type="button"
                   onClick={() => requireEmail("pdf")}
-                  className="text-[11px] font-semibold px-3 py-1 rounded border border-green-500/50 text-green-400 hover:bg-green-500/10 transition-colors leading-tight"
+                  className="text-[11px] font-semibold px-3 py-1 rounded border border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors leading-tight whitespace-nowrap"
                 >
-                  ⬇ Download PDF
+                  Download PDF
                 </button>
               </div>
             )}
