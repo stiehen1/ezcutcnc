@@ -132,6 +132,7 @@ type SkuRecord = {
   // Chamfer mills
   chamfer_angle?: number;
   tip_diameter?: number;
+  max_cutting_edge_length?: number;
 };
 
 function fmtNum(n: unknown, digits = 2): string {
@@ -938,6 +939,7 @@ export default function Mentor() {
   const [skuResults, setSkuResults] = React.useState<SkuRecord[]>([]);
   const [skuDropdownOpen, setSkuDropdownOpen] = React.useState(false);
   const [skuLocked, setSkuLocked] = React.useState(false);
+  const [skuChamferEdgeLength, setSkuChamferEdgeLength] = React.useState<number | null>(null);
 
   // Quote modals — shared customer form, separate open/status per product
   const [quoteForm, setQuoteForm] = React.useState({ name: "", company: "", email: "", phone: "", qty: "", tolerance: "H7", notes: "" });
@@ -1064,6 +1066,7 @@ export default function Mentor() {
         chamfer_depth: 0,
       } : {}),
     }));
+    setSkuChamferEdgeLength(isChamfer && sku.max_cutting_edge_length ? Number(sku.max_cutting_edge_length) : null);
   }
 
   function clearSku() {
@@ -1071,6 +1074,7 @@ export default function Mentor() {
     setEdpText("");
     setSkuResults([]);
     setSkuDropdownOpen(false);
+    setSkuChamferEdgeLength(null);
   }
 
   function resetAll() {
@@ -2766,6 +2770,17 @@ ${stabSection}
                       }
                     }}
                   />
+                  {(() => {
+                    if (!skuChamferEdgeLength || !(form.chamfer_depth > 0)) return null;
+                    const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+                    const maxDepth = skuChamferEdgeLength * Math.sin(halfRad);
+                    if (form.chamfer_depth <= maxDepth) return null;
+                    return (
+                      <p className="mt-1 text-xs text-amber-400">
+                        ⚠ Depth exceeds this tool's cutting edge length ({skuChamferEdgeLength.toFixed(4)}"). Max achievable depth: {maxDepth.toFixed(4)}".
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
