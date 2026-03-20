@@ -2759,11 +2759,11 @@ ${stabSection}
                   return (
                     <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 space-y-2 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-zinc-400">Cutting Edge Length</span>
+                        <span className="text-orange-400">Cutting Edge Length</span>
                         <span className="font-mono font-semibold text-orange-400">{skuChamferEdgeLength.toFixed(4)}"</span>
                         <span className="text-zinc-500">→</span>
-                        <span className="text-zinc-400">Max Chamfer Depth</span>
-                        <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
+                        <span className="text-blue-400">Max Chamfer Depth</span>
+                        <span className="font-mono font-semibold text-blue-400">{maxDepth.toFixed(4)}"</span>
                       </div>
                       {(() => {
                         const topY = 12, clY = 74;
