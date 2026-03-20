@@ -6276,6 +6276,29 @@ ${stabSection}
                     </div>
                   )}
 
+                  {/* CMH shear angle badge */}
+                  {chamferResult.cmh_shear_angle_deg != null && (
+                    <div className="flex items-start gap-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+                      <div className="flex-1 space-y-0.5">
+                        <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">CMH Shear Angle — {chamferResult.cmh_shear_angle_deg}°</div>
+                        <div className="grid grid-cols-2 gap-x-4 text-xs mt-1">
+                          <div><span className="text-muted-foreground">SFM boost</span><span className="ml-2 font-semibold text-emerald-400">+{chamferResult.cmh_sfm_boost_pct}%</span></div>
+                          <div><span className="text-muted-foreground">Force factor</span><span className="ml-2 font-semibold">{chamferResult.cmh_force_factor?.toFixed(3)}×</span></div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">
+                          Shear geometry distributes load progressively along the flank — like a helical endmill vs straight-flute. Lower instantaneous force means less heat and a higher SFM ceiling. CMH must be run aggressively enough to cut through the tip flat, not rub.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CMH minimum chip warning */}
+                  {chamferResult.cmh_min_ipt != null && chamferResult.cmh_min_ipt_ok === false && (
+                    <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-400">
+                      ⚠ Chip load below CMH minimum ({chamferResult.cmh_min_ipt.toFixed(5)}"). Tip flat will rub — increase feed or chamfer depth.
+                    </div>
+                  )}
+
                   {/* Chip thinning */}
                   <div className="border-t border-white/10 pt-2 space-y-1">
                     <div className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider mb-1">Angled-Flank Chip Thinning</div>

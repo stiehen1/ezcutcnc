@@ -429,6 +429,19 @@ CORE_FACTOR_BY_FLUTES = {2: 0.75, 3: 0.85, 4: 1.00, 5: 1.10, 6: 1.20, 7: 1.30}
 
 HELIX_FORCE_FACTOR = {35: 1.00, 38: 0.95, 45: 0.90}
 
+# CMH chamfer mill series — shear angle on the flank (like helix on an endmill).
+# Distributes cutting load progressively, reduces instantaneous force, spreads heat.
+# Update CMH_SHEAR_ANGLE_DEG once a physical measurement is taken off a production tool.
+CMH_SHEAR_ANGLE_DEG  = 15.0   # degrees (conservative default — measure and confirm)
+# SFM bonus: shear angle lowers force → less heat per unit area → can sustain higher SFM.
+# Interpolated from HELIX_FORCE_FACTOR slope: 10° shear ≈ +6%, 15° ≈ +10%, 20° ≈ +14%.
+CMH_SFM_MULT         = 1.10   # +10% SFM vs CMS/baseline
+# Force factor: same physics as HELIX_FORCE_FACTOR — shear reduces Kc.
+# At 15° shear: 1.00 - (15/45)*(1.00-0.90) = 0.967
+CMH_FORCE_FACTOR     = round(1.0 - (CMH_SHEAR_ANGLE_DEG / 45.0) * 0.10, 4)  # ~0.967
+# Minimum chip fraction: below this × base_ipt, CMH tip flat rubs instead of cutting.
+CMH_MIN_CHIP_FRAC    = 0.30   # 30% of base ipt_frac × body_dia
+
 # Helix angle by Core Cutter tool series.
 # QTR3 is variable-helix (40/41/42°); 41° is the representative average for force calcs.
 # When a SKU upload includes a helix_angle column, that value takes priority over this table.
@@ -1401,11 +1414,28 @@ def run_chamfer_mill(payload: dict) -> dict:
     # Capped at 2.0× to prevent unrealistic feeds at very shallow included angles.
     ipt_frac = IPT_FRAC.get(_mat_key, IPT_FRAC.get(mat_group, 0.005))
     lead_ctf = min(2.0, 1.0 / max(0.10, math.sin(half_angle_rad)))
-    # CMH: shear angle + edge prep → full chip load
-    # CMS: straight flute, center-cutting → ~65% of CMH chip load
+
     chamfer_series = str(payload.get("chamfer_series", "CMH")).upper()
-    series_mult = 0.65 if chamfer_series == "CMS" else 1.0
+    is_cmh = chamfer_series == "CMH"
+
+    # CMH: shear angle on the flank → lower force, higher SFM ceiling, needs aggressive chip load
+    # CMS: straight flute, center-cutting → 65% of CMH chip load, no SFM boost
+    if is_cmh:
+        sfm_target = sfm_target * CMH_SFM_MULT   # shear angle allows higher SFM
+        series_mult = 1.0
+    else:
+        series_mult = 0.65
+
+    # Recalculate RPM with CMH-adjusted SFM target
+    target_rpm = (sfm_target * 12.0) / (math.pi * d_eff)
+    rpm = min(target_rpm, float(max_rpm) * rpm_util)
+    rpm = max(1.0, rpm)
+    sfm_actual = (rpm * math.pi * d_eff) / 12.0
+
     ipt = ipt_frac * body_dia * lead_ctf * series_mult
+
+    # CMH minimum chip load — tip flat rubs below this threshold
+    cmh_min_ipt = ipt_frac * body_dia * CMH_MIN_CHIP_FRAC * lead_ctf if is_cmh else 0.0
 
     feed_ipm = rpm * ipt * flutes
 
@@ -1440,6 +1470,11 @@ def run_chamfer_mill(payload: dict) -> dict:
         notes.append(
             f"Chamfer depth creates D_eff ({d_eff:.4f}\") near body diameter ({body_dia:.4f}\"). "
             f"Verify depth doesn't exceed tool geometry."
+        )
+    if is_cmh and ipt < cmh_min_ipt:
+        notes.append(
+            f"⚠ Chip load ({ipt:.5f}\") is below CMH minimum ({cmh_min_ipt:.5f}\"). "
+            f"The tip flat will rub rather than cut — increase feed or chamfer depth."
         )
 
     # Contextual tips
@@ -1516,6 +1551,12 @@ def run_chamfer_mill(payload: dict) -> dict:
                 (chamfer_depth / math.cos(half_angle_rad)) /
                 max(0.0001, (body_dia - tip_dia) / 2.0 / math.sin(half_angle_rad)) * 100, 1
             ) if chamfer_depth > 0 and math.cos(half_angle_rad) > 0 and (body_dia - tip_dia) > 0 else 0.0,
+            # CMH shear angle physics
+            "cmh_shear_angle_deg": round(CMH_SHEAR_ANGLE_DEG, 1) if is_cmh else None,
+            "cmh_sfm_boost_pct":   round((CMH_SFM_MULT - 1.0) * 100, 0) if is_cmh else None,
+            "cmh_force_factor":    round(CMH_FORCE_FACTOR, 4) if is_cmh else None,
+            "cmh_min_ipt":         round(cmh_min_ipt, 6) if is_cmh else None,
+            "cmh_min_ipt_ok":      ipt >= cmh_min_ipt if is_cmh else None,
         },
         "debug": None,
     }
