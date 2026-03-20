@@ -337,6 +337,7 @@ export default function Mentor() {
   const [tbInputCode, setTbInputCode] = React.useState("");
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
+  const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
 
   // ── Email results (lead capture) ──────────────────────────────────────────
   const [erEmail, setErEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
@@ -381,7 +382,7 @@ export default function Mentor() {
     return () => clearTimeout(t);
   }, [machineQuery]);
 
-  // Load saved machines when toolbox session is active
+  // Load saved machines + item count when toolbox session is active
   React.useEffect(() => {
     const e = tbEmail || localStorage.getItem("tb_email") || "";
     const t = tbToken || localStorage.getItem("tb_token") || "";
@@ -389,6 +390,10 @@ export default function Mentor() {
     fetch(`/api/user-machines?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`)
       .then(r => r.ok ? r.json() : [])
       .then(setSavedMachines)
+      .catch(() => {});
+    fetch(`/api/toolbox/items?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((items: any[]) => setTbItemCount(items.length))
       .catch(() => {});
   }, [tbEmail, tbToken]);
 
@@ -507,6 +512,7 @@ export default function Mentor() {
       });
       if (r.status === 401) { setTbShowModal(true); return; }
       setTbSaved(true);
+      setTbItemCount(c => c !== null ? c + 1 : 1);
       setTimeout(() => setTbSaved(false), 3000);
     } finally { setTbSaving(false); }
   }
@@ -2131,7 +2137,7 @@ ${stabSection}
               </div>
               {/* Toolbox — middle */}
               {tbEmail && tbToken ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-500/40 bg-orange-500/10">
+                <a href="/toolbox" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="7" width="20" height="14" rx="2"/>
                     <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
@@ -2139,7 +2145,10 @@ ${stabSection}
                     <line x1="10" y1="14" x2="14" y2="14"/>
                   </svg>
                   <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
-                </div>
+                  {tbItemCount !== null && tbItemCount > 0 && (
+                    <span className="text-[9px] font-bold bg-orange-500 text-white rounded-full px-1.5 py-0.5 leading-none">{tbItemCount}</span>
+                  )}
+                </a>
               ) : (
                 <button type="button" onClick={() => setTbShowModal(true)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-600 hover:border-orange-500/60 hover:bg-orange-500/10 transition-colors group">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400 group-hover:text-orange-400">
