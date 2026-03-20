@@ -2754,13 +2754,40 @@ ${stabSection}
                 {skuChamferEdgeLength && (() => {
                   const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                   const maxDepth = skuChamferEdgeLength * Math.sin(halfRad);
+                  const isCms = !(form.chamfer_tip_dia > 0);
+                  const tipX = isCms ? 138 : 128;
                   return (
-                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Cutting Edge Length</span>
-                      <span className="font-mono font-semibold text-orange-400">{skuChamferEdgeLength.toFixed(4)}"</span>
-                      <span className="text-zinc-500">→</span>
-                      <span className="text-zinc-400">Max Depth</span>
-                      <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
+                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-400">Cutting Edge Length</span>
+                        <span className="font-mono font-semibold text-orange-400">{skuChamferEdgeLength.toFixed(4)}"</span>
+                        <span className="text-zinc-500">→</span>
+                        <span className="text-zinc-400">Max Chamfer Depth</span>
+                        <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
+                      </div>
+                      <svg viewBox="0 0 170 90" width="100%" height="80" className="block">
+                        {/* Shank / body top */}
+                        <line x1="18" y1="8" x2="18" y2="48" stroke="#666" strokeWidth="1.5"/>
+                        <line x1="18" y1="8" x2="98" y2="8" stroke="#666" strokeWidth="1.5"/>
+                        {/* Chamfer cutting edge — orange */}
+                        <line x1="98" y1="8" x2={tipX} y2="48" stroke="#f97316" strokeWidth="2"/>
+                        {/* Tip flat for CMH */}
+                        {!isCms && <line x1={tipX} y1="48" x2={tipX} y2="62" stroke="#f97316" strokeWidth="2"/>}
+                        {/* Centerline dashed */}
+                        <line x1="18" y1="48" x2={tipX} y2="48" stroke="#444" strokeWidth="1" strokeDasharray="3,2"/>
+                        {/* Cutting edge length arrow along edge */}
+                        <line x1="98" y1="8" x2={tipX} y2="48" stroke="#f97316" strokeWidth="0.5" strokeOpacity="0.3"/>
+                        <text x={isCms ? "107" : "103"} y={isCms ? "22" : "20"} fontSize="8" fill="#f97316" transform={`rotate(${isCms ? 38 : 42},${isCms ? 107 : 103},${isCms ? 22 : 20})`}>L={skuChamferEdgeLength.toFixed(3)}"</text>
+                        {/* Depth arrow — blue */}
+                        <line x1={tipX + 12} y1="8" x2={tipX + 12} y2="48" stroke="#60a5fa" strokeWidth="1"/>
+                        <polygon points={`${tipX+12},8 ${tipX+9},15 ${tipX+15},15`} fill="#60a5fa"/>
+                        <polygon points={`${tipX+12},48 ${tipX+9},41 ${tipX+15},41`} fill="#60a5fa"/>
+                        <text x={tipX + 16} y="31" fontSize="8" fill="#60a5fa">d={maxDepth.toFixed(3)}"</text>
+                        {/* OD label */}
+                        <text x="55" y="6" fontSize="7" fill="#888" textAnchor="middle">OD</text>
+                        {/* Series label */}
+                        <text x="18" y="82" fontSize="7" fill="#666">{isCms ? "CMS — center cutting (point tip)" : "CMH — non-center cutting (flat tip)"}</text>
+                      </svg>
                     </div>
                   );
                 })()}
