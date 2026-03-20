@@ -6263,15 +6263,31 @@ ${stabSection}
                     <span className="text-base font-mono font-bold text-orange-400 ml-3 shrink-0">{chamferResult.d_eff_in.toFixed(4)}"</span>
                   </div>
 
-                  {/* Edge engagement bar */}
+                  {/* Growing WOC + edge engagement */}
                   {chamferResult.edge_pct > 0 && (
-                    <div>
-                      <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                        <span>Flank engaged at depth</span>
-                        <span className="font-semibold text-white">{chamferResult.edge_pct.toFixed(1)}% of cutting edge</span>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Flank engaged at depth</span>
+                          <span className="font-semibold text-white">{chamferResult.edge_pct.toFixed(1)}% of cutting edge</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-700">
+                          <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, chamferResult.edge_pct)}%` }} />
+                        </div>
                       </div>
-                      <div className="h-1.5 rounded-full bg-zinc-700">
-                        <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, chamferResult.edge_pct)}%` }} />
+                      <div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Radial WOC at this depth <span className="text-zinc-600">(grows as depth increases)</span></span>
+                          <span className="font-semibold text-amber-400">{chamferResult.actual_woc_in?.toFixed(4)}" — {chamferResult.woc_pct_d_eff?.toFixed(0)}% of D_eff</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-700">
+                          <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${Math.min(100, chamferResult.woc_pct_d_eff ?? 0)}%` }} />
+                        </div>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">
+                          {(chamferResult.woc_pct_d_eff ?? 0) >= 45
+                            ? "≈ slot-equivalent engagement — not a light finishing cut"
+                            : "WOC and cutting force scale proportionally with depth"}
+                        </p>
                       </div>
                     </div>
                   )}

@@ -1439,12 +1439,16 @@ def run_chamfer_mill(payload: dict) -> dict:
 
     feed_ipm = rpm * ipt * flutes
 
-    # HP estimate — chamfer cut is very light; approximate using thin-engagement MRR
-    _doc_equiv = chamfer_depth if chamfer_depth > 0 else 0.010
-    _woc_equiv = 0.05 * d_eff   # ~5% of D_eff radial engagement proxy
-    mrr_equiv  = feed_ipm * _doc_equiv * _woc_equiv
-    _hp_unit   = HP_PER_CUIN.get(_mat_key, HP_PER_CUIN.get(mat_group, 1.0))
-    hp_required = max(0.01, mrr_equiv * _hp_unit * hardness_kc_mult(_hrc))
+    # HP estimate — chamfer geometry is triangular, not rectangular.
+    # WOC grows with depth: actual_woc = depth × tan(half_angle) = (D_eff - tip_dia) / 2
+    # Cross-section removed is a triangle → MRR = 0.5 × woc × depth × feed
+    # (was incorrectly using fixed 5% of D_eff — badly understated load at real depths)
+    _depth_for_hp = chamfer_depth if chamfer_depth > 0 else 0.010
+    _actual_woc   = _depth_for_hp * math.tan(half_angle_rad)          # radial reach at this depth
+    _woc_as_pct   = _actual_woc / max(0.001, d_eff)                   # fraction of D_eff engaged
+    mrr_equiv     = feed_ipm * _depth_for_hp * _actual_woc * 0.5      # 0.5 = triangular cross-section
+    _hp_unit      = HP_PER_CUIN.get(_mat_key, HP_PER_CUIN.get(mat_group, 1.0))
+    hp_required   = max(0.01, mrr_equiv * _hp_unit * hardness_kc_mult(_hrc))
 
     # Machine HP
     _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
@@ -1489,6 +1493,13 @@ def run_chamfer_mill(payload: dict) -> dict:
         tips.append("Flood or TSC coolant significantly extends chamfer mill life — heat builds quickly at the tip flat on CMH series even at low forces.")
     if mat_group in ("Stainless", "Inconel", "Titanium"):
         tips.append("Climb milling only in this material — conventional cut direction work-hardens the entry edge and shortens tool life.")
+    # Growing WOC tip — always shown when depth is entered, core chamfer physics
+    if chamfer_depth > 0:
+        tips.append(
+            f"WOC grows with depth: at {chamfer_depth:.4f}\" depth, radial engagement is "
+            f"{_actual_woc:.4f}\" ({_woc_as_pct*100:.0f}% of D_eff). "
+            f"{'CMS point tools always run ~50% WOC (slot-equivalent) — do not treat as a light finishing cut.' if not is_cmh and tip_dia < 0.001 else 'Engagement and cutting force increase proportionally as you go deeper — program your final depth pass separately from roughing passes.'}"
+        )
     if chamfer_depth > 0 and chamfer_depth / body_dia > 0.25:
         tips.append("Deep chamfer: consider two lighter axial passes for better edge finish and longer tool life.")
     if flutes <= 2:
@@ -1523,7 +1534,10 @@ def run_chamfer_mill(payload: dict) -> dict:
             "deflection_in":          0.0,
             "chip_thickness_in":      round(ipt, 6),
             "chatter_index":          0.0,
-            "teeth_in_cut":           round(max(0.1, (math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, (chamfer_depth * math.cos(half_angle_rad)) / max(0.001, d_eff))))) / (2.0 * math.pi)) * flutes), 2),
+            # Teeth in cut: derived from actual WOC/D_eff radial engagement fraction.
+            # woc = depth × tan(half_angle); woc/D_eff = 0.5 always for CMS (point tip).
+            # engagement_arc = acos(1 - 2 × woc/D_eff); teeth = arc/(2π) × flutes
+            "teeth_in_cut":           round(max(0.1, (math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, _woc_as_pct)))) / (2.0 * math.pi)) * flutes), 2),
             "helix_wrap_deg":         None,
             "engagement_continuous":  None,
             "tool_life_min":          round(tool_life_min, 1),
@@ -1551,6 +1565,9 @@ def run_chamfer_mill(payload: dict) -> dict:
                 (chamfer_depth / math.cos(half_angle_rad)) /
                 max(0.0001, (body_dia - tip_dia) / 2.0 / math.sin(half_angle_rad)) * 100, 1
             ) if chamfer_depth > 0 and math.cos(half_angle_rad) > 0 and (body_dia - tip_dia) > 0 else 0.0,
+            # Growing WOC with depth
+            "actual_woc_in":     round(_actual_woc, 4),
+            "woc_pct_d_eff":     round(_woc_as_pct * 100, 1),
             # CMH shear angle physics
             "cmh_shear_angle_deg": round(CMH_SHEAR_ANGLE_DEG, 1) if is_cmh else None,
             "cmh_sfm_boost_pct":   round((CMH_SFM_MULT - 1.0) * 100, 0) if is_cmh else None,
