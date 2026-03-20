@@ -54,7 +54,7 @@ function defaultThreadFlutes(dia: number): number {
   return 5;
 }
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint: string }) {
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React.ReactNode }) {
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -64,7 +64,7 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint: strin
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
           </Label>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-56 text-xs">
+        <TooltipContent side="top" className="max-w-72 text-xs">
           {hint}
         </TooltipContent>
       </Tooltip>
@@ -2752,7 +2752,40 @@ ${stabSection}
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <FieldLabel hint="Axial depth of the chamfer being cut. Determines D_eff (the effective cutting diameter at the outer edge of contact). D_eff = tip_dia + 2 × depth × tan(angle/2).">Chamfer Depth (in)</FieldLabel>
+                  <FieldLabel hint={
+                    <div className="space-y-2">
+                      <p>Axial depth of the chamfer being cut. D_eff = tip_dia + 2 × depth × tan(angle/2).</p>
+                      {/* Chamfer geometry diagram */}
+                      <svg viewBox="0 0 160 100" width="160" height="100" className="block mx-auto">
+                        {/* Tool body outline */}
+                        <line x1="20" y1="10" x2="20" y2="50" stroke="#888" strokeWidth="1.5"/>
+                        <line x1="20" y1="10" x2="100" y2="10" stroke="#888" strokeWidth="1.5"/>
+                        {/* Chamfer cutting edge */}
+                        <line x1="100" y1="10" x2={form.chamfer_tip_dia > 0 ? "130" : "140"} y2="50" stroke="#f97316" strokeWidth="2"/>
+                        {/* Tip flat (CMH) or point (CMS) */}
+                        {form.chamfer_tip_dia > 0
+                          ? <line x1="130" y1="50" x2="130" y2="70" stroke="#f97316" strokeWidth="2"/>
+                          : null}
+                        {/* Bottom of tool / axis */}
+                        <line x1="20" y1="50" x2={form.chamfer_tip_dia > 0 ? "130" : "140"} y2="50" stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
+                        {/* Depth arrow */}
+                        <line x1="145" y1="10" x2="145" y2="50" stroke="#60a5fa" strokeWidth="1"/>
+                        <polygon points="145,10 142,17 148,17" fill="#60a5fa"/>
+                        <polygon points="145,50 142,43 148,43" fill="#60a5fa"/>
+                        <text x="150" y="33" fontSize="9" fill="#60a5fa">d</text>
+                        {/* Edge length label along cutting edge */}
+                        <text x="108" y="26" fontSize="9" fill="#f97316" transform="rotate(35,108,26)">L</text>
+                        {/* OD label */}
+                        <text x="55" y="8" fontSize="8" fill="#aaa" textAnchor="middle">OD</text>
+                        {/* Tip label */}
+                        {form.chamfer_tip_dia > 0
+                          ? <text x="135" y="65" fontSize="8" fill="#aaa">tip</text>
+                          : <text x="133" y="48" fontSize="8" fill="#aaa">▲</text>}
+                        {/* Series label */}
+                        <text x="5" y="90" fontSize="8" fill="#aaa">{form.chamfer_tip_dia > 0 ? "CMH — flat tip" : "CMS — center cutting"}</text>
+                      </svg>
+                    </div>
+                  }>Chamfer Depth (in)</FieldLabel>
                   <Input
                     type="text"
                     inputMode="decimal"
