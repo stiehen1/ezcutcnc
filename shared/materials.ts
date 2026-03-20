@@ -77,8 +77,8 @@ export const ISO_SUBCATEGORIES = [
   { iso: "M" as IsoCategory, key: "stainless_304",         label: "304 / 304L / 321 Stainless",                  hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_316",         label: "316 / 316L Stainless (Mo-bearing)",           hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_ph",          label: "17-4PH / 15-5PH / 13-8MO Stainless",         hardness: { value: 33, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 30, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_superduplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 32, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_superduplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 28, scale: "hrc" as const } },
   // K — Cast Iron
   { iso: "K" as IsoCategory, key: "cast_iron_gray",        label: "Gray Cast Iron (GG10, GG20, GG30)",           hardness: { value: 92, scale: "hrb" as const } },
   { iso: "K" as IsoCategory, key: "cast_iron_ductile",     label: "Ductile Cast Iron (GGG-40, GGG-50, GGG-60)",  hardness: { value: 90, scale: "hrb" as const } },
@@ -125,8 +125,8 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "stainless_304":       { min: 65, max: 95,  scale: "hrb", note: "304/316/321 austenitic stainless cannot be hardened by heat treatment — HRB scale only." },
   "stainless_316":       { min: 65, max: 95,  scale: "hrb", note: "316 austenitic stainless cannot be hardened by heat treatment — HRB scale only." },
   "stainless_ph":        { min: 28, max: 45,  scale: "hrc", note: "PH stainless (17-4PH, 15-5PH) age-hardens to 28–45 HRC depending on condition (H900–H1150)." },
-  "stainless_duplex":    { min: 24, max: 35,  scale: "hrc", note: "Duplex 2205 is not heat-treatable — typical range 24–35 HRC." },
-  "stainless_superduplex": { min: 26, max: 38, scale: "hrc", note: "Super duplex 2507 typical range 26–38 HRC — not heat-treatable beyond solution anneal." },
+  "stainless_duplex":    { min: 18, max: 25,  scale: "hrc", note: "Duplex 2205 max 217 HB (~22 HRC) — not heat-treatable, but work-hardens significantly." },
+  "stainless_superduplex": { min: 22, max: 32, scale: "hrc", note: "Super duplex 2507 typical 22–32 HRC as-annealed — not heat-treatable beyond solution anneal." },
   // K — Cast Iron
   "cast_iron_gray":     { min: 80, max: 105, scale: "hrb", note: "Gray cast iron ranges 80–105 HRB depending on grade. Not heat-treatable to HRC levels." },
   "cast_iron_ductile":  { min: 82, max: 108, scale: "hrb", note: "Ductile iron ranges 82–108 HRB. Some grades can be surface hardened." },
