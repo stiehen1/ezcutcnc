@@ -1089,9 +1089,10 @@ export default function Mentor() {
         chamfer_angle: Number(sku.chamfer_angle ?? 90),
         chamfer_tip_dia: Number(sku.tip_diameter ?? 0),
         chamfer_depth: 0,
+        chamfer_series: String(sku.series ?? "").toUpperCase().startsWith("CMS") ? "CMS" as const : "CMH" as const,
       } : {}),
     }));
-    setSkuChamferEdgeLength(isChamfer && sku.max_cutting_edge_length ? Number(sku.max_cutting_edge_length) : null);
+    setSkuChamferEdgeLength(isChamfer ? 1 : null); // just a truthy flag — values computed from geometry
   }
 
   function clearSku() {
@@ -2851,16 +2852,18 @@ ${stabSection}
                     />
                   </div>
                 </div>
-                {skuChamferEdgeLength && (() => {
+                {skuChamferEdgeLength && form.tool_dia > 0 && (() => {
                   const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
-                  const maxDepth = skuChamferEdgeLength * Math.sin(halfRad);
+                  const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+                  const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                  const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
                   const isCms = !(form.chamfer_tip_dia > 0);
                   const tipX = isCms ? 138 : 128;
                   return (
                     <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 space-y-2 text-xs">
                       <div className="flex items-center justify-between">
                         <span className="text-orange-400">Cutting Edge Length</span>
-                        <span className="font-mono font-semibold text-orange-400">{skuChamferEdgeLength.toFixed(4)}"</span>
+                        <span className="font-mono font-semibold text-orange-400">{edgeLength.toFixed(4)}"</span>
                         <span className="text-zinc-600">|</span>
                         <span className="text-blue-400">Max Chamfer Depth</span>
                         <span className="font-mono font-semibold text-blue-400">{maxDepth.toFixed(4)}"</span>
@@ -2975,13 +2978,15 @@ ${stabSection}
                     }}
                   />
                   {(() => {
-                    if (!skuChamferEdgeLength || !(form.chamfer_depth > 0)) return null;
+                    if (!skuChamferEdgeLength || !(form.chamfer_depth > 0) || !(form.tool_dia > 0)) return null;
                     const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
-                    const maxDepth = skuChamferEdgeLength * Math.sin(halfRad);
+                    const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+                    const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                    const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
                     if (form.chamfer_depth <= maxDepth) return null;
                     return (
                       <p className="mt-1 text-xs text-amber-400">
-                        ⚠ Depth exceeds this tool's cutting edge length ({skuChamferEdgeLength.toFixed(4)}"). Max achievable depth: {maxDepth.toFixed(4)}".
+                        ⚠ Depth exceeds this tool's cutting edge length ({edgeLength.toFixed(4)}"). Max achievable depth: {maxDepth.toFixed(4)}".
                       </p>
                     );
                   })()}
