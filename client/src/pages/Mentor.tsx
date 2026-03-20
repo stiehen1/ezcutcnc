@@ -2767,23 +2767,24 @@ ${stabSection}
                       </div>
                       <svg viewBox="0 0 260 108" width="100%" height="92" className="block mt-1">
                         {/* Center axis (dashed vertical) */}
-                        <line x1="38" y1="4" x2="38" y2="100" stroke="#3f3f46" strokeWidth="1" strokeDasharray="4,3"/>
-                        {/* OD line at top (horizontal) */}
-                        <line x1="38" y1="18" x2="148" y2="18" stroke="#71717a" strokeWidth="2"/>
-                        {/* OD label */}
-                        <text x="93" y="13" fontSize="8" fill="#71717a" textAnchor="middle">← OD →</text>
-                        {/* Chamfer cutting edge (orange) from OD corner down to tip */}
-                        <line x1="148" y1="18" x2={isCms ? 38 : 60} y2="84" stroke="#f97316" strokeWidth="2.5"/>
-                        {/* CMS: filled point at tip */}
-                        {isCms && <polygon points="38,84 33,76 43,76" fill="#f97316" opacity="0.85"/>}
-                        {/* CMH: gray flat (non-cutting) from tip back to axis */}
+                        <line x1="38" y1="4" x2="38" y2="104" stroke="#3f3f46" strokeWidth="1" strokeDasharray="4,3"/>
+                        {/* CMS: point at TOP, OD at BOTTOM */}
+                        {/* CMH: flat tip at TOP, OD at BOTTOM */}
+                        {/* Tip region at top */}
+                        {isCms && <polygon points="38,18 33,26 43,26" fill="#f97316" opacity="0.85"/>}
                         {!isCms && <>
-                          <line x1="38" y1="84" x2="60" y2="84" stroke="#52525b" strokeWidth="2.5"/>
-                          <text x="49" y="96" fontSize="7" fill="#52525b" textAnchor="middle">flat tip</text>
+                          <line x1="38" y1="18" x2="62" y2="18" stroke="#52525b" strokeWidth="2.5"/>
+                          <text x="50" y="13" fontSize="7" fill="#52525b" textAnchor="middle">flat tip</text>
                         </>}
+                        {/* Chamfer cutting edge (orange) — from tip (top) down to OD (bottom) */}
+                        <line x1={isCms ? 38 : 62} y1="18" x2="148" y2="84" stroke="#f97316" strokeWidth="2.5"/>
+                        {/* OD line at bottom */}
+                        <line x1="38" y1="84" x2="148" y2="84" stroke="#71717a" strokeWidth="2"/>
+                        {/* OD label */}
+                        <text x="93" y="96" fontSize="8" fill="#71717a" textAnchor="middle">← OD →</text>
                         {/* Depth ref lines (dashed blue) */}
-                        <line x1="148" y1="18" x2="166" y2="18" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="3,2"/>
-                        <line x1={isCms ? 38 : 60} y1="84" x2="166" y2="84" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="3,2"/>
+                        <line x1={isCms ? 38 : 62} y1="18" x2="166" y2="18" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="3,2"/>
+                        <line x1="148" y1="84" x2="166" y2="84" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="3,2"/>
                         {/* Depth arrow */}
                         <line x1="164" y1="20" x2="164" y2="82" stroke="#3b82f6" strokeWidth="1.5"/>
                         <polygon points="164,20 161,28 167,28" fill="#3b82f6"/>
@@ -2791,11 +2792,11 @@ ${stabSection}
                         {/* d= label */}
                         <text x="170" y="55" fontSize="8.5" fill="#60a5fa" fontFamily="monospace">d={maxDepth.toFixed(3)}"</text>
                         {/* L label — centered on hypotenuse, rotated along it */}
-                        <text x="93" y="51" fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform="rotate(-31,93,51)">L={skuChamferEdgeLength.toFixed(3)}"</text>
+                        <text x="93" y="51" fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform="rotate(31,93,51)">L={skuChamferEdgeLength.toFixed(3)}"</text>
                         {/* Axis label */}
-                        <text x="14" y="58" fontSize="7" fill="#3f3f46" textAnchor="middle" transform="rotate(-90,14,58)">axis</text>
+                        <text x="14" y="55" fontSize="7" fill="#3f3f46" textAnchor="middle" transform="rotate(-90,14,55)">axis</text>
                         {/* Series label */}
-                        <text x="38" y="104" fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting (point tip)" : "CMH — non-center cutting (flat tip)"}</text>
+                        <text x="38" y="106" fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting (point tip)" : "CMH — non-center cutting (flat tip)"}</text>
                       </svg>
                     </div>
                   );
