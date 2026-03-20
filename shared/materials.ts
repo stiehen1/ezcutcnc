@@ -218,7 +218,13 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "1.4307": "stainless_304", "1.4541": "stainless_304", "a2 stainless": "stainless_304",
   // ── 316 Mo-Bearing ────────────────────────────────────────────────────────
   "316": "stainless_316", "316l": "stainless_316", "316ti": "stainless_316",
-  "317": "stainless_316", "1.4401": "stainless_316", "1.4404": "stainless_316",
+  "316h": "stainless_316", "316n": "stainless_316", "316/l": "stainless_316",
+  "317": "stainless_316", "317l": "stainless_316",
+  "1.4401": "stainless_316", "1.4404": "stainless_316", "1.4432": "stainless_316",
+  "s31600": "stainless_316", "s31603": "stainless_316", "s31609": "stainless_316",
+  "sus 316": "stainless_316", "x5crnimo17-12-2": "stainless_316",
+  "ugima 316": "stainless_316", "ugima": "stainless_316",
+  "904l": "stainless_316",  // super-austenitic — closest available; AI will note higher difficulty
   "a4 stainless": "stainless_316", "marine grade": "stainless_316",
   // ── PH Stainless ──────────────────────────────────────────────────────────
   "17-4": "stainless_ph", "17-4ph": "stainless_ph", "17-4 ph": "stainless_ph",
