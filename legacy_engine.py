@@ -138,9 +138,10 @@ BASE_SFM = {
     "monel_k500":   115,            # Monel K-500 — guide 90–140, mid 115 SFM (was 110)
     "inconel_625":  110,            # 625 / Hastelloy C-276 — guide 80–120; baseline 110 → HEM 220 SFM (was 100)
     "inconel_718":  110,            # Inconel 718 — guide 70–110; baseline 110 → HEM 220 SFM (was 90)
-    "hastelloy_x":   82,            # Hastelloy X/725/X-750 — avg guide mids (87.5+82.5+75)/3=82 (was 80)
-    "waspaloy":      68,            # Waspaloy / HAYNES 282 / René 41 — hot-section; avg first test 68 SFM
-    "mp35n":         60,            # MP35N — ultra-high-strength; first test 60 SFM
+    "hastelloy_x":   82,            # Hastelloy X/725/X-750/Nimonic C-263/Haynes 242 — avg guide mids 82 SFM
+    "inconel_617":   78,            # Inconel 617 / Haynes 230 — solid-solution Ni-Cr-Co-Mo, power-gen combustors
+    "waspaloy":      68,            # Waspaloy / HAYNES 282 / René 41/77/80 / Nimonic 80A/90/105 / Udimet 500/700 — hot-section
+    "mp35n":         60,            # MP35N / Udimet 720 / René 95 — ultra-high-strength; first test 60 SFM
     "inconel":      100,            # legacy fallback
     "tool_steel_p20": 300,  # P20 prehardened ~30 HRC: 260–340 SFM; 300 SFM confirmed
     "tool_steel_a2":  240,  # A2 tool steel: 200–280 SFM; 240 SFM confirmed
@@ -195,9 +196,10 @@ HP_PER_CUIN = {
     "monel_k500":            1.30,   # Ni-Cu — friendliest in the family
     "inconel_625":           1.40,   # 625/C-276 — corrosion-focused
     "inconel_718":           1.55,   # 718 — standard aerospace Ni
-    "hastelloy_x":           1.55,   # X / 725 / X-750 — mid-tier
-    "waspaloy":              1.65,   # Waspaloy/282/René 41 — hot-section
-    "mp35n":                 1.70,   # MP35N — highest unit power in the family
+    "hastelloy_x":           1.55,   # X / 725 / X-750 / Nimonic C-263 — mid-tier
+    "inconel_617":           1.58,   # 617 / Haynes 230 — solid-solution, between hastelloy_x and waspaloy
+    "waspaloy":              1.65,   # Waspaloy/282/René 41/77/80/Nimonic 80A/90 — hot-section
+    "mp35n":                 1.70,   # MP35N / Udimet 720 / René 95 — highest unit power in the family
     "inconel":               1.55,   # legacy fallback
     "tool_steel_p20": 1.05,
     "tool_steel_a2":  1.10,
@@ -508,9 +510,10 @@ IPT_FRAC = {
     "monel_k500":            0.0041,  # K-500 guide 0.0016–0.0025, mid 0.00205 on 0.5" = 0.41%×D ✓
     "inconel_625":           0.0036,  # 625/C-276 guide mid 0.0018 on 0.5" = 0.36%×D ✓
     "inconel_718":           0.0032,  # 718 guide mid 0.0016 on 0.5" = 0.32%×D ✓
-    "hastelloy_x":           0.0029,  # X/725/X-750 avg guide mids (0.0031+0.0029+0.0027)/3=0.0029 (was 0.0028)
-    "waspaloy":              0.0024,  # Waspaloy/282/René41: avg midpoint ~0.0012 on 0.5" = 0.24%×D
-    "mp35n":                 0.0022,  # MP35N: midpoint 0.0011 on 0.5" = 0.22%×D
+    "hastelloy_x":           0.0029,  # X/725/X-750/Nimonic C-263 avg guide mids = 0.29%×D
+    "inconel_617":           0.0027,  # 617/Haynes 230: solid-solution, between hastelloy_x and waspaloy
+    "waspaloy":              0.0024,  # Waspaloy/282/René41/77/80/Nimonic 80A/90: avg mid ~0.24%×D
+    "mp35n":                 0.0022,  # MP35N/Udimet 720/René 95: midpoint 0.0011 on 0.5" = 0.22%×D
     "inconel":               0.003,   # legacy fallback
     "tool_steel_p20": 0.0050,  # P20 ~30 HRC: .0025 IPT on 0.5" → 0.50%×D confirmed
     "tool_steel_a2":  0.0044,  # A2: .0022 IPT on 0.5" → 0.44%×D confirmed
@@ -563,9 +566,10 @@ HEM_IPT_MULT = {
     "monel_k500":  2.2,   # Monel — friendliest; generous HEM boost
     "inconel_625": 1.8,   # 625/C-276 — HEM 1.5%×D adj at 3% WOC (110 SFM base × 2.0 = 220 HEM)
     "inconel_718": 1.8,   # 718 — HEM 1.5%×D adj at 3% WOC (110 SFM base × 2.0 = 220 HEM)
-    "hastelloy_x": 2.0,   # X/725/X-750 — mid-tier; moderate boost
-    "waspaloy":    1.8,   # Waspaloy/282/René41 — conservative HEM boost
-    "mp35n":       1.6,   # MP35N — very conservative; ultra-high-strength
+    "hastelloy_x": 2.0,   # X/725/X-750/Nimonic C-263 — mid-tier; moderate boost
+    "inconel_617": 1.8,   # 617/Haynes 230 — solid-solution; same HEM boost tier as 718/625
+    "waspaloy":    1.8,   # Waspaloy/282/René 41/77/80/Nimonic 80A/90 — conservative HEM boost
+    "mp35n":       1.6,   # MP35N/Udimet 720/René 95 — very conservative; ultra-high-strength
     "inconel":     2.2,   # legacy fallback
     "hiTemp_fe":   2.0,
     "hiTemp_co":   2.0,
@@ -618,6 +622,7 @@ _ISO_KEY_TO_GROUP = {
     "inconel_625":           "Inconel",
     "inconel_718":           "Inconel",
     "hastelloy_x":           "Inconel",
+    "inconel_617":           "Inconel",
     "waspaloy":              "Inconel",
     "mp35n":                 "Inconel",
     "inconel":               "Inconel",   # legacy fallback
@@ -1271,7 +1276,7 @@ DRILL_SFM = {
     "titanium_cp": 60, "titanium_64": 45,
     "hiTemp_fe": 30, "hiTemp_co": 25,
     "inconel_625": 25, "inconel_718": 20,
-    "monel_k500": 35, "hastelloy_x": 22, "waspaloy": 18, "mp35n": 15,
+    "monel_k500": 35, "hastelloy_x": 22, "inconel_617": 20, "waspaloy": 18, "mp35n": 15,
     "hardened_lt55": 50, "hardened_gt55": 30,
     "tool_steel_p20": 75, "tool_steel_a2": 60, "tool_steel_h13": 55,
     "tool_steel_s7": 60, "tool_steel_d2": 45, "cpm_10v": 30,
@@ -1295,7 +1300,7 @@ DRILL_IPR_BASE = {
     "titanium_cp": 0.004, "titanium_64": 0.003,
     "hiTemp_fe": 0.002, "hiTemp_co": 0.0015,
     "inconel_625": 0.002, "inconel_718": 0.0015,
-    "monel_k500": 0.0025, "hastelloy_x": 0.0018, "waspaloy": 0.0015, "mp35n": 0.0013,
+    "monel_k500": 0.0025, "hastelloy_x": 0.0018, "inconel_617": 0.0016, "waspaloy": 0.0015, "mp35n": 0.0013,
     "hardened_lt55": 0.002, "hardened_gt55": 0.001,
     "tool_steel_p20": 0.0035, "tool_steel_a2": 0.0028, "tool_steel_h13": 0.0025,
     "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022, "cpm_10v": 0.0018,
@@ -2195,6 +2200,7 @@ KEYSEAT_SFM = {
     "inconel_625":        55,
     "inconel_718":        55,
     "hastelloy_x":        45,
+    "inconel_617":        42,
     "waspaloy":           40,
     "mp35n":              35,
     "monel_k500":         60,

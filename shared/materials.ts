@@ -28,16 +28,17 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "cast_iron_ductile":   "Tougher than gray iron with longer, more ductile chips. Slight SFM reduction; same preference for dry or mist cutting.",
   "cast_iron_malleable": "Good machinability with clean chip break. More abrasive on edges than gray iron; standard uncoated or TiN carbide handles it well.",
   // S — Superalloys / Titanium
-  "titanium_cp":         "Springy and prone to galling — the tool wants to weld to the workpiece at low feed. High chip load at low SFM; TSC or flood coolant is not optional.",
-  "titanium_64":         "Heat-trapping, work-hardening, and notch-sensitive. Sharp geometry, high chip load, high-pressure coolant; never slow down or dwell mid-cut.",
-  "hiTemp_fe":           "Iron-based superalloy (A-286, Incoloy 800) — aggressive work-hardening, heat stays in the tool. Lower SFM than nickel alloys but same unforgiving behavior; TSC essential.",
-  "hiTemp_co":           "Cobalt superalloy (Stellite) — extremely abrasive and punishing on cutting edges. PVD coating required; conservative SFM and feed, no exceptions.",
-  "monel_k500":          "Nickel-copper age-hardened alloy — the friendliest grade in this family. Still wants consistent chip load and flood coolant, but runs meaningfully faster than 718 or Waspaloy.",
-  "inconel_625":         "Corrosion-focused nickel alloy — more machinable than 718 because strength-at-temperature isn't the design goal. Still work-hardens; keep the tool engaged and chip load consistent.",
-  "inconel_718":         "Most common aerospace nickel alloy — work-hardening, heat-building, and gummy. Traditional roughing at conservative SFM; HEM at low WOC is the only practical high-feed strategy.",
-  "hastelloy_x":         "Mid-tier aerospace/industrial Ni alloys — tougher than 625/718 family due to higher strength objectives. Drop SFM and chip load below 718; TSC strongly recommended.",
-  "waspaloy":            "Hot-section aerospace alloys — among the most demanding Ni alloys to machine. Work-hardens rapidly, notches tools aggressively; conservative SFM and consistent engagement are non-negotiable.",
-  "mp35n":               "Ultra-high-strength Ni-Co-Cr-Mo alloy — used in medical implants and sour-service oilfield hardware. The most demanding grade here; treat every parameter conservatively.",
+  "titanium_cp":         "Springy and prone to galling — the tool wants to weld to the workpiece at low feed. High chip load at low SFM; TSC or flood coolant is not optional. Grade 1 is softest, Grade 4 is toughest — both behave the same way in the cut.",
+  "titanium_64":         "Heat-trapping, work-hardening, and notch-sensitive. Sharp geometry, high chip load, high-pressure coolant; never slow down or dwell mid-cut. Beta alloys (Ti-5553, Ti-10-2-3) run conservative end of the range.",
+  "hiTemp_fe":           "Iron-based superalloy (A-286, Incoloy 800/825, Incoloy 901) — aggressive work-hardening, heat stays in the tool. Lower SFM than nickel alloys but same unforgiving cut behavior; TSC essential. More cost-effective than Ni-base but same discipline required.",
+  "hiTemp_co":           "Cobalt superalloy (Stellite 6/12/21/31, Haynes 188, L-605) — extremely abrasive and punishing on cutting edges. Very high hot hardness retained at temperature makes these among the hardest to machine by volume. PVD coating required; conservative SFM and feed, no exceptions.",
+  "monel_k500":          "Nickel-copper age-hardened alloy — the friendliest grade in this family. Still wants consistent chip load and flood coolant, but runs meaningfully faster than 718 or Waspaloy. Monel 400 is similar but softer; K-500 age-hardened is the tougher condition.",
+  "inconel_625":         "Corrosion-focused solid-solution Ni alloy (625, C-276, C-22, Hastelloy B-3, Incoloy 825) — more machinable than 718 because gamma-prime precipitation isn't the design goal. Still work-hardens and traps heat; keep the tool engaged and chip load consistent. TSC strongly preferred.",
+  "inconel_718":         "Most common aerospace nickel superalloy (718, Allvac 718, 718 Plus, Inconel 706) — work-hardening, heat-building, and gummy. Gamma-prime and delta phase make it punishing on edges. Traditional roughing at conservative SFM; HEM at low WOC (3–8%) is the only practical high-feed strategy for solid carbide.",
+  "hastelloy_x":         "Mid-tier aerospace/industrial Ni alloys (Hastelloy X, Inconel 725, X-750, Nimonic C-263, Haynes 242) — solid-solution strengthened, less gamma-prime than 718 but still heat-trapping and abrasive. Drop SFM and chip load below 718 levels; TSC strongly recommended. Harder to cool than steels because low thermal conductivity keeps heat at the edge.",
+  "inconel_617":         "Power-generation Ni superalloy (Inconel 617, Haynes 230, Alloy 617) — solid-solution Ni-Cr-Co-Mo designed for oxidation resistance in gas turbine combustors up to 1000°C. No gamma-prime, so less work-hardening than 718 — but still heat-trapping and abrasive. Similar strategy to Hastelloy X: consistent chip load, sharp coated carbide, high-pressure coolant.",
+  "waspaloy":            "Hot-section gamma-prime Ni superalloys (Waspaloy, HAYNES 282, René 41/77/80, Nimonic 80A/90/105, Udimet 500/600/700, Inconel 738/939) — among the most demanding Ni alloys to machine. Very high gamma-prime fraction impedes dislocation motion and resists cutting at temperature. Work-hardens rapidly, notches tools aggressively; conservative SFM and consistent engagement are non-negotiable. TSC mandatory.",
+  "mp35n":               "Ultra-high-strength Ni-Co-Cr-Mo alloys (MP35N, Udimet 720, René 95) — used in medical implants, sour-service hardware, and turbine disks. Highest unit cutting force in the superalloy family. Extremely work-hardening; even small rubbing or dwell causes immediate edge breakdown. Treat every parameter at the conservative end; TSC and premium PVD coating required.",
   // H — Hardened Steel
   "hardened_lt55":       "Hard enough to challenge solid carbide — TiAlN/AlCrN coating and conservative chip loads are required. Light WOC with higher DOC is more efficient than full-width cuts.",
   "hardened_gt55":       "At the upper limit for solid carbide — CBN tooling is preferred above 60 HRC. Extremely light chip loads; any tool flex causes immediate chipping.",
@@ -89,11 +90,12 @@ export const ISO_SUBCATEGORIES = [
   { iso: "S" as IsoCategory, key: "hiTemp_fe",             label: "A-286 / Incoloy 800 / Udimet (Fe-based)",     hardness: { value: 85, scale: "hrb" as const } },
   { iso: "S" as IsoCategory, key: "hiTemp_co",             label: "Stellite (Co-based superalloy)",              hardness: { value: 35, scale: "hrc" as const } },
   { iso: "S" as IsoCategory, key: "monel_k500",            label: "Monel K-500 (Ni-Cu age-hardened)",            hardness: { value: 30, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "inconel_625",           label: "Inconel 625 / Hastelloy C-276",               hardness: { value: 25, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "inconel_718",           label: "Inconel 718",                                 hardness: { value: 40, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "hastelloy_x",           label: "Hastelloy X / Inconel 725 / X-750",           hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "S" as IsoCategory, key: "waspaloy",              label: "Waspaloy / HAYNES 282 / René 41",             hardness: { value: 40, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "mp35n",                 label: "MP35N (Ni-Co-Cr-Mo ultra-high-strength)",     hardness: { value: 40, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "inconel_625",           label: "Inconel 625 / Hastelloy C-276 / C-22 / Incoloy 825", hardness: { value: 25, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "inconel_718",           label: "Inconel 718 / 718 Plus / Allvac 718",         hardness: { value: 40, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "hastelloy_x",           label: "Hastelloy X / Inconel X-750 / Nimonic C-263", hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "S" as IsoCategory, key: "inconel_617",           label: "Inconel 617 / Haynes 230 (power-gen Ni)",     hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "S" as IsoCategory, key: "waspaloy",              label: "Waspaloy / René 41/77/80 / Nimonic 80A/90",   hardness: { value: 40, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "mp35n",                 label: "MP35N / Udimet 720 / René 95 (ultra-high-str)", hardness: { value: 40, scale: "hrc" as const } },
   // H — Hardened Steel
   { iso: "H" as IsoCategory, key: "hardened_lt55",         label: "Hardened Steel < 55 HRC",  hardness: { value: 48, scale: "hrc" as const } },
   { iso: "H" as IsoCategory, key: "hardened_gt55",         label: "Hardened Steel > 55 HRC",  hardness: { value: 60, scale: "hrc" as const } },
@@ -139,9 +141,10 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "monel_k500":     { min: 22, max: 35,  scale: "hrc", note: "Monel K-500 age-hardened ranges 22–35 HRC." },
   "inconel_625":    { min: 18, max: 30,  scale: "hrc", note: "Inconel 625 solution annealed ranges 18–30 HRC — it's a corrosion alloy, not a hardening alloy." },
   "inconel_718":    { min: 35, max: 45,  scale: "hrc", note: "Inconel 718 age-hardened ranges 35–45 HRC — this is its standard working condition." },
-  "hastelloy_x":    { min: 80, max: 100, scale: "hrb", note: "Hastelloy X / Inconel 725 / X-750 are typically solution annealed — HRB scale, not heat-treatable to HRC." },
-  "waspaloy":       { min: 35, max: 44,  scale: "hrc", note: "Waspaloy / HAYNES 282 age-hardened ranges 35–44 HRC." },
-  "mp35n":          { min: 38, max: 62,  scale: "hrc", note: "MP35N ranges 38–62 HRC — the wide range reflects cold-worked vs. fully aged conditions." },
+  "hastelloy_x":    { min: 80, max: 100, scale: "hrb", note: "Hastelloy X / Inconel X-750 / Nimonic C-263 are typically solution annealed — HRB scale, not heat-treatable to HRC levels." },
+  "inconel_617":    { min: 75, max: 100, scale: "hrb", note: "Inconel 617 / Haynes 230 are solid-solution alloys, typically solution annealed — HRB scale only, not age-hardenable." },
+  "waspaloy":       { min: 35, max: 44,  scale: "hrc", note: "Waspaloy / René 41/77/80 / Nimonic 80A/90 age-hardened ranges 35–44 HRC. Udimet 700 can reach 48 HRC." },
+  "mp35n":          { min: 38, max: 62,  scale: "hrc", note: "MP35N ranges 38–62 HRC; cold-worked + aged can reach 62 HRC. Udimet 720 turbine disk: 40–48 HRC typical." },
   // H — Hardened Steel
   "hardened_lt55":  { min: 40, max: 54,  scale: "hrc", note: "Use this category for hardened steels 40–54 HRC. Below 40 HRC, standard alloy steel parameters apply." },
   "hardened_gt55":  { min: 55, max: 68,  scale: "hrc", note: "Use this category for hardened steels 55–68 HRC. CBN tooling is preferred above 60 HRC." },
@@ -270,31 +273,73 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "ti-10-2-3": "titanium_64", "beta c": "titanium_64",
   "ti-6al-2sn-4zr-2mo": "titanium_64",                          // Ti-6242 near-alpha
   "ti-6242": "titanium_64",
-  // ── A-286 / Fe Superalloy ─────────────────────────────────────────────────
-  "a-286": "hiTemp_fe", "a286": "hiTemp_fe", "incoloy 800": "hiTemp_fe",
-  "incoloy 901": "hiTemp_fe", "v57": "hiTemp_fe",
-  // ── Stellite / Co Superalloy ──────────────────────────────────────────────
-  "stellite": "hiTemp_co", "stellite 6": "hiTemp_co", "stellite 12": "hiTemp_co",
-  "haynes 25": "hiTemp_co", "l605": "hiTemp_co",
+  // ── A-286 / Fe-Based Superalloy ───────────────────────────────────────────
+  "a-286": "hiTemp_fe", "a286": "hiTemp_fe", "v57": "hiTemp_fe",
+  "incoloy 800": "hiTemp_fe", "incoloy 800h": "hiTemp_fe", "incoloy 800ht": "hiTemp_fe",
+  "incoloy 801": "hiTemp_fe", "incoloy 901": "hiTemp_fe", "incoloy 909": "hiTemp_fe",
+  "uns n08800": "hiTemp_fe", "uns n09901": "hiTemp_fe",
+  "udimet l-605": "hiTemp_fe",  // Fe-based version of L-605
+  // ── Stellite / Co-Based Superalloy ────────────────────────────────────────
+  "stellite": "hiTemp_co", "stellite 1": "hiTemp_co", "stellite 3": "hiTemp_co",
+  "stellite 6": "hiTemp_co", "stellite 12": "hiTemp_co", "stellite 21": "hiTemp_co",
+  "stellite 31": "hiTemp_co", "tribaloy t-400": "hiTemp_co",
+  "haynes 25": "hiTemp_co", "haynes 188": "hiTemp_co",
+  "l605": "hiTemp_co", "l-605": "hiTemp_co",
+  "cobalt superalloy": "hiTemp_co", "cobalt alloy": "hiTemp_co",
+  "mar-m 509": "hiTemp_co",         // cast cobalt turbine alloy
   // ── Monel ─────────────────────────────────────────────────────────────────
   "monel": "monel_k500", "monel k500": "monel_k500", "monel k-500": "monel_k500",
-  "k500": "monel_k500", "uns n05500": "monel_k500", "monel 400": "monel_k500",
-  // ── Inconel 625 ───────────────────────────────────────────────────────────
+  "k500": "monel_k500", "uns n05500": "monel_k500",
+  "monel 400": "monel_k500", "uns n04400": "monel_k500",  // 400 is similar difficulty
+  // ── Inconel 625 / Corrosion-Grade Ni ─────────────────────────────────────
   "625": "inconel_625", "inconel 625": "inconel_625", "in625": "inconel_625",
-  "uns n06625": "inconel_625", "hastelloy c-276": "inconel_625",
-  "hastelloy c276": "inconel_625", "c-276": "inconel_625",
-  // ── Inconel 718 ───────────────────────────────────────────────────────────
+  "uns n06625": "inconel_625", "alloy 625": "inconel_625",
+  "hastelloy c-276": "inconel_625", "hastelloy c276": "inconel_625", "c-276": "inconel_625",
+  "hastelloy c-22": "inconel_625", "hastelloy c22": "inconel_625", "c-22": "inconel_625",
+  "hastelloy c-4": "inconel_625",  "hastelloy b-2": "inconel_625",
+  "hastelloy b-3": "inconel_625",  "hastelloy c-2000": "inconel_625",
+  "inconel 600": "inconel_625",    "inconel 601": "inconel_625",
+  "inconel 686": "inconel_625",    "inconel 690": "inconel_625",
+  "incoloy 825": "inconel_625",    "incoloy 925": "inconel_625",  "incoloy 945": "inconel_625",
+  "uns n06600": "inconel_625",     "uns n06601": "inconel_625",
+  "custom age 625+": "inconel_625",
+  // ── Inconel 718 / Gamma-Prime Aerospace Ni ───────────────────────────────
   "718": "inconel_718", "inconel 718": "inconel_718", "in718": "inconel_718",
   "uns n07718": "inconel_718", "allvac 718": "inconel_718",
-  // ── Hastelloy X / Mid-Tier Ni ─────────────────────────────────────────────
-  "hastelloy x": "hastelloy_x", "haynes 230": "hastelloy_x",
+  "ati 718 plus": "inconel_718", "718 plus": "inconel_718",
+  "inconel 706": "inconel_718",    // close in machinability to 718
+  "uns n09706": "inconel_718",
+  // ── Hastelloy X / Mid-Tier Solution-Strengthened Ni ──────────────────────
+  "hastelloy x": "hastelloy_x", "uns n06002": "hastelloy_x",
   "inconel x-750": "hastelloy_x", "inconel 725": "hastelloy_x",
-  "rene 88": "hastelloy_x", "uns n06002": "hastelloy_x",
-  // ── Waspaloy ─────────────────────────────────────────────────────────────
-  "waspaloy": "waspaloy", "haynes 282": "waspaloy", "rene 41": "waspaloy",
-  "uns n07001": "waspaloy",
-  // ── MP35N ─────────────────────────────────────────────────────────────────
+  "uns n07750": "hastelloy_x",    "uns n07725": "hastelloy_x",
+  "nimonic c-263": "hastelloy_x", "nimonic 263": "hastelloy_x",
+  "haynes 263": "hastelloy_x",    "haynes 242": "hastelloy_x",
+  "hastelloy g-30": "hastelloy_x", "hastelloy n": "hastelloy_x",
+  "hastelloy w": "hastelloy_x",   "hastelloy s": "hastelloy_x",
+  "vdm alloy 602ca": "hastelloy_x",
+  // ── Inconel 617 / Haynes 230 — Power-Gen Combustor Ni ────────────────────
+  "inconel 617": "inconel_617",   "alloy 617": "inconel_617",
+  "uns n06617": "inconel_617",    "haynes 230": "inconel_617",
+  "617": "inconel_617",
+  // ── Waspaloy / Hot-Section Gamma-Prime Ni ─────────────────────────────────
+  "waspaloy": "waspaloy", "uns n07001": "waspaloy",
+  "haynes 282": "waspaloy",       "haynes282": "waspaloy",
+  "rene 41": "waspaloy",  "rené 41": "waspaloy",
+  "rene 77": "waspaloy",  "rené 77": "waspaloy",
+  "rene 80": "waspaloy",  "rené 80": "waspaloy",
+  "rene 88": "waspaloy",  "rene 88dt": "waspaloy",
+  "nimonic 80a": "waspaloy",      "nimonic 90": "waspaloy",
+  "nimonic 105": "waspaloy",      "nimonic 115": "waspaloy",
+  "udimet 500": "waspaloy",       "udimet 600": "waspaloy",
+  "udimet 700": "waspaloy",
+  "inconel 738": "waspaloy",      "inconel 939": "waspaloy",
+  "mar-m 247": "waspaloy",        // cast nickel — similar milling difficulty
+  // ── MP35N / Ultra-High-Strength Ni-Co ─────────────────────────────────────
   "mp35n": "mp35n", "uns r30035": "mp35n",
+  "udimet 720": "mp35n",          // turbine disk Ni — most demanding PM grade
+  "rene 95": "mp35n", "rené 95": "mp35n",
+  "rene 104": "mp35n",
 };
 
 export function matchMaterialAlias(input: string): string | null {
