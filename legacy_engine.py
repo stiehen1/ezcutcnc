@@ -1455,13 +1455,26 @@ def run_chamfer_mill(payload: dict) -> dict:
     _drive_eff     = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     machine_hp     = float(payload.get("machine_hp", 10.0) or 10.0) * _drive_eff
 
+    # ── Flute count validation & chip room depth scaling ──────────────────────
+    # Standard Core Cutter flute counts by series:
+    #   CMS: 2-flute (max chip room, deepest cuts) or 4-flute (better finish, shallower limit)
+    #   CMH: 3-flute (good chip room, deep capable) or 5-flute (finish quality, shallower limit)
+    # More chip gullet volume at lower flute count = better evacuation as WOC grows with depth.
+    CHAMFER_SERIES_FLUTES = {"CMS": [2, 4], "CMH": [3, 5]}
+    _std_flutes = CHAMFER_SERIES_FLUTES.get(chamfer_series, [])
+    _flute_nonstandard = _std_flutes and flutes not in _std_flutes
+
+    # Chip room depth multiplier: fewer flutes → bigger gullets → deeper single pass
+    # 2-fl: 1.35×, 3-fl: 1.15×, 4-fl: 1.00× (baseline), 5-fl: 0.85×
+    _chip_room_mult = {2: 1.35, 3: 1.15, 4: 1.00, 5: 0.85}.get(flutes, 1.00)
+
     # ── Multi-pass strategy ────────────────────────────────────────────────────
     # Chamfer WOC grows with depth (50% engagement for CMS at any depth) — aggressive
     # single-pass cuts degrade finish and tool life as material removal grows quadratically.
-    # Max safe single-pass depth: 15% of body dia (10% for hard materials).
-    # Always leave a finish allowance for the final pass.
+    # Base max safe single-pass depth: 15% of body dia (10% for hard materials),
+    # scaled by chip room multiplier from flute count.
     _hard_mat = mat_group in ("Stainless", "Inconel", "Titanium", "Hardened")
-    _max_rough_depth = body_dia * (0.10 if _hard_mat else 0.15)
+    _max_rough_depth = body_dia * (0.10 if _hard_mat else 0.15) * _chip_room_mult
     _finish_allow    = 0.015 if _hard_mat else 0.010
     multi_pass = None
     if chamfer_depth > 0:
@@ -1515,6 +1528,11 @@ def run_chamfer_mill(payload: dict) -> dict:
         notes.append(
             f"Chamfer depth creates D_eff ({d_eff:.4f}\") near body diameter ({body_dia:.4f}\"). "
             f"Verify depth doesn't exceed tool geometry."
+        )
+    if _flute_nonstandard:
+        notes.append(
+            f"{chamfer_series} series is standard in {_std_flutes[0]}- and {_std_flutes[1]}-flute. "
+            f"Entered {flutes} flutes — verify this is a special/custom configuration."
         )
     if is_cmh and ipt < cmh_min_ipt:
         notes.append(
@@ -1610,6 +1628,11 @@ def run_chamfer_mill(payload: dict) -> dict:
             # Growing WOC with depth
             "actual_woc_in":     round(_actual_woc, 4),
             "woc_pct_d_eff":     round(_woc_as_pct * 100, 1),
+            # Flute count / chip room
+            "std_flutes":        _std_flutes,
+            "flute_nonstandard": _flute_nonstandard,
+            "chip_room_mult":    round(_chip_room_mult, 2),
+            "max_rough_depth_in": round(_max_rough_depth, 4),
             # CMH shear angle physics
             "cmh_shear_angle_deg": round(CMH_SHEAR_ANGLE_DEG, 1) if is_cmh else None,
             "cmh_sfm_boost_pct":   round((CMH_SFM_MULT - 1.0) * 100, 0) if is_cmh else None,

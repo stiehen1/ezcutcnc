@@ -6289,6 +6289,30 @@ ${stabSection}
                             : "WOC and cutting force scale proportionally with depth"}
                         </p>
                       </div>
+                      {/* Chip room / flute count context */}
+                      <div className="flex items-center justify-between rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 text-xs">
+                        <div>
+                          <span className="text-zinc-400">Chip room factor </span>
+                          <span className="font-mono font-semibold text-white">{chamferResult.chip_room_mult?.toFixed(2)}×</span>
+                          <span className="text-zinc-600 ml-2">({form.flutes}-flute {form.chamfer_series})</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-zinc-400">Max single rough pass </span>
+                          <span className="font-mono font-semibold text-amber-400">{chamferResult.max_rough_depth_in?.toFixed(4)}"</span>
+                        </div>
+                      </div>
+                      {chamferResult.flute_nonstandard && (
+                        <p className="text-[10px] text-amber-400">
+                          ⚠ {form.chamfer_series} is standard in {(chamferResult.std_flutes as number[])?.join('- and ')}-flute. Verify {form.flutes}-flute is a custom configuration.
+                        </p>
+                      )}
+                      {chamferResult.std_flutes && !chamferResult.flute_nonstandard && (
+                        <p className="text-[10px] text-zinc-600">
+                          {form.chamfer_series} standard: {(chamferResult.std_flutes as number[]).map((f: number, i: number) =>
+                            `${f}-flute (${f === Math.min(...chamferResult.std_flutes as number[]) ? "more chip room, deeper cuts" : "better finish, lighter DOC"})`
+                          ).join(" · ")}
+                        </p>
+                      )}
                     </div>
                   )}
 
