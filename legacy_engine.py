@@ -1565,12 +1565,13 @@ def run_chamfer_mill(payload: dict) -> dict:
         tips.append("More flutes (4–6) improve finish quality on chamfer mills — light chip load per tooth reduces edge burnishing.")
     tips.append("Keep chip load per tooth consistent — verify actual SFM at D_eff matches target before adjusting feed.")
     # Saddling tip — always shown: position chamfer in middle of cutting edge, not at extremes
+    _saddle_pct  = 80 if is_cmh else 60
+    _saddle_excl = (100 - _saddle_pct) // 2
     tips.append(
-        "Saddle the tool: position your chamfer depth so it engages the middle 60% of the cutting edge length (L2), "
-        "staying clear of the bottom 20% near the tip and the top 20% near the shoulder. "
-        "The middle 60% of the flank is the strongest zone — the tip area is vulnerable to chipping "
-        "and the top shoulder is prone to corner breakdown under load. "
-        "If your chamfer is shallow relative to L2, shift the tool Z up so contact lands in that center band."
+        f"Saddle the tool: position your chamfer so it engages the middle {_saddle_pct}% of the cutting edge length (L2), "
+        f"staying clear of the bottom {_saddle_excl}% near the tip and the top {_saddle_excl}% near the shoulder. "
+        f"{'CMH tip flat is robust enough for 10% exclusion at each end.' if is_cmh else 'CMS point tip is fragile — keep a 20% exclusion zone at the tip to avoid chipping.'} "
+        f"If your chamfer is shallow relative to L2, shift Z up so contact lands in that center band."
     )
     # Z-oscillation tip — always shown: up-down motion distributes wear, prevents notching
     tips.append(
