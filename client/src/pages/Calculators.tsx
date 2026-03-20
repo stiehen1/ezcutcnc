@@ -1681,12 +1681,184 @@ function CornerClearance() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Chamfer Mill Calculator
+// ─────────────────────────────────────────────────────────────────
+function ChamferMill() {
+  const metric = useMetric();
+  const dU = metric ? "mm" : "in";
+
+  const [dia,    setDia]    = React.useState("");
+  const [angle,  setAngle]  = React.useState("90");
+  const [tipDia, setTipDia] = React.useState("");
+  const [depth,  setDepth]  = React.useState("");
+  const [flutes, setFlutes] = React.useState("");
+  const [rpm,    setRpm]    = React.useState("");
+  const [fpt,    setFpt]    = React.useState("");
+
+  const D      = metric ? n(dia)    / 25.4 : n(dia);
+  const tipD   = metric ? n(tipDia) / 25.4 : n(tipDia);
+  const dep    = metric ? n(depth)  / 25.4 : n(depth);
+  const fz     = metric ? n(fpt)    / 25.4 : n(fpt);
+  const ang    = n(angle);
+  const fl     = n(flutes);
+  const sp     = n(rpm);
+  const IN     = metric ? 25.4 : 1;
+
+  const halfRad       = (ang / 2) * (Math.PI / 180);
+  const sinH          = Math.sin(halfRad);
+  const cosH          = Math.cos(halfRad);
+  const tanH          = Math.tan(halfRad);
+  const radialReach   = D > 0 && tipD < D ? (D - tipD) / 2 : 0;
+  const edgeLength    = sinH > 0 && radialReach > 0 ? radialReach / sinH : 0;
+  const maxDepth      = tanH > 0 && radialReach > 0 ? radialReach / tanH : 0;
+
+  const depValid = dep > 0 && dep <= maxDepth && D > 0;
+  const dEff          = depValid ? tipD + 2 * dep * tanH : 0;
+  const edgeUsed      = depValid && cosH > 0 ? dep / cosH : 0;
+  const edgePct       = edgeLength > 0 ? edgeUsed / edgeLength * 100 : 0;
+
+  // Chip thinning: chamfer flank is at half_angle from tool axis.
+  // Actual chip thickness = FPT × sin(half_angle) — much thinner than a vertical flute.
+  const ctFactor      = sinH; // chip thin factor
+  const hexActual     = fz * ctFactor;
+  const fptCorrected  = ctFactor > 0 && fz > 0 ? fz / ctFactor : 0; // FPT needed to match same chip thickness as vertical cutter
+
+  const ipmProgrammed = fl > 0 && sp > 0 && fz > 0 ? sp * fl * fz : 0;
+  const ipmCorrected  = fl > 0 && sp > 0 && fptCorrected > 0 ? sp * fl * fptCorrected : 0;
+
+  const hasGeo   = D > 0 && ang > 0;
+  const hasFeed  = fz > 0 && hasGeo;
+  const hasIpm   = fl > 0 && sp > 0 && hasFeed;
+
+  usePrintRegister("Chamfer Mill", "Arcs & Contours", hasGeo ? [
+    { label: `Tool Dia (${dU})`,          value: (D * IN).toFixed(metric ? 3 : 4) },
+    { label: "Chamfer Angle (°)",          value: ang.toString() },
+    { label: `Tip Dia (${dU})`,            value: (tipD * IN).toFixed(metric ? 3 : 4) },
+    { label: `Edge Length (${dU})`,        value: (edgeLength * IN).toFixed(metric ? 3 : 4) },
+    { label: `Max Depth (${dU})`,          value: (maxDepth * IN).toFixed(metric ? 3 : 4) },
+    ...(depValid ? [
+      { label: `Depth Entered (${dU})`,    value: (dep * IN).toFixed(metric ? 3 : 4) },
+      { label: `Eff. Cut Dia (${dU})`,     value: (dEff * IN).toFixed(metric ? 3 : 4), highlight: true },
+      { label: "Edge Engaged",             value: `${edgePct.toFixed(1)}%` },
+    ] : []),
+    ...(hasFeed ? [
+      { label: "Chip Thin Factor",         value: ctFactor.toFixed(4) },
+      { label: `Actual Chip Thickness (${dU})`, value: (hexActual * IN).toFixed(metric ? 4 : 5) },
+      { label: `Adj FPT to match chip (${dU})`, value: (fptCorrected * IN).toFixed(metric ? 4 : 5), highlight: true },
+    ] : []),
+    ...(hasIpm ? [
+      { label: "Programmed IPM",           value: (ipmProgrammed * IN).toFixed(metric ? 2 : 1) },
+      { label: "Adj IPM (corrected FPT)",  value: (ipmCorrected * IN).toFixed(metric ? 2 : 1), highlight: true },
+    ] : []),
+  ] : null);
+
+  return (
+    <CalcCard title="Chamfer Mill" category="Arcs & Contours"
+      onClear={() => { setDia(""); setTipDia(""); setDepth(""); setFlutes(""); setRpm(""); setFpt(""); }}>
+      <p className="text-[10px] text-gray-500 -mt-1">
+        Effective dia, edge engagement, and chip thinning along the angled flank.
+      </p>
+
+      {/* Tool Geometry */}
+      <Row label="Tool Dia (outer)" hint="Outer cutting diameter — largest diameter of the chamfer teeth.">
+        <NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.7" : "0.500"} />
+      </Row>
+      <Row label="Chamfer Angle" hint="Included angle of the tool (tip-to-tip). Common: 60°, 90°, 120°. CMH series also offers 82° and 100°.">
+        <div className="flex gap-1 flex-wrap">
+          {([60, 82, 90, 100, 120] as const).map(a => (
+            <button key={a} type="button"
+              onClick={() => setAngle(String(a))}
+              className="px-2 py-1 rounded text-[11px] font-semibold border transition-colors"
+              style={{ borderColor: ang === a ? "#f97316" : "#3f3f5a", backgroundColor: ang === a ? "#f97316" : "transparent", color: ang === a ? "#fff" : "#9ca3af" }}>
+              {a}°
+            </button>
+          ))}
+        </div>
+      </Row>
+      <Row label="Tip Dia" hint="Flat at the very tip. CMS series = 0 (point / center-cutting). CMH series has a non-zero tip flat — check catalog.">
+        <NumIn value={tipDia} onChange={setTipDia} unit={dU} placeholder="0 = point" />
+      </Row>
+
+      {hasGeo && (
+        <div className="rounded bg-[#0d1b2a] border border-[#2d2d4a] px-3 py-2 space-y-1">
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-400">Cutting edge length</span>
+            <span className="font-mono text-orange-400 font-semibold">{(edgeLength * IN).toFixed(metric ? 3 : 4)} {dU}</span>
+          </div>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-400">Max achievable depth</span>
+            <span className="font-mono text-orange-400 font-semibold">{(maxDepth * IN).toFixed(metric ? 3 : 4)} {dU}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Depth & Engagement */}
+      <div className="border-t border-[#2d2d4a] pt-2">
+        <p className="text-[10px] text-gray-500 mb-2">Enter chamfer depth to cut → engagement &amp; effective dia</p>
+        <Row label="Chamfer Depth" hint="Axial depth of the chamfer being cut into the part.">
+          <NumIn value={depth} onChange={setDepth} unit={dU} placeholder={metric ? "1.0" : "0.040"} />
+        </Row>
+        {dep > 0 && hasGeo && dep > maxDepth && (
+          <p className="text-[11px] text-red-400 mt-1">⚠ Depth exceeds tool capacity ({(maxDepth * IN).toFixed(metric ? 3 : 4)} {dU} max)</p>
+        )}
+        {depValid && <>
+          <Result label={`Effective Cut Dia at Depth (${dU})`} value={`${(dEff * IN).toFixed(metric ? 3 : 4)}`} highlight />
+          <Result label="Cutting Edge Engaged" value={`${edgePct.toFixed(1)}% of flank (${(edgeUsed * IN).toFixed(metric ? 3 : 4)} ${dU})`} />
+        </>}
+      </div>
+
+      {/* Chip Thinning */}
+      <div className="border-t border-[#2d2d4a] pt-2">
+        <p className="text-[10px] text-gray-500 mb-2">Enter programmed FPT → chip thinning impact</p>
+        <Row label="Programmed FPT" hint="Feed per tooth programmed in CAM. On a chamfer mill, the angled flank thins the chip — you often need to program a higher FPT to get real chip load.">
+          <NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.025" : "0.001"} />
+        </Row>
+        {hasFeed && <>
+          <div className="rounded bg-[#0d1b2a] border border-[#2d2d4a] px-3 py-2 space-y-1 mt-1">
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray-400">Chip thin factor (sin {ang/2}°)</span>
+              <span className="font-mono text-gray-200">{ctFactor.toFixed(4)}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray-400">Actual chip thickness</span>
+              <span className="font-mono text-amber-400">{(hexActual * IN).toFixed(metric ? 4 : 5)} {dU} ({(ctFactor * 100).toFixed(1)}% of FPT)</span>
+            </div>
+          </div>
+          <Result
+            label={`Adjusted FPT to maintain chip load (${dU})`}
+            value={`${(fptCorrected * IN).toFixed(metric ? 4 : 5)}`}
+            highlight
+          />
+        </>}
+      </div>
+
+      {/* Feed Rate */}
+      {hasFeed && (
+        <div className="border-t border-[#2d2d4a] pt-2">
+          <p className="text-[10px] text-gray-500 mb-2">Enter spindle speed + flutes → compare programmed vs adjusted IPM</p>
+          <Row label="Flutes" hint="Number of cutting flutes on the chamfer mill.">
+            <NumIn value={flutes} onChange={setFlutes} placeholder="2" />
+          </Row>
+          <Row label="Spindle Speed" hint="RPM — use the RPM↔SFM calculator above if needed.">
+            <NumIn value={rpm} onChange={setRpm} unit="RPM" />
+          </Row>
+          {hasIpm && <>
+            <Result label={`Programmed IPM (at entered FPT)`} value={`${(ipmProgrammed * IN).toFixed(metric ? 2 : 1)} ${metric ? "mm/min" : "IPM"}`} />
+            <Result label={`Adjusted IPM (corrected FPT)`}    value={`${(ipmCorrected  * IN).toFixed(metric ? 2 : 1)} ${metric ? "mm/min" : "IPM"}`} highlight />
+          </>}
+        </div>
+      )}
+    </CalcCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────────
 const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
   { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement"] },
   { heading: "Surface Finish",  color: "#10b981", ids: ["cusp","eff-dia","surf-finish","ballnose-vel"] },
-  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","bolt-circle","chord-sag","corner-clear"] },
+  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","bolt-circle","chord-sag","corner-clear","chamfer-mill"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
   { heading: "Power & MRR",     color: "#f43f5e", ids: ["mrr"] },
   { heading: "Materials",       color: "#a78bfa", ids: ["hardness","mat-cond"] },
@@ -1709,6 +1881,7 @@ const CALC_MAP: Record<string, React.ReactNode> = {
   "bolt-circle":  <BoltCircle />,
   "chord-sag":    <ChordSagitta />,
   "corner-clear": <CornerClearance />,
+  "chamfer-mill": <ChamferMill />,
   "tap-drill":   <TapDrill />,
   "drill-point":  <DrillPointDepth />,
   "drill-torque": <DrillingTorque />,
@@ -1739,6 +1912,7 @@ export default function Calculators() {
     "bolt-circle":  "bolt circle hole pattern xy coordinates bcd radius",
     "chord-sag":    "chord sagitta arc height curved surface depth",
     "corner-clear": "corner radius clearance tool fits pocket inside corner",
+    "chamfer-mill": "chamfer mill effective diameter depth engagement chip thinning feed adjustment fpt angled flank",
     "tap-drill":   "tap drill size thread engagement percent metric inch",
     "drill-point":  "drill point depth tip angle 118 135",
     "drill-torque": "drilling torque in-lbs nm hp kw rpm spindle power",
