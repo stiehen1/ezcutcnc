@@ -1566,10 +1566,11 @@ def run_chamfer_mill(payload: dict) -> dict:
     tips.append("Keep chip load per tooth consistent — verify actual SFM at D_eff matches target before adjusting feed.")
     # Saddling tip — always shown: position chamfer in middle of cutting edge, not at extremes
     tips.append(
-        "Saddle the tool: position your chamfer depth so it engages the middle third of the cutting edge length (L2), "
-        "not at the tip or the top shoulder. The middle of the flank is the strongest zone — "
-        "running at the very tip risks chipping the point, running at the top risks corner breakdown. "
-        "If the chamfer only needs a shallow depth, shift the tool Z up so contact lands mid-flank."
+        "Saddle the tool: position your chamfer depth so it engages the middle 60% of the cutting edge length (L2), "
+        "staying clear of the bottom 20% near the tip and the top 20% near the shoulder. "
+        "The middle 60% of the flank is the strongest zone — the tip area is vulnerable to chipping "
+        "and the top shoulder is prone to corner breakdown under load. "
+        "If your chamfer is shallow relative to L2, shift the tool Z up so contact lands in that center band."
     )
     # Z-oscillation tip — always shown: up-down motion distributes wear, prevents notching
     tips.append(
