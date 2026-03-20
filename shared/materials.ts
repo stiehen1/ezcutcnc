@@ -248,13 +248,28 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "ductile iron": "cast_iron_ductile", "nodular iron": "cast_iron_ductile",
   "ggg40": "cast_iron_ductile", "ggg50": "cast_iron_ductile",
   "ggg60": "cast_iron_ductile", "65-45-12": "cast_iron_ductile",
-  // ── CP Titanium ───────────────────────────────────────────────────────────
-  "cp titanium": "titanium_cp", "grade 2": "titanium_cp", "grade 4": "titanium_cp",
-  "commercially pure titanium": "titanium_cp",
-  // ── Ti-6Al-4V ─────────────────────────────────────────────────────────────
+  // ── CP Titanium (Grade 1–4 + near-alpha Grade 9) ──────────────────────────
+  "cp titanium": "titanium_cp", "commercially pure titanium": "titanium_cp",
+  "grade 1": "titanium_cp", "grade 2": "titanium_cp",
+  "grade 3": "titanium_cp", "grade 4": "titanium_cp",
+  "titanium grade 1": "titanium_cp", "titanium grade 2": "titanium_cp",
+  "titanium grade 3": "titanium_cp", "titanium grade 4": "titanium_cp",
+  "uns r50250": "titanium_cp", "uns r50400": "titanium_cp",
+  "uns r50550": "titanium_cp", "uns r50700": "titanium_cp",
+  "grade 9": "titanium_cp",          // Ti-3Al-2.5V near-alpha — similar machinability to CP
+  "ti-3al-2.5v": "titanium_cp", "ti 3-2.5": "titanium_cp",
+  "3al-2.5v": "titanium_cp",
+  // ── Ti-6Al-4V and alpha-beta alloys ───────────────────────────────────────
   "ti-6al-4v": "titanium_64", "ti64": "titanium_64", "6al-4v": "titanium_64",
-  "grade 5": "titanium_64", "grade 23": "titanium_64", "ti-6-4": "titanium_64",
-  "titanium 6-4": "titanium_64",
+  "grade 5": "titanium_64", "titanium grade 5": "titanium_64",
+  "grade 23": "titanium_64", "titanium grade 23": "titanium_64",  // ELI
+  "ti-6-4": "titanium_64", "titanium 6-4": "titanium_64",
+  "ti-6al-4v eli": "titanium_64", "6-4 eli": "titanium_64",
+  "uns r56400": "titanium_64", "uns r56407": "titanium_64",
+  "ti-5553": "titanium_64", "5al-5mo-5v-3cr": "titanium_64",   // beta alloy — similar difficulty
+  "ti-10-2-3": "titanium_64", "beta c": "titanium_64",
+  "ti-6al-2sn-4zr-2mo": "titanium_64",                          // Ti-6242 near-alpha
+  "ti-6242": "titanium_64",
   // ── A-286 / Fe Superalloy ─────────────────────────────────────────────────
   "a-286": "hiTemp_fe", "a286": "hiTemp_fe", "incoloy 800": "hiTemp_fe",
   "incoloy 901": "hiTemp_fe", "v57": "hiTemp_fe",
