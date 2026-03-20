@@ -1394,18 +1394,28 @@ function HelixEntry() {
 function BoltCircle() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
+  const dec = metric ? 3 : 5;
 
-  const [cx, setCx] = React.useState("0");
-  const [cy, setCy] = React.useState("0");
-  const [bcr, setBcr] = React.useState("");
-  const [holes, setHoles] = React.useState("");
+  const [cx,         setCx]         = React.useState("0");
+  const [cy,         setCy]         = React.useState("0");
+  const [bcr,        setBcr]        = React.useState("");
+  const [holes,      setHoles]      = React.useState("");
   const [startAngle, setStartAngle] = React.useState("0");
+  const [gcMode,     setGcMode]     = React.useState<"position"|"g81">("position");
+  const [zDepth,     setZDepth]     = React.useState("");
+  const [zClear,     setZClear]     = React.useState("0.100");
+  const [feedRate,   setFeedRate]   = React.useState("");
+  const [showGcode,  setShowGcode]  = React.useState(false);
+  const [copied,     setCopied]     = React.useState(false);
 
-  const R = metric ? n(bcr)/25.4 : n(bcr);
-  const N = Math.round(n(holes));
+  const R  = metric ? n(bcr)/25.4 : n(bcr);
+  const N  = Math.round(n(holes));
   const sa = n(startAngle) * Math.PI / 180;
   const CX = metric ? n(cx)/25.4 : n(cx);
   const CY = metric ? n(cy)/25.4 : n(cy);
+  const ZD = metric ? n(zDepth)/25.4 : n(zDepth);
+  const ZR = metric ? n(zClear)/25.4 : n(zClear);
+  const F  = n(feedRate);
 
   const pts = R > 0 && N >= 2 ? Array.from({ length: N }, (_, i) => {
     const angle = sa + (2 * Math.PI * i) / N;
@@ -1414,33 +1424,124 @@ function BoltCircle() {
     return { i: i + 1, x: metric ? x*25.4 : x, y: metric ? y*25.4 : y };
   }) : null;
 
+  function buildGcode(): string {
+    if (!pts) return "";
+    const xf = (v: number) => v.toFixed(dec);
+    const zf  = (v: number) => v.toFixed(metric ? 3 : 4);
+    const lines: string[] = ["(Bolt Circle — EZCutCNC)", "G90 G17"];
+    if (gcMode === "g81") {
+      const zVal = ZD !== 0 ? -Math.abs(ZD) : -0.500;
+      const rVal = Math.abs(ZR);
+      const fVal = F > 0 ? F : (metric ? 100 : 4);
+      lines.push(`G81 X${xf(pts[0].x)} Y${xf(pts[0].y)} Z${zf(-Math.abs(zVal))} R${zf(rVal)} F${fVal.toFixed(metric?1:0)}`);
+      for (let i = 1; i < pts.length; i++) {
+        lines.push(`    X${xf(pts[i].x)} Y${xf(pts[i].y)}`);
+      }
+      lines.push("G80");
+    } else {
+      for (const p of pts) {
+        lines.push(`G00 X${xf(p.x)} Y${xf(p.y)}  (Hole ${p.i})`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  const gcode = showGcode && pts ? buildGcode() : "";
+
+  function copyGcode() {
+    navigator.clipboard.writeText(gcode).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+
   usePrintRegister("Bolt Circle", "Arcs & Contours", pts ? [
     { label: `BCD Radius (${dU})`, value: bcr },
     { label: "Holes", value: String(N) },
     { label: "Start Angle (°)", value: startAngle || "0" },
-    ...pts.map(p => ({ label: `Hole ${p.i}`, value: `X ${p.x.toFixed(metric?3:5)}  Y ${p.y.toFixed(metric?3:5)}` })),
+    ...pts.map(p => ({ label: `Hole ${p.i}`, value: `X ${p.x.toFixed(dec)}  Y ${p.y.toFixed(dec)}` })),
   ] : null);
 
   return (
     <CalcCard title="Bolt Circle" category="Arcs & Contours"
-      onClear={() => { setCx("0"); setCy("0"); setBcr(""); setHoles(""); setStartAngle("0"); }}>
+      onClear={() => { setCx("0"); setCy("0"); setBcr(""); setHoles(""); setStartAngle("0"); setZDepth(""); setFeedRate(""); setShowGcode(false); }}>
       <p className="text-[10px] text-gray-500 -mt-1">X/Y coordinates for equally-spaced holes on a bolt circle.</p>
       <Row label={`Center X (${dU})`}><NumIn value={cx} onChange={setCx} unit={dU} placeholder="0" /></Row>
       <Row label={`Center Y (${dU})`}><NumIn value={cy} onChange={setCy} unit={dU} placeholder="0" /></Row>
       <Row label={`BCD Radius (${dU})`} hint="Bolt circle diameter radius — distance from the circle center to each hole center."><NumIn value={bcr} onChange={setBcr} unit={dU} /></Row>
       <Row label="# Holes" hint="Total number of equally-spaced holes around the bolt circle."><NumIn value={holes} onChange={setHoles} placeholder="6" /></Row>
-      <Row label="Start Angle (°)" hint="Angle of the first hole measured from 3 o'clock (0°) counterclockwise. Use 90° to start at 12 o'clock."><NumIn value={startAngle} onChange={setStartAngle} unit="°" placeholder="0" /></Row>
+      <Row label="Start Angle (°)" hint="Angle of the first hole from 3 o'clock (0°) counterclockwise. 90° = 12 o'clock."><NumIn value={startAngle} onChange={setStartAngle} unit="°" placeholder="0" /></Row>
+
       {pts && (
-        <div className="border-t border-[#2d2d4a] pt-2 space-y-1">
-          {pts.map(p => (
-            <div key={p.i} className="flex items-center justify-between px-3 py-1.5 rounded bg-[#0d1b2a]">
-              <span className="text-[11px] text-gray-400">Hole {p.i}</span>
-              <span className="text-xs font-mono text-yellow-300">
-                X {p.x.toFixed(metric?3:5)} &nbsp; Y {p.y.toFixed(metric?3:5)}
-              </span>
+        <>
+          <div className="border-t border-[#2d2d4a] pt-2 space-y-1">
+            {pts.map(p => (
+              <div key={p.i} className="flex items-center justify-between px-3 py-1.5 rounded bg-[#0d1b2a]">
+                <span className="text-[11px] text-gray-400">Hole {p.i}</span>
+                <span className="text-xs font-mono text-yellow-300">
+                  X {p.x.toFixed(dec)} &nbsp; Y {p.y.toFixed(dec)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* G-code toggle */}
+          <button
+            type="button"
+            onClick={() => setShowGcode(v => !v)}
+            className="w-full mt-1 text-[11px] font-semibold rounded border border-indigo-600 text-indigo-400 hover:bg-indigo-600/20 py-1.5 transition-colors">
+            {showGcode ? "▲ Hide G-code" : "▼ Generate G-code Snippet"}
+          </button>
+
+          {showGcode && (
+            <div className="space-y-2">
+              {/* Mode selector */}
+              <div className="flex gap-1">
+                {([["position","G00 Positioning"],["g81","G81 Drill Cycle"]] as const).map(([m,label]) => (
+                  <button key={m} type="button" onClick={() => setGcMode(m)}
+                    className="flex-1 px-2 py-1 rounded text-[11px] font-semibold border transition-colors"
+                    style={{ borderColor: gcMode===m?"#6366f1":"#3f3f5a", backgroundColor: gcMode===m?"#6366f1":"transparent", color: gcMode===m?"#fff":"#9ca3af" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {gcMode === "g81" && (
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <div className="text-[10px] text-gray-500 mb-1">Z Depth ({dU})</div>
+                    <input type="text" value={zDepth} onChange={e => setZDepth(e.target.value)}
+                      placeholder={metric?"-12.7":"-0.500"}
+                      className="w-full rounded bg-[#0d1b2a] border border-[#2d2d4a] text-white text-xs px-2 py-1.5 focus:outline-none focus:border-indigo-500" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-500 mb-1">R Clearance ({dU})</div>
+                    <input type="text" value={zClear} onChange={e => setZClear(e.target.value)}
+                      placeholder={metric?"2.540":"0.100"}
+                      className="w-full rounded bg-[#0d1b2a] border border-[#2d2d4a] text-white text-xs px-2 py-1.5 focus:outline-none focus:border-indigo-500" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-500 mb-1">Feed ({metric?"mm/min":"IPM"})</div>
+                    <input type="text" value={feedRate} onChange={e => setFeedRate(e.target.value)}
+                      placeholder={metric?"100":"4"}
+                      className="w-full rounded bg-[#0d1b2a] border border-[#2d2d4a] text-white text-xs px-2 py-1.5 focus:outline-none focus:border-indigo-500" />
+                  </div>
+                </div>
+              )}
+
+              {/* G-code block */}
+              <div className="relative">
+                <pre className="rounded bg-[#050d18] border border-[#2d2d4a] text-[11px] font-mono text-green-400 px-3 py-2.5 overflow-x-auto leading-relaxed whitespace-pre">
+                  {gcode}
+                </pre>
+                <button
+                  type="button"
+                  onClick={copyGcode}
+                  className="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded border border-indigo-600 text-indigo-400 hover:bg-indigo-600/30 transition-colors">
+                  {copied ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-600">Verify Z values, tool offsets, and work coordinate system before running. Always dry-run or single-block first.</p>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </CalcCard>
   );
