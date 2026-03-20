@@ -1124,6 +1124,11 @@ export default function Mentor() {
   }
 
   const run = async () => {
+    // Customer mode lock — must have an EDP or CC print PDF
+    if (!engMode && !skuLocked && !pdfExtracted) {
+      setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);
+      return;
+    }
     // Pre-flight validation — show friendly inline warnings instead of a red crash
     const missing: string[] = [];
     if (!(form.machine_hp > 0)) missing.push("Machine HP");
@@ -2512,7 +2517,7 @@ ${stabSection}
 
           {/* EDP# / SKU lookup */}
           <div className="mb-4 relative">
-            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields. Leave blank for manual entry — the form works either way.">EDP# (this will auto-fill tool specifications)</FieldLabel>
+            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">EDP# (required to run — auto-fills tool specifications)</FieldLabel>
             <div className="relative mt-1.5">
               <Input
                 type="text"
@@ -4936,12 +4941,19 @@ ${stabSection}
           </div>
 
           {/* Actions */}
+          {!engMode && !skuLocked && !pdfExtracted && (
+            <p className="text-xs text-amber-400 mb-2">
+              {operation === "milling"
+                ? "Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."
+                : "Upload a CC print PDF to run the calculator."}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button
               className="w-full transition-all"
               onClick={run}
-              disabled={mentor.isPending}
-              style={formDirty ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
+              disabled={mentor.isPending || (!engMode && !skuLocked && !pdfExtracted)}
+              style={formDirty && (engMode || skuLocked || pdfExtracted) ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
             >
               {mentor.isPending ? "Running…" : formDirty ? "⟳ Inputs changed — Re-run EZCutCNC" : "Run EZCutCNC"}
             </Button>
