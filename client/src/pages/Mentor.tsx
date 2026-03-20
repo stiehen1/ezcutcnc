@@ -6239,18 +6239,57 @@ ${stabSection}
             </>
           ) : (
             <>
-              {/* Chamfer Mill: D_eff info panel */}
+              {/* Chamfer Mill: geometry + chip thinning panel */}
               {chamferResult && (
-                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 text-sm space-y-1">
-                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Chamfer Geometry</div>
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 text-sm space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Chamfer Geometry</div>
+
+                  {/* Tool identity */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div><span className="text-muted-foreground">Series</span><span className="ml-2 font-semibold text-indigo-300">{form.chamfer_series}</span></div>
                     <div><span className="text-muted-foreground">Included Angle</span><span className="ml-2 font-semibold">{chamferResult.chamfer_angle_deg}°</span></div>
-                    <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 (point)"}</span></div>
+                    <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 — point (CMS)"}</span></div>
+                    <div><span className="text-muted-foreground">Cutting Edge Length</span><span className="ml-2 font-semibold">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
+                    <div><span className="text-muted-foreground">Max Achievable Depth</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.max_depth_in?.toFixed(4)}"</span></div>
                     <div><span className="text-muted-foreground">Chamfer Depth</span><span className="ml-2 font-semibold">{chamferResult.chamfer_depth_in > 0 ? `${chamferResult.chamfer_depth_in.toFixed(4)}"` : "—"}</span></div>
-                    <div><span className="text-muted-foreground">D_eff</span><span className="ml-2 font-semibold text-orange-400">{chamferResult.d_eff_in.toFixed(4)}"</span></div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">RPM and feed are based on D_eff — the effective cutting diameter at the outer edge of the chamfer.</p>
+
+                  {/* D_eff */}
+                  <div className="flex items-center justify-between rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2">
+                    <div>
+                      <span className="text-xs font-semibold text-orange-400">Effective Cut Dia (D_eff)</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">RPM &amp; SFM are based on D_eff — diameter at the outer edge of the chamfer, not the body OD.</p>
+                    </div>
+                    <span className="text-base font-mono font-bold text-orange-400 ml-3 shrink-0">{chamferResult.d_eff_in.toFixed(4)}"</span>
+                  </div>
+
+                  {/* Edge engagement bar */}
+                  {chamferResult.edge_pct > 0 && (
+                    <div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                        <span>Flank engaged at depth</span>
+                        <span className="font-semibold text-white">{chamferResult.edge_pct.toFixed(1)}% of cutting edge</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-zinc-700">
+                        <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, chamferResult.edge_pct)}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Chip thinning */}
+                  <div className="border-t border-white/10 pt-2 space-y-1">
+                    <div className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider mb-1">Angled-Flank Chip Thinning</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div><span className="text-muted-foreground">Chip thin factor</span><span className="ml-2 font-mono font-semibold">{chamferResult.chip_thin_factor?.toFixed(4)} × FPT</span></div>
+                      <div><span className="text-muted-foreground">FPT multiplier applied</span><span className="ml-2 font-mono font-semibold text-emerald-400">{chamferResult.lead_ctf?.toFixed(2)}×</span></div>
+                      <div><span className="text-muted-foreground">Target chip thickness</span><span className="ml-2 font-mono font-semibold">{chamferResult.base_chip_in?.toFixed(5)}"</span></div>
+                      <div><span className="text-muted-foreground">Programmed FPT</span><span className="ml-2 font-mono font-semibold text-yellow-300">{result?.customer?.fpt?.toFixed(5)}"</span></div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      At {chamferResult.chamfer_angle_deg}° ({chamferResult.chamfer_angle_deg/2}° half-angle), each tooth only removes {((chamferResult.chip_thin_factor ?? 1) * 100).toFixed(0)}% of the programmed FPT as actual chip thickness.
+                      Feed is corrected {chamferResult.lead_ctf?.toFixed(2)}× so real chip load matches a standard endmill at the same material target.
+                    </p>
+                  </div>
                 </div>
               )}
 

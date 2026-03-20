@@ -1504,6 +1504,18 @@ def run_chamfer_mill(payload: dict) -> dict:
             "tip_dia_in":        tip_dia,
             "chamfer_depth_in":  chamfer_depth,
             "tips":              tips,
+            # Chip-thinning physics (for UI display)
+            "lead_ctf":          round(lead_ctf, 3),            # programmed FPT multiplier (e.g. 2.00× at 60°)
+            "chip_thin_factor":  round(math.sin(half_angle_rad), 4),  # actual chip is this fraction of programmed FPT
+            "base_chip_in":      round(ipt_frac * body_dia * series_mult, 6),  # target chip before CTF
+            # Edge geometry
+            "radial_reach_in":   round((body_dia - tip_dia) / 2.0, 4),
+            "edge_length_in":    round((body_dia - tip_dia) / 2.0 / math.sin(half_angle_rad), 4) if math.sin(half_angle_rad) > 0 else 0,
+            "max_depth_in":      round((body_dia - tip_dia) / 2.0 / math.tan(half_angle_rad), 4) if math.tan(half_angle_rad) > 0 else 0,
+            "edge_pct":          round(
+                (chamfer_depth / math.cos(half_angle_rad)) /
+                max(0.0001, (body_dia - tip_dia) / 2.0 / math.sin(half_angle_rad)) * 100, 1
+            ) if chamfer_depth > 0 and math.cos(half_angle_rad) > 0 and (body_dia - tip_dia) > 0 else 0.0,
         },
         "debug": None,
     }
