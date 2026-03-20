@@ -2765,38 +2765,60 @@ ${stabSection}
                         <span className="text-zinc-400">Max Chamfer Depth</span>
                         <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
                       </div>
-                      <svg viewBox="0 0 260 100" width="100%" height="88" className="block mt-1">
-                        {/* Horizontal centerline (CL) at bottom — long-short-long drafting linetype */}
-                        <line x1="5" y1="72" x2="252" y2="72" stroke="#3f3f46" strokeWidth="1" strokeDasharray="12,3,3,3"/>
-                        <text x="248" y="70" fontSize="7" fill="#3f3f46" textAnchor="end">CL</text>
-                        {/* Tool body — shank portion */}
-                        <line x1="22" y1="16" x2="105" y2="16" stroke="#71717a" strokeWidth="2"/>
-                        <line x1="22" y1="16" x2="22" y2="72" stroke="#71717a" strokeWidth="1.5"/>
-                        <line x1="105" y1="16" x2="105" y2="72" stroke="#71717a" strokeWidth="1.5"/>
-                        {/* OD bracket on far left */}
-                        <line x1="11" y1="16" x2="11" y2="72" stroke="#666" strokeWidth="1"/>
-                        <polygon points="11,16 8,23 14,23" fill="#666"/>
-                        <polygon points="11,72 8,65 14,65" fill="#666"/>
-                        <text x="6" y="47" fontSize="7.5" fill="#888" textAnchor="middle" transform="rotate(-90,6,47)">OD</text>
-                        {/* Chamfer cutting edge (orange) — horizontal tool, shank left, tip right */}
-                        <line x1="105" y1="16" x2={isCms ? 200 : 178} y2="72" stroke="#f97316" strokeWidth="2.5"/>
-                        {/* CMS: point on CL */}
-                        {isCms && <polygon points="200,72 192,65 192,72" fill="#f97316" opacity="0.85"/>}
-                        {/* CMH: flat face (gray vertical stub at tip) */}
-                        {!isCms && <line x1="178" y1="55" x2="178" y2="72" stroke="#52525b" strokeWidth="2.5"/>}
-                        {/* Depth ref tick lines */}
-                        <line x1="105" y1="72" x2="105" y2="86" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
-                        <line x1={isCms ? 200 : 178} y1="72" x2={isCms ? 200 : 178} y2="86" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
-                        {/* Depth arrow (horizontal) */}
-                        <line x1="105" y1="84" x2={isCms ? 200 : 178} y2="84" stroke="#3b82f6" strokeWidth="1.5"/>
-                        <polygon points="105,84 112,81 112,87" fill="#3b82f6"/>
-                        <polygon points={`${isCms?200:178},84 ${isCms?193:171},81 ${isCms?193:171},87`} fill="#3b82f6"/>
-                        <text x={isCms ? 152 : 141} y="96" fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle">d={maxDepth.toFixed(3)}"</text>
-                        {/* L label centered on cutting edge, rotated along it */}
-                        <text x={isCms ? 152 : 141} y="40" fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${isCms?30:36},${isCms?152:141},40)`}>L={skuChamferEdgeLength.toFixed(3)}"</text>
-                        {/* Series label top right */}
-                        <text x="108" y="10" fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting" : "CMH — non-center (flat tip)"}</text>
-                      </svg>
+                      {(() => {
+                        const topY = 12, clY = 74;
+                        const bodyX1 = 22, chamferX = 58;
+                        const tipX = isCms ? 230 : 205;
+                        const tipHalfPx = (!isCms && form.tool_dia > 0)
+                          ? Math.max(5, (form.chamfer_tip_dia / form.tool_dia) * (clY - topY))
+                          : 0;
+                        const tipY = clY - tipHalfPx;
+                        const lMidX = (chamferX + tipX) / 2;
+                        const lMidY = (topY + tipY) / 2;
+                        const lAngle = Math.round(Math.atan2(tipY - topY, tipX - chamferX) * 180 / Math.PI);
+                        const dArrowY = clY + 13;
+                        return (
+                          <svg viewBox="0 0 265 98" width="100%" height="88" className="block mt-1">
+                            <defs>
+                              <clipPath id="cc-hatch2">
+                                <rect x={bodyX1} y={topY} width="9" height={clY - topY}/>
+                              </clipPath>
+                            </defs>
+                            {/* Cross-hatch on left end face */}
+                            <g clipPath="url(#cc-hatch2)">
+                              {[0,7,14,21,28,35,42,49,56,63,70].map((d,i) =>
+                                <line key={i} x1={bodyX1+d-(clY-topY)} y1={clY} x2={bodyX1+d} y2={topY} stroke="#666" strokeWidth="0.75"/>
+                              )}
+                            </g>
+                            {/* Tool body top wall */}
+                            <line x1={bodyX1} y1={topY} x2={chamferX} y2={topY} stroke="#888" strokeWidth="1.5"/>
+                            {/* Left end cap */}
+                            <line x1={bodyX1} y1={topY} x2={bodyX1} y2={clY} stroke="#888" strokeWidth="1.5"/>
+                            {/* Shoulder line where body meets chamfer */}
+                            <line x1={chamferX} y1={topY} x2={chamferX} y2={clY} stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
+                            {/* Centerline — proper long-short-long drafting linetype */}
+                            <line x1={bodyX1-6} y1={clY} x2={tipX+12} y2={clY} stroke="#4a4a5a" strokeWidth="1" strokeDasharray="12,3,3,3"/>
+                            {/* Chamfer cutting edge (orange) */}
+                            <line x1={chamferX} y1={topY} x2={tipX} y2={tipY} stroke="#f97316" strokeWidth="2.5"/>
+                            {/* CMS: point on CL */}
+                            {isCms && <polygon points={`${tipX},${clY} ${tipX-9},${clY-7} ${tipX-9},${clY}`} fill="#f97316" opacity="0.85"/>}
+                            {/* CMH: gray flat face from tipY down to CL */}
+                            {!isCms && <line x1={tipX} y1={tipY} x2={tipX} y2={clY} stroke="#52525b" strokeWidth="2.5"/>}
+                            {/* Depth ref ticks */}
+                            <line x1={chamferX} y1={clY} x2={chamferX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
+                            <line x1={tipX} y1={clY} x2={tipX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
+                            {/* Depth arrow */}
+                            <line x1={chamferX} y1={dArrowY} x2={tipX} y2={dArrowY} stroke="#3b82f6" strokeWidth="1.5"/>
+                            <polygon points={`${chamferX},${dArrowY} ${chamferX+7},${dArrowY-3} ${chamferX+7},${dArrowY+3}`} fill="#3b82f6"/>
+                            <polygon points={`${tipX},${dArrowY} ${tipX-7},${dArrowY-3} ${tipX-7},${dArrowY+3}`} fill="#3b82f6"/>
+                            <text x={(chamferX+tipX)/2} y={dArrowY+9} fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle">d={maxDepth.toFixed(3)}"</text>
+                            {/* L label along cutting edge */}
+                            <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`}>L={skuChamferEdgeLength.toFixed(3)}"</text>
+                            {/* Series label */}
+                            <text x={chamferX+4} y={topY-1} fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting" : "CMH — non-center (flat tip)"}</text>
+                          </svg>
+                        );
+                      })()}
                     </div>
                   );
                 })()}
