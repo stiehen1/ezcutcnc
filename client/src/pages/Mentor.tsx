@@ -2815,7 +2815,7 @@ ${stabSection}
                             {/* L label along cutting edge */}
                             <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`}>L={skuChamferEdgeLength.toFixed(3)}"</text>
                             {/* Series label */}
-                            <text x={chamferX+4} y={topY-1} fontSize="7.5" fill="#52525b">{isCms ? "CMS — center cutting" : "CMH — non-center (flat tip)"}</text>
+                            <text x={tipX - 10} y={topY - 1} fontSize="8" fill={isCms ? "#f97316" : "#94a3b8"} fontWeight="600" textAnchor="end">{isCms ? "CMS — Center Cutting" : "CMH — Non-Center (flat tip)"}</text>
                           </svg>
                         );
                       })()}
