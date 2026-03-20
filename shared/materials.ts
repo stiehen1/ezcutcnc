@@ -44,6 +44,10 @@ export const MATERIAL_NOTES: Record<string, string> = {
   // H — Hardened Steel
   "hardened_lt55":       "Hard enough to challenge solid carbide — TiAlN/AlCrN coating and conservative chip loads are required. Light WOC with higher DOC is more efficient than full-width cuts.",
   "hardened_gt55":       "At the upper limit for solid carbide — CBN tooling is preferred above 60 HRC. Extremely light chip loads; any tool flex causes immediate chipping.",
+  // O — Plastics & Composites
+  "plastic_unfilled":    "Heat is the enemy, not cutting force. PEEK, POM/Delrin, PA/Nylon, PC, PPS — all cut easily but melt, smear, or weld to the edge if chip load drops too low or chips aren't cleared. Polished uncoated carbide or DLC preferred — TiAlN coatings can stick to thermoplastic matrices. 2–3 flutes, high-positive rake, flood or strong air blast. Never dwell; never let the tool rub.",
+  "plastic_filled":      "Short/long glass or carbon fibers (GF-PA, CF-PA, filled PEEK) raise stiffness and abrasion significantly. Still 'plastic' cutting behavior but tool wear is 3–5× faster than unfilled grades. Fine-grain or DLC-coated carbide preferred. Chip load still matters — rubbing generates heat that melts the matrix around the fibers, creating a fuzzy, smeared surface. Dry with air blast or light mist.",
+  "composite_tpc":       "Continuous-fiber thermoplastic laminates (CF-PEEK, GF-PP, CFR-TP tapes/plates) — carbon fiber is less abrasive than glass but both are aggressive on edges. Run lower SFM than unfilled TPs with higher chip load than you'd use on thermoset CFRP (TP matrix is tougher, not brittle). Target solid chips, not dust or powder — if you're making dust, chip load is too light. Dry + extraction mandatory; carbon fiber dust is hazardous. Delamination risk at exits — back up thin laminates.",
 };
 
 export const ISO_CATEGORIES = [
@@ -53,6 +57,7 @@ export const ISO_CATEGORIES = [
   { iso: "K", label: "Cast Iron",      color: "#EF5350" },
   { iso: "S", label: "Superalloys",    color: "#FFA726" },
   { iso: "H", label: "Hardened Steel", color: "#BDBDBD" },
+  { iso: "O", label: "Plastics & Composites", color: "#26C6DA" },
 ] as const;
 
 export type IsoCategory = (typeof ISO_CATEGORIES)[number]["iso"];
@@ -103,6 +108,10 @@ export const ISO_SUBCATEGORIES = [
   // H — Hardened Steel
   { iso: "H" as IsoCategory, key: "hardened_lt55",         label: "Hardened Steel < 55 HRC",  hardness: { value: 48, scale: "hrc" as const } },
   { iso: "H" as IsoCategory, key: "hardened_gt55",         label: "Hardened Steel > 55 HRC",  hardness: { value: 60, scale: "hrc" as const } },
+  // O — Plastics & Composites
+  { iso: "O" as IsoCategory, key: "plastic_unfilled",      label: "Unfilled Engineering Thermoplastics (PEEK, POM, PA, PC)", hardness: { value: 0, scale: "hrb" as const } },
+  { iso: "O" as IsoCategory, key: "plastic_filled",        label: "Fiber-Reinforced Thermoplastics (GF/CF-PA, PEEK-GF)",     hardness: { value: 0, scale: "hrb" as const } },
+  { iso: "O" as IsoCategory, key: "composite_tpc",         label: "Continuous-Fiber TPC Laminates (CF-PEEK, GF-PP, CFR-TP)", hardness: { value: 0, scale: "hrb" as const } },
 ];
 
 export type MaterialKey = (typeof ISO_SUBCATEGORIES)[number]["key"];
@@ -153,6 +162,10 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   // H — Hardened Steel
   "hardened_lt55":  { min: 40, max: 54,  scale: "hrc", note: "Use this category for hardened steels 40–54 HRC. Below 40 HRC, standard alloy steel parameters apply." },
   "hardened_gt55":  { min: 55, max: 68,  scale: "hrc", note: "Use this category for hardened steels 55–68 HRC. CBN tooling is preferred above 60 HRC." },
+  // O — Plastics & Composites (hardness not used in calculations)
+  "plastic_unfilled": { min: 0, max: 0, scale: "hrb", note: "Hardness not applicable for thermoplastics — leave at 0. Parameters are not affected by hardness input for this category." },
+  "plastic_filled":   { min: 0, max: 0, scale: "hrb", note: "Hardness not applicable for fiber-reinforced thermoplastics — leave at 0." },
+  "composite_tpc":    { min: 0, max: 0, scale: "hrb", note: "Hardness not applicable for continuous-fiber TPC laminates — leave at 0." },
 };
 
 // ── Material Aliases ─────────────────────────────────────────────────────────
@@ -424,6 +437,36 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "udimet 720": "mp35n",          // turbine disk Ni — most demanding PM grade
   "rene 95": "mp35n", "rené 95": "mp35n",
   "rene 104": "mp35n",
+  // ── Unfilled Engineering Thermoplastics ───────────────────────────────────
+  "peek": "plastic_unfilled",    "polyether ether ketone": "plastic_unfilled",
+  "pom": "plastic_unfilled",     "delrin": "plastic_unfilled", "acetal": "plastic_unfilled",
+  "pa": "plastic_unfilled",      "nylon": "plastic_unfilled",
+  "pa6": "plastic_unfilled",     "pa66": "plastic_unfilled",   "pa12": "plastic_unfilled",
+  "nylon 6": "plastic_unfilled", "nylon 66": "plastic_unfilled",
+  "pc": "plastic_unfilled",      "polycarbonate": "plastic_unfilled", "lexan": "plastic_unfilled",
+  "pps": "plastic_unfilled",     "polyphenylene sulfide": "plastic_unfilled",
+  "pei": "plastic_unfilled",     "ultem": "plastic_unfilled",  "ultem 1000": "plastic_unfilled",
+  "ptfe": "plastic_unfilled",    "teflon": "plastic_unfilled",
+  "hdpe": "plastic_unfilled",    "uhmwpe": "plastic_unfilled", "uhmw": "plastic_unfilled",
+  "pp": "plastic_unfilled",      "polypropylene": "plastic_unfilled",
+  "abs": "plastic_unfilled",     "pbt": "plastic_unfilled",
+  "pla": "plastic_unfilled",     "pmma": "plastic_unfilled",   "acrylic": "plastic_unfilled",
+  "engineering plastic": "plastic_unfilled", "thermoplastic": "plastic_unfilled",
+  // ── Fiber-Reinforced Thermoplastics ──────────────────────────────────────
+  "gf-pa": "plastic_filled",     "glass filled nylon": "plastic_filled",
+  "cf-pa": "plastic_filled",     "carbon filled nylon": "plastic_filled",
+  "gf-peek": "plastic_filled",   "cf-peek filled": "plastic_filled",
+  "gf-pp": "plastic_filled",     "pps-gf": "plastic_filled",
+  "peek-cf": "plastic_filled",   "peek-gf": "plastic_filled",
+  "glass filled peek": "plastic_filled", "carbon filled peek": "plastic_filled",
+  "filled thermoplastic": "plastic_filled", "fiber reinforced thermoplastic": "plastic_filled",
+  // ── Continuous-Fiber TPC Laminates ───────────────────────────────────────
+  "cf-peek": "composite_tpc",    "cf peek laminate": "composite_tpc",
+  "cfr-tp": "composite_tpc",     "gfr-tp": "composite_tpc",
+  "cfrtp": "composite_tpc",      "gfrtp": "composite_tpc",
+  "cf-pekk": "composite_tpc",    "pekk composite": "composite_tpc",
+  "tpc laminate": "composite_tpc", "thermoplastic composite": "composite_tpc",
+  "tpc": "composite_tpc",
 };
 
 export function matchMaterialAlias(input: string): string | null {

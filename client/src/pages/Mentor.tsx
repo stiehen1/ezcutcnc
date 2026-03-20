@@ -1107,13 +1107,14 @@ export default function Mentor() {
   }
 
   function getCoatingRec(cat: string): { code: string; desc: string } {
-    if (cat === "N") return { code: "Uncoated or D-MAX", desc: "non-ferrous / aluminum" };
+    if (cat === "N" || cat === "O") return { code: "Uncoated or D-MAX", desc: "non-ferrous / plastics & composites" };
     if (cat === "P" || cat === "K") return { code: "P-MAX", desc: "steel & cast iron" };
     return { code: "T-MAX", desc: "stainless, superalloys & hardened" };
   }
 
   function getMillingCoatings(cat: string): { coatings: string[]; note: string } {
     if (cat === "N") return { coatings: ["D-MAX"], note: "non-ferrous / aluminum" };
+    if (cat === "O") return { coatings: ["D-MAX"], note: "plastics & composites — polished uncoated or DLC; avoid TiAlN" };
     if (cat === "P") return { coatings: ["A-MAX", "P-MAX"], note: "steel" };
     if (cat === "K") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "cast iron" };
     if (cat === "M") return { coatings: ["A-MAX", "P-MAX", "T-MAX", "C-MAX"], note: "stainless" };

@@ -144,6 +144,9 @@ BASE_SFM = {
     "inconel_617":   78,            # Inconel 617 / Haynes 230 — solid-solution Ni-Cr-Co-Mo, power-gen combustors
     "waspaloy":      68,            # Waspaloy / HAYNES 282 / René 41/77/80 / Nimonic 80A/90/105 / Udimet 500/700 — hot-section
     "mp35n":         60,            # MP35N / Udimet 720 / René 95 — ultra-high-strength; first test 60 SFM
+    "plastic_unfilled":  450,  # Unfilled engineering TPs (PEEK, POM, PA, PC, PPS, PEI) — mid of 300–600 SFM range
+    "plastic_filled":    350,  # Short/long fiber GF/CF TPs — abrasion reduces SFM vs unfilled
+    "composite_tpc":     400,  # Continuous-fiber TPC laminates (CF-PEEK, GF-PP) — composite milling range
     "inconel":      100,            # legacy fallback
     "tool_steel_p20": 300,  # P20 prehardened ~30 HRC: 260–340 SFM; 300 SFM confirmed
     "tool_steel_a2":  240,  # A2 tool steel: 200–280 SFM; 240 SFM confirmed
@@ -172,6 +175,9 @@ HP_PER_CUIN = {
     "aluminum_wrought":    0.28,
     "aluminum_wrought_hs": 0.30,   # 7075/2024 — slightly higher unit force than 6061
     "aluminum_cast":    0.32,
+    "plastic_unfilled":  0.06,  # Very low unit cutting force — thermoplastics cut easily
+    "plastic_filled":    0.10,  # Fibers add abrasion; force higher than unfilled
+    "composite_tpc":     0.14,  # Continuous fibers — highest force in this family
     "non_ferrous":      0.35,
     "steel_free":       0.75,
     "steel_alloy":      1.00,  # 4140, 4340 — Machinery's Handbook C=1.0 for alloy steel
@@ -303,6 +309,9 @@ BASE_LIFE_MIN = {
     "aluminum_wrought":    180.0,
     "aluminum_wrought_hs": 140.0,  # 7075/2024 — shorter tool life than 6061
     "aluminum_cast":    130.0,
+    "plastic_unfilled":  250.0, # Long tool life if sharp tools maintained; BUE/smear is the failure mode
+    "plastic_filled":     80.0, # Glass fiber abrasion dramatically shortens tool life
+    "composite_tpc":      70.0, # Continuous fibers — aggressive on edges, especially GF laminates
     "non_ferrous":      110.0,
     "steel_free":        90.0,
     "steel_alloy":       75.0,
@@ -489,6 +498,9 @@ IPT_FRAC = {
     "aluminum_wrought":    0.0125,  # 6061 chipbreaker: 1.25%×D confirmed
     "aluminum_wrought_hs": 0.0100,  # 7075/2024: lighter chip load — stronger alloy, more demanding on edges
     "aluminum_cast":    0.010,
+    "plastic_unfilled":  0.010,  # High chip load — too light causes rubbing, heat, BUE (1.0%×D = 0.005" on 0.5" tool)
+    "plastic_filled":    0.008,  # Fiber-filled: slightly lower than unfilled — abrasion limits aggressiveness
+    "composite_tpc":     0.006,  # Continuous fiber laminates: lower chip load; delamination risk at high IPT
     "non_ferrous":      0.008,
     "steel_free":       0.007,    # A36/low-carbon structural
     "steel_alloy":      0.0055,   # 4140 slotting: 0.55%×D confirmed
@@ -539,6 +551,9 @@ HEM_IPT_MULT = {
     "aluminum_wrought":    2.0,
     "aluminum_wrought_hs": 2.0,   # 7075/2024 — HEM strategy same as 6061
     "aluminum_cast": 2.0,
+    "plastic_unfilled":  1.5,   # HEM uncommon for plastics — moderate boost only
+    "plastic_filled":    1.4,   # Conservative; abrasion limits HEM chip load upside
+    "composite_tpc":     1.3,   # Very conservative; composite laminates rarely run HEM
     "Steel": 2.0,
     "steel_alloy": 2.0,
     "steel_free": 2.0,
@@ -604,6 +619,9 @@ _ISO_KEY_TO_GROUP = {
     "aluminum_wrought":    "Aluminum",
     "aluminum_wrought_hs": "Aluminum",
     "aluminum_cast": "Aluminum",
+    "plastic_unfilled":  "Plastics",
+    "plastic_filled":    "Plastics",
+    "composite_tpc":     "Plastics",
     "non_ferrous": "Non-Ferrous",
     "steel_free": "Steel",
     "steel_alloy": "Steel",
@@ -1275,6 +1293,7 @@ def hem_typical_woc_range_pct(material_group, flutes):
 # SFM for solid carbide drills (base — flood coolant, 135° point)
 DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
+    "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
     "steel_free": 150, "steel_alloy": 100, "steel_tool": 70,
     # Base = flood external coolant, non-coolant-fed drill. coolant_fed × 1.15 bonus brings these up to through-coolant target.
     # stainless_304 validated: 60 SFM non-coolant-fed → 69 SFM coolant-fed ≈ 70 reference target.
@@ -1299,6 +1318,7 @@ DRILL_SFM = {
 # IPR base for 0.5" diameter solid carbide drill — scales with dia^0.6
 DRILL_IPR_BASE = {
     "aluminum_wrought": 0.010, "aluminum_wrought_hs": 0.009, "aluminum_cast": 0.008, "non_ferrous": 0.007,
+    "plastic_unfilled": 0.006, "plastic_filled": 0.005, "composite_tpc": 0.002,
     "steel_free": 0.006, "steel_alloy": 0.004, "steel_tool": 0.003,
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
@@ -2171,6 +2191,9 @@ KEYSEAT_SFM = {
     "aluminum_wrought_hs": 700,   # 7075/2024 keyseat: lower full-slot SFM — stronger alloy
     "aluminum_cast":     500,
     "non_ferrous":       400,
+    "plastic_unfilled":  350,   # Unfilled TPs: moderate keyseat SFM — heat is the constraint
+    "plastic_filled":    275,   # Fiber-filled: lower to manage abrasion in full-slot
+    "composite_tpc":     250,   # Continuous-fiber laminates: conservative; delamination risk
     # Steel
     "Steel":             220,
     "steel_free":        280,
