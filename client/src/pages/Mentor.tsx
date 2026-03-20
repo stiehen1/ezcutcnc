@@ -5213,27 +5213,27 @@ ${stabSection}
           <div className="flex items-center justify-between">
             <CardTitle>Recommendation</CardTitle>
             {customer && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => requireEmail("copy")}
-                  className="text-[11px] font-semibold px-3 py-1 rounded border border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors leading-tight whitespace-nowrap"
+                  className="text-[10px] font-semibold px-2 py-1 rounded border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/15 transition-colors leading-tight whitespace-nowrap"
                 >
-                  {camCopied ? "Copied ✓" : "Copy Parameters"}
+                  {camCopied ? "Copied ✓" : "Copy CAM Params"}
                 </button>
                 <button
                   type="button"
                   onClick={() => requireEmail("print")}
-                  className="text-[11px] font-semibold px-3 py-1 rounded border border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors leading-tight whitespace-nowrap"
+                  className="text-[10px] font-semibold px-2 py-1 rounded border border-orange-500/60 text-orange-400 hover:bg-orange-500/15 transition-colors leading-tight whitespace-nowrap"
                 >
                   Print PDF
                 </button>
                 <button
                   type="button"
                   onClick={() => requireEmail("pdf")}
-                  className="text-[11px] font-semibold px-3 py-1 rounded border border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors leading-tight whitespace-nowrap"
+                  className="text-[10px] font-semibold px-2 py-1 rounded border border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/15 transition-colors leading-tight whitespace-nowrap"
                 >
-                  Download PDF
+                  ⬇ PDF
                 </button>
               </div>
             )}
