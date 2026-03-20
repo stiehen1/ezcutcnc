@@ -228,6 +228,8 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   // ── Duplex ────────────────────────────────────────────────────────────────
   "2205": "stainless_duplex", "s31803": "stainless_duplex", "s32205": "stainless_duplex",
   "1.4462": "stainless_duplex", "2304": "stainless_duplex",
+  "duplex stainless": "stainless_duplex", "duplex": "stainless_duplex",
+  "2205 duplex": "stainless_duplex",
   // ── Super Duplex ──────────────────────────────────────────────────────────
   "2507": "stainless_superduplex", "s32750": "stainless_superduplex",
   "s32760": "stainless_superduplex", "zeron 100": "stainless_superduplex",

@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api, mentorSchemas } from "@shared/routes";
+import { matchMaterialAlias, ISO_SUBCATEGORIES } from "@shared/materials";
 import { z } from "zod";
 import { exec, spawn } from "child_process";
 import { writeFile, unlink } from "fs/promises";
@@ -1816,10 +1817,18 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const { input } = req.body as { input: string };
     if (!input || input.trim().length < 2) return res.status(400).json({ error: "Input too short" });
 
-    const { matchMaterialAlias, ISO_SUBCATEGORIES } = await import("@shared/materials");
-
-    // Level 1 — instant alias lookup
-    const aliasMatch = matchMaterialAlias(input);
+    // Level 1 — alias lookup: try full string, then each word/token, then pairs
+    const normalized = input.trim().toLowerCase();
+    let aliasMatch = matchMaterialAlias(normalized);
+    if (!aliasMatch) {
+      // try tokens (longest first so "17-4 ph" beats "ph")
+      const tokens = normalized.split(/[\s,/]+/).filter(t => t.length > 1);
+      const pairs = tokens.slice(0, -1).map((t, i) => `${t} ${tokens[i+1]}`);
+      for (const candidate of [...pairs, ...tokens].sort((a,b) => b.length - a.length)) {
+        const m = matchMaterialAlias(candidate);
+        if (m) { aliasMatch = m; break; }
+      }
+    }
     if (aliasMatch) {
       const sub = ISO_SUBCATEGORIES.find(s => s.key === aliasMatch);
       return res.json({ key: aliasMatch, label: sub?.label ?? aliasMatch, confidence: "high", source: "alias", note: null });
