@@ -2517,7 +2517,7 @@ ${stabSection}
 
           {/* EDP# / SKU lookup */}
           <div className="mb-4 relative">
-            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">EDP# (required to run — auto-fills tool specifications)</FieldLabel>
+            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">Core Cutter EDP# (required to run — auto-fills tool specifications)</FieldLabel>
             <div className="relative mt-1.5">
               <Input
                 type="text"
