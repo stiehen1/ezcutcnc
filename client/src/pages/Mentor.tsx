@@ -5933,13 +5933,6 @@ ${stabSection}
                 );
               })()}
 
-              {/* Save to Toolbox */}
-              <div className="flex items-center gap-2 mt-3">
-                <button onClick={saveToToolbox} disabled={tbSaving} className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50">
-                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
-                </button>
-                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
-              </div>
             </>
           ) : drillResult ? (
             /* ── DRILLING OUTPUT ─────────────────────────────────── */
@@ -6232,13 +6225,6 @@ ${stabSection}
                 );
               })()}
 
-              {/* Save to Toolbox */}
-              <div className="flex items-center gap-2 mt-3">
-                <button onClick={saveToToolbox} disabled={tbSaving} className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50">
-                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
-                </button>
-                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
-              </div>
             </>
           ) : (
             <>
@@ -6833,18 +6819,6 @@ ${stabSection}
                 </div>
               ) : null}
 
-              {/* Save to Toolbox */}
-              <div className="flex items-center gap-2 mt-3">
-                <button
-                  onClick={saveToToolbox}
-                  disabled={tbSaving}
-                  className="flex-1 rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold py-2 transition-colors disabled:opacity-50"
-                >
-                  {tbSaved ? "✓ Saved to Toolbox" : tbSaving ? "Saving…" : "🧰 Save to Toolbox"}
-                </button>
-                <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
-              </div>
-
             </>
           )}
         </CardContent>
@@ -7095,6 +7069,30 @@ ${stabSection}
 
       </div>
       </div>} {/* end grid */}
+
+      {/* Toolbox */}
+      {mentor.data && (
+        <div className="mt-5 rounded-xl border border-indigo-700/50 bg-indigo-950/30 px-4 py-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-indigo-200 leading-snug">🧰 Save to Toolbox</p>
+              <p className="text-xs text-zinc-500 leading-snug mt-0.5">
+                Saves this setup to your account so you can pull it up again in any future session — no re-entering parameters.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={saveToToolbox}
+                disabled={tbSaving}
+                className="rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold px-4 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {tbSaved ? "✓ Saved" : tbSaving ? "Saving…" : "Save Setup"}
+              </button>
+              <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Email Results — lead capture */}
       {mentor.data && erStatus !== "sent" && (
