@@ -2751,6 +2751,19 @@ ${stabSection}
                     />
                   </div>
                 </div>
+                {skuChamferEdgeLength && (() => {
+                  const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+                  const maxDepth = skuChamferEdgeLength * Math.sin(halfRad);
+                  return (
+                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-zinc-400">Cutting Edge Length</span>
+                      <span className="font-mono font-semibold text-orange-400">{skuChamferEdgeLength.toFixed(4)}"</span>
+                      <span className="text-zinc-500">→</span>
+                      <span className="text-zinc-400">Max Depth</span>
+                      <span className="font-mono font-semibold text-orange-400">{maxDepth.toFixed(4)}"</span>
+                    </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   <FieldLabel hint={
                     <div className="space-y-2">
