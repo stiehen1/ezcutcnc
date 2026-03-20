@@ -5223,7 +5223,7 @@ ${stabSection}
                 </button>
                 <button
                   type="button"
-                  onClick={() => requireEmail("print")}
+                  onClick={() => printSummary()}
                   className="text-[10px] font-semibold px-2 py-1 rounded border border-orange-500/60 text-orange-400 hover:bg-orange-500/15 transition-colors leading-tight whitespace-nowrap"
                 >
                   Print PDF
