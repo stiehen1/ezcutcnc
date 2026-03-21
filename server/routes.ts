@@ -914,8 +914,8 @@ export async function registerRoutes(
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
 
-      // Only surface if genuinely better (score gap ≥ 2)
-      if (!bestSku || bestScore - curScore < 2) return res.json({ found: false });
+      // Only surface if genuinely better (any positive score gap)
+      if (!bestSku || bestScore <= curScore) return res.json({ found: false });
 
       // Build modified payload with recommended SKU geometry
       const crNum  = Number(bestSku.corner_condition);
