@@ -3756,7 +3756,8 @@ ${stabSection}
                 return (
                   <div className="mt-2 flex gap-1.5">
                     {/* Engagement Angle */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
+                      title={`Arc of tool in contact with material. At ${form.woc_pct.toFixed(1)}% WOC the tool engages ${engAngleDeg.toFixed(1)}° of its 360° rotation. Higher angle = more heat and cutting force per revolution.`}>
                       <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Eng. Angle</div>
                       <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
                       <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
@@ -3764,7 +3765,8 @@ ${stabSection}
                       </div>
                     </div>
                     {/* Chip Thinning */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
+                      title={`Chip thinning factor — at low WOC the chip formed is thinner than your programmed FPT. ${chipThinPct}% means the actual chip is only ${chipThinPct}% as thick as programmed. The engine compensates automatically by boosting feed. Below 30% risks rubbing instead of cutting.`}>
                       <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Chip Thin</div>
                       <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
                       <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
@@ -3775,7 +3777,8 @@ ${stabSection}
                     {(() => {
                       const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
                       return (
-                        <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                        <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
+                          title={`Average number of flutes simultaneously cutting. Sweet spot is 1.5–2.5 teeth — enough for smooth cutting without heat buildup. Too low = interrupted, chattery cut. Too high = heat and tool wear.`}>
                           <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Teeth in Cut</div>
                           <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
                           <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
