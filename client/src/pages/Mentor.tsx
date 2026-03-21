@@ -412,7 +412,7 @@ export default function Mentor() {
       machine_type: m.machine_type ?? p.machine_type,
     }));
     setActiveMachineId(m.id ?? null);
-    setActiveMachineName(m.nickname ? `${m.nickname}` : `${m.brand} ${m.model}`);
+    setActiveMachineName(`${m.brand} ${m.model}${m.nickname ? ` (${m.nickname})` : ""}`);
     setMachineQuery("");
     setMachineDropOpen(false);
     setMachineResults([]);
@@ -858,7 +858,8 @@ export default function Mentor() {
       const wocLow  = Math.max(2,  Math.round(wocMed * 0.55));
       const wocHigh = Math.min(15, Math.round(wocMed * 1.50));
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
-      const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
+      // HEM high = full LOC (not capped at 1.5×med) — using full flute length is normal in HEM
+      const docHigh = loc > 0 && dia > 0 ? loc / dia : docMed * 2.0;
       return {
         woc: { low: wocLow, med: wocMed, high: wocHigh },
         doc: { low: docLow, med: loc > 0 && dia > 0 ? Math.min(docMed, loc / dia) : docMed, high: Math.round(docHigh * 4) / 4 },
@@ -3975,8 +3976,14 @@ ${stabSection}
               {/* DOC out-of-range note */}
               {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (() => {
                 const dp = DOC_PRESETS[form.mode];
+                const isHem = form.mode === "hem" || form.mode === "trochoidal";
+                const locXd = form.loc > 0 && form.tool_dia > 0 ? form.loc / form.tool_dia : null;
                 if (form.doc_xd < dp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below typical range ({dp.low}–{dp.high}×D) — axial engagement may be too light</p>;
-                if (form.doc_xd > dp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above typical range ({dp.low}–{dp.high}×D) — deflection and force increase significantly</p>;
+                if (form.doc_xd > dp.high) {
+                  // HEM: only warn if exceeding full flute length, not just the "High" preset
+                  if (isHem && locXd != null && form.doc_xd <= locXd) return null;
+                  return <p className="text-[10px] text-amber-400 mt-1">⚠ Above typical range ({dp.low}–{dp.high}×D) — deflection and force increase significantly</p>;
+                }
                 return null;
               })()}
               {/* Tool Stickout — lives under DOC */}
