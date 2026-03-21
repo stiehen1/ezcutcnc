@@ -2277,7 +2277,21 @@ ${stabSection}
                           setChamferDepthText("");
                           setSkuChamferEdgeLength(null);
                         } else {
-                          setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }));
+                          // Switching to chamfer mill — clear endmill-specific fields
+                          setForm((p) => ({
+                            ...p,
+                            tool_type: "chamfer_mill",
+                            corner_condition: "square",
+                            corner_radius: 0,
+                            geometry: "standard",
+                            mode: "",
+                            woc_pct: 0,
+                            doc_xd: 0,
+                          }));
+                          setWocText("");
+                          setDocText("");
+                          setWocPreset(null);
+                          setDocPreset(null);
                         }
                       }}
                       className="flex-1 rounded px-3 py-1.5 text-xs font-semibold border transition-all"
