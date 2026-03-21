@@ -959,7 +959,7 @@ export async function registerRoutes(
         const smallTaper  = taper === "CAT30" || taper === "BT30" || taper === "R8";
         // VXR needs meaningful DOC and WOC — not for shallow/low-engagement passes
         const shallowDoc = docXd > 0 && docXd < 0.5;
-        const lowWoc     = wocPct > 0 && wocPct < 6;
+        const lowWoc     = wocPct > 0 && wocPct < 8;
         if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) return res.json({ found: false });
         // Borderline setup — show card with a note
         const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
