@@ -1261,7 +1261,8 @@ export default function Mentor() {
       setFormDirty(false);
       setOptimalRec(null);
       // Fetch optimal tool recommendation if a specific EDP is locked
-      if (skuLocked && edpText && form.tool_type !== "chamfer_mill") {
+      const isQtr3 = /^qtr3/i.test(form.tool_series ?? "");
+      if (skuLocked && edpText && form.tool_type !== "chamfer_mill" && !isQtr3) {
         setOptimalLoading(true);
         try {
           const optPayload = {
