@@ -6800,10 +6800,20 @@ ${stabSection}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Kpi
                   label="Material"
-                  value={
-                    ISO_SUBCATEGORIES.find((s) => s.key === customer.material)?.label
-                    ?? String(customer.material ?? "—")
-                  }
+                  value={(() => {
+                    const full = ISO_SUBCATEGORIES.find((s) => s.key === customer.material)?.label
+                      ?? String(customer.material ?? "—");
+                    const parenIdx = full.indexOf("(");
+                    if (parenIdx === -1) return <>{full}</>;
+                    const main = full.slice(0, parenIdx).trim();
+                    const sub  = full.slice(parenIdx);
+                    return (
+                      <>
+                        {main}
+                        <span className="block text-[11px] font-normal text-zinc-400 leading-snug mt-0.5">{sub}</span>
+                      </>
+                    );
+                  })()}
                 />
                 <Kpi label={UL("Ø (in)", "Ø (mm)")} hint="Cutting diameter of the tool as confirmed by the engine." value={UC(customer.diameter, 25.4, metric ? 2 : 3)} />
                 <Kpi label="Flutes" hint="Number of cutting flutes. More flutes increase feed rate but reduce chip clearance — critical in gummy materials like aluminum and stainless." value={fmtInt(customer.flutes)} />
