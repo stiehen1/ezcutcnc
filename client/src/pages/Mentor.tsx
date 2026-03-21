@@ -2262,7 +2262,24 @@ ${stabSection}
                     <button
                       key={key}
                       type="button"
-                      onClick={() => setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }))}
+                      onClick={() => {
+                        if (key === "endmill") {
+                          setForm((p) => ({
+                            ...p,
+                            tool_type: "endmill",
+                            corner_condition: "square",
+                            chamfer_angle: 90,
+                            chamfer_tip_dia: 0,
+                            chamfer_depth: 0,
+                            chamfer_series: "CMH" as const,
+                          }));
+                          setChamferTipDiaText("");
+                          setChamferDepthText("");
+                          setSkuChamferEdgeLength(null);
+                        } else {
+                          setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }));
+                        }
+                      }}
                       className="flex-1 rounded px-3 py-1.5 text-xs font-semibold border transition-all"
                       style={{
                         backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#6366f1" : "transparent",
