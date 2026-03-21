@@ -604,6 +604,10 @@ export async function registerRoutes(
         const payloadToolDia = Number((parsed.data as any).tool_dia  ?? 0);
         const payloadDocXd   = Number((parsed.data as any).doc_xd   ?? 0);  // axial depth in multiples of D
         const docTooLow  = payloadDocXd > 0 && payloadDocXd < 1.0;  // less than 1×D
+        // Geometry preference for flute-bump suggestions — stay in same geometry if available
+        const VALID_GEOMS = ["standard", "chipbreaker", "truncated_rougher"];
+        const rawGeom = String((parsed.data as any).geometry ?? "standard").toLowerCase();
+        const payloadGeometry = VALID_GEOMS.includes(rawGeom) ? rawGeom : "standard";
         const excludeCB  = payloadWocPct > 0 && (payloadWocPct < 8  || docTooLow);
         const excludeVRX = payloadWocPct > 0 && (payloadWocPct < 10 || docTooLow);
         const cbClause =
@@ -633,8 +637,10 @@ export async function registerRoutes(
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                    ${cbClause}
                    ${noBLK}
-                   ORDER BY s.edp`,
-                  [derivedBase + "%"]
+                   ORDER BY
+                     CASE WHEN LOWER(COALESCE(s.geometry, 'standard')) = $2 THEN 0 ELSE 1 END,
+                     s.edp`,
+                  [derivedBase + "%", payloadGeometry]
                 );
                 if (q.rows.length > 0) {
                   s.suggested_edps = q.rows.map((r: any) => r.edp);
