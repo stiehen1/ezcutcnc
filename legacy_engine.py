@@ -113,7 +113,8 @@ BASE_SFM = {
     "aluminum_wrought_hs": 1100,  # 7075/2024/7xxx/2xxx — ~20% lower; harder/stronger, sharper tools needed
     "aluminum_cast": 650,
     "non_ferrous": 550,
-    "steel_free": 425,              # A36/low-carbon structural (was 375)
+    "steel_mild": 400,              # Plain low-carbon / structural (A36, 1018, 1020, 10xx series)
+    "steel_free": 425,              # True free-machining (12L14, 1215, 1117 — sulfur-additive grades)
     "steel_alloy": 350,             # 4140: 350 SFM confirmed at full-slot (worst case)
     "steel_tool": 150,
     "stainless_fm":          290,   # 303/416 free-machining — midpoint 240–340 SFM
@@ -179,6 +180,7 @@ HP_PER_CUIN = {
     "plastic_filled":    0.10,  # Fibers add abrasion; force higher than unfilled
     "composite_tpc":     0.14,  # Continuous fibers — highest force in this family
     "non_ferrous":      0.35,
+    "steel_mild":       0.82,   # Plain low-carbon — softer than alloy, harder than free-machining
     "steel_free":       0.75,
     "steel_alloy":      1.00,  # 4140, 4340 — Machinery's Handbook C=1.0 for alloy steel
     "steel_tool":       1.10,
@@ -313,6 +315,7 @@ BASE_LIFE_MIN = {
     "plastic_filled":     80.0, # Glass fiber abrasion dramatically shortens tool life
     "composite_tpc":      70.0, # Continuous fibers — aggressive on edges, especially GF laminates
     "non_ferrous":      110.0,
+    "steel_mild":       100.0,   # Plain mild steel — good tool life, predictable wear
     "steel_free":        90.0,
     "steel_alloy":       75.0,
     "steel_tool":        55.0,
@@ -515,7 +518,8 @@ IPT_FRAC = {
     "plastic_filled":    0.008,  # Fiber-filled: slightly lower than unfilled — abrasion limits aggressiveness
     "composite_tpc":     0.006,  # Continuous fiber laminates: lower chip load; delamination risk at high IPT
     "non_ferrous":      0.008,
-    "steel_free":       0.007,    # A36/low-carbon structural
+    "steel_mild":       0.0065,   # Plain low-carbon (1018, A36) — between free and alloy chip loads
+    "steel_free":       0.007,    # True free-machining (12L14, 1215) — sulfur breaks chips cleanly
     "steel_alloy":      0.0055,   # 4140 slotting: 0.55%×D confirmed
     "steel_tool":       0.005,    # A2 annealed estimated
     "stainless_fm":          0.0048,  # 303/416 — midpoint 0.0018–0.0030 on 0.5" = 0.48%×D
@@ -568,6 +572,7 @@ HEM_IPT_MULT = {
     "plastic_filled":    1.4,   # Conservative; abrasion limits HEM chip load upside
     "composite_tpc":     1.3,   # Very conservative; composite laminates rarely run HEM
     "Steel": 2.0,
+    "steel_mild": 2.0,
     "steel_alloy": 2.0,
     "steel_free": 2.0,
     "steel_tool": 2.0,
@@ -636,6 +641,7 @@ _ISO_KEY_TO_GROUP = {
     "plastic_filled":    "Plastics",
     "composite_tpc":     "Plastics",
     "non_ferrous": "Non-Ferrous",
+    "steel_mild": "Steel",
     "steel_free": "Steel",
     "steel_alloy": "Steel",
     "steel_tool": "Steel",
@@ -1307,7 +1313,7 @@ def hem_typical_woc_range_pct(material_group, flutes):
 DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
-    "steel_free": 150, "steel_alloy": 100, "steel_tool": 70,
+    "steel_mild": 140, "steel_free": 150, "steel_alloy": 100, "steel_tool": 70,
     # Base = flood external coolant, non-coolant-fed drill. coolant_fed × 1.15 bonus brings these up to through-coolant target.
     # stainless_304 validated: 60 SFM non-coolant-fed → 69 SFM coolant-fed ≈ 70 reference target.
     "stainless_304": 60, "stainless_316": 52,
@@ -1332,7 +1338,7 @@ DRILL_SFM = {
 DRILL_IPR_BASE = {
     "aluminum_wrought": 0.010, "aluminum_wrought_hs": 0.009, "aluminum_cast": 0.008, "non_ferrous": 0.007,
     "plastic_unfilled": 0.006, "plastic_filled": 0.005, "composite_tpc": 0.002,
-    "steel_free": 0.006, "steel_alloy": 0.004, "steel_tool": 0.003,
+    "steel_mild": 0.0055, "steel_free": 0.006, "steel_alloy": 0.004, "steel_tool": 0.003,
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
     "stainless_304": 0.0055, "stainless_316": 0.0050,
@@ -2347,6 +2353,7 @@ KEYSEAT_SFM = {
     "composite_tpc":     250,   # Continuous-fiber laminates: conservative; delamination risk
     # Steel
     "Steel":             220,
+    "steel_mild":        250,   # Plain low-carbon full-slot — between free and alloy
     "steel_free":        280,
     "steel_alloy":       200,
     "steel_tool":        120,

@@ -5,7 +5,8 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "aluminum_cast":       "Silicon particles are the enemy — more Si means more abrasion and shorter tool life. A356/A357 (7% Si) are more forgiving; A380 (8.5% Si) and especially A390 (17% Si high-silicon) eat edges fast. Reduce SFM and chip load vs. wrought, monitor edge condition closely, and shorten change intervals in high-Si grades. PCD tooling cost-justified in high-volume production.",
   "non_ferrous":         "Copper and brass are soft but gummy — copper especially smears and welds to the edge at low chip load. High feed, sharp polished flutes, no dwells. Leaded brass (C360) is much friendlier than copper; bronze varies widely by alloy and lead content.",
   // P — Steel
-  "steel_free":          "Easiest steel to machine. Sulfur additives break chips cleanly at high SFM — run it fast, push the feed, and tool wear is minimal.",
+  "steel_mild":          "Plain low-carbon and structural steels (A36, 1018, 1020, 10xx series). Very consistent — predictable chip load, good tool life. Flood or mist coolant; standard TiAlN coated carbide. A36 hot-rolled can vary heat to heat — check hardness on critical jobs.",
+  "steel_free":          "Sulfur-additive free-machining grades (12L14, 1215, 1117). Easiest steel to machine — sulfur breaks chips cleanly at high SFM. Run fast, push the feed, expect excellent tool life. Note: 12L14 is not weldable.",
   "steel_alloy":         "Tough alloy steel (4140, 4340) that responds well to high chip loads. Variable-pitch geometry and TiAlN coating control chatter and heat.",
   "tool_steel_p20":      "Prehardened mold steel (~30 HRC) — cuts like firm alloy steel. Well-suited to long roughing passes with standard TiAlN solid carbide endmills.",
   "tool_steel_a2":       "Air-hardening tool steel — tougher than D2 and more forgiving on cutting edges. Machines consistently at working hardness; AlTiN coating preferred.",
@@ -69,7 +70,8 @@ export const ISO_SUBCATEGORIES = [
   { iso: "N" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A356, A380, A390, high-Si)", hardness: { value: 0,  scale: "hrb" as const } },
   { iso: "N" as IsoCategory, key: "non_ferrous",           label: "Copper / Brass / Bronze",                  hardness: { value: 0,  scale: "hrb" as const } },
   // P — Steel
-  { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (1018, 1215, 12L14)", hardness: { value: 80, scale: "hrb" as const } },
+  { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
+  { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (12L14, 1215, 1117)",  hardness: { value: 80, scale: "hrb" as const } },
   { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130, 4140, 4340, 8620)",     hardness: { value: 32, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_p20",        label: "P20 Tool Steel (prehardened ~30 HRC)",      hardness: { value: 30, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_a2",         label: "A2 Tool Steel",                             hardness: { value: 36, scale: "hrc" as const } },
@@ -123,7 +125,8 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   min: number; max: number; scale: "hrb" | "hrc"; note: string;
 }> = {
   // P — Steel
-  "steel_free":      { min: 55, max: 95,  scale: "hrb", note: "Free-machining steels (1018, 1215) range 55–95 HRB — they cannot be significantly hardened." },
+  "steel_mild":      { min: 50, max: 90,  scale: "hrb", note: "Mild and structural steels (A36, 1018, 1020) range 50–90 HRB depending on condition. Cold-rolled is harder than hot-rolled of the same grade." },
+  "steel_free":      { min: 55, max: 95,  scale: "hrb", note: "Free-machining grades (12L14, 1215, 1117) range 55–95 HRB — sulfur additives improve chip breaking, not hardenability." },
   "steel_alloy":     { min: 18, max: 52,  scale: "hrc", note: "Alloy steels (4140, 4340) range 18–52 HRC depending on temper condition." },
   "tool_steel_p20":  { min: 28, max: 36,  scale: "hrc", note: "P20 is supplied prehardened 28–36 HRC — outside this range it's likely a different condition." },
   "tool_steel_a2":   { min: 54, max: 62,  scale: "hrc", note: "A2 in working condition is hardened 54–62 HRC. Annealed (~92 HRB) is pre-heat treat stock." },
@@ -210,10 +213,27 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "copper": "non_ferrous", "brass": "non_ferrous", "bronze": "non_ferrous",
   "c360": "non_ferrous", "c260": "non_ferrous", "c932": "non_ferrous",
   "naval brass": "non_ferrous", "red brass": "non_ferrous",
-  // ── Free Machining Steel ──────────────────────────────────────────────────
-  "1018": "steel_free", "1020": "steel_free", "1045": "steel_free",
+  // ── Mild / Low-Carbon Steel ───────────────────────────────────────────────
+  "1005": "steel_mild", "1006": "steel_mild", "1008": "steel_mild",
+  "1010": "steel_mild", "1012": "steel_mild", "1015": "steel_mild",
+  "1018": "steel_mild", "1020": "steel_mild", "1022": "steel_mild", "1025": "steel_mild",
+  "a36": "steel_mild",  "a-36": "steel_mild",
+  "a283": "steel_mild", "a285": "steel_mild",
+  "a572": "steel_mild", "a588": "steel_mild",
+  "a1008": "steel_mild", "a1011": "steel_mild",
+  "s235": "steel_mild", "s275": "steel_mild", "s355": "steel_mild",
+  "ss400": "steel_mild",
+  "s10c": "steel_mild", "s15c": "steel_mild", "s20c": "steel_mild",
+  "c10": "steel_mild", "c15": "steel_mild", "c20": "steel_mild",
+  "mild steel": "steel_mild", "low carbon": "steel_mild", "low carbon steel": "steel_mild",
+  "structural steel": "steel_mild", "hot rolled": "steel_mild", "cold rolled": "steel_mild",
+  // ── True Free Machining Steel (sulfur-additive) ───────────────────────────
   "1215": "steel_free", "12l14": "steel_free", "1144": "steel_free",
-  "1117": "steel_free", "b1112": "steel_free", "free machining": "steel_free",
+  "1117": "steel_free", "1118": "steel_free", "b1112": "steel_free",
+  "1213": "steel_free",
+  "free machining": "steel_free", "free machining steel": "steel_free",
+  // ── Alloy / Medium Carbon (moved from steel_free) ─────────────────────────
+  "1045": "steel_alloy",
   // ── Alloy Steel ───────────────────────────────────────────────────────────
   "4140": "steel_alloy", "4130": "steel_alloy", "4340": "steel_alloy",
   "8620": "steel_alloy", "4142": "steel_alloy", "4150": "steel_alloy",
