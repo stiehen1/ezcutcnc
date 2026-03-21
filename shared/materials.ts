@@ -61,7 +61,7 @@ export const ISO_CATEGORIES = [
   { iso: "M", label: "Stainless",      color: "#FDD835" },
   { iso: "K", label: "Cast Iron",      color: "#EF5350" },
   { iso: "S", label: "Superalloys",    color: "#FFA726" },
-  { iso: "H", label: "Hardened Steel", color: "#BDBDBD" },
+  { iso: "H", label: "Hardened Steel / Armor Plate", color: "#BDBDBD" },
   { iso: "O", label: "Plastics & Composites", color: "#26C6DA" },
 ] as const;
 
