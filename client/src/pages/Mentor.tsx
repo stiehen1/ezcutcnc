@@ -3772,11 +3772,16 @@ ${stabSection}
                       </div>
                     </div>
                     {/* Teeth in Cut */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Teeth in Cut</div>
-                      <div className="text-sm font-bold leading-tight" style={{ color: "#e2e8f0" }}>{teethInCut.toFixed(2)}</div>
-                      <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
-                    </div>
+                    {(() => {
+                      const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
+                      return (
+                        <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                          <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Teeth in Cut</div>
+                          <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
+                          <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
