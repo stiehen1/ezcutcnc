@@ -867,8 +867,10 @@ export async function registerRoutes(
       // Scoring helpers
       const isRoughing  = ["hem", "roughing"].includes(mode);
       const isFinishing = ["finishing", "face"].includes(mode);
-      const cbOk  = wocPct >= 8  && docXd >= 1.0;
-      const vrxOk = wocPct >= 10 && docXd >= 1.0;
+      // HEM uses intentionally low WOC — CB is beneficial regardless of WOC%.
+      // For conventional roughing, still require ≥8% WOC before recommending CB.
+      const cbOk  = docXd >= 1.0 && (mode === "hem" || wocPct >= 8);
+      const vrxOk = docXd >= 1.0 && wocPct >= 10;
 
       function scoreGeometry(g: string | null): number {
         const geom = (g ?? "standard").toLowerCase();
@@ -935,7 +937,8 @@ export async function registerRoutes(
         corner_radius:   (!isNaN(crNum) && crNum > 0) ? crNum : 0,
       };
 
-      const recRaw = await runMentorBridge(modPayload) as any;
+      let recRaw: any = null;
+      try { recRaw = await runMentorBridge(modPayload); } catch { /* delta unavailable — still surface card */ }
 
       // ── Results-based safety filter ───────────────────────────────────────
       // Score is the positive gate (encodes engineering judgment — CB for HEM,
