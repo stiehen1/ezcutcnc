@@ -112,6 +112,8 @@ type SkuRecord = {
   edp?: string;
   series?: string;
   description?: string;
+  description1?: string;
+  description2?: string;
   // Geometry
   tool_type?: string;
   cutting_diameter_in: number;
@@ -964,6 +966,7 @@ export default function Mentor() {
   const [skuResults, setSkuResults] = React.useState<SkuRecord[]>([]);
   const [skuDropdownOpen, setSkuDropdownOpen] = React.useState(false);
   const [skuLocked, setSkuLocked] = React.useState(false);
+  const [skuDescription, setSkuDescription] = React.useState<string>("");
   const [skuChamferEdgeLength, setSkuChamferEdgeLength] = React.useState<number | null>(null);
 
   // Quote modals — shared customer form, separate open/status per product
@@ -1052,6 +1055,7 @@ export default function Mentor() {
     const defaultStickout = Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
 
     setEdpText(sku.EDP ?? (sku as any).edp ?? "");
+    setSkuDescription([sku.description1, sku.description2].filter(Boolean).join(" — ") || sku.description || "");
     setSkuDropdownOpen(false);
     setSkuResults([]);
     setSkuLocked(true);
@@ -1097,6 +1101,7 @@ export default function Mentor() {
 
   function clearSku() {
     setSkuLocked(false);
+    setSkuDescription("");
     setEdpText("");
     setSkuResults([]);
     setSkuDropdownOpen(false);
@@ -2710,6 +2715,11 @@ ${stabSection}
                 onFocus={() => { if (skuResults.length > 0 && !skuLocked) setSkuDropdownOpen(true); }}
                 onBlur={() => setTimeout(() => setSkuDropdownOpen(false), 150)}
               />
+              {skuLocked && skuDescription && (
+                <span className="pointer-events-none absolute inset-y-0 left-[5rem] right-8 flex items-center overflow-hidden">
+                  <span className="text-[11px] text-muted-foreground truncate">— {skuDescription}</span>
+                </span>
+              )}
               {skuLocked && (
                 <button
                   type="button"
