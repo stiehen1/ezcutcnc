@@ -804,14 +804,16 @@ export default function Mentor() {
     const f = flutes <= 5 ? 5 : flutes <= 6 ? 6 : flutes <= 7 ? 7 : flutes <= 9 ? 9 : 11;
     // WOC med % by ISO × flute bucket
     const wocTable: Record<string, Record<number, number>> = {
-      P: { 5: 12, 6: 10, 7: 9, 9: 7, 11: 5 },
-      M: { 5: 10, 6:  8, 7: 7, 9: 6, 11: 4 },
-      K: { 5:  8, 6:  7, 7: 6, 9: 5, 11: 4 },
-      S: { 5:  7, 6:  6, 7: 5, 9: 4, 11: 3 },
-      H: { 5:  5, 6:  4, 7: 4, 9: 3, 11: 3 },
+      N: { 5: 30, 6: 25, 7: 20, 9: 18, 11: 15 },  // aluminum — high WOC in HEM
+      P: { 5: 12, 6: 10, 7:  9, 9:  7, 11:  5 },
+      M: { 5: 10, 6:  8, 7:  7, 9:  6, 11:  4 },
+      K: { 5:  8, 6:  7, 7:  6, 9:  5, 11:  4 },
+      S: { 5:  7, 6:  6, 7:  5, 9:  4, 11:  3 },
+      H: { 5:  5, 6:  4, 7:  4, 9:  3, 11:  3 },
     };
     // DOC med xD by ISO × flute bucket
     const docTable: Record<string, Record<number, number>> = {
+      N: { 5: 2.5, 6: 3.0, 7: 3.0, 9: 3.5, 11: 4.0 },  // aluminum — deep DOC in HEM
       P: { 5: 2.0, 6: 2.5, 7: 2.5, 9: 3.0, 11: 3.0 },
       M: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
       K: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
@@ -855,8 +857,10 @@ export default function Mentor() {
   } {
     if (mode === "hem" || mode === "trochoidal") {
       const { wocMed, docMed } = getHemMed(iso, flutes);
-      const wocLow  = Math.max(2,  Math.round(wocMed * 0.55));
-      const wocHigh = Math.min(15, Math.round(wocMed * 1.50));
+      const wocLow  = Math.max(iso === "S" ? 2 : 2, Math.round(wocMed * 0.40));
+      const wocHigh = iso === "N"
+        ? Math.round(wocMed * 1.50)           // aluminum: no 15% cap
+        : Math.min(15, Math.round(wocMed * 1.50)); // others: cap at 15%
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       // HEM high = full LOC (not capped at 1.5×med) — using full flute length is normal in HEM
       const docHigh = loc > 0 && dia > 0 ? loc / dia : docMed * 2.0;
