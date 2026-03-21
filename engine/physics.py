@@ -733,6 +733,7 @@ REAM_SFM = {
     "aluminum_wrought": 700, "aluminum_wrought_hs": 560, "aluminum_cast": 550, "non_ferrous": 300,
     "plastic_unfilled": 300, "plastic_filled": 220, "composite_tpc": 200,
     "steel_mild": 250, "steel_free": 275, "steel_alloy": 175, "steel_tool": 75,
+    "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
     "stainless_martensitic": 85, "stainless_fm": 90,
     "stainless_austenitic": 185, "stainless_ph": 75,
     "cast_iron_gray": 160, "cast_iron_ductile": 135, "cast_iron_malleable": 150,

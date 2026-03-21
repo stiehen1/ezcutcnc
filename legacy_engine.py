@@ -157,6 +157,11 @@ BASE_SFM = {
     "cpm_10v":        85,   # CPM 10V / A11: PM high-vanadium wear steel. Vanadium carbides (~80 HRC) harder than carbide binder — treat as abrasion problem. Assumes premium TiAlSiN HiPIMS coating (e.g. Cemecon Inoxicon); standard AlTiN ~70 SFM. HEM = 2× = 170 SFM.
     "hardened_lt55": 240,   # Carbide endmill in hardened tool steel 35–54 HRC (e.g. H13 45 HRC → 240 SFM confirmed)
     "hardened_gt55": 100,  # Carbide in very hard steel ≥55 HRC (CBN territory starts ~60 HRC)
+    # ── Armor plate steels (HEM preferred; abrasion-dominated wear mechanism) ─
+    "armor_milspec": 240,   # MIL-A-12560 / MIL-A-46100 structural armor — 260–300 HB (~27–32 HRC); most machinable armor grade
+    "armor_ar400":   175,   # AR400 / AR450 abrasion-resistant plate — 360–480 HB (~38–47 HRC)
+    "armor_ar500":   130,   # AR500 / Armox 500T — 470–540 HB (~50–56 HRC); most common range for ballistic targets
+    "armor_ar600":    75,   # AR550 / AR600 / Armox 600T — 570–640 HB (~58–63 HRC); extreme hardness, treat as grinding
 }
 
 # Unit power (HP·min/in³) at nominal chip thickness, TiAlN carbide tooling.
@@ -221,6 +226,10 @@ HP_PER_CUIN = {
     "cpm_10v":        1.30,  # CPM 10V: vanadium carbides harder than tool binder phases = higher cutting force
     "hardened_lt55": 1.35,
     "hardened_gt55": 1.50,
+    "armor_milspec": 1.25,  # MIL-A-12560 — tough but lower hardness
+    "armor_ar400":   1.38,  # AR400 — high toughness + hardness combined
+    "armor_ar500":   1.50,  # AR500 — extreme toughness resists shearing
+    "armor_ar600":   1.60,  # AR600 — maximum combined resistance
 }
 
 COOLANT_LIFE = {
@@ -336,6 +345,10 @@ BASE_LIFE_MIN = {
     "inconel":               18.0,
     "hardened_lt55":         38.0,
     "hardened_gt55":         20.0,
+    "armor_milspec":         55.0,  # Most machinable armor grade — reasonable tool life with correct approach
+    "armor_ar400":           30.0,  # AR400 — first pass (scale/decarb) is the killer
+    "armor_ar500":           18.0,  # AR500 — brutal; expect 50–70% shorter tool life than alloy steel
+    "armor_ar600":           10.0,  # AR600 — extreme; treat it like grinding, plan for frequent changes
     "cpm_10v":               30.0,  # CPM 10V: abrasive wear shortens tool life significantly vs D2
     "steel":      75.0,
     "stainless":  50.0,
@@ -559,6 +572,10 @@ IPT_FRAC = {
     "cpm_10v":        0.0030,  # CPM 10V: 0.30%×D — slightly below D2; can't go too light (rubbing on vanadium carbides accelerates wear)
     "hardened_lt55": 0.0045,  # H13/D2/A2 hardened 35–54 HRC: 0.0036/0.750" = 0.0048×D; conservative 0.0045 confirmed
     "hardened_gt55": 0.0012,  # ≥55 HRC — light chip load, avoid rubbing
+    "armor_milspec": 0.0042,  # MIL-A-12560 structural armor — maintain chip load, never rub
+    "armor_ar400":   0.0038,  # AR400 — chip load critical; underfeed = immediate edge failure
+    "armor_ar500":   0.0030,  # AR500 — 0.002–0.004 IPT confirmed on 0.5" endmill (0.004–0.008×D)
+    "armor_ar600":   0.0022,  # AR600 — minimum viable chip load; going lighter grinds the edge off
 }
 
 # HEM/trochoidal IPT boost per material group (applied on top of chip thinning).
@@ -615,6 +632,12 @@ HEM_IPT_MULT = {
     "inconel":     2.2,   # legacy fallback
     "hiTemp_fe":   2.0,
     "hiTemp_co":   2.0,
+    "hardened_lt55": 1.4,
+    "hardened_gt55": 1.3,
+    "armor_milspec": 2.0,  # HEM is the preferred strategy — constant engagement reduces shock and heat
+    "armor_ar400":   2.0,  # HEM strongly recommended for all armor grades
+    "armor_ar500":   2.0,
+    "armor_ar600":   1.8,  # AR600 — slightly conservative HEM boost; tool life is already very short
 }
 
 # Edge radius proxy (inches) → for minimum chip thickness model
@@ -682,6 +705,10 @@ _ISO_KEY_TO_GROUP = {
     "cpm_10v":        "Steel",
     "hardened_lt55": "Steel",
     "hardened_gt55": "Steel",
+    "armor_milspec": "Steel",
+    "armor_ar400":   "Steel",
+    "armor_ar500":   "Steel",
+    "armor_ar600":   "Steel",
 }
 
 def get_material_group(mat):
@@ -1314,6 +1341,7 @@ DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
     "steel_mild": 140, "steel_free": 150, "steel_alloy": 100, "steel_tool": 70,
+    "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
     # Base = flood external coolant, non-coolant-fed drill. coolant_fed × 1.15 bonus brings these up to through-coolant target.
     # stainless_304 validated: 60 SFM non-coolant-fed → 69 SFM coolant-fed ≈ 70 reference target.
     "stainless_304": 60, "stainless_316": 52,
@@ -1339,6 +1367,7 @@ DRILL_IPR_BASE = {
     "aluminum_wrought": 0.010, "aluminum_wrought_hs": 0.009, "aluminum_cast": 0.008, "non_ferrous": 0.007,
     "plastic_unfilled": 0.006, "plastic_filled": 0.005, "composite_tpc": 0.002,
     "steel_mild": 0.0055, "steel_free": 0.006, "steel_alloy": 0.004, "steel_tool": 0.003,
+    "armor_milspec": 0.003, "armor_ar400": 0.002, "armor_ar500": 0.0015, "armor_ar600": 0.001,
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
     "stainless_304": 0.0055, "stainless_316": 0.0050,
@@ -1352,6 +1381,7 @@ DRILL_IPR_BASE = {
     "inconel_625": 0.002, "inconel_718": 0.0015,
     "monel_k500": 0.0025, "hastelloy_x": 0.0018, "inconel_617": 0.0016, "waspaloy": 0.0015, "mp35n": 0.0013,
     "hardened_lt55": 0.002, "hardened_gt55": 0.001,
+    "armor_milspec": 0.0018, "armor_ar400": 0.0015, "armor_ar500": 0.0012, "armor_ar600": 0.0008,
     "tool_steel_p20": 0.0035, "tool_steel_a2": 0.0028, "tool_steel_h13": 0.0025,
     "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022, "cpm_10v": 0.0018,
     # Legacy group fallbacks
@@ -2365,6 +2395,10 @@ KEYSEAT_SFM = {
     "cpm_10v":            60,  # CPM 10V keyseat: full-slot = high abrasive exposure; very conservative
     "hardened_lt55":     160,
     "hardened_gt55":      70,
+    "armor_milspec":     160,  # MIL-A-12560 keyseat — full-slot is harsh, reduce vs endmill
+    "armor_ar400":       115,  # AR400 keyseat — full-slot engagement is a tool killer
+    "armor_ar500":        85,  # AR500 keyseat — borderline viable; use largest tool possible
+    "armor_ar600":        50,  # AR600 keyseat — extremely conservative; consider EDM alternative
     # Stainless
     "Stainless":         120,
     "stainless_fm":      200,
@@ -3038,7 +3072,7 @@ def run(payload=None):
     _hrc = float(data.get("hardness_hrc", 0) or 0)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                         "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                        "cpm_10v")
+                        "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600")
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)

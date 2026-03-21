@@ -42,9 +42,13 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "inconel_617":         "Power-generation Ni superalloy (Inconel 617, Haynes 230, Alloy 617) — solid-solution Ni-Cr-Co-Mo designed for oxidation resistance in gas turbine combustors up to 1000°C. No gamma-prime, so less work-hardening than 718 — but still heat-trapping and abrasive. Similar strategy to Hastelloy X: consistent chip load, sharp coated carbide, high-pressure coolant.",
   "waspaloy":            "Hot-section gamma-prime Ni superalloys (Waspaloy, HAYNES 282, René 41/77/80, Nimonic 80A/90/105, Udimet 500/600/700, Inconel 738/939) — among the most demanding Ni alloys to machine. Very high gamma-prime fraction impedes dislocation motion and resists cutting at temperature. Work-hardens rapidly, notches tools aggressively; conservative SFM and consistent engagement are non-negotiable. TSC mandatory.",
   "mp35n":               "Ultra-high-strength Ni-Co-Cr-Mo alloys (MP35N, Udimet 720, René 95) — used in medical implants, sour-service hardware, and turbine disks. Highest unit cutting force in the superalloy family. Extremely work-hardening; even small rubbing or dwell causes immediate edge breakdown. Treat every parameter at the conservative end; TSC and premium PVD coating required.",
-  // H — Hardened Steel
+  // H — Hardened Steel & Armor
   "hardened_lt55":       "Hard enough to challenge solid carbide — TiAlN/AlCrN coating and conservative chip loads are required. Light WOC with higher DOC is more efficient than full-width cuts.",
   "hardened_gt55":       "At the upper limit for solid carbide — CBN tooling is preferred above 60 HRC. Extremely light chip loads; any tool flex causes immediate chipping.",
+  "armor_milspec":       "MIL-A-12560 / MIL-A-46100 structural armor — most machinable mil-spec grade (~260–300 HB). Still punishing vs alloy steel; remove mill scale/decarb layer first, maintain chip load at all times, and expect the first pass to be the worst on tool life.",
+  "armor_ar400":         "AR400 / AR450 abrasion-resistant plate (~360–480 HB, ~38–47 HRC). Hard and tough simultaneously — you're fighting both abrasion and deformation resistance. HEM / dynamic milling strongly preferred; slotting is a tool killer. AlCrN or AlTiN coating required; strong edge prep (T-land or hone), lower rake angle. Maintain chip load — underfeed causes immediate edge breakdown.",
+  "armor_ar500":         "AR500 / Armox 500T (~470–540 HB, ~50–56 HRC) — the most common ballistic target and light vehicle armor grade. Extremely abrasive martensitic microstructure; heat stays at the edge even with coolant. HEM at 5–15% WOC is the only practical solid carbide strategy. First pass (skin/scale) is the worst — expect 40–60% shorter tool life on the entry cut. Never slot, never dwell, never rub. Use larger tools when possible; 5/8\" outperforms 1/2\" in tool life and stability.",
+  "armor_ar600":         "AR600 / AR550 / Armox 600T (~570–640 HB, ~58–63 HRC) — extreme hardness, more like grinding than cutting. Very conservative SFM; maintain minimum chip load or the tool wears before it can cut. Plan for frequent insert/tool changes. Pre-drill holes; helical ramp entry only. At these hardness levels, EDM is often a more practical alternative to milling large features.",
   // O — Plastics & Composites
   "plastic_unfilled":    "Heat is the enemy, not cutting force. PEEK, POM/Delrin, PA/Nylon, PC, PPS — all cut easily but melt, smear, or weld to the edge if chip load drops too low or chips aren't cleared. Polished uncoated carbide or DLC preferred — TiAlN coatings can stick to thermoplastic matrices. 2–3 flutes, high-positive rake, flood or strong air blast. Never dwell; never let the tool rub.",
   "plastic_filled":      "Short/long glass or carbon fibers (GF-PA, CF-PA, filled PEEK) raise stiffness and abrasion significantly. Still 'plastic' cutting behavior but tool wear is 3–5× faster than unfilled grades. Fine-grain or DLC-coated carbide preferred. Chip load still matters — rubbing generates heat that melts the matrix around the fibers, creating a fuzzy, smeared surface. Dry with air blast or light mist.",
@@ -107,9 +111,13 @@ export const ISO_SUBCATEGORIES = [
   { iso: "S" as IsoCategory, key: "inconel_617",           label: "Inconel 617 / Haynes 230 (power-gen Ni)",     hardness: { value: 85, scale: "hrb" as const } },
   { iso: "S" as IsoCategory, key: "waspaloy",              label: "Waspaloy / René 41/77/80 / Nimonic 80A/90",   hardness: { value: 40, scale: "hrc" as const } },
   { iso: "S" as IsoCategory, key: "mp35n",                 label: "MP35N / Udimet 720 / René 95 (ultra-high-str)", hardness: { value: 40, scale: "hrc" as const } },
-  // H — Hardened Steel
-  { iso: "H" as IsoCategory, key: "hardened_lt55",         label: "Hardened Steel < 55 HRC",  hardness: { value: 48, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "hardened_gt55",         label: "Hardened Steel > 55 HRC",  hardness: { value: 60, scale: "hrc" as const } },
+  // H — Hardened Steel & Armor
+  { iso: "H" as IsoCategory, key: "hardened_lt55",         label: "Hardened Steel < 55 HRC",                              hardness: { value: 48, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "hardened_gt55",         label: "Hardened Steel > 55 HRC",                              hardness: { value: 60, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_milspec",         label: "Mil-Spec Armor (MIL-A-12560 / 46100, ~260–300 HB)",    hardness: { value: 29, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar400",           label: "AR400 / AR450 Armor Plate (~360–480 HB)",              hardness: { value: 43, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar500",           label: "AR500 / Armox 500T Armor Plate (~470–540 HB)",         hardness: { value: 53, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar600",           label: "AR550 / AR600 / Armox 600T (~570–640 HB)",             hardness: { value: 60, scale: "hrc" as const } },
   // O — Plastics & Composites
   { iso: "O" as IsoCategory, key: "plastic_unfilled",      label: "Unfilled Engineering Thermoplastics (PEEK, POM, PA, PC)", hardness: { value: 0, scale: "hrb" as const } },
   { iso: "O" as IsoCategory, key: "plastic_filled",        label: "Fiber-Reinforced Thermoplastics (GF/CF-PA, PEEK-GF)",     hardness: { value: 0, scale: "hrb" as const } },
@@ -162,9 +170,13 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "inconel_617":    { min: 75, max: 100, scale: "hrb", note: "Inconel 617 / Haynes 230 are solid-solution alloys, typically solution annealed — HRB scale only, not age-hardenable." },
   "waspaloy":       { min: 35, max: 44,  scale: "hrc", note: "Waspaloy / René 41/77/80 / Nimonic 80A/90 age-hardened ranges 35–44 HRC. Udimet 700 can reach 48 HRC." },
   "mp35n":          { min: 38, max: 62,  scale: "hrc", note: "MP35N ranges 38–62 HRC; cold-worked + aged can reach 62 HRC. Udimet 720 turbine disk: 40–48 HRC typical." },
-  // H — Hardened Steel
+  // H — Hardened Steel & Armor
   "hardened_lt55":  { min: 40, max: 54,  scale: "hrc", note: "Use this category for hardened steels 40–54 HRC. Below 40 HRC, standard alloy steel parameters apply." },
   "hardened_gt55":  { min: 55, max: 68,  scale: "hrc", note: "Use this category for hardened steels 55–68 HRC. CBN tooling is preferred above 60 HRC." },
+  "armor_milspec":  { min: 26, max: 33,  scale: "hrc", note: "MIL-A-12560 / MIL-A-46100 structural armor is specified at 260–300 HB (~26–33 HRC). Values outside this range may indicate a different armor class." },
+  "armor_ar400":    { min: 38, max: 47,  scale: "hrc", note: "AR400 / AR450 plate is 360–480 HB (~38–47 HRC). Below this range, use steel_alloy parameters; above 47 HRC, step up to AR500." },
+  "armor_ar500":    { min: 50, max: 57,  scale: "hrc", note: "AR500 / Armox 500T is 470–540 HB (~50–57 HRC). The most common grade for ballistic targets and light vehicle armor." },
+  "armor_ar600":    { min: 57, max: 64,  scale: "hrc", note: "AR550 / AR600 / Armox 600T is 570–640 HB (~57–64 HRC). At the practical limit for solid carbide — consider EDM for complex features." },
   // O — Plastics & Composites (hardness not used in calculations)
   "plastic_unfilled": { min: 0, max: 0, scale: "hrb", note: "Hardness not applicable for thermoplastics — leave at 0. Parameters are not affected by hardness input for this category." },
   "plastic_filled":   { min: 0, max: 0, scale: "hrb", note: "Hardness not applicable for fiber-reinforced thermoplastics — leave at 0." },
@@ -262,6 +274,32 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   // ── CPM 10V ───────────────────────────────────────────────────────────────
   "cpm10v": "cpm_10v", "cpm-10v": "cpm_10v", "a11": "cpm_10v",
   "10v": "cpm_10v", "cpm 10v": "cpm_10v",
+  // ── Mil-Spec Armor ────────────────────────────────────────────────────────
+  "mil-a-12560": "armor_milspec", "mila12560": "armor_milspec", "12560": "armor_milspec",
+  "mil-a-46100": "armor_milspec", "mila46100": "armor_milspec", "46100": "armor_milspec",
+  "mil-dtl-32332": "armor_milspec", "32332": "armor_milspec",
+  "milspec armor": "armor_milspec", "mil spec armor": "armor_milspec",
+  "military armor": "armor_milspec", "structural armor": "armor_milspec",
+  // ── AR400 / AR450 ─────────────────────────────────────────────────────────
+  "ar400": "armor_ar400", "ar-400": "armor_ar400", "ar 400": "armor_ar400",
+  "ar450": "armor_ar400", "ar-450": "armor_ar400", "ar 450": "armor_ar400",
+  "abrasion resistant 400": "armor_ar400", "wear plate 400": "armor_ar400",
+  "hardox 400": "armor_ar400", "hardox400": "armor_ar400",
+  // ── AR500 / Armox 500T ────────────────────────────────────────────────────
+  "ar500": "armor_ar500", "ar-500": "armor_ar500", "ar 500": "armor_ar500",
+  "armox 500t": "armor_ar500", "armox500t": "armor_ar500", "armox 500": "armor_ar500",
+  "ramor 500": "armor_ar500", "mars 500": "armor_ar500",
+  "abrasion resistant 500": "armor_ar500", "ballistic steel": "armor_ar500",
+  "hardox 500": "armor_ar500", "hardox500": "armor_ar500",
+  // ── AR550 / AR600 / Armox 600T ────────────────────────────────────────────
+  "ar600": "armor_ar600", "ar-600": "armor_ar600", "ar 600": "armor_ar600",
+  "ar550": "armor_ar600", "ar-550": "armor_ar600", "ar 550": "armor_ar600",
+  "armox 600t": "armor_ar600", "armox600t": "armor_ar600", "armox 600": "armor_ar600",
+  "ramor 600": "armor_ar600", "mars 600": "armor_ar600",
+  "abrasion resistant 600": "armor_ar600",
+  "hardox 600": "armor_ar600", "hardox600": "armor_ar600",
+  "armor plate": "armor_ar500",  // generic fallback → most common grade
+  "armor steel": "armor_ar500",
   // ── 303 / 416 Free-Machining Stainless ───────────────────────────────────
   "303": "stainless_fm", "303se": "stainless_fm", "416": "stainless_fm",
   "1.4305": "stainless_fm", "free machining stainless": "stainless_fm",
