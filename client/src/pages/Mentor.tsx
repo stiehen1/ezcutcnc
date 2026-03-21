@@ -412,7 +412,8 @@ export default function Mentor() {
       machine_type: m.machine_type ?? p.machine_type,
     }));
     setActiveMachineId(m.id ?? null);
-    setActiveMachineName(`${m.brand} ${m.model}${m.nickname ? ` (${m.nickname})` : ""}`);
+    const _namePart = [m.brand, m.model].filter(Boolean).join(" ");
+    setActiveMachineName(_namePart ? `${_namePart}${m.nickname ? ` (${m.nickname})` : ""}` : (m.nickname ?? ""));
     setMachineQuery("");
     setMachineDropOpen(false);
     setMachineResults([]);
