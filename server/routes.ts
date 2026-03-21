@@ -834,6 +834,7 @@ export async function registerRoutes(
       const matKey  = String(payload.material ?? "");
 
       // Peers: same diameter, exclude chamfer mills, not current EDP, not blanks
+      const curLoc = Number(payload.loc ?? 0);
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -891,6 +892,8 @@ export async function registerRoutes(
         return 0;
       }
 
+      const curFlutes = Number(payload.flutes ?? 0);
+
       function scoreSku(row: any): number {
         let s = scoreGeometry(row.geometry) + scoreCoating(row.coating);
         if (row.variable_pitch) s += 1;
@@ -907,16 +910,40 @@ export async function registerRoutes(
       const curSku   = curResult.rows[0];
       const curScore = curSku ? scoreSku(curSku) : 0;
 
-      // Find best peer
+      // ── Priority 1: Same LOC + same flutes, better geometry/coating ──────────
+      // Prefer exact LOC match — avoids recommending a short-LOC CB for a long-reach job
+      const sameLocSameFlute = peers.rows.filter((r: any) =>
+        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes
+      );
       let bestSku: any = null;
       let bestScore = -1;
-      for (const row of peers.rows) {
+      for (const row of sameLocSameFlute) {
         const sc = scoreSku(row);
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
+      if (bestSku && bestScore > curScore) {
+        // Found a same-LOC same-flute geometry/coating upgrade — use it
+      } else {
+        // ── Priority 2: Same LOC, next flute count up ─────────────────────────
+        // Only step up by 1 flute (e.g. 5→6), same LOC
+        const nextFlutes = curFlutes + 1;
+        const sameLocNextFlute = peers.rows.filter((r: any) =>
+          Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes
+        );
+        bestSku = null; bestScore = -1;
+        for (const row of sameLocNextFlute) {
+          const sc = scoreSku(row);
+          if (sc > bestScore) { bestScore = sc; bestSku = row; }
+        }
+        // Flute count upgrade: only surface if score ≥ curScore (same or better geometry)
+        // to avoid recommending a 6-flute with inferior coating
+        if (!bestSku || bestScore < curScore) {
+          bestSku = null; bestScore = -1;
+        }
+      }
 
-      // Score pre-filter: must beat current tool (any positive gap) before spending engine time
-      if (!bestSku || bestScore <= curScore) return res.json({ found: false });
+      // No recommendation found
+      if (!bestSku) return res.json({ found: false });
 
       // Build modified payload with recommended SKU geometry
       const crNum  = Number(bestSku.corner_condition);
