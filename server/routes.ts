@@ -987,6 +987,7 @@ export async function registerRoutes(
         recommended_edp: bestSku.edp,
         recommended_sku: {
           edp:                bestSku.edp,
+          tool_type:          bestSku.tool_type,
           flutes:             bestSku.flutes,
           cutting_diameter_in: bestSku.cutting_diameter_in,
           loc_in:             bestSku.loc_in,

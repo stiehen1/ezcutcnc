@@ -1172,6 +1172,10 @@ export default function Mentor() {
     return { coatings: ["P-MAX"], note: "" };
   }
 
+  const runRef = React.useRef<() => Promise<void>>(async () => {});
+  // Keep ref in sync so deferred calls always use the latest form state
+  React.useEffect(() => { runRef.current = run; });
+
   const run = async () => {
     // Customer mode lock — must have an EDP or CC print PDF
     if (!engMode && !skuLocked && !pdfExtracted) {
@@ -6795,7 +6799,7 @@ ${stabSection}
                       onClick={() => {
                         applySkuToForm(recSku as any);
                         setOptimalRec(null);
-                        setTimeout(() => run(), 100);
+                        setTimeout(() => runRef.current(), 100);
                       }}
                     >
                       Run Optimal Tool Parameters
