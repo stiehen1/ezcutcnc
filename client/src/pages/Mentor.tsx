@@ -1164,7 +1164,11 @@ export default function Mentor() {
     if (!(form.machine_hp > 0)) missing.push("Machine HP");
     if (!(form.max_rpm > 0)) missing.push("Max RPM");
     if (!(form.tool_dia > 0)) missing.push("Tool Diameter");
-    if (operation === "milling" || operation === "feedmilling") {
+    if (form.tool_type === "chamfer_mill") {
+      if (!(form.flutes > 0)) missing.push("Flute Count");
+      if (!(form.chamfer_angle > 0)) missing.push("Chamfer Angle");
+      if (!(form.chamfer_depth > 0)) missing.push("Chamfer Depth");
+    } else if (operation === "milling" || operation === "feedmilling") {
       if (!form.mode) missing.push("Process (HEM / Conventional / Slot…)");
       if (!(form.flutes > 0)) missing.push("Flute Count");
       if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
