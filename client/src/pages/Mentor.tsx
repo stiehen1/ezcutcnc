@@ -4825,9 +4825,9 @@ ${stabSection}
               <Input
                 type="text"
                 placeholder="Search catalog — e.g. Haas VF-2, Mazak, DMG..."
-                value={machineQuery}
+                value={machineQuery || (!machineDropOpen ? activeMachineName : "")}
                 onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
-                onFocus={() => setMachineDropOpen(true)}
+                onFocus={() => { setMachineQuery(""); setMachineDropOpen(true); }}
                 onBlur={() => setTimeout(() => setMachineDropOpen(false), 150)}
                 className="text-sm"
               />
