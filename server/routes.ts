@@ -124,6 +124,32 @@ export async function registerRoutes(
     console.warn("[Leads migration]", err?.message ?? err);
   }
 
+  // ── Access control tables ──────────────────────────────────────────────────
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS allowed_emails (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        notes TEXT DEFAULT '',
+        added_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS blocked_domains (
+        id SERIAL PRIMARY KEY,
+        domain TEXT NOT NULL UNIQUE,
+        reason TEXT DEFAULT '',
+        added_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      ALTER TABLE toolbox_sessions ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT FALSE
+    `).catch(() => { /* column may already exist */ });
+  } catch (err: any) {
+    console.warn("[Access control migration]", err?.message ?? err);
+  }
+
   app.get(api.snippets.list.path, async (req, res) => {
     const snippets = await storage.getSnippets();
     res.json(snippets);
@@ -1575,11 +1601,12 @@ export async function registerRoutes(
         SELECT
           s.email,
           s.created_at as joined,
+          s.blocked,
           COUNT(i.id) as save_count,
           MAX(i.created_at) as last_active
         FROM toolbox_sessions s
         LEFT JOIN toolbox_items i ON i.email = s.email
-        GROUP BY s.email, s.created_at
+        GROUP BY s.email, s.created_at, s.blocked
         ORDER BY s.created_at DESC
       `),
       // Recent activity: last 50 saves
@@ -1610,6 +1637,94 @@ export async function registerRoutes(
         saves: activity.rows.length > 0 ? (await pool.query(`SELECT COUNT(*) FROM toolbox_items`)).rows[0].count : 0,
       },
     });
+  });
+
+  // ── Admin: access control ─────────────────────────────────────────────────
+  function requireAdmin(req: any, res: any): boolean {
+    const token = ((req.query.token || req.headers["x-admin-token"] || "") as string);
+    if (token !== process.env.ADMIN_PASSWORD) {
+      res.status(401).json({ error: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/admin/access", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    const [emails, domains, blockedUsers] = await Promise.all([
+      pool.query(`SELECT email, notes, added_at FROM allowed_emails ORDER BY added_at DESC`),
+      pool.query(`SELECT domain, reason, added_at FROM blocked_domains ORDER BY added_at DESC`),
+      pool.query(`SELECT email, created_at FROM toolbox_sessions WHERE blocked = TRUE ORDER BY email`),
+    ]);
+    res.json({
+      allowed_emails: emails.rows,
+      blocked_domains: domains.rows,
+      blocked_users: blockedUsers.rows,
+    });
+  });
+
+  app.post("/api/admin/allowed-emails", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { email, notes } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    const { pool } = await import("./db");
+    await pool.query(
+      `INSERT INTO allowed_emails (email, notes) VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET notes = $2`,
+      [email.toLowerCase().trim(), notes || ""]
+    );
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/admin/allowed-emails/:email", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [
+      decodeURIComponent(req.params.email).toLowerCase(),
+    ]);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/blocked-domains", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { domain, reason } = req.body;
+    if (!domain) return res.status(400).json({ error: "domain required" });
+    const { pool } = await import("./db");
+    const clean = domain.toLowerCase().trim().replace(/^@/, "");
+    await pool.query(
+      `INSERT INTO blocked_domains (domain, reason) VALUES ($1, $2)
+       ON CONFLICT (domain) DO UPDATE SET reason = $2`,
+      [clean, reason || ""]
+    );
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/admin/blocked-domains/:domain", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    await pool.query(`DELETE FROM blocked_domains WHERE domain = $1`, [
+      decodeURIComponent(req.params.domain).toLowerCase(),
+    ]);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/block-user", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    const { pool } = await import("./db");
+    await pool.query(`UPDATE toolbox_sessions SET blocked = TRUE WHERE email = $1`, [email.toLowerCase()]);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/unblock-user", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    const { pool } = await import("./db");
+    await pool.query(`UPDATE toolbox_sessions SET blocked = FALSE WHERE email = $1`, [email.toLowerCase()]);
+    res.json({ ok: true });
   });
 
   // ── PDF print geometry extraction ─────────────────────────────────────────
@@ -1759,6 +1874,33 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       return res.status(400).json({ error: "Valid email required" });
     }
     const { pool } = await import("./db");
+
+    // ── Access control checks ──────────────────────────────────────────────
+    const emailLower = email.toLowerCase().trim();
+    const domain = emailLower.split("@")[1];
+
+    // 1. Domain blocklist
+    const domainBlock = await pool.query(`SELECT 1 FROM blocked_domains WHERE domain = $1`, [domain]);
+    if (domainBlock.rows.length > 0) {
+      return res.status(403).json({ error: "This email domain is not authorized to access EZCutCNC." });
+    }
+
+    // 2. User-level block
+    const userRow = await pool.query(`SELECT blocked FROM toolbox_sessions WHERE email = $1`, [emailLower]);
+    if (userRow.rows.length > 0 && userRow.rows[0].blocked) {
+      return res.status(403).json({ error: "This account has been suspended. Contact sales@corecutterusa.com for assistance." });
+    }
+
+    // 3. Allowlist — only enforced when the list has at least one entry
+    const { rows: [{ count: allowCount }] } = await pool.query(`SELECT COUNT(*) FROM allowed_emails`);
+    if (Number(allowCount) > 0) {
+      const allowed = await pool.query(`SELECT 1 FROM allowed_emails WHERE email = $1`, [emailLower]);
+      if (allowed.rows.length === 0) {
+        return res.status(403).json({ error: "Access to EZCutCNC is by invitation only. Contact sales@corecutterusa.com to request access." });
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
     await pool.query(
