@@ -2972,7 +2972,13 @@ ${stabSection}
                     type="text"
                     inputMode="decimal"
                     className="no-spinners"
-                    placeholder="e.g. 0.050"
+                    placeholder={(() => {
+                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "e.g. 0.050";
+                      const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+                      const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+                      const maxD = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
+                      return maxD > 0 ? `max ${maxD.toFixed(4)}"` : "e.g. 0.050";
+                    })()}
                     value={chamferDepthText}
                     onChange={(e) => setChamferDepthText(e.target.value)}
                     onBlur={() => {
@@ -2986,15 +2992,15 @@ ${stabSection}
                     }}
                   />
                   {(() => {
-                    if (!skuChamferEdgeLength || !(form.chamfer_depth > 0) || !(form.tool_dia > 0)) return null;
+                    if (!(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
                     const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                     const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                     const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
                     const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
                     if (form.chamfer_depth <= maxDepth) return null;
                     return (
-                      <p className="mt-1 text-xs text-amber-400">
-                        ⚠ Depth exceeds this tool's cutting edge length ({edgeLength.toFixed(4)}"). Max achievable depth: {maxDepth.toFixed(4)}".
+                      <p className="mt-1 text-xs text-red-400">
+                        ⚠ Depth exceeds max ({maxDepth.toFixed(4)}") — tool cutting edge is only {edgeLength.toFixed(4)}" long. Reduce depth or use a larger tool.
                       </p>
                     );
                   })()}
