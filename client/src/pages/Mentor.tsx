@@ -3595,12 +3595,19 @@ ${stabSection}
                     style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
                     onClick={() => {
                       const wp = WOC_PRESETS[form.mode];
-                      const dp = DOC_PRESETS[form.mode];
-                      if (!wp || !dp) return;
+                      if (!wp) return;
                       const dia = form.tool_dia || 0.5;
-                      const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
-                      const floorWoc = Math.max(geoMinWoc, wp.low);
-                      const optPct = Math.min(100, Math.max(floorWoc, (wp.med * dp.med) / form.doc_xd));
+                      const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                      // Start from material+mode+flute-aware target (wp.med already encodes ISO category)
+                      let optPct = wp.med;
+                      // Chip-thinning floor: ensure sin(acos(1-2*woc/100)) >= 0.25 (no rubbing)
+                      const chipThinAtTarget = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * optPct / 100))));
+                      if (chipThinAtTarget < 0.25) {
+                        // Solve: sin(acos(1-2*woc/100)) = 0.25 → woc = (1-cos(asin(0.25)))*50
+                        optPct = Math.max(optPct, (1 - Math.cos(Math.asin(0.25))) * 50);
+                      }
+                      // Apply floors
+                      optPct = Math.min(100, Math.max(geoFloor, Math.max(wp.low, optPct)));
                       setForm((p) => ({ ...p, woc_pct: optPct }));
                       setWocText(((optPct / 100) * dia).toFixed(4));
                       const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
@@ -3675,6 +3682,23 @@ ${stabSection}
                 if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
                 return null;
               })()}
+              {/* Engagement physics annotation — shown when Optimal is active */}
+              {wocPreset === "optimal" && form.woc_pct > 0 && form.flutes > 0 && (() => {
+                const wocFrac = form.woc_pct / 100;
+                const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
+                const engAngleDeg = Math.acos(arg) * (180 / Math.PI);
+                const chipThin = Math.sin(Math.acos(arg));
+                const teethInCut = engAngleDeg / (360 / form.flutes);
+                const chipThinPct = Math.round(chipThin * 100);
+                const chipColor = chipThin < 0.30 ? "#f87171" : chipThin < 0.55 ? "#facc15" : "#4ade80";
+                return (
+                  <p className="text-[10px] mt-1" style={{ color: "#94a3b8" }}>
+                    Eng. angle <span style={{ color: "#e2e8f0" }}>{engAngleDeg.toFixed(1)}°</span>
+                    {" · "}Chip thin <span style={{ color: chipColor }}>{chipThinPct}%</span>
+                    {" · "}Teeth in cut <span style={{ color: "#e2e8f0" }}>{teethInCut.toFixed(2)}</span>
+                  </p>
+                );
+              })()}
               {/* Bore enlargement arc engagement advisory */}
               {form.mode === "circ_interp" && form.woc_pct > 0 && form.tool_dia > 0 && (() => {
                 const wocIn = (form.woc_pct / 100) * form.tool_dia;
@@ -3705,11 +3729,12 @@ ${stabSection}
                     className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
                     style={docPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
                     onClick={() => {
-                      const wp = WOC_PRESETS[form.mode];
                       const dp = DOC_PRESETS[form.mode];
-                      if (!wp || !dp) return;
+                      if (!dp) return;
                       const dia = form.tool_dia || 0.5;
-                      const optXd = Math.min(form.loc > 0 ? form.loc / dia : 99, Math.max(0.1, (wp.med * dp.med) / form.woc_pct));
+                      // Use material+mode+flute-aware target directly — no MRR-balance scaling
+                      const locCap = form.loc > 0 ? form.loc / dia : 99;
+                      const optXd = Math.min(locCap, Math.max(dp.low, dp.med));
                       const optIn = optXd * dia;
                       setForm((p) => ({ ...p, doc_xd: optXd }));
                       setDocText(optIn.toFixed(3));
