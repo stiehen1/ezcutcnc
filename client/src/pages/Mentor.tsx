@@ -6722,6 +6722,31 @@ ${stabSection}
                         </span>
                       )}
                     </div>
+                    {(() => {
+                      const geom = recSku.geometry ?? "standard";
+                      const curWoc = form.woc_pct ?? 0;
+                      if (geom === "chipbreaker") {
+                        const needsWocIncrease = curWoc < 8;
+                        return (
+                          <div className={`text-xs rounded px-2 py-1 ${needsWocIncrease ? "bg-amber-900/40 border border-amber-600/40 text-amber-300" : "bg-emerald-900/20 border border-emerald-700/30 text-emerald-400"}`}>
+                            {needsWocIncrease
+                              ? `⚠ CB geometry requires ≥8% WOC — your current ${curWoc}% won't engage it. Increase WOC to 8–20% after switching.`
+                              : "✓ Your WOC meets CB geometry minimum (≥8%) — chipbreaker will be fully active."}
+                          </div>
+                        );
+                      }
+                      if (geom === "truncated_rougher") {
+                        const needsWocIncrease = curWoc < 10;
+                        return (
+                          <div className={`text-xs rounded px-2 py-1 ${needsWocIncrease ? "bg-amber-900/40 border border-amber-600/40 text-amber-300" : "bg-emerald-900/20 border border-emerald-700/30 text-emerald-400"}`}>
+                            {needsWocIncrease
+                              ? `⚠ VRX geometry requires ≥10% WOC — your current ${curWoc}% won't engage it. Increase WOC to 10–25% after switching.`
+                              : "✓ Your WOC meets VRX geometry minimum (≥10%) — truncated rougher will be fully active."}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <button
                       type="button"
                       className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
