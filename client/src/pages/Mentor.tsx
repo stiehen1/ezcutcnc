@@ -6779,7 +6779,12 @@ ${stabSection}
                     )}
                     {geom === "truncated_rougher" && (
                       <p className="text-[11px] text-zinc-400 leading-relaxed">
-                        VRX (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
+                        VXR (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
+                      </p>
+                    )}
+                    {rec.rigidity_note && (
+                      <p className="text-[11px] text-amber-400 leading-relaxed">
+                        ⚠ {rec.rigidity_note}
                       </p>
                     )}
                     {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && (

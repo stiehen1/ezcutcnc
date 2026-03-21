@@ -946,6 +946,28 @@ export async function registerRoutes(
       // No recommendation found
       if (!bestSku) return res.json({ found: false });
 
+      // ── VXR rigidity gate ─────────────────────────────────────────────────
+      // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces
+      const isVxr = /^vxr/i.test(bestSku.series ?? "");
+      let vxrRigidityNote: string | null = null;
+      if (isVxr) {
+        const holder   = String(payload.toolholder ?? "").toLowerCase();
+        const availHp  = Number(payload.machine_hp ?? 0);
+        const taper    = String(payload.spindle_taper ?? "").toUpperCase();
+        const weakHolder  = holder === "er_collet";
+        const weakMachine = availHp > 0 && availHp < 10;
+        const smallTaper  = taper === "CAT30" || taper === "BT30" || taper === "R8";
+        // VXR needs meaningful DOC and WOC — not for shallow/low-engagement passes
+        const shallowDoc = docXd > 0 && docXd < 0.5;
+        const lowWoc     = wocPct > 0 && wocPct < 10;
+        if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) return res.json({ found: false });
+        // Borderline setup — show card with a note
+        const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
+        if (borderlineHolder || (availHp > 0 && availHp < 15)) {
+          vxrRigidityNote = "VXR geometry is aggressive — best results with shrink-fit or hydraulic holder, rigid workholding, and 15+ HP.";
+        }
+      }
+
       // Build modified payload with recommended SKU geometry
       const crNum  = Number(bestSku.corner_condition);
       const isBall = String(bestSku.corner_condition ?? "").toLowerCase() === "ball";
@@ -985,6 +1007,7 @@ export async function registerRoutes(
       return res.json({
         found: true,
         recommended_edp: bestSku.edp,
+        rigidity_note: vxrRigidityNote ?? undefined,
         recommended_sku: {
           edp:                bestSku.edp,
           tool_type:          bestSku.tool_type,
