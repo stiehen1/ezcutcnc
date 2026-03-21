@@ -1512,6 +1512,7 @@ def run_chamfer_mill(payload: dict) -> dict:
     _hard_mat = mat_group in ("Stainless", "Inconel", "Titanium", "Hardened")
     _max_rough_depth = body_dia * (0.10 if _hard_mat else 0.15) * _chip_room_mult
     _finish_allow    = 0.015 if _hard_mat else 0.010
+    notes = []
     multi_pass = None
     if chamfer_depth > 0:
         if chamfer_depth <= _max_rough_depth + _finish_allow:
@@ -1553,8 +1554,6 @@ def run_chamfer_mill(payload: dict) -> dict:
     _coolant_factor = COOLANT_LIFE.get(_coolant, 1.0) * _coolant_fluid_mult(payload)
     tool_life_min = (_base_life / max(0.20, _sfm_ratio ** 0.40)) * _coolant_factor
 
-    # Notes
-    notes = []
     if chamfer_depth <= 0:
         notes.append(
             f"No chamfer depth entered — RPM based on nominal 0.010\" depth. "
