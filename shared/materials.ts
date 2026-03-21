@@ -114,10 +114,10 @@ export const ISO_SUBCATEGORIES = [
   // H — Hardened Steel & Armor
   { iso: "H" as IsoCategory, key: "hardened_lt55",         label: "Hardened Steel < 55 HRC",                              hardness: { value: 48, scale: "hrc" as const } },
   { iso: "H" as IsoCategory, key: "hardened_gt55",         label: "Hardened Steel > 55 HRC",                              hardness: { value: 60, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_milspec",         label: "Mil-Spec Armor (MIL-A-12560 / 46100, ~260–300 HB)",    hardness: { value: 29, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_ar400",           label: "AR400 / AR450 Armor Plate (~360–480 HB)",              hardness: { value: 43, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_ar500",           label: "AR500 / Armox 500T Armor Plate (~470–540 HB)",         hardness: { value: 53, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_ar600",           label: "AR550 / AR600 / Armox 600T (~570–640 HB)",             hardness: { value: 60, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_milspec",         label: "Mil-Spec Armor (MIL-A-12560 / 46100, ~260-300 HB)",    hardness: { value: 29, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar400",           label: "AR400 / AR450 Armor Plate (~360-480 HB)",              hardness: { value: 43, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar500",           label: "AR500 / Armox 500T Armor Plate (~470-540 HB)",         hardness: { value: 53, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar600",           label: "AR550 / AR600 / Armox 600T (~570-640 HB)",             hardness: { value: 60, scale: "hrc" as const } },
   // O — Plastics & Composites
   { iso: "O" as IsoCategory, key: "plastic_unfilled",      label: "Unfilled Engineering Thermoplastics (PEEK, POM, PA, PC)", hardness: { value: 0, scale: "hrb" as const } },
   { iso: "O" as IsoCategory, key: "plastic_filled",        label: "Fiber-Reinforced Thermoplastics (GF/CF-PA, PEEK-GF)",     hardness: { value: 0, scale: "hrb" as const } },
