@@ -2977,7 +2977,12 @@ ${stabSection}
                       const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                       const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                       const maxD = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
-                      return maxD > 0 ? `max ${maxD.toFixed(4)}"` : "e.g. 0.050";
+                      if (!(maxD > 0)) return "e.g. 0.050";
+                      // Saddling sweet spot: middle 60% for CMS, middle 80% for CMH
+                      const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
+                      const lo = maxD * skip;
+                      const hi = maxD * (1 - skip);
+                      return `saddle ${lo.toFixed(3)}"–${hi.toFixed(3)}"`;
                     })()}
                     value={chamferDepthText}
                     onChange={(e) => setChamferDepthText(e.target.value)}
