@@ -3697,8 +3697,8 @@ ${stabSection}
                 if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
                 return null;
               })()}
-              {/* Engagement physics annotation — shown when Optimal is active */}
-              {wocPreset === "optimal" && form.woc_pct > 0 && form.flutes > 0 && (() => {
+              {/* Engagement physics annotation — always visible when WOC + flutes known */}
+              {form.woc_pct > 0 && form.flutes > 0 && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 const engAngleDeg = Math.acos(arg) * (180 / Math.PI);
@@ -3827,6 +3827,24 @@ ${stabSection}
                 if (form.doc_xd > dp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above typical range ({dp.low}–{dp.high}×D) — deflection and force increase significantly</p>;
                 return null;
               })()}
+              {/* Tool Stickout — lives under DOC */}
+              <div className="mt-3 space-y-2">
+                <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
+                <Input
+                  type="text" inputMode="decimal"
+                  className="no-spinners"
+                  placeholder="e.g. 1.500"
+                  value={stickoutText}
+                  onChange={(e) => setStickoutText(e.target.value)}
+                  onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
+                  onBlur={() => {
+                    const n = parseDim(stickoutText);
+                    const val = metric ? n / 25.4 : n;
+                    if (Number.isFinite(val) && val > 0) { setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3)); }
+                    else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+                  }}
+                />
+              </div>
             </div>
           </div>
           {form.mode === "face" && (
@@ -3868,23 +3886,6 @@ ${stabSection}
               </div>
             </div>
           )}
-          <div className="mt-3 w-40 space-y-2">
-            <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
-            <Input
-              type="text" inputMode="decimal"
-              className="no-spinners"
-              placeholder="e.g. 1.500"
-              value={stickoutText}
-              onChange={(e) => setStickoutText(e.target.value)}
-              onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
-              onBlur={() => {
-                const n = parseDim(stickoutText);
-                const val = metric ? n / 25.4 : n;
-                if (Number.isFinite(val) && val > 0) { setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3)); }
-                else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
-              }}
-            />
-          </div>
 
           {/* Chipbreaker / truncated rougher engagement warning */}
           {(form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (() => {
