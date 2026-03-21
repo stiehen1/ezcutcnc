@@ -823,7 +823,7 @@ export async function registerRoutes(
   // ── Optimal tool recommendation ────────────────────────────────────────────
   app.post("/api/optimal-tool", async (req, res) => {
     try {
-      const { current_edp, payload } = req.body;
+      const { current_edp, payload, current_mrr, current_feed_ipm, current_stability_pct } = req.body;
       if (!payload || !current_edp) return res.json({ found: false });
       const { pool } = await import("./db");
 
@@ -914,7 +914,7 @@ export async function registerRoutes(
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
 
-      // Only surface if genuinely better (any positive score gap)
+      // Score pre-filter: must beat current tool (any positive gap) before spending engine time
       if (!bestSku || bestScore <= curScore) return res.json({ found: false });
 
       // Build modified payload with recommended SKU geometry
@@ -936,6 +936,24 @@ export async function registerRoutes(
       };
 
       const recRaw = await runMentorBridge(modPayload) as any;
+
+      // ── Results-based filter ──────────────────────────────────────────────
+      // Only surface if the actual computed deltas are worth a machinist's attention.
+      // Thresholds: MRR improves ≥8%, OR stability crosses a zone boundary,
+      // OR stability drops ≥15 percentage points.
+      const recMrr      = Number(recRaw?.customer?.mrr_in3_min ?? 0);
+      const recStabPct  = Number(recRaw?.stability?.deflection_pct ?? 0);
+      const curMrrNum   = Number(current_mrr  ?? 0);
+      const curStabNum  = Number(current_stability_pct ?? 0);
+
+      const mrrImprovePct = curMrrNum > 0 ? (recMrr - curMrrNum) / curMrrNum * 100 : 0;
+      const stabDrop      = curStabNum > 0 ? curStabNum - recStabPct : 0;
+      const stabZoneImproves =
+        (curStabNum >= 175 && recStabPct < 175) ||  // red → yellow or green
+        (curStabNum >= 100 && recStabPct < 100);     // yellow → green
+
+      const worthSurfacing = mrrImprovePct >= 8 || stabDrop >= 15 || stabZoneImproves;
+      if (!worthSurfacing) return res.json({ found: false });
 
       return res.json({
         found: true,

@@ -1237,7 +1237,7 @@ export default function Mentor() {
     setErStatus("idle");
     setErError("");
     try {
-      await mentor.mutateAsync({
+      const runResult: any = await mentor.mutateAsync({
         ...form,
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
         stickout: form.stickout || form.loc * 1.25,
@@ -1257,7 +1257,13 @@ export default function Mentor() {
           const r = await fetch("/api/optimal-tool", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ current_edp: edpText, payload: optPayload }),
+            body: JSON.stringify({
+              current_edp: edpText,
+              payload: optPayload,
+              current_mrr:          runResult?.customer?.mrr_in3_min ?? null,
+              current_feed_ipm:     runResult?.customer?.feed_ipm ?? null,
+              current_stability_pct: runResult?.stability?.deflection_pct ?? null,
+            }),
           });
           if (r.ok) {
             const rec = await r.json();
