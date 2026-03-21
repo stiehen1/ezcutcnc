@@ -3732,9 +3732,10 @@ ${stabSection}
               {form.woc_pct > 0 && form.flutes > 0 && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
-                const engAngleDeg = Math.acos(arg) * (180 / Math.PI);
+                // Engine uses 2×acos(...) — full included arc entry-to-exit
+                const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
                 const chipThin = Math.sin(Math.acos(arg));
-                const teethInCut = engAngleDeg / (360 / form.flutes);
+                const teethInCut = (engAngleDeg / 360) * form.flutes;
                 const chipThinPct = Math.round(chipThin * 100);
                 const chipColor = chipThin < 0.30 ? "#f87171" : chipThin < 0.55 ? "#facc15" : "#4ade80";
                 const chipLabel = chipThin < 0.30 ? "Low" : chipThin < 0.55 ? "Mod" : "Good";
@@ -3749,7 +3750,7 @@ ${stabSection}
                 const x2 = cx + r * Math.cos(toRad(endAngle));
                 const y2 = cy + r * Math.sin(toRad(endAngle));
                 const largeArc = engAngleDeg > 180 ? 1 : 0;
-                const arcColor = engAngleDeg > 150 ? "#f87171" : engAngleDeg > 90 ? "#facc15" : "#6366f1";
+                const arcColor = engAngleDeg > 300 ? "#f87171" : engAngleDeg > 180 ? "#facc15" : "#6366f1";
                 const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
                 const labelStyle = { color: "#64748b" };
                 return (
@@ -3759,7 +3760,7 @@ ${stabSection}
                       <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Eng. Angle</div>
                       <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
                       <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 180) * 100)}%`, background: arcColor }} />
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: arcColor }} />
                       </div>
                     </div>
                     {/* Chip Thinning */}
