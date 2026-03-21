@@ -833,8 +833,7 @@ export async function registerRoutes(
       const docXd   = Number(payload.doc_xd ?? 0);
       const matKey  = String(payload.material ?? "");
 
-      // Peers: same diameter, same tool type, not current EDP, not blanks
-      const toolType = String(payload.tool_type ?? "endmill");
+      // Peers: same diameter, exclude chamfer mills, not current EDP, not blanks
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -842,9 +841,9 @@ export async function registerRoutes(
            AND ABS(s.cutting_diameter_in - $1) < 0.001
            AND LOWER(s.edp) != LOWER($2)
            AND s.edp NOT ILIKE '%-BLK'
-           AND (s.tool_type IS NULL OR LOWER(s.tool_type) = $3)
+           AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
          ORDER BY s.edp`,
-        [dia, current_edp, toolType]
+        [dia, current_edp]
       );
       if (peers.rows.length === 0) return res.json({ found: false });
 
