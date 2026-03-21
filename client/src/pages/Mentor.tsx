@@ -2247,6 +2247,28 @@ ${stabSection}
 
             </div>
 
+            {/* Tool Type toggle — Endmill vs Chamfer Mill (shown when Milling is selected) */}
+            {operation === "milling" && (
+              <div className="flex gap-2">
+                {([
+                  { key: "endmill",      label: "Endmill" },
+                  { key: "chamfer_mill", label: "Chamfer Mill" },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }))}
+                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1",
+                      color: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#fff" : "#6366f1",
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            )}
+
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <select
                 className={`w-full rounded-md border px-3 py-2 text-sm ${!form.mode ? "border-zinc-500 bg-zinc-800 text-zinc-300" : "bg-background"}`}
@@ -2601,26 +2623,6 @@ ${stabSection}
           )}
 
           {operation === "milling" ? (<>
-          {/* Tool Type toggle — Endmill vs Chamfer Mill */}
-          <div className="flex gap-2 mb-4">
-            {([
-              { key: "endmill",      label: "Endmill" },
-              { key: "chamfer_mill", label: "Chamfer Mill" },
-            ] as const).map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }))}
-                className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                style={{
-                  backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#6366f1" : "transparent",
-                  borderColor: "#6366f1",
-                  color: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#fff" : "#6366f1",
-                }}
-              >{label}</button>
-            ))}
-          </div>
-
           {/* EDP# / SKU lookup */}
           <div className="mb-4 relative">
             <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">Core Cutter EDP# (required to run — auto-fills tool specifications)</FieldLabel>
