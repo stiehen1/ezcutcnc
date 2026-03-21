@@ -937,23 +937,20 @@ export async function registerRoutes(
 
       const recRaw = await runMentorBridge(modPayload) as any;
 
-      // ── Results-based filter ──────────────────────────────────────────────
-      // Only surface if the actual computed deltas are worth a machinist's attention.
-      // Thresholds: MRR improves ≥8%, OR stability crosses a zone boundary,
-      // OR stability drops ≥15 percentage points.
-      const recMrr      = Number(recRaw?.customer?.mrr_in3_min ?? 0);
-      const recStabPct  = Number(recRaw?.stability?.deflection_pct ?? 0);
-      const curMrrNum   = Number(current_mrr  ?? 0);
-      const curStabNum  = Number(current_stability_pct ?? 0);
+      // ── Results-based safety filter ───────────────────────────────────────
+      // Score is the positive gate (encodes engineering judgment — CB for HEM,
+      // right coating, var pitch etc). Results filter is a safety net only:
+      // suppress the recommendation if the engine says the swap is actually worse
+      // (e.g. a longer LOC peer that deflects more at the same setup).
+      const recMrr     = Number(recRaw?.customer?.mrr_in3_min ?? 0);
+      const recStabPct = Number(recRaw?.stability?.deflection_pct ?? 0);
+      const curMrrNum  = Number(current_mrr  ?? 0);
+      const curStabNum = Number(current_stability_pct ?? 0);
 
-      const mrrImprovePct = curMrrNum > 0 ? (recMrr - curMrrNum) / curMrrNum * 100 : 0;
-      const stabDrop      = curStabNum > 0 ? curStabNum - recStabPct : 0;
-      const stabZoneImproves =
-        (curStabNum >= 175 && recStabPct < 175) ||  // red → yellow or green
-        (curStabNum >= 100 && recStabPct < 100);     // yellow → green
-
-      const worthSurfacing = mrrImprovePct >= 8 || stabDrop >= 15 || stabZoneImproves;
-      if (!worthSurfacing) return res.json({ found: false });
+      // Suppress only if recommended tool is materially worse (>5% MRR drop OR stability gets worse)
+      const mrrWorse  = curMrrNum > 0 && recMrr < curMrrNum * 0.95;
+      const stabWorse = curStabNum > 0 && recStabPct > curStabNum * 1.10;
+      if (mrrWorse || stabWorse) return res.json({ found: false });
 
       return res.json({
         found: true,
