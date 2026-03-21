@@ -1576,7 +1576,7 @@ export default function Mentor() {
 
 <h2>Setup</h2>
 <table>
-  ${form.edp ? row("EDP #", form.edp) : ""}
+  ${form.edp ? row("EDP #", `<span class="edp">${form.edp}</span>${skuDescription ? ` &nbsp;—&nbsp; <span style="color:#444;font-weight:400;">${skuDescription}</span>` : ""}`) : ""}
   ${row("Material", matLabel + (form.hardness_value ? ` — ${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : ""))}
   ${row("Operation", opLabel)}
   ${row("Tool Diameter", `${form.tool_dia?.toFixed(4)}" (${(form.tool_dia * 25.4).toFixed(2)} mm)`)}
@@ -1759,7 +1759,7 @@ ${stabSection}
     lines.push(DIV);
     lines.push(L("Brand",        "Core Cutter"));
     lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
-    if (form.edp)        lines.push(L("EDP",          form.edp));
+    if (form.edp)        lines.push(L("EDP",          skuDescription ? `${form.edp}  —  ${skuDescription}` : form.edp));
     if (form.tool_series) lines.push(L("Series",       form.tool_series));
     lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
     lines.push(L("Flutes",       String(form.flutes || "—")));
