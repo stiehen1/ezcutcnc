@@ -3750,38 +3750,31 @@ ${stabSection}
                 const y2 = cy + r * Math.sin(toRad(endAngle));
                 const largeArc = engAngleDeg > 180 ? 1 : 0;
                 const arcColor = engAngleDeg > 150 ? "#f87171" : engAngleDeg > 90 ? "#facc15" : "#6366f1";
+                const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
+                const labelStyle = { color: "#64748b" };
                 return (
                   <div className="mt-2 flex gap-1.5">
                     {/* Engagement Angle */}
-                    <div className="flex-1 rounded-md px-2 py-1.5 flex items-center gap-2" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
-                      <svg width="36" height="36" viewBox="0 0 36 36">
-                        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
-                        <path
-                          d={`M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`}
-                          fill="none" stroke={arcColor} strokeWidth="3" strokeLinecap="round"
-                        />
-                      </svg>
-                      <div>
-                        <div className="text-[9px] uppercase tracking-widest" style={{ color: "#64748b" }}>Eng. Angle</div>
-                        <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Eng. Angle</div>
+                      <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
+                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 180) * 100)}%`, background: arcColor }} />
                       </div>
                     </div>
                     {/* Chip Thinning */}
-                    <div className="flex-1 rounded-md px-2 py-1.5" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#64748b" }}>Chip Thin</div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex-1 rounded-full overflow-hidden" style={{ height: 4, background: "rgba(255,255,255,0.08)" }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${chipThinPct}%`, background: chipColor }} />
-                        </div>
-                        <span className="text-xs font-bold" style={{ color: chipColor }}>{chipThinPct}%</span>
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Chip Thin</div>
+                      <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
+                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                        <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
                       </div>
-                      <div className="text-[9px] mt-0.5" style={{ color: chipColor }}>{chipLabel}</div>
                     </div>
                     {/* Teeth in Cut */}
-                    <div className="flex-1 rounded-md px-2 py-1.5" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#64748b" }}>Teeth in Cut</div>
-                      <div className="text-sm font-bold" style={{ color: "#e2e8f0" }}>{teethInCut.toFixed(2)}</div>
-                      <div className="text-[9px]" style={{ color: "#64748b" }}>of {form.flutes} flutes</div>
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Teeth in Cut</div>
+                      <div className="text-sm font-bold leading-tight" style={{ color: "#e2e8f0" }}>{teethInCut.toFixed(2)}</div>
+                      <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
                     </div>
                   </div>
                 );
