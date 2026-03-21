@@ -413,7 +413,8 @@ export default function Mentor() {
     }));
     setActiveMachineId(m.id ?? null);
     const _namePart = [m.brand, m.model].filter(Boolean).join(" ");
-    setActiveMachineName(_namePart ? `${_namePart}${m.nickname ? ` (${m.nickname})` : ""}` : (m.nickname ?? ""));
+    const _machNo = m.shop_machine_no ? ` #${m.shop_machine_no}` : "";
+    setActiveMachineName(_namePart ? `${_namePart}${_machNo}${m.nickname ? ` (${m.nickname})` : ""}` : `${m.nickname ?? ""}${_machNo}`);
     setMachineQuery("");
     setMachineDropOpen(false);
     setMachineResults([]);
