@@ -6693,15 +6693,22 @@ ${stabSection}
                 const rec = optimalRec;
                 const recSku = rec.recommended_sku;
                 const recCust = rec.recommended_result?.customer ?? {};
+                const recEng  = rec.recommended_result?.engineering ?? {};
                 const recStab = rec.recommended_result?.stability ?? {};
-                const curMrr  = customer?.mrr_in3_min ?? 0;
-                const recMrr  = recCust?.mrr_in3_min ?? 0;
-                const curFeed = customer?.feed_ipm ?? 0;
-                const recFeed = recCust?.feed_ipm ?? 0;
+                const curMrr     = customer?.mrr_in3_min ?? 0;
+                const recMrr     = recCust?.mrr_in3_min ?? 0;
+                const curFeed    = customer?.feed_ipm ?? 0;
+                const recFeed    = recCust?.feed_ipm ?? 0;
                 const curStabPct = result?.stability?.deflection_pct ?? null;
                 const recStabPct = recStab?.deflection_pct ?? null;
-                const mrrDelta  = curMrr  > 0 ? Math.round((recMrr  - curMrr)  / curMrr  * 100) : null;
-                const feedDelta = curFeed > 0 ? Math.round((recFeed - curFeed) / curFeed * 100) : null;
+                const curForce   = result?.engineering?.force_lbf ?? null;
+                const recForce   = recEng?.force_lbf ?? null;
+                const mrrDelta   = curMrr  > 0 && recMrr  > curMrr  ? Math.round((recMrr  - curMrr)  / curMrr  * 100) : null;
+                const feedDelta  = curFeed > 0 && recFeed > curFeed  ? Math.round((recFeed - curFeed) / curFeed * 100) : null;
+                const stabImprove = curStabPct != null && recStabPct != null && recStabPct < curStabPct
+                  ? Math.round((curStabPct - recStabPct) / curStabPct * 100) : null;
+                const forceDrop  = curForce != null && recForce != null && recForce < curForce
+                  ? Math.round((curForce - recForce) / curForce * 100) : null;
                 const geomLabel: Record<string, string> = {
                   chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std"
                 };
@@ -6713,53 +6720,41 @@ ${stabSection}
                     : recSku.variable_pitch ? "Var Pitch"
                     : recSku.variable_helix ? "Var Helix" : null,
                 ].filter(Boolean).join(" · ");
+                const geom = recSku.geometry ?? "standard";
+                const wocOk = geom === "truncated_rougher" ? (form.woc_pct ?? 0) >= 10
+                            : geom === "chipbreaker"       ? (form.woc_pct ?? 0) >= 8
+                            : true;
                 return (
                   <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 px-4 py-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">💡 Optimized Match for This Setup</span>
-                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">💡 Optimized EDP Match for This Setup</span>
                     <div className="text-xs text-zinc-200 font-semibold">
                       EDP# {recSku.edp}
                       {tags ? <span className="ml-2 font-normal text-zinc-400">· {tags}</span> : null}
                     </div>
-                    <div className="flex items-center gap-4 flex-wrap text-xs font-bold">
-                      {mrrDelta != null && mrrDelta > 0 && (
-                        <span className="text-emerald-400">+{mrrDelta}% MRR</span>
+                    {/* Benefit stats — positive framing */}
+                    <div className="flex items-center gap-3 flex-wrap text-xs font-bold">
+                      {stabImprove != null && (
+                        <span className="text-emerald-400">Stability improves {stabImprove}%</span>
                       )}
-                      {feedDelta != null && feedDelta > 0 && (
-                        <span className="text-emerald-400">+{feedDelta}% Feed</span>
-                      )}
-                      {curStabPct != null && recStabPct != null && recStabPct < curStabPct && (
-                        <span className={recStabPct < 100 ? "text-green-400" : "text-yellow-300"}>
-                          Stability {Math.round(curStabPct)}% → {Math.round(recStabPct)}% {recStabPct < 100 ? "✓" : ""}
+                      {forceDrop != null && (
+                        <span className="text-zinc-300 font-normal">· Force drops {forceDrop}%
+                          {curForce != null && recForce != null &&
+                            <span className="text-zinc-500"> ({Math.round(curForce)}→{Math.round(recForce)} lbf)</span>}
                         </span>
                       )}
+                      {mrrDelta != null && (
+                        <span className="text-emerald-400">+{mrrDelta}% MRR</span>
+                      )}
+                      {feedDelta != null && (
+                        <span className="text-emerald-400">+{feedDelta}% Feed</span>
+                      )}
                     </div>
-                    {(() => {
-                      const geom = recSku.geometry ?? "standard";
-                      const curWoc = form.woc_pct ?? 0;
-                      if (geom === "chipbreaker") {
-                        const needsWocIncrease = curWoc < 8;
-                        return (
-                          <div className={`text-xs rounded px-2 py-1 ${needsWocIncrease ? "bg-amber-900/40 border border-amber-600/40 text-amber-300" : "bg-emerald-900/20 border border-emerald-700/30 text-emerald-400"}`}>
-                            {needsWocIncrease
-                              ? `⚠ CB geometry requires ≥8% WOC — your current ${curWoc}% won't engage it. Increase WOC to 8–20% after switching.`
-                              : "✓ Your WOC meets CB geometry minimum (≥8%) — chipbreaker will be fully active."}
-                          </div>
-                        );
-                      }
-                      if (geom === "truncated_rougher") {
-                        const needsWocIncrease = curWoc < 10;
-                        return (
-                          <div className={`text-xs rounded px-2 py-1 ${needsWocIncrease ? "bg-amber-900/40 border border-amber-600/40 text-amber-300" : "bg-emerald-900/20 border border-emerald-700/30 text-emerald-400"}`}>
-                            {needsWocIncrease
-                              ? `⚠ VRX geometry requires ≥10% WOC — your current ${curWoc}% won't engage it. Increase WOC to 10–25% after switching.`
-                              : "✓ Your WOC meets VRX geometry minimum (≥10%) — truncated rougher will be fully active."}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
+                    {/* WOC warning only when geometry won't engage */}
+                    {!wocOk && (
+                      <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
+                        ⚠ {geom === "truncated_rougher" ? "VRX requires ≥10% WOC" : "CB requires ≥8% WOC"} — increase WOC after switching.
+                      </div>
+                    )}
                     <button
                       type="button"
                       className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
