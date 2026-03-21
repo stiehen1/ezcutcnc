@@ -1397,6 +1397,41 @@ export default function Mentor() {
         ${ticTip ? `<p style="font-size:9px;color:#555;margin-top:4px;">→ ${ticTip}</p>` : ""}
       </div>` : "";
 
+    const printWocFrac = (form.woc_pct ?? 0) / 100;
+    const printEngAngleDeg = printWocFrac > 0
+      ? 2 * Math.acos(Math.max(-1, Math.min(1, 1 - 2 * printWocFrac))) * (180 / Math.PI)
+      : null;
+    const printEngZone = printEngAngleDeg == null ? null
+      : printEngAngleDeg < 90 ? "light" : printEngAngleDeg < 180 ? "moderate" : printEngAngleDeg < 270 ? "heavy" : "extreme";
+    const printEngZoneLabel = printEngZone === "light" ? "Light" : printEngZone === "moderate" ? "Moderate" : printEngZone === "heavy" ? "Heavy" : printEngZone === "extreme" ? "Extreme" : "";
+    const printEngZoneColor = (printEngZone === "light" || printEngZone === "moderate") ? "#166534" : printEngZone === "heavy" ? "#9a3412" : "#991b1b";
+    const printEngZoneBg = (printEngZone === "light" || printEngZone === "moderate") ? "#f0fdf4" : printEngZone === "heavy" ? "#fff7ed" : "#fef2f2";
+    const printEngTip = printEngZone === "light" ? "Light radial engagement — consider increasing WOC% for better MRR."
+      : printEngZone === "heavy" ? "Heavy engagement — monitor heat buildup and chip evacuation."
+      : printEngZone === "extreme" ? "Near-full slot — reduce WOC% to extend tool life."
+      : "";
+    const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
+    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" ? `
+      <div style="margin:8px 0 4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Engagement Angle</span>
+          <span style="font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span>
+        </div>
+        <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#22c55e 0%,#22c55e ${pctEng(90)},#eab308 ${pctEng(90)},#eab308 ${pctEng(180)},#f97316 ${pctEng(180)},#f97316 ${pctEng(270)},#ef4444 ${pctEng(270)},#ef4444 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+          <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctEng(printEngAngleDeg)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+        </div>
+        <div style="position:relative;height:14px;">
+          <div style="position:absolute;transform:translateX(-50%);left:${pctEng(printEngAngleDeg)};font-size:9px;font-weight:700;color:#111;white-space:nowrap;">${printEngAngleDeg.toFixed(1)}°</div>
+        </div>
+        <div style="position:relative;height:14px;font-size:8px;margin-top:2px;">
+          <span style="position:absolute;left:${pctEng(45)};transform:translateX(-50%);color:#166534;font-weight:600;white-space:nowrap;">Light</span>
+          <span style="position:absolute;left:calc((${pctEng(90)} + ${pctEng(180)}) / 2);transform:translateX(-50%);color:#ca8a04;font-weight:600;white-space:nowrap;">Moderate</span>
+          <span style="position:absolute;left:calc((${pctEng(180)} + ${pctEng(270)}) / 2);transform:translateX(-50%);color:#f97316;font-weight:600;white-space:nowrap;">Heavy</span>
+          <span style="position:absolute;left:calc((${pctEng(270)} + 100%) / 2);transform:translateX(-50%);color:#ef4444;font-weight:600;white-space:nowrap;">Extreme</span>
+        </div>
+        ${printEngTip ? `<p style="font-size:9px;color:#555;margin-top:4px;">→ ${printEngTip}</p>` : ""}
+      </div>` : "";
+
     const engSection = eng ? `
       <h3>Engineering Data</h3>
       <div class="kpi-grid">
@@ -1405,8 +1440,10 @@ export default function Mentor() {
         ${kpiBox("Deflection (in)", eng.deflection_in != null ? eng.deflection_in.toFixed(6) : null)}
         ${kpiBox("Chip Thick (in)", eng.chip_thickness_in != null ? eng.chip_thickness_in.toFixed(6) : null)}
         ${kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null)}
+        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
       </div>
       ${ticGauge}
+      ${engAngleGauge}
       ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.</p>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
@@ -6859,6 +6896,66 @@ ${stabSection}
                       <p className="text-[11px] text-zinc-300">
                         {zone === "low" ? `⬆ ${tips.low}` : zone === "high" ? `⬇ ${tips.high}` : `→ ${tips.ok}`}
                       </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Engagement Angle Advisory */}
+              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && (() => {
+                const wocFrac = form.woc_pct / 100;
+                const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
+                const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
+                const zone = engAngleDeg < 90 ? "light" : engAngleDeg < 180 ? "moderate" : engAngleDeg < 270 ? "heavy" : "extreme";
+                const maxDisplay = 360;
+                const pct = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
+                const tips: Record<string, string> = {
+                  light: "Light radial engagement — consider increasing WOC% for better MRR and chip formation.",
+                  moderate: "",
+                  heavy: "Heavy engagement — monitor heat buildup and ensure adequate chip evacuation.",
+                  extreme: "Near-full slot — reduce WOC% to extend tool life and reduce cutting forces.",
+                };
+                return (
+                  <div className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-300 flex items-center gap-1">
+                        Engagement Angle
+                        <span className="group relative cursor-pointer">
+                          <span className="text-zinc-500 hover:text-zinc-300 text-[10px]">ⓘ</span>
+                          <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border border-zinc-600 bg-zinc-800 p-3 text-[11px] text-zinc-300 leading-relaxed shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                            <p className="font-bold text-white mb-1">Arc of engagement</p>
+                            <p className="mb-1">The angle swept by the cutter as it enters and exits the workpiece. Formula: 2×arccos(1 − 2×WOC/D) — the full included arc entry to exit.</p>
+                            <p className="mb-1"><span className="text-green-400 font-semibold">Light (&lt;90°):</span> Short arc — low heat per pass. Typical of HEM and trochoidal toolpaths.</p>
+                            <p className="mb-1"><span className="text-yellow-300 font-semibold">Moderate (90–180°):</span> Standard conventional milling. Good balance of MRR and tool life.</p>
+                            <p className="mb-1"><span className="text-orange-400 font-semibold">Heavy (180–270°):</span> Extended contact arc — high heat, needs strong coolant and chip evacuation.</p>
+                            <p><span className="text-red-400 font-semibold">Extreme (&gt;270°):</span> Near full-slot — maximum heat concentration. Limit feed and monitor tool aggressively.</p>
+                          </div>
+                        </span>
+                      </span>
+                      <span className={`text-xs font-bold ${zone === "light" || zone === "moderate" ? "text-green-400" : zone === "heavy" ? "text-orange-400" : "text-red-400"}`}>
+                        {engAngleDeg.toFixed(1)}° — {zone === "light" ? "Light" : zone === "moderate" ? "Moderate" : zone === "heavy" ? "Heavy" : "Extreme"}
+                      </span>
+                    </div>
+                    {/* Gauge bar */}
+                    <div className="relative rounded-full overflow-hidden" style={{ height: "18px", background: "#18181b" }}>
+                      <div className="absolute inset-y-0 left-0" style={{ width: pct(90), background: "#22c55e" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(90), width: `calc(${pct(180)} - ${pct(90)})`, background: "#eab308" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(180), width: `calc(${pct(270)} - ${pct(180)})`, background: "#f97316" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(270), right: 0, background: "#ef4444" }} />
+                      <div className="absolute inset-y-0" style={{ left: pct(engAngleDeg), width: "3px", background: "black", transform: "translateX(-50%)", boxShadow: "0 0 6px rgba(0,0,0,0.9)" }} />
+                      <div className="absolute top-0 bottom-0 flex items-center" style={{ left: `calc(${pct(engAngleDeg)} + 5px)` }}>
+                        <span className="text-[10px] font-black text-black drop-shadow" style={{ textShadow: "0 0 4px rgba(255,255,255,0.8)" }}>{engAngleDeg.toFixed(1)}°</span>
+                      </div>
+                    </div>
+                    {/* Zone labels */}
+                    <div className="relative text-[9px] font-semibold" style={{ height: "14px" }}>
+                      <span className="absolute text-green-400" style={{ left: pct(45), transform: "translateX(-50%)" }}>Light</span>
+                      <span className="absolute text-yellow-300" style={{ left: `calc((${pct(90)} + ${pct(180)}) / 2)`, transform: "translateX(-50%)" }}>Moderate</span>
+                      <span className="absolute text-orange-400" style={{ left: `calc((${pct(180)} + ${pct(270)}) / 2)`, transform: "translateX(-50%)" }}>Heavy</span>
+                      <span className="absolute text-red-400" style={{ left: `calc((${pct(270)} + 100%) / 2)`, transform: "translateX(-50%)" }}>Extreme</span>
+                    </div>
+                    {tips[zone] && (
+                      <p className="text-[11px] text-zinc-300">→ {tips[zone]}</p>
                     )}
                   </div>
                 );
