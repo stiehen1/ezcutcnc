@@ -374,15 +374,19 @@ export default function Mentor() {
   const [activeMachineName, setActiveMachineName] = React.useState("");
   const [showManageMachines, setShowManageMachines] = React.useState(false);
 
-  // Search catalog
+  // Search catalog (+ user saved machines if logged in)
   React.useEffect(() => {
     if (machineQuery.length < 2) { setMachineResults([]); return; }
     const t = setTimeout(async () => {
-      const r = await fetch(`/api/machines/search?q=${encodeURIComponent(machineQuery)}`);
+      const e = tbEmail || localStorage.getItem("tb_email") || "";
+      const tk = tbToken || localStorage.getItem("tb_token") || "";
+      let url = `/api/machines/search?q=${encodeURIComponent(machineQuery)}`;
+      if (e && tk) url += `&email=${encodeURIComponent(e)}&token=${encodeURIComponent(tk)}`;
+      const r = await fetch(url);
       if (r.ok) setMachineResults(await r.json());
     }, 250);
     return () => clearTimeout(t);
-  }, [machineQuery]);
+  }, [machineQuery, tbEmail, tbToken]);
 
   // Load saved machines + item count when toolbox session is active
   React.useEffect(() => {
@@ -4846,14 +4850,18 @@ ${stabSection}
               />
               {machineDropOpen && machineResults.length > 0 && (
                 <div className="absolute z-50 w-full mt-1 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl max-h-60 overflow-y-auto">
-                  {machineResults.map(m => (
+                  {machineResults.map((m, i) => (
                     <button
-                      key={m.id}
+                      key={`${m._saved ? "u" : "c"}-${m.id}-${i}`}
                       type="button"
                       onMouseDown={() => applyMachineToForm(m)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 flex items-baseline gap-2"
                     >
-                      <span className="font-semibold text-orange-400">{m.brand} {m.model}</span>
+                      <span className="font-semibold text-orange-400">
+                        {m._saved && m.nickname ? m.nickname : [m.brand, m.model].filter(Boolean).join(" ")}
+                        {m._saved && m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
+                      </span>
+                      {m._saved && <span className="text-[10px] font-bold text-emerald-400 border border-emerald-600/50 rounded px-1">Saved</span>}
                       <span className="text-xs text-zinc-400">{m.max_rpm?.toLocaleString()} RPM · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
                     </button>
                   ))}
