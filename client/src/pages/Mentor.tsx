@@ -2890,8 +2890,8 @@ ${stabSection}
                 }}
               />
             </div>}
-            {form.tool_type !== "chamfer_mill" && <div className="space-y-2">
-              <FieldLabel hint={'Length Below Shank — refers to necked tooling indicating the whole reach from the base of the shank to the tool tip (complete drop depth without interference). LOC is encompassed inside LBS measurement, rather than being supplementary to it. Set to "0" for conventional tools.'}>{UL("LBS (in)", "LBS (mm)")}</FieldLabel>
+            {form.tool_type !== "chamfer_mill" && form.lbs > 0 && <div className="space-y-2">
+              <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>{UL("LBS (in)", "LBS (mm)")}</FieldLabel>
               <Input
                 type="text"
                 inputMode="decimal"
