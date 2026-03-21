@@ -884,7 +884,7 @@ export async function registerRoutes(
 
       function scoreCoating(coating: string | null): number {
         const c = (coating ?? "").toLowerCase();
-        if (isoCategory === "N") return (c.includes("zrn") || c === "uncoated") ? 2 : 0;
+        if (isoCategory === "N") return (c.includes("zrn") || c === "uncoated" || c.includes("d-max") || c.includes("a-max") || c.includes("dlc")) ? 2 : 0;
         if (isoCategory === "P") return (c.includes("altin") || c.includes("p-max") || c.includes("alcrn")) ? 2 : c.includes("tin") ? 1 : 0;
         if (isoCategory === "M") return (c.includes("altin") || c.includes("p-max")) ? 2 : 0;
         if (isoCategory === "S") return (c.includes("altin") || c.includes("t-max")) ? 2 : 0;
