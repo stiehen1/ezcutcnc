@@ -6758,6 +6758,23 @@ ${stabSection}
                       </div>
                     )}
 
+                    {/* Geometry benefit note */}
+                    {geom === "chipbreaker" && (
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate. MRR stays similar; the gain is stability and tool life.
+                      </p>
+                    )}
+                    {geom === "truncated_rougher" && (
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        VRX (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
+                      </p>
+                    )}
+                    {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && (
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        More flutes means a higher feed rate at the same chip load per tooth — directly increasing MRR with the same spindle speed.
+                      </p>
+                    )}
+
                     {/* WOC warning only when geometry won't engage */}
                     {!wocOk && (
                       <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
