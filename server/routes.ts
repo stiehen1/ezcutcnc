@@ -885,10 +885,11 @@ export async function registerRoutes(
       function scoreCoating(coating: string | null): number {
         const c = (coating ?? "").toLowerCase();
         if (isoCategory === "N") return (c.includes("zrn") || c === "uncoated" || c.includes("d-max") || c.includes("a-max") || c.includes("dlc")) ? 2 : 0;
-        if (isoCategory === "P") return (c.includes("altin") || c.includes("p-max") || c.includes("alcrn")) ? 2 : c.includes("tin") ? 1 : 0;
-        if (isoCategory === "M") return (c.includes("altin") || c.includes("p-max")) ? 2 : 0;
-        if (isoCategory === "S") return (c.includes("altin") || c.includes("t-max")) ? 2 : 0;
-        if (isoCategory === "H") return (c.includes("alcrn") || c.includes("c-max")) ? 2 : 0;
+        if (isoCategory === "P") return (c.includes("altin") || c.includes("p-max") || c.includes("alcrn") || c.includes("t-max")) ? 2 : c.includes("tin") ? 1 : 0;
+        // M (stainless) + S (superalloys): T-Max is the top pick (score 3); C-Max second (2); A-Max/P-Max acceptable (1)
+        if (isoCategory === "M") return c.includes("t-max") ? 3 : (c.includes("c-max") || c.includes("alcrn")) ? 2 : (c.includes("altin") || c.includes("p-max")) ? 1 : 0;
+        if (isoCategory === "S") return c.includes("t-max") ? 3 : (c.includes("altin") || c.includes("c-max") || c.includes("alcrn")) ? 2 : 0;
+        if (isoCategory === "H") return (c.includes("alcrn") || c.includes("c-max") || c.includes("t-max")) ? 2 : 0;
         return 0;
       }
 
