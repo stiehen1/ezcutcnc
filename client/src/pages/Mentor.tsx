@@ -3750,7 +3750,7 @@ ${stabSection}
                 const x2 = cx + r * Math.cos(toRad(endAngle));
                 const y2 = cy + r * Math.sin(toRad(endAngle));
                 const largeArc = engAngleDeg > 180 ? 1 : 0;
-                const arcColor = engAngleDeg > 300 ? "#f87171" : engAngleDeg > 180 ? "#facc15" : "#6366f1";
+                const arcColor = engAngleDeg > 270 ? "#f87171" : engAngleDeg > 180 ? "#facc15" : "#4ade80";
                 const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
                 const labelStyle = { color: "#64748b" };
                 return (
