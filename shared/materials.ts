@@ -84,12 +84,12 @@ export const ISO_SUBCATEGORIES = [
   { iso: "P" as IsoCategory, key: "tool_steel_d2",         label: "D2 Tool Steel",                             hardness: { value: 58, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "cpm_10v",               label: "CPM 10V / A11 (PM Tool Steel)",               hardness: { value: 60, scale: "hrc" as const } },
   // M — Stainless Steel
+  { iso: "M" as IsoCategory, key: "stainless_304",         label: "304 / 304L / 321 Stainless",                  hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_fm",          label: "303 / 416 Free-Machining Stainless",          hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_ferritic",    label: "Ferritic Stainless (409 / 430 / 441)",         hardness: { value: 80, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_410",         label: "410 Martensitic Stainless",                   hardness: { value: 22, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_420",         label: "420 Martensitic Stainless",                   hardness: { value: 25, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_440c",        label: "440C Stainless",                              hardness: { value: 58, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_304",         label: "304 / 304L / 321 Stainless",                  hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_316",         label: "316 / 316L Stainless (Mo-bearing)",           hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_ph",          label: "17-4PH / 15-5PH / 13-8MO Stainless",         hardness: { value: 33, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
