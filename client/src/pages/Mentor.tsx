@@ -3714,7 +3714,7 @@ ${stabSection}
                 if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
                 return null;
               })()}
-              {/* Engagement physics annotation — always visible when WOC + flutes known */}
+              {/* Engagement physics mini-chart */}
               {form.woc_pct > 0 && form.flutes > 0 && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
@@ -3723,12 +3723,53 @@ ${stabSection}
                 const teethInCut = engAngleDeg / (360 / form.flutes);
                 const chipThinPct = Math.round(chipThin * 100);
                 const chipColor = chipThin < 0.30 ? "#f87171" : chipThin < 0.55 ? "#facc15" : "#4ade80";
+                const chipLabel = chipThin < 0.30 ? "Low" : chipThin < 0.55 ? "Mod" : "Good";
+                const engPct = engAngleDeg / 180; // 0–1 for arc bar (180° = slot)
+                // SVG arc for engagement angle
+                const r = 14; const cx = 18; const cy = 18;
+                const startAngle = -90; // top
+                const endAngle = startAngle + engAngleDeg;
+                const toRad = (d: number) => d * Math.PI / 180;
+                const x1 = cx + r * Math.cos(toRad(startAngle));
+                const y1 = cy + r * Math.sin(toRad(startAngle));
+                const x2 = cx + r * Math.cos(toRad(endAngle));
+                const y2 = cy + r * Math.sin(toRad(endAngle));
+                const largeArc = engAngleDeg > 180 ? 1 : 0;
+                const arcColor = engAngleDeg > 150 ? "#f87171" : engAngleDeg > 90 ? "#facc15" : "#6366f1";
                 return (
-                  <p className="text-[10px] mt-1" style={{ color: "#94a3b8" }}>
-                    Eng. angle <span style={{ color: "#e2e8f0" }}>{engAngleDeg.toFixed(1)}°</span>
-                    {" · "}Chip thin <span style={{ color: chipColor }}>{chipThinPct}%</span>
-                    {" · "}Teeth in cut <span style={{ color: "#e2e8f0" }}>{teethInCut.toFixed(2)}</span>
-                  </p>
+                  <div className="mt-2 flex gap-1.5">
+                    {/* Engagement Angle */}
+                    <div className="flex-1 rounded-md px-2 py-1.5 flex items-center gap-2" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
+                      <svg width="36" height="36" viewBox="0 0 36 36">
+                        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+                        <path
+                          d={`M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`}
+                          fill="none" stroke={arcColor} strokeWidth="3" strokeLinecap="round"
+                        />
+                      </svg>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-widest" style={{ color: "#64748b" }}>Eng. Angle</div>
+                        <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
+                      </div>
+                    </div>
+                    {/* Chip Thinning */}
+                    <div className="flex-1 rounded-md px-2 py-1.5" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#64748b" }}>Chip Thin</div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex-1 rounded-full overflow-hidden" style={{ height: 4, background: "rgba(255,255,255,0.08)" }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${chipThinPct}%`, background: chipColor }} />
+                        </div>
+                        <span className="text-xs font-bold" style={{ color: chipColor }}>{chipThinPct}%</span>
+                      </div>
+                      <div className="text-[9px] mt-0.5" style={{ color: chipColor }}>{chipLabel}</div>
+                    </div>
+                    {/* Teeth in Cut */}
+                    <div className="flex-1 rounded-md px-2 py-1.5" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#64748b" }}>Teeth in Cut</div>
+                      <div className="text-sm font-bold" style={{ color: "#e2e8f0" }}>{teethInCut.toFixed(2)}</div>
+                      <div className="text-[9px]" style={{ color: "#64748b" }}>of {form.flutes} flutes</div>
+                    </div>
+                  </div>
                 );
               })()}
               {/* Bore enlargement arc engagement advisory */}
