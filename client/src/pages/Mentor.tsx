@@ -2209,56 +2209,8 @@ ${stabSection}
             </div>
             {/* Second row: operation calculators */}
             <div className="flex flex-wrap gap-2">
-              {/* Milling — grouped with tool type sub-toggle when active */}
-              <div
-                className="flex-1 rounded-lg border transition-all"
-                style={{
-                  borderColor: "#6366f1",
-                  borderWidth: operation === "milling" ? 2 : 1,
-                  padding: operation === "milling" ? "2px" : 0,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOperation("milling");
-                    mentor.reset();
-                    setPdfExtracted(false);
-                    setForm((p) => ({ ...p, operation: "milling", mode: "" }));
-                  }}
-                  className="w-full rounded-md flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold transition-all"
-                  style={{
-                    backgroundColor: operation === "milling" ? "#6366f1" : "transparent",
-                    color: operation === "milling" ? "#fff" : "#6366f1",
-                  }}
-                >
-                  <span>Milling</span>
-                  <span className="text-lg leading-none">⟳</span>
-                </button>
-                {operation === "milling" && (
-                  <div className="flex gap-1 px-1 pb-1">
-                    {([
-                      { key: "endmill",      label: "Endmill" },
-                      { key: "chamfer_mill", label: "Chamfer Mill" },
-                    ] as const).map(({ key, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }))}
-                        className="flex-1 rounded text-[9px] font-semibold py-1 transition-all border"
-                        style={{
-                          backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.05)",
-                          borderColor: "rgba(255,255,255,0.30)",
-                          color: "#fff",
-                        }}
-                      >{label}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Other operations */}
               {([
+                { op: "milling",       label: "Milling",       icon: "⟳" },
                 { op: "drilling",      label: "Drilling",      icon: "↓" },
                 { op: "reaming",       label: "Reaming",       icon: "◎" },
                 { op: "threadmilling", label: "Thread Milling",icon: "⌇" },
@@ -2274,7 +2226,11 @@ ${stabSection}
                       setOperation(op);
                       mentor.reset();
                       setPdfExtracted(false);
-                      setForm((p) => ({ ...p, operation: op as any }));
+                      setForm((p) => ({
+                        ...p,
+                        operation: op as any,
+                        ...(op === "milling" ? { mode: "" } : {}),
+                      }));
                     }}
                     className="rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all flex-1"
                     style={{
@@ -2289,6 +2245,31 @@ ${stabSection}
                 );
               })}
             </div>
+
+            {/* Tool type card — appears below the operation row when Milling is active */}
+            {operation === "milling" && (
+              <div className="rounded-lg border border-indigo-500/40 bg-indigo-950/30 px-3 py-2.5">
+                <div className="text-[9px] font-semibold uppercase tracking-widest text-indigo-400/70 mb-2">Milling — Tool Type</div>
+                <div className="flex gap-2">
+                  {([
+                    { key: "endmill",      label: "Endmill" },
+                    { key: "chamfer_mill", label: "Chamfer Mill" },
+                  ] as const).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, tool_type: key, corner_condition: "square" }))}
+                      className="flex-1 rounded px-3 py-1.5 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1",
+                        color: form.tool_type === key || (key === "endmill" && !["chamfer_mill"].includes(form.tool_type)) ? "#fff" : "#6366f1",
+                      }}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <select
