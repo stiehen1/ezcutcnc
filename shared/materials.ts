@@ -74,9 +74,9 @@ export const ISO_SUBCATEGORIES = [
   { iso: "N" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A356, A380, A390, high-Si)", hardness: { value: 0,  scale: "hrb" as const } },
   { iso: "N" as IsoCategory, key: "non_ferrous",           label: "Copper / Brass / Bronze",                  hardness: { value: 0,  scale: "hrb" as const } },
   // P — Steel
+  { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
   { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (12L14, 1215, 1117)",  hardness: { value: 80, scale: "hrb" as const } },
-  { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_p20",        label: "P20 Tool Steel (prehardened ~30 HRC)",      hardness: { value: 30, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_a2",         label: "A2 Tool Steel",                             hardness: { value: 36, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_h13",        label: "H13 Tool Steel",                            hardness: { value: 44, scale: "hrc" as const } },
