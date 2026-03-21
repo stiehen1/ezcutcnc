@@ -7,7 +7,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   // P — Steel
   "steel_mild":          "Plain low-carbon and structural steels (A36, 1018, 1020, 10xx series). Very consistent — predictable chip load, good tool life. Flood or mist coolant; standard TiAlN coated carbide. A36 hot-rolled can vary heat to heat — check hardness on critical jobs.",
   "steel_free":          "Sulfur-additive free-machining grades (12L14, 1215, 1117). Easiest steel to machine — sulfur breaks chips cleanly at high SFM. Run fast, push the feed, expect excellent tool life. Note: 12L14 is not weldable.",
-  "steel_alloy":         "Tough alloy steel (4140, 4340) that responds well to high chip loads. Variable-pitch geometry and TiAlN coating control chatter and heat.",
+  "steel_alloy":         "Cr-Mo and NiCrMo alloy steels (4130 Chrom-Moly, 4140, 4340, 8620, 9310 and similar grades). Hardness matters more than the grade name — set it to match your actual condition. 4130 normalized cuts easily; 4140 prehard (~30 HRC) is the most common shop challenge. Variable-pitch geometry and TiAlN coating are the right tool choice for any of these. Never let the tool rub — hardened alloy steel work-hardens at the cut faster than mild steel.",
   "tool_steel_p20":      "Prehardened mold steel (~30 HRC) — cuts like firm alloy steel. Well-suited to long roughing passes with standard TiAlN solid carbide endmills.",
   "tool_steel_a2":       "Air-hardening tool steel — tougher than D2 and more forgiving on cutting edges. Machines consistently at working hardness; AlTiN coating preferred.",
   "tool_steel_h13":      "Hot-work die steel (44–48 HRC typical). Work-hardens at the cut if the tool rubs — keep feed up and never let the tool dwell. AlTiN or AlCrN coating required.",
@@ -44,7 +44,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "mp35n":               "Ultra-high-strength Ni-Co-Cr-Mo alloys (MP35N, Udimet 720, René 95) — used in medical implants, sour-service hardware, and turbine disks. Highest unit cutting force in the superalloy family. Extremely work-hardening; even small rubbing or dwell causes immediate edge breakdown. Treat every parameter at the conservative end; TSC and premium PVD coating required.",
   // H — Hardened Steel & Armor
   "hardened_lt55":       "Hard enough to challenge solid carbide — TiAlN/AlCrN coating and conservative chip loads are required. Light WOC with higher DOC is more efficient than full-width cuts.",
-  "hardened_gt55":       "At the upper limit for solid carbide — CBN tooling is preferred above 60 HRC. Extremely light chip loads; any tool flex causes immediate chipping.",
+  "hardened_gt55":       "At the upper limit for solid carbide — CBN tooling is preferred above 60 HRC. Extremely light chip loads; any tool flex causes immediate chipping. Includes HSS stock (M2/M4 at 62–65 HRC) — machining HSS with carbide is viable but tool life is short; use AlTiN coating, very conservative SFM, and light chip load.",
   "armor_milspec":       "MIL-A-12560 / MIL-A-46100 structural armor — most machinable mil-spec grade (~260–300 HB). Still punishing vs alloy steel; remove mill scale/decarb layer first, maintain chip load at all times, and expect the first pass to be the worst on tool life.",
   "armor_ar400":         "AR400 / AR450 abrasion-resistant plate (~360–480 HB, ~38–47 HRC). Hard and tough simultaneously — you're fighting both abrasion and deformation resistance. HEM / dynamic milling strongly preferred; slotting is a tool killer. AlCrN or AlTiN coating required; strong edge prep (T-land or hone), lower rake angle. Maintain chip load — underfeed causes immediate edge breakdown.",
   "armor_ar500":         "AR500 / Armox 500T (~470–540 HB, ~50–56 HRC) — the most common ballistic target and light vehicle armor grade. Extremely abrasive martensitic microstructure; heat stays at the edge even with coolant. HEM at 5–15% WOC is the only practical solid carbide strategy. First pass (skin/scale) is the worst — expect 40–60% shorter tool life on the entry cut. Never slot, never dwell, never rub. Use larger tools when possible; 5/8\" outperforms 1/2\" in tool life and stability.",
@@ -76,7 +76,7 @@ export const ISO_SUBCATEGORIES = [
   // P — Steel
   { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
   { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (12L14, 1215, 1117)",  hardness: { value: 80, scale: "hrb" as const } },
-  { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130, 4140, 4340, 8620)",     hardness: { value: 32, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_p20",        label: "P20 Tool Steel (prehardened ~30 HRC)",      hardness: { value: 30, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_a2",         label: "A2 Tool Steel",                             hardness: { value: 36, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_h13",        label: "H13 Tool Steel",                            hardness: { value: 44, scale: "hrc" as const } },
@@ -244,16 +244,60 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "1117": "steel_free", "1118": "steel_free", "b1112": "steel_free",
   "1213": "steel_free",
   "free machining": "steel_free", "free machining steel": "steel_free",
-  // ── Alloy / Medium Carbon (moved from steel_free) ─────────────────────────
-  "1045": "steel_alloy",
-  // ── Alloy Steel ───────────────────────────────────────────────────────────
-  "4140": "steel_alloy", "4130": "steel_alloy", "4340": "steel_alloy",
-  "8620": "steel_alloy", "4142": "steel_alloy", "4150": "steel_alloy",
-  "4145": "steel_alloy", "4320": "steel_alloy", "9310": "steel_alloy",
-  "e4340": "steel_alloy", "300m": "steel_alloy", "4037": "steel_alloy",
-  "52100": "steel_alloy", "1.7225": "steel_alloy", "42crmo4": "steel_alloy",
+  // ── Medium Carbon (harder than mild, no alloy additions) ─────────────────
+  "1030": "steel_alloy", "1035": "steel_alloy", "1040": "steel_alloy",
+  "1045": "steel_alloy", "1055": "steel_alloy",
+  "1070": "steel_alloy", "1080": "steel_alloy",
+  "1090": "steel_alloy", "1095": "steel_alloy",
+  "medium carbon": "steel_alloy", "medium carbon steel": "steel_alloy",
+  // ── Cr-Mo (Chromoly / 41xx series) ───────────────────────────────────────
+  "4130": "steel_alloy", "4135": "steel_alloy",
+  "4140": "steel_alloy", "4140 ph": "steel_alloy", "4140 prehard": "steel_alloy",
+  "4142": "steel_alloy", "4145": "steel_alloy", "4147": "steel_alloy", "4150": "steel_alloy",
+  "chromoly": "steel_alloy", "chrom-moly": "steel_alloy", "chrome-moly": "steel_alloy",
+  "chromemoly": "steel_alloy", "4130 normalized": "steel_alloy",
+  "4130 n": "steel_alloy", "4130 ht": "steel_alloy",
+  // ── NiCrMo (43xx, high-toughness) ────────────────────────────────────────
+  "4320": "steel_alloy", "4340": "steel_alloy", "4340 ht": "steel_alloy",
+  "e4340": "steel_alloy", "300m": "steel_alloy",
+  // ── NiCrMo case-hardening / gear steels ──────────────────────────────────
+  "4620": "steel_alloy", "4820": "steel_alloy",
+  "8620": "steel_alloy", "8640": "steel_alloy",
+  "9310": "steel_alloy",
+  // ── Mo steels ─────────────────────────────────────────────────────────────
+  "4037": "steel_alloy", "4047": "steel_alloy",
+  // ── Spring / Si-Mn steels ─────────────────────────────────────────────────
+  "9260": "steel_alloy", "6150": "steel_alloy", "5160": "steel_alloy",
+  "spring steel": "steel_alloy",
+  // ── Bearing steel ─────────────────────────────────────────────────────────
+  "52100": "steel_alloy", "100cr6": "steel_alloy", "1.3505": "steel_alloy",
+  "gcr15": "steel_alloy", "bearing steel": "steel_alloy",
+  // ── Maraging steels (route to steel_alloy; set hardness to actual condition)
+  "18ni 250": "steel_alloy", "18ni 300": "steel_alloy",
+  "18ni250": "steel_alloy", "18ni300": "steel_alloy",
+  "maraging 250": "steel_alloy", "maraging 300": "steel_alloy",
+  "maraging steel": "steel_alloy",
+  // ── ASTM Cr-Mo pressure / structural grades ───────────────────────────────
+  "a182 f11": "steel_alloy", "a182 f22": "steel_alloy", "f11": "steel_alloy", "f22": "steel_alloy",
+  "a387 gr 11": "steel_alloy", "a387 gr 22": "steel_alloy", "a387": "steel_alloy",
+  "a335 p11": "steel_alloy", "a335 p22": "steel_alloy", "a335": "steel_alloy",
+  "a193 b7": "steel_alloy",  // Cr-Mo bolting
+  // ── European / DIN equivalents ────────────────────────────────────────────
+  "25crmo4": "steel_alloy", "34crmo4": "steel_alloy", "42crmo4": "steel_alloy",
+  "1.7218": "steel_alloy", "1.7220": "steel_alloy", "1.7225": "steel_alloy",
+  "30crnimod8": "steel_alloy", "30crnimod": "steel_alloy", "30crnimo8": "steel_alloy",
+  "36crnimod4": "steel_alloy", "36crnimod": "steel_alloy",
+  "40crmnnimod8-6-4": "steel_alloy",
   "en19": "steel_alloy", "en24": "steel_alloy", "en36": "steel_alloy",
-  "alloy steel": "steel_alloy", "cr-mo steel": "steel_alloy",
+  "en25": "steel_alloy", "en26": "steel_alloy", "en30b": "steel_alloy",
+  "817m40": "steel_alloy",  // UK equiv of 4340
+  // ── HSS (rare to machine; routes to hardened_gt55 — they're 62–65 HRC) ───
+  "m2": "hardened_gt55", "m4": "hardened_gt55", "m42": "hardened_gt55",
+  "t1": "hardened_gt55", "t15": "hardened_gt55",
+  "hss": "hardened_gt55", "high speed steel": "hardened_gt55",
+  // ── Generic text matches ──────────────────────────────────────────────────
+  "alloy steel": "steel_alloy", "cr-mo steel": "steel_alloy", "crmo": "steel_alloy",
+  "nickel steel": "steel_alloy", "chrome moly": "steel_alloy",
   // ── P20 Tool Steel ────────────────────────────────────────────────────────
   "p20": "tool_steel_p20", "p-20": "tool_steel_p20", "1.2311": "tool_steel_p20",
   "1.2312": "tool_steel_p20", "718 mold": "tool_steel_p20", "nak80": "tool_steel_p20",
