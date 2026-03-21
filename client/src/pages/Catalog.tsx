@@ -88,7 +88,7 @@ function coerceRow(raw: Record<string, string>): Record<string, any> {
     oal_in: snapToFraction(num(raw.oal_in)),
     corner_condition: normalizeCornerCondition(raw.corner_condition),
     flute_wash: num(raw.flute_wash),
-    coating: raw.coating || null,
+    coating: raw.coating || raw.labeled_coating || null,
     geometry: raw.geometry ? raw.geometry.trim().toLowerCase().replace(/ /g, "_") || null : null,
     variable_pitch: bool(raw.variable_pitch),
     variable_helix: bool(raw.variable_helix),
