@@ -100,8 +100,8 @@ export const ISO_SUBCATEGORIES = [
   { iso: "K" as IsoCategory, key: "cast_iron_cgi",         label: "Compacted Graphite Iron / CGI (GJV-300/400)",             hardness: { value: 95, scale: "hrb" as const } },
   { iso: "K" as IsoCategory, key: "cast_iron_malleable",   label: "Malleable Cast Iron (GTW/GTB, GTS-35-10)",                hardness: { value: 82, scale: "hrb" as const } },
   // S — Superalloys / Titanium
-  { iso: "S" as IsoCategory, key: "titanium_cp",           label: "CP Titanium Grade 1–4",                       hardness: { value: 80, scale: "hrb" as const } },
   { iso: "S" as IsoCategory, key: "titanium_64",           label: "Ti-6Al-4V (Grade 5)",                         hardness: { value: 36, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "titanium_cp",           label: "CP Titanium Grade 1–4",                       hardness: { value: 80, scale: "hrb" as const } },
   { iso: "S" as IsoCategory, key: "hiTemp_fe",             label: "A-286 / Incoloy 800 / Udimet (Fe-based)",     hardness: { value: 85, scale: "hrb" as const } },
   { iso: "S" as IsoCategory, key: "hiTemp_co",             label: "Stellite (Co-based superalloy)",              hardness: { value: 35, scale: "hrc" as const } },
   { iso: "S" as IsoCategory, key: "monel_k500",            label: "Monel K-500 (Ni-Cu age-hardened)",            hardness: { value: 30, scale: "hrc" as const } },
