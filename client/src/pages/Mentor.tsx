@@ -967,6 +967,8 @@ export default function Mentor() {
   const [skuDropdownOpen, setSkuDropdownOpen] = React.useState(false);
   const [skuLocked, setSkuLocked] = React.useState(false);
   const [skuDescription, setSkuDescription] = React.useState<string>("");
+  const [optimalRec, setOptimalRec] = React.useState<any>(null);
+  const [optimalLoading, setOptimalLoading] = React.useState(false);
   const [skuChamferEdgeLength, setSkuChamferEdgeLength] = React.useState<number | null>(null);
 
   // Quote modals — shared customer form, separate open/status per product
@@ -1102,6 +1104,7 @@ export default function Mentor() {
   function clearSku() {
     setSkuLocked(false);
     setSkuDescription("");
+    setOptimalRec(null);
     setEdpText("");
     setSkuResults([]);
     setSkuDropdownOpen(false);
@@ -1241,6 +1244,28 @@ export default function Mentor() {
         debug: false,
       });
       setFormDirty(false);
+      setOptimalRec(null);
+      // Fetch optimal tool recommendation if a specific EDP is locked
+      if (skuLocked && edpText && form.tool_type !== "chamfer_mill") {
+        setOptimalLoading(true);
+        try {
+          const optPayload = {
+            ...form,
+            flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
+            stickout: form.stickout || form.loc * 1.25,
+          };
+          const r = await fetch("/api/optimal-tool", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ current_edp: edpText, payload: optPayload }),
+          });
+          if (r.ok) {
+            const rec = await r.json();
+            if (rec.found) setOptimalRec(rec);
+          }
+        } catch { /* silently skip */ }
+        setOptimalLoading(false);
+      }
     } catch (e: any) {
       // Server-side error — shown inline in the error box below the button
     }
@@ -6635,6 +6660,73 @@ ${stabSection}
                     {mp.aggressive && (
                       <p className="text-xs text-red-400 leading-relaxed">⚠ Current pass depth exceeds recommended safe limit. Consider reducing Cut Pass Depth to {mp.max_safe_doc_in.toFixed(4)}" or less.</p>
                     )}
+                  </div>
+                );
+              })()}
+
+              {/* Optimal Tool Recommendation Card */}
+              {optimalLoading && (
+                <div className="mb-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
+                  Finding optimal tool match…
+                </div>
+              )}
+              {!optimalLoading && optimalRec && (() => {
+                const rec = optimalRec;
+                const recSku = rec.recommended_sku;
+                const recCust = rec.recommended_result?.customer ?? {};
+                const recStab = rec.recommended_result?.stability ?? {};
+                const curMrr  = customer?.mrr_in3_min ?? 0;
+                const recMrr  = recCust?.mrr_in3_min ?? 0;
+                const curFeed = customer?.feed_ipm ?? 0;
+                const recFeed = recCust?.feed_ipm ?? 0;
+                const curStabPct = result?.stability?.deflection_pct ?? null;
+                const recStabPct = recStab?.deflection_pct ?? null;
+                const mrrDelta  = curMrr  > 0 ? Math.round((recMrr  - curMrr)  / curMrr  * 100) : null;
+                const feedDelta = curFeed > 0 ? Math.round((recFeed - curFeed) / curFeed * 100) : null;
+                const geomLabel: Record<string, string> = {
+                  chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std"
+                };
+                const tags = [
+                  recSku.geometry && recSku.geometry !== "standard" ? geomLabel[recSku.geometry] ?? recSku.geometry : null,
+                  recSku.coating ?? null,
+                  recSku.series ?? null,
+                  recSku.variable_pitch && recSku.variable_helix ? "Var Pitch+Helix"
+                    : recSku.variable_pitch ? "Var Pitch"
+                    : recSku.variable_helix ? "Var Helix" : null,
+                ].filter(Boolean).join(" · ");
+                return (
+                  <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">💡 Optimized Match for This Setup</span>
+                    </div>
+                    <div className="text-xs text-zinc-200 font-semibold">
+                      EDP# {recSku.edp}
+                      {tags ? <span className="ml-2 font-normal text-zinc-400">· {tags}</span> : null}
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap text-xs font-bold">
+                      {mrrDelta != null && mrrDelta > 0 && (
+                        <span className="text-emerald-400">+{mrrDelta}% MRR</span>
+                      )}
+                      {feedDelta != null && feedDelta > 0 && (
+                        <span className="text-emerald-400">+{feedDelta}% Feed</span>
+                      )}
+                      {curStabPct != null && recStabPct != null && recStabPct < curStabPct && (
+                        <span className={recStabPct < 100 ? "text-green-400" : "text-yellow-300"}>
+                          Stability {Math.round(curStabPct)}% → {Math.round(recStabPct)}% {recStabPct < 100 ? "✓" : ""}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
+                      onClick={() => {
+                        applySkuToForm(recSku as any);
+                        setOptimalRec(null);
+                        setTimeout(() => run(), 100);
+                      }}
+                    >
+                      Run Optimal Tool Parameters
+                    </button>
                   </div>
                 );
               })()}

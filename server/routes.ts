@@ -820,6 +820,153 @@ export async function registerRoutes(
     }
   });
 
+  // ── Optimal tool recommendation ────────────────────────────────────────────
+  app.post("/api/optimal-tool", async (req, res) => {
+    try {
+      const { current_edp, payload } = req.body;
+      if (!payload || !current_edp) return res.json({ found: false });
+      const { pool } = await import("./db");
+
+      const dia     = Number(payload.tool_dia ?? 0);
+      const mode    = String(payload.mode ?? "");
+      const wocPct  = Number(payload.woc_pct ?? 0);
+      const docXd   = Number(payload.doc_xd ?? 0);
+      const matKey  = String(payload.material ?? "");
+
+      // Peers: same diameter, same tool type, not current EDP, not blanks
+      const toolType = String(payload.tool_type ?? "endmill");
+      const peers = await pool.query(
+        `SELECT s.* FROM skus s
+         JOIN sku_uploads u ON s.upload_id = u.id
+         WHERE u.is_current = TRUE
+           AND ABS(s.cutting_diameter_in - $1) < 0.001
+           AND LOWER(s.edp) != LOWER($2)
+           AND s.edp NOT ILIKE '%-BLK'
+           AND (s.tool_type IS NULL OR LOWER(s.tool_type) = $3)
+         ORDER BY s.edp`,
+        [dia, current_edp, toolType]
+      );
+      if (peers.rows.length === 0) return res.json({ found: false });
+
+      // ISO category from material key (simple map — N/P/M/K/S/H)
+      const ISO_MAP: Record<string, string> = {
+        aluminum_wrought: "N", aluminum_cast: "N",
+        steel_mild: "P", steel_free: "P", steel_alloy: "P",
+        stainless_304: "M", stainless_316: "M", stainless_ph: "M",
+        stainless_duplex: "M", stainless_superduplex: "M", stainless_fm: "M",
+        stainless_ferritic: "M", stainless_410: "M", stainless_420: "M", stainless_440c: "M",
+        titanium_64: "S", inconel_718: "S", inconel_625: "S",
+        hastelloy_x: "S", waspaloy: "S", mp35n: "S", monel_k500: "S",
+        cast_iron_gray: "K", cast_iron_ductile: "K",
+        hardened_lt55: "H", hardened_gt55: "H",
+        tool_steel_p20: "H", tool_steel_a2: "H", tool_steel_h13: "H",
+        tool_steel_s7: "H", tool_steel_d2: "H",
+      };
+      const isoCategory = ISO_MAP[matKey] ?? "P";
+
+      // Scoring helpers
+      const isRoughing  = ["hem", "roughing"].includes(mode);
+      const isFinishing = ["finishing", "face"].includes(mode);
+      const cbOk  = wocPct >= 8  && docXd >= 1.0;
+      const vrxOk = wocPct >= 10 && docXd >= 1.0;
+
+      function scoreGeometry(g: string | null): number {
+        const geom = (g ?? "standard").toLowerCase();
+        if (isRoughing && vrxOk && geom === "truncated_rougher") return 4;
+        if (isRoughing && cbOk && geom === "chipbreaker")        return 3;
+        if ((isFinishing || !isRoughing) && geom === "standard") return 2;
+        if (geom === "standard")                                 return 2;
+        if (geom === "chipbreaker" && !isRoughing)               return 1;
+        return 1;
+      }
+
+      function scoreCoating(coating: string | null): number {
+        const c = (coating ?? "").toLowerCase();
+        if (isoCategory === "N") return (c.includes("zrn") || c === "uncoated") ? 2 : 0;
+        if (isoCategory === "P") return (c.includes("altin") || c.includes("p-max") || c.includes("alcrn")) ? 2 : c.includes("tin") ? 1 : 0;
+        if (isoCategory === "M") return (c.includes("altin") || c.includes("p-max")) ? 2 : 0;
+        if (isoCategory === "S") return (c.includes("altin") || c.includes("t-max")) ? 2 : 0;
+        if (isoCategory === "H") return (c.includes("alcrn") || c.includes("c-max")) ? 2 : 0;
+        return 0;
+      }
+
+      function scoreSku(row: any): number {
+        let s = scoreGeometry(row.geometry) + scoreCoating(row.coating);
+        if (row.variable_pitch) s += 1;
+        if (row.variable_helix) s += 1;
+        return s;
+      }
+
+      // Score current EDP
+      const curResult = await pool.query(
+        `SELECT s.* FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
+         WHERE u.is_current = TRUE AND LOWER(s.edp) = LOWER($1)`,
+        [current_edp]
+      );
+      const curSku   = curResult.rows[0];
+      const curScore = curSku ? scoreSku(curSku) : 0;
+
+      // Find best peer
+      let bestSku: any = null;
+      let bestScore = -1;
+      for (const row of peers.rows) {
+        const sc = scoreSku(row);
+        if (sc > bestScore) { bestScore = sc; bestSku = row; }
+      }
+
+      // Only surface if genuinely better (score gap ≥ 2)
+      if (!bestSku || bestScore - curScore < 2) return res.json({ found: false });
+
+      // Build modified payload with recommended SKU geometry
+      const crNum  = Number(bestSku.corner_condition);
+      const isBall = String(bestSku.corner_condition ?? "").toLowerCase() === "ball";
+      const modPayload = {
+        ...payload,
+        edp:             bestSku.edp,
+        tool_dia:        Number(bestSku.cutting_diameter_in),
+        flutes:          Number(bestSku.flutes),
+        loc:             Number(bestSku.loc_in),
+        geometry:        bestSku.geometry ?? "standard",
+        variable_pitch:  !!bestSku.variable_pitch,
+        variable_helix:  !!bestSku.variable_helix,
+        helix_angle:     bestSku.helix ?? payload.helix_angle ?? 35,
+        coating:         bestSku.coating ?? payload.coating,
+        corner_condition: isBall ? "ball" : (!isNaN(crNum) && crNum > 0) ? "corner_radius" : "square",
+        corner_radius:   (!isNaN(crNum) && crNum > 0) ? crNum : 0,
+      };
+
+      const recRaw = await runMentorBridge(modPayload) as any;
+
+      return res.json({
+        found: true,
+        recommended_edp: bestSku.edp,
+        recommended_sku: {
+          edp:                bestSku.edp,
+          flutes:             bestSku.flutes,
+          cutting_diameter_in: bestSku.cutting_diameter_in,
+          loc_in:             bestSku.loc_in,
+          geometry:           bestSku.geometry ?? "standard",
+          coating:            bestSku.coating,
+          series:             bestSku.series,
+          variable_pitch:     bestSku.variable_pitch,
+          variable_helix:     bestSku.variable_helix,
+          description1:       bestSku.description1,
+          description2:       bestSku.description2,
+          corner_condition:   bestSku.corner_condition,
+          lbs_in:             bestSku.lbs_in,
+          neck_dia_in:        bestSku.neck_dia_in,
+          shank_dia_in:       bestSku.shank_dia_in,
+          oal_in:             bestSku.oal_in,
+          flute_wash:         bestSku.flute_wash,
+          helix:              bestSku.helix,
+        },
+        recommended_result: recRaw,
+      });
+    } catch (_e: any) {
+      return res.json({ found: false });
+    }
+  });
+
   app.post("/api/execute", async (req, res) => {
     const { code } = req.body;
     if (!code || typeof code !== "string") {
