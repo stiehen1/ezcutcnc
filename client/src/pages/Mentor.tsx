@@ -6703,12 +6703,6 @@ ${stabSection}
                 const recStabPct = recStab?.deflection_pct ?? null;
                 const curForce   = result?.engineering?.force_lbf ?? null;
                 const recForce   = recEng?.force_lbf ?? null;
-                const mrrDelta   = curMrr  > 0 && recMrr  > curMrr  ? Math.round((recMrr  - curMrr)  / curMrr  * 100) : null;
-                const feedDelta  = curFeed > 0 && recFeed > curFeed  ? Math.round((recFeed - curFeed) / curFeed * 100) : null;
-                const stabImprove = curStabPct != null && recStabPct != null && recStabPct < curStabPct
-                  ? Math.round((curStabPct - recStabPct) / curStabPct * 100) : null;
-                const forceDrop  = curForce != null && recForce != null && recForce < curForce
-                  ? Math.round((curForce - recForce) / curForce * 100) : null;
                 const geomLabel: Record<string, string> = {
                   chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std"
                 };
@@ -6724,6 +6718,18 @@ ${stabSection}
                 const wocOk = geom === "truncated_rougher" ? (form.woc_pct ?? 0) >= 10
                             : geom === "chipbreaker"       ? (form.woc_pct ?? 0) >= 8
                             : true;
+
+                // Comparison rows — only show rows where we have both values
+                const cmpRows: { label: string; cur: string; opt: string; better: boolean }[] = [];
+                if (curStabPct != null && recStabPct != null)
+                  cmpRows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct });
+                if (curForce != null && recForce != null)
+                  cmpRows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce });
+                if (curMrr > 0 && recMrr > 0)
+                  cmpRows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr });
+                if (curFeed > 0 && recFeed > 0)
+                  cmpRows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed });
+
                 return (
                   <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 px-4 py-3 space-y-2">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">💡 Optimized EDP Match for This Setup</span>
@@ -6731,24 +6737,27 @@ ${stabSection}
                       EDP# {recSku.edp}
                       {tags ? <span className="ml-2 font-normal text-zinc-400">· {tags}</span> : null}
                     </div>
-                    {/* Benefit stats — positive framing */}
-                    <div className="flex items-center gap-3 flex-wrap text-xs font-bold">
-                      {stabImprove != null && (
-                        <span className="text-emerald-400">Stability improves {stabImprove}%</span>
-                      )}
-                      {forceDrop != null && (
-                        <span className="text-zinc-300 font-normal">· Force drops {forceDrop}%
-                          {curForce != null && recForce != null &&
-                            <span className="text-zinc-500"> ({Math.round(curForce)}→{Math.round(recForce)} lbf)</span>}
-                        </span>
-                      )}
-                      {mrrDelta != null && (
-                        <span className="text-emerald-400">+{mrrDelta}% MRR</span>
-                      )}
-                      {feedDelta != null && (
-                        <span className="text-emerald-400">+{feedDelta}% Feed</span>
-                      )}
-                    </div>
+
+                    {/* Side-by-side comparison table */}
+                    {cmpRows.length > 0 && (
+                      <div className="rounded-lg overflow-hidden border border-zinc-700/50 text-xs">
+                        <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          <span></span>
+                          <span className="text-center">Current</span>
+                          <span className="text-center text-emerald-400">Optimized</span>
+                        </div>
+                        {cmpRows.map((r) => (
+                          <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                            <span className="text-zinc-400">{r.label}</span>
+                            <span className="text-center text-zinc-300">{r.cur}</span>
+                            <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : "text-zinc-300"}`}>
+                              {r.opt}{r.better ? " ✓" : ""}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* WOC warning only when geometry won't engage */}
                     {!wocOk && (
                       <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
