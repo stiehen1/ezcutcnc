@@ -2238,50 +2238,60 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
   // ── Machine catalog search ────────────────────────────────────────────────
   app.get("/api/machines/search", async (req, res) => {
-    const { q, email, token } = req.query as { q: string; email?: string; token?: string };
-    if (!q || q.length < 1) return res.json([]);
-    const { pool } = await import("./db");
+    try {
+      const { q, email, token } = req.query as { q: string; email?: string; token?: string };
+      if (!q || q.length < 1) return res.json([]);
+      const { pool } = await import("./db");
 
-    // Split query into tokens — all tokens must match somewhere in brand/model/control
-    const tokens = q.trim().split(/\s+/).filter(Boolean);
-    const params: string[] = tokens.map(t => `%${t}%`);
-    const tokenConds = tokens.map((_, i) =>
-      `(brand ILIKE $${i+1} OR model ILIKE $${i+1} OR control ILIKE $${i+1} OR (brand || ' ' || model) ILIKE $${i+1})`
-    ).join(" AND ");
+      // Split query into tokens — all tokens must match somewhere in brand/model/control/nickname
+      const tokens = q.trim().split(/\s+/).filter(Boolean);
+      const params: string[] = tokens.map(t => `%${t}%`);
+      const tokenConds = tokens.map((_, i) =>
+        `(brand ILIKE $${i+1} OR model ILIKE $${i+1} OR control ILIKE $${i+1} OR (brand || ' ' || model) ILIKE $${i+1} OR nickname ILIKE $${i+1})`
+      ).join(" AND ");
 
-    const catalogRows = await pool.query(
-      `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved
-       FROM machines
-       WHERE ${tokenConds}
-       ORDER BY brand, model LIMIT 20`,
-      params
-    );
-
-    // Also search user's saved machines if logged in
-    let savedRows: any[] = [];
-    if (email && token) {
-      const auth = await pool.query(
-        `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
-        [email.toLowerCase(), token]
+      const catalogRows = await pool.query(
+        `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved
+         FROM machines
+         WHERE ${tokenConds}
+         ORDER BY brand, model LIMIT 20`,
+        params
       );
-      if (auth.rows.length) {
-        const userTokenConds = tokens.map((_, i) =>
-          `(brand ILIKE $${i+3} OR model ILIKE $${i+3} OR nickname ILIKE $${i+3} OR shop_machine_no ILIKE $${i+3})`
-        ).join(" AND ");
-        const userParams = [email.toLowerCase(), token, ...tokens.map(t => `%${t}%`)];
-        const ur = await pool.query(
-          `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, nickname, shop_machine_no, true AS _saved
-           FROM user_machines
-           WHERE email = $1 AND (${userTokenConds})
-           ORDER BY created_at DESC LIMIT 10`,
-          userParams
-        );
-        savedRows = ur.rows;
-      }
-    }
 
-    // Saved machines first, then catalog
-    res.json([...savedRows, ...catalogRows.rows]);
+      // Also search user's saved machines if logged in
+      let savedRows: any[] = [];
+      if (email && token) {
+        try {
+          const auth = await pool.query(
+            `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+            [email.toLowerCase(), token]
+          );
+          if (auth.rows.length) {
+            const userTokenConds = tokens.map((_, i) =>
+              `(brand ILIKE $${i+3} OR model ILIKE $${i+3} OR nickname ILIKE $${i+3} OR shop_machine_no ILIKE $${i+3} OR control ILIKE $${i+3})`
+            ).join(" AND ");
+            const userParams = [email.toLowerCase(), token, ...tokens.map(t => `%${t}%`)];
+            const ur = await pool.query(
+              `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, nickname, shop_machine_no, true AS _saved
+               FROM user_machines
+               WHERE email = $1 AND (${userTokenConds})
+               ORDER BY created_at DESC LIMIT 10`,
+              userParams
+            );
+            savedRows = ur.rows;
+          }
+        } catch (savedErr) {
+          console.error("[machines/search] user_machines query failed:", savedErr);
+          // Fall through — still return catalog results
+        }
+      }
+
+      // Saved machines first, then catalog
+      res.json([...savedRows, ...catalogRows.rows]);
+    } catch (err) {
+      console.error("[machines/search] error:", err);
+      res.json([]); // Return empty array rather than 500 — UI stays usable
+    }
   });
 
   // ── User machines: save ───────────────────────────────────────────────────
