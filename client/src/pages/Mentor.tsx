@@ -2452,6 +2452,8 @@ ${stabSection}
                 <p>• <span className="text-white">Climb mill</span> whenever possible — chip is cut thick-to-thin, leaving a cleaner surface.</p>
                 <p>• <span className="text-white">Increase WOC slightly</span> (3–8%) — more radial engagement can dampen vibration and reduce chatter marks vs. a hairline cut.</p>
                 <p>• <span className="text-white">Full-LOC axial pass</span> — one full-length pass gives a more consistent wall than stacked shallow passes.</p>
+                <p>• <span className="text-white">Runout at tool tip &lt;0.0005"</span> — check with a test indicator in-spindle before finishing. Runout above this causes lobing and uneven wall finish.</p>
+                <p>• <span className="text-white">Coolant matters:</span> concentration too high or too low degrades surface finish. Keep coolant mix at manufacturer spec (typically 8–10%) and ensure good chip flush.</p>
                 <p>• <span className="text-white">Aluminum:</span> uncoated or D-Max (DLC) tools outperform other coatings for surface finish — avoid adhesion/BUE.</p>
               </div>
             )}
