@@ -7725,6 +7725,24 @@ ${stabSection}
         </div>
       )}
 
+      {/* Facing tips — shown at bottom of results when face mode */}
+      {mentor.data && form.mode === "face" && (
+        <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
+          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Facing / Planar Milling Tips</p>
+          <p>• <span className="text-white">Stepover = (D − 2×CR) × 0.75</span> — keeps the wiper overlapping each adjacent pass by 25%, burnishing out the cusp line</p>
+          <p>• <span className="text-white">DOC must exceed CR</span> — if DOC &lt; CR you're cutting only on the arc (no flat contact), wiper effect disappears, floor looks scalloped. Minimum: CR + 0.003"</p>
+          <p>• DOC well below tool radius (D/2) is fine — <span className="text-white">0.005–0.020" finish DOC</span> is common and correct</p>
+          <p>• <span className="text-white">Prefer CR 0.030"+</span> — larger corner radius = wider wiper = better finish. Sharp corners leave lines at every pass</p>
+          <p>• <span className="text-white">Minimize stickout</span> — #1 rule for facing. Full diameter is engaged; any deflection shows as flatness error</p>
+          <p>• <span className="text-white">Climb mill on finish pass</span> — bi-directional OK for roughing only. Uni-directional on finish to avoid conventional passes</p>
+          <p>• <span className="text-white">Spring pass:</span> re-run at zero Z offset, same direction — removes deflection bow from first pass</p>
+          <p>• <span className="text-white">Axial runout &lt;0.0005"</span> — Z-wobble leaves repeating arc witness marks at every stepover. Even 0.001" is visible on aluminum. Use shrink-fit or precision collet, check face TIR</p>
+          <p>• <span className="text-white">Air blast over flood</span> — chips under the wiper get smeared and streak the surface. Air blast sweeps them clear</p>
+          <p>• <span className="text-white">Ramp or arc entry, lead-out past edge</span> — never plunge, never stop feed mid-pass (dwell kills finish)</p>
+          <p>• <span className="text-white">Scallop lines</span> = stepover too wide or CR too small &nbsp;|&nbsp; <span className="text-white">Witness arcs</span> = check axial runout &nbsp;|&nbsp; <span className="text-white">Wavy surface</span> = reduce stickout + spring pass</p>
+        </div>
+      )}
+
       {/* Disclaimer */}
       <div className="mt-6 px-1 text-[11px] text-muted-foreground/60 leading-relaxed border-t border-border pt-4">
         The speeds and feeds shown are recommended starting values only. Actual results will vary depending on the machine, setup rigidity, tooling, coolant, and material condition — adjust parameters as necessary. Core Cutter LLC accepts no responsibility for application results.
