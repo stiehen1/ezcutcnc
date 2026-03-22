@@ -4897,7 +4897,7 @@ ${stabSection}
                 value={machineQuery || (!machineDropOpen ? activeMachineName : "")}
                 onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
                 onFocus={() => { setMachineQuery(""); setMachineDropOpen(true); }}
-                onBlur={() => setTimeout(() => setMachineDropOpen(false), 150)}
+                onBlur={() => setTimeout(() => setMachineDropOpen(false), 300)}
                 className="text-sm"
               />
               {machineDropOpen && machineResults.length > 0 && (
@@ -4906,7 +4906,8 @@ ${stabSection}
                     <button
                       key={`${m._saved ? "u" : "c"}-${m.id}-${i}`}
                       type="button"
-                      onMouseDown={() => applyMachineToForm(m)}
+                      onMouseDown={e => { e.preventDefault(); applyMachineToForm(m); }}
+                      onTouchEnd={e => { e.preventDefault(); applyMachineToForm(m); }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 flex items-baseline gap-2"
                     >
                       <span className="font-semibold text-orange-400">
