@@ -364,6 +364,7 @@ export default function Mentor() {
   const [machineQuery, setMachineQuery] = React.useState("");
   const [machineResults, setMachineResults] = React.useState<any[]>([]);
   const [machineDropOpen, setMachineDropOpen] = React.useState(false);
+  const machineTouchingDropRef = React.useRef(false);
   const [savedMachines, setSavedMachines] = React.useState<any[]>([]);
   const [showSaveMachineModal, setShowSaveMachineModal] = React.useState(false);
   const [machineNickname, setMachineNickname] = React.useState("");
@@ -4896,8 +4897,8 @@ ${stabSection}
                 placeholder="Search catalog — e.g. Haas VF-2, Mazak, DMG..."
                 value={machineQuery || (!machineDropOpen ? activeMachineName : "")}
                 onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
-                onFocus={() => { setMachineQuery(""); setMachineDropOpen(true); }}
-                onBlur={() => setTimeout(() => setMachineDropOpen(false), 300)}
+                onFocus={() => { setMachineDropOpen(true); }}
+                onBlur={() => setTimeout(() => { if (!machineTouchingDropRef.current) setMachineDropOpen(false); }, 500)}
                 className="text-sm"
               />
               {machineDropOpen && machineResults.length > 0 && (
@@ -4907,7 +4908,8 @@ ${stabSection}
                       key={`${m._saved ? "u" : "c"}-${m.id}-${i}`}
                       type="button"
                       onMouseDown={e => { e.preventDefault(); applyMachineToForm(m); }}
-                      onTouchEnd={e => { e.preventDefault(); applyMachineToForm(m); }}
+                      onTouchStart={() => { machineTouchingDropRef.current = true; }}
+                      onTouchEnd={e => { e.preventDefault(); machineTouchingDropRef.current = false; applyMachineToForm(m); }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 flex items-baseline gap-2"
                     >
                       <span className="font-semibold text-orange-400">
