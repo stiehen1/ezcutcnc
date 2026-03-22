@@ -888,14 +888,14 @@ export default function Mentor() {
     }
     // Fallback for finish, face, slot, circ_interp — keep flat presets
     const flatWoc: Record<string, { low: number; med: number; high: number }> = {
-      finish:     { low: 5,  med: 15, high: 25 },
+      finish:     { low: 2,  med: 5,  high: 10  },
       face:       { low: 50, med: 75, high: 90 },
       trochoidal: { low: 5,  med: 8,  high: 12 },
       slot:       { low: 100,med: 100,high: 100 },
       circ_interp:{ low: 10, med: 25, high: 50 },
     };
     const flatDoc: Record<string, { low: number; med: number; high: number }> = {
-      finish:     { low: 0.1, med: 0.25, high: 0.5 },
+      finish:     { low: 0.1, med: 0.5, high: loc > 0 && dia > 0 ? loc / dia : 2.0 },
       face:       { low: 0.03,med: 0.08, high: 0.15 },
       trochoidal: { low: 1.0, med: 1.5,  high: 2.0 },
       slot:       { low: flutes === 5 ? 0.15 : 0.25, med: flutes === 5 ? 0.30 : 0.5, high: flutes === 5 ? 0.5 : 1.0 },
