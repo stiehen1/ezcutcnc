@@ -2445,47 +2445,17 @@ ${stabSection}
 
             {/* Finishing tips */}
             {form.mode === "finish" && (
-              <div className="mt-2 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2.5 text-[11px] text-sky-200 space-y-2.5">
-                <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide">Side Finishing Tips</p>
-
-                {/* Engagement */}
-                <div>
-                  <p className="font-semibold text-sky-400 mb-0.5">Radial Engagement (WOC)</p>
-                  <p>• Keep WOC <span className="text-white">3–5% of tool diameter</span> — the single biggest lever for reducing deflection and cutting pressure on finish passes.</p>
-                  <p>• Use <span className="text-white">1–1.5×D axial DOC</span> for best surface finish — one full-length pass beats stacked shallow passes.</p>
-                </div>
-
-                {/* Technique */}
-                <div>
-                  <p className="font-semibold text-sky-400 mb-0.5">Technique</p>
-                  <p>• <span className="text-white">Climb mill</span> — chip starts thick and thins out, less rubbing on exit, better Ra and longer tool life.</p>
-                  <p>• <span className="text-white">Spring passes:</span> run the same path twice at zero offset. Removes material left by deflection on the first pass — non-negotiable on tight wall tolerances.</p>
-                  <p>• <span className="text-white">Finishing allowance:</span> leave 0.005–0.015" stock after roughing to maintain consistent radial pressure and prevent deflection-induced taper.</p>
-                </div>
-
-                {/* Setup */}
-                <div>
-                  <p className="font-semibold text-sky-400 mb-0.5">Setup</p>
-                  <p>• <span className="text-white">Minimize stickout</span> — aim for ≤3×D. Every extra 0.5×D adds significant deflection. If chatter appears, check stickout before changing speeds.</p>
-                  <p>• <span className="text-white">Runout at tool tip &lt;0.0005"</span> — check with a test indicator in-spindle. Runout above this causes lobing and uneven walls.</p>
-                  <p>• <span className="text-white">Shrink-fit or ER collet</span> over set-screw holders. Eliminate all play — chatter hides in fixtures.</p>
-                </div>
-
-                {/* Feeds & Speeds */}
-                <div>
-                  <p className="font-semibold text-sky-400 mb-0.5">Feeds &amp; Speeds</p>
-                  <p>• <span className="text-white">Reduce feed 15–25%</span> vs roughing. <span className="text-white">Increase SFM 10–15%</span> — higher speed reduces built-up edge.</p>
-                  <p>• If finish is still rough: check tool wear first, then try RPM ±10% to find a resonance-free zone, then run a spring pass.</p>
-                </div>
-
-                {/* Material */}
-                <div>
-                  <p className="font-semibold text-sky-400 mb-0.5">Material Notes</p>
-                  <p>• <span className="text-white">Aluminum:</span> air blast over flood (prevents recutting chips), D-Max (DLC) or uncoated, 3-flute, push SFM aggressively.</p>
-                  <p>• <span className="text-white">Steel:</span> flood coolant — keep it on consistently (cycling causes thermal shock and cracks coatings). 4–5 flute, AlTiN/TiAlN.</p>
-                  <p>• <span className="text-white">Stainless / Titanium:</span> conservative SFM to avoid work-hardening. Sharp edge geometry matters most.</p>
-                  <p>• <span className="text-white">Coolant concentration:</span> too high or too low degrades finish — keep mix at 8–10% and ensure good chip flush.</p>
-                </div>
+              <div className="mt-2 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
+                <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Finishing Tips</p>
+                <p>• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
+                <p>• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
+                <p>• <span className="text-white">Climb mill</span> always — less rubbing, better Ra, longer tool life</p>
+                <p>• <span className="text-white">Spring pass:</span> repeat same path at zero offset to remove deflection stock</p>
+                <p>• Leave <span className="text-white">0.005–0.015" stock</span> after roughing before finishing</p>
+                <p>• <span className="text-white">Stickout ≤3×D</span> — check this before adjusting speeds if chatter appears</p>
+                <p>• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
+                <p>• <span className="text-white">Increase SFM 10–15%,  reduce feed 15–25%</span> vs roughing</p>
+                <p>• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
               </div>
             )}
 
