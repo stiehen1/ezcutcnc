@@ -2443,6 +2443,19 @@ ${stabSection}
               </select>
             )}
 
+            {/* Finishing tips */}
+            {form.mode === "finish" && (
+              <div className="mt-2 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-300 space-y-1">
+                <p className="font-semibold text-sky-200 text-[11px] uppercase tracking-wide">Finishing Tips</p>
+                <p>• <span className="text-white">Increase SFM 10–20%</span> over roughing — higher speed reduces built-up edge and improves surface finish.</p>
+                <p>• <span className="text-white">Reduce chip load (IPT) 20–40%</span> — lighter cuts leave a smoother wall.</p>
+                <p>• <span className="text-white">Climb mill</span> whenever possible — chip is cut thick-to-thin, leaving a cleaner surface.</p>
+                <p>• <span className="text-white">Increase WOC slightly</span> (3–8%) — more radial engagement can dampen vibration and reduce chatter marks vs. a hairline cut.</p>
+                <p>• <span className="text-white">Full-LOC axial pass</span> — one full-length pass gives a more consistent wall than stacked shallow passes.</p>
+                <p>• <span className="text-white">Aluminum:</span> uncoated or D-Max (DLC) tools outperform other coatings for surface finish — avoid adhesion/BUE.</p>
+              </div>
+            )}
+
             {/* Circular Interpolation hole dimensions */}
             {form.mode === "circ_interp" && (
               <div className="mt-3 grid grid-cols-2 gap-3">
