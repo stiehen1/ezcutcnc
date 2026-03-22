@@ -6735,14 +6735,15 @@ ${stabSection}
 
                 // Comparison rows — only show rows where we have both values
                 const cmpRows: { label: string; cur: string; opt: string; better: boolean }[] = [];
+                const meaningfulGain = (cur: number, opt: number, pct = 5) => Math.abs((opt - cur) / (cur || 1)) * 100 >= pct;
                 if (curStabPct != null && recStabPct != null)
-                  cmpRows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct });
+                  cmpRows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct && meaningfulGain(curStabPct, recStabPct) });
                 if (curForce != null && recForce != null)
-                  cmpRows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce });
+                  cmpRows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce && meaningfulGain(curForce, recForce) });
                 if (curMrr > 0 && recMrr > 0)
-                  cmpRows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr });
+                  cmpRows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr && meaningfulGain(curMrr, recMrr) });
                 if (curFeed > 0 && recFeed > 0)
-                  cmpRows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed });
+                  cmpRows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed && meaningfulGain(curFeed, recFeed) });
 
                 return (
                   <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 px-4 py-3 space-y-2">
