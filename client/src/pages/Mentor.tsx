@@ -2489,12 +2489,30 @@ ${stabSection}
                     }}
                   />
                 </div>
-                {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && (
-                  <div className="col-span-2 text-xs text-muted-foreground">
-                    Radial wall (a<sub>e</sub>): <strong>{(((form.target_hole_dia - form.existing_hole_dia) / 2)).toFixed(3)}"</strong>
-                    {" · "}Feed correction: <strong>×{(form.tool_dia / form.target_hole_dia).toFixed(2)}</strong> (programmed ÷ peripheral)
-                  </div>
-                )}
+                {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && form.tool_dia > 0 && (() => {
+                  const radialWall = (form.target_hole_dia - form.existing_hole_dia) / 2;
+                  const radialClearance = (form.existing_hole_dia - form.tool_dia) / 2;
+                  const wocIn = (form.woc_pct / 100) * form.tool_dia;
+                  const passes = wocIn > 0 ? Math.ceil(radialWall / wocIn) : null;
+                  const tooBig = form.existing_hole_dia < form.tool_dia * 1.1;
+                  const tightClearance = radialClearance > 0 && radialClearance < 0.050;
+                  return (
+                    <div className="col-span-2 space-y-1.5">
+                      <div className="text-xs text-muted-foreground">
+                        Radial wall (a<sub>e</sub>): <strong>{radialWall.toFixed(3)}"</strong>
+                        {" · "}Feed correction: <strong>×{(form.tool_dia / form.target_hole_dia).toFixed(3)}</strong> (programmed ÷ peripheral)
+                        {passes != null && <span> · <strong>{passes} radial pass{passes !== 1 ? "es" : ""}</strong> to final dia</span>}
+                      </div>
+                      {tooBig && (
+                        <p className="text-xs text-red-400">⛔ Entry bore too small — tool cannot safely enter. Entry bore must be &gt;1.1× tool diameter minimum.</p>
+                      )}
+                      {!tooBig && tightClearance && (
+                        <p className="text-xs text-amber-400">⚠ Radial clearance {radialClearance.toFixed(3)}" — tight (&lt;0.050"). Risk of rubbing on entry. Consider a smaller tool or larger entry bore.</p>
+                      )}
+                      <p className="text-xs text-sky-400/80">Tip: Leave 0.005–0.010" stock for a final light cleanup pass at reduced feed for bore tolerance.</p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -7723,6 +7741,21 @@ ${stabSection}
           <p>• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
           <p>• <span className="text-white">Increase SFM 10–15%, reduce feed 15–25%</span> vs roughing</p>
           <p>• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
+        </div>
+      )}
+
+      {/* Circular interpolation tips — shown at bottom of results */}
+      {mentor.data && form.mode === "circ_interp" && (
+        <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
+          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Circular Interpolation Tips</p>
+          <p>• <span className="text-white">Arc feed correction:</span> programmed feedrate = peripheral feed × (tool dia ÷ bore dia). The cutting edge travels faster than the tool center — always apply this or chip load will be wrong</p>
+          <p>• <span className="text-white">CCW toolpath = climb milling</span> on an internal bore. Use CCW for finish passes; CW is conventional (more rubbing, better if backlash is a concern)</p>
+          <p>• <span className="text-white">Leave 0.005–0.010" stock</span> for a final cleanup pass at reduced feed — bore tolerances are tight and deflection on roughing passes leaves material</p>
+          <p>• <span className="text-white">Entry bore clearance:</span> radial clearance (entry bore − tool dia) ÷ 2 should be ≥0.050" for rigid entry. Tighter = rubbing risk</p>
+          <p>• <span className="text-white">Stepover ≤15% of tool dia</span> for finishing passes — excessive stepover causes chatter and poor bore finish</p>
+          <p>• <span className="text-white">Minimize stickout</span> — at 2×D+ depth, deflection bows the bore. Keep gauge line as close to holder as part clearance allows</p>
+          <p>• <span className="text-white">Ramp angle ≤2°</span> if helically ramping to depth (no pre-drilled hole). Most endmills are not designed for steep axial ramps</p>
+          <p>• <span className="text-white">Never dwell mid-pass</span> — stopping feed inside the bore leaves a witness ring. Lead tool out past bore edge on exit</p>
         </div>
       )}
 
