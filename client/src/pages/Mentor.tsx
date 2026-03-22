@@ -895,7 +895,7 @@ export default function Mentor() {
       circ_interp:{ low: 10, med: 25, high: 50 },
     };
     const flatDoc: Record<string, { low: number; med: number; high: number }> = {
-      finish:     { low: 0.25, med: 1.0, high: loc > 0 && dia > 0 ? loc / dia : 2.0 },
+      finish:     { low: 0.25, med: 1.0, high: loc > 0 && dia > 0 ? Math.round((loc / dia) * 100) / 100 : 2.0 },
       face:       { low: 0.03,med: 0.08, high: 0.15 },
       trochoidal: { low: 1.0, med: 1.5,  high: 2.0 },
       slot:       { low: flutes === 5 ? 0.15 : 0.25, med: flutes === 5 ? 0.30 : 0.5, high: flutes === 5 ? 0.5 : 1.0 },
@@ -918,7 +918,7 @@ export default function Mentor() {
   const WOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
     hem:         dynPresets.woc,
     traditional: dynPresets.woc,
-    finish:      dynPresets.woc,
+    finish:      { low: 2, med: 5, high: 10 },
     face:        { low: 50, med: 75, high: 90 },
     trochoidal:  dynPresets.woc,
     slot:        { low: 100,med: 100,high: 100 },
@@ -927,7 +927,7 @@ export default function Mentor() {
   const DOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
     hem:         dynPresets.doc,
     traditional: dynPresets.doc,
-    finish:      dynPresets.doc,
+    finish:      { low: 0.25, med: 1.0, high: form.loc > 0 && form.tool_dia > 0 ? Math.round((form.loc / form.tool_dia) * 100) / 100 : 2.0 },
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
     slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
