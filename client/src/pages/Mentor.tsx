@@ -2443,21 +2443,6 @@ ${stabSection}
               </select>
             )}
 
-            {/* Finishing tips */}
-            {form.mode === "finish" && (
-              <div className="mt-2 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
-                <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Finishing Tips</p>
-                <p>• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
-                <p>• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
-                <p>• <span className="text-white">Climb mill</span> always — less rubbing, better Ra, longer tool life</p>
-                <p>• <span className="text-white">Spring pass:</span> repeat same path at zero offset to remove deflection stock</p>
-                <p>• Leave <span className="text-white">0.005–0.015" stock</span> after roughing before finishing</p>
-                <p>• <span className="text-white">Stickout ≤3×D</span> — check this before adjusting speeds if chatter appears</p>
-                <p>• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
-                <p>• <span className="text-white">Increase SFM 10–15%,  reduce feed 15–25%</span> vs roughing</p>
-                <p>• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
-              </div>
-            )}
 
             {/* Circular Interpolation hole dimensions */}
             {form.mode === "circ_interp" && (
@@ -7721,6 +7706,22 @@ ${stabSection}
         <div className="mt-5 rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 flex items-center gap-2 text-sm text-emerald-300">
           <span className="text-base">✓</span>
           <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
+        </div>
+      )}
+
+      {/* Finishing tips — shown at bottom of results when finish mode */}
+      {mentor.data && form.mode === "finish" && (
+        <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
+          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Finishing Tips</p>
+          <p>• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
+          <p>• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
+          <p>• <span className="text-white">Climb mill</span> always — less rubbing, better Ra, longer tool life</p>
+          <p>• <span className="text-white">Spring pass:</span> repeat same path at zero offset to remove deflection stock</p>
+          <p>• Leave <span className="text-white">0.005–0.015" stock</span> after roughing before finishing</p>
+          <p>• <span className="text-white">Stickout ≤3×D</span> — check this before adjusting speeds if chatter appears</p>
+          <p>• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
+          <p>• <span className="text-white">Increase SFM 10–15%, reduce feed 15–25%</span> vs roughing</p>
+          <p>• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
         </div>
       )}
 
