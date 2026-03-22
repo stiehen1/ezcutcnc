@@ -918,7 +918,7 @@ export default function Mentor() {
   const WOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
     hem:         dynPresets.woc,
     traditional: dynPresets.woc,
-    finish:      { low: 5,  med: 15, high: 25 },
+    finish:      dynPresets.woc,
     face:        { low: 50, med: 75, high: 90 },
     trochoidal:  dynPresets.woc,
     slot:        { low: 100,med: 100,high: 100 },
@@ -927,7 +927,7 @@ export default function Mentor() {
   const DOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
     hem:         dynPresets.doc,
     traditional: dynPresets.doc,
-    finish:      { low: 0.1, med: 0.25, high: 0.5 },
+    finish:      dynPresets.doc,
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
     slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
