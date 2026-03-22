@@ -3901,22 +3901,50 @@ ${stabSection}
                   </div>
                 );
               })()}
-              {/* Bore enlargement arc engagement advisory */}
-              {form.mode === "circ_interp" && form.woc_pct > 0 && form.tool_dia > 0 && (() => {
-                const wocIn = (form.woc_pct / 100) * form.tool_dia;
-                const arg = Math.max(-1, Math.min(1, 1 - (2 * wocIn) / form.tool_dia));
-                const arcDeg = 2 * Math.acos(arg) * (180 / Math.PI);
-                const zone = arcDeg < 90 ? { label: "Light", color: "#4ade80" }
-                  : arcDeg < 150 ? { label: "Moderate", color: "#facc15" }
-                  : arcDeg <= 180 ? { label: "Heavy", color: "#fb923c" }
-                  : { label: "Too High", color: "#f87171" };
+              {/* Bore enlargement arc engagement — entry pass vs finish pass */}
+              {form.mode === "circ_interp" && form.tool_dia > 0 && (() => {
+                const D = form.tool_dia;
+                const entryBore = form.existing_hole_dia > 0 ? form.existing_hole_dia : 0;
+                const targetBore = form.target_hole_dia > entryBore ? form.target_hole_dia : 0;
+                // Entry pass: ae = total radial wall (worst case single pass or first roughing pass)
+                const aeEntry = entryBore > 0 && targetBore > 0 ? (targetBore - entryBore) / 2 : (form.woc_pct / 100) * D;
+                // Finish pass: 0.007" stock removal (light cleanup)
+                const aeFinish = 0.007;
+                const engAngle = (ae: number) => {
+                  const arg = Math.max(-1, Math.min(1, 1 - (2 * ae) / D));
+                  return 2 * Math.acos(arg) * (180 / Math.PI);
+                };
+                const zoneColor = (deg: number) =>
+                  deg < 90 ? "#4ade80" : deg < 150 ? "#facc15" : deg <= 180 ? "#fb923c" : "#f87171";
+                const zoneLabel = (deg: number) =>
+                  deg < 90 ? "Light" : deg < 150 ? "Moderate" : deg <= 180 ? "Heavy" : "Too High";
+                const entryDeg = engAngle(aeEntry);
+                const finishDeg = engAngle(aeFinish);
+                const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
                 return (
-                  <div className="mt-1 space-y-1">
-                    <p className="text-[10px]" style={{ color: zone.color }}>
-                      Arc engagement: {arcDeg.toFixed(1)}° — <strong>{zone.label}</strong>
-                    </p>
-                    {arcDeg > 150 && (
-                      <p className="text-[10px] text-amber-400">⚠ Consider multiple radial passes for this bore enlargement</p>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex gap-1.5">
+                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}
+                        title="Arc engagement on first/roughing pass — highest engagement of the operation. Bore curvature at entry makes actual engagement slightly higher than shown.">
+                        <div className="text-[9px] uppercase tracking-widest mb-1 text-slate-500">Entry Pass</div>
+                        <div className="text-sm font-bold leading-tight" style={{ color: zoneColor(entryDeg) }}>{entryDeg.toFixed(1)}°</div>
+                        <div className="text-[9px] mt-0.5" style={{ color: zoneColor(entryDeg) }}>{zoneLabel(entryDeg)}</div>
+                        <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (entryDeg / 360) * 100)}%`, background: zoneColor(entryDeg) }} />
+                        </div>
+                      </div>
+                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}
+                        title="Arc engagement on finish pass (0.007&quot; stock removal) — lightest engagement. As the bore opens toward final diameter, each pass removes less material and engagement drops.">
+                        <div className="text-[9px] uppercase tracking-widest mb-1 text-slate-500">Finish Pass</div>
+                        <div className="text-sm font-bold leading-tight" style={{ color: zoneColor(finishDeg) }}>{finishDeg.toFixed(1)}°</div>
+                        <div className="text-[9px] mt-0.5" style={{ color: zoneColor(finishDeg) }}>{zoneLabel(finishDeg)}</div>
+                        <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (finishDeg / 360) * 100)}%`, background: zoneColor(finishDeg) }} />
+                        </div>
+                      </div>
+                    </div>
+                    {entryDeg > 150 && (
+                      <p className="text-[10px] text-amber-400">⚠ High entry engagement — use multiple radial passes to reduce force on first cut</p>
                     )}
                   </div>
                 );
