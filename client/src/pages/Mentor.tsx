@@ -2499,26 +2499,18 @@ ${stabSection}
                   />
                 </div>
                 {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && form.tool_dia > 0 && (() => {
-                  const radialWall = (form.target_hole_dia - form.existing_hole_dia) / 2;
-                  const radialClearance = (form.existing_hole_dia - form.tool_dia) / 2;
-                  const wocIn = (form.woc_pct / 100) * form.tool_dia;
-                  const passes = wocIn > 0 ? Math.ceil(radialWall / wocIn) : null;
                   const tooBig = form.existing_hole_dia < form.tool_dia * 1.1;
+                  const radialClearance = (form.existing_hole_dia - form.tool_dia) / 2;
                   const tightClearance = radialClearance > 0 && radialClearance < 0.050;
+                  if (!tooBig && !tightClearance) return null;
                   return (
-                    <div className="col-span-2 space-y-1.5">
-                      <div className="text-xs text-muted-foreground">
-                        Radial wall (a<sub>e</sub>): <strong>{radialWall.toFixed(3)}"</strong>
-                        {passes != null && <span> · <strong>{passes} radial pass{passes !== 1 ? "es" : ""}</strong> to final dia</span>}
-                        {" · "}Bore correction <strong>×{(form.tool_dia / form.target_hole_dia).toFixed(3)}</strong> applied — <span className="text-amber-300">Feed (IPM) in results = enter in CAM · Peripheral Feed = actual chip load at wall</span>
-                      </div>
+                    <div className="col-span-2 space-y-1">
                       {tooBig && (
                         <p className="text-xs text-red-400">⛔ Entry bore too small — tool cannot safely enter. Entry bore must be &gt;1.1× tool diameter minimum.</p>
                       )}
                       {!tooBig && tightClearance && (
-                        <p className="text-xs text-amber-400">⚠ Radial clearance {radialClearance.toFixed(3)}" — tight (&lt;0.050"). Risk of rubbing on entry. Consider a smaller tool or larger entry bore.</p>
+                        <p className="text-xs text-amber-400">⚠ Radial clearance {radialClearance.toFixed(3)}" — tight (&lt;0.050"). Risk of rubbing on entry.</p>
                       )}
-                      <p className="text-xs text-sky-400/80">Tip: Leave 0.005–0.010" stock for a final light cleanup pass at reduced feed for bore tolerance.</p>
                     </div>
                   );
                 })()}
@@ -3910,83 +3902,7 @@ ${stabSection}
                   </div>
                 );
               })()}
-              {/* Bore enlargement arc engagement — 3-phase layout */}
-              {form.mode === "circ_interp" && form.tool_dia > 0 && (() => {
-                const D = form.tool_dia;
-                const entryBore = form.existing_hole_dia > 0 ? form.existing_hole_dia : 0;
-                const targetBore = form.target_hole_dia > entryBore ? form.target_hole_dia : 0;
-                const radialWall = entryBore > 0 && targetBore > 0 ? (targetBore - entryBore) / 2 : (form.woc_pct / 100) * D;
-                const passes = Math.max(1, Math.ceil(radialWall / (D * 0.25)));
-                const aePerPass = radialWall / passes;
-                const aeFinish = 0.007;
-                const radialClearance = entryBore > 0 ? (entryBore - D) / 2 : null;
-                const engAngle = (ae: number) => {
-                  const arg = Math.max(-1, Math.min(1, 1 - (2 * ae) / D));
-                  return 2 * Math.acos(arg) * (180 / Math.PI);
-                };
-                const zoneColor = (deg: number) =>
-                  deg < 90 ? "#4ade80" : deg < 150 ? "#facc15" : deg <= 180 ? "#fb923c" : "#f87171";
-                const zoneLabel = (deg: number) =>
-                  deg < 90 ? "Light" : deg < 150 ? "Moderate" : deg <= 180 ? "Heavy" : "Too High";
-                const entryDeg = engAngle(aePerPass);
-                const finishDeg = engAngle(aeFinish);
-                const phaseStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
-                return (
-                  <div className="mt-2 space-y-1.5">
-                    {/* Phase 1 — Entry */}
-                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
-                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">① Entry</div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-400">Bore clearance</span>
-                        <span className="text-[10px] font-semibold" style={{ color: radialClearance == null ? "#94a3b8" : radialClearance >= 0.050 ? "#4ade80" : "#f87171" }}>
-                          {radialClearance != null ? `${radialClearance.toFixed(3)}" per side ${radialClearance >= 0.050 ? "✓" : "⚠ tight"}` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Entry type</span>
-                        <span className="text-[10px] font-semibold text-sky-300">Sweep / Roll-in preferred</span>
-                      </div>
-                    </div>
-                    {/* Phase 2 — Cutting */}
-                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
-                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">② Cutting — {passes} radial pass{passes !== 1 ? "es" : ""} · {aePerPass.toFixed(4)}"/pass</div>
-                      <div className="flex gap-1.5">
-                        <div className="flex-1">
-                          <div className="text-[9px] text-zinc-500 mb-0.5">Engagement / pass</div>
-                          <div className="text-sm font-bold" style={{ color: zoneColor(entryDeg) }}>{entryDeg.toFixed(1)}°</div>
-                          <div className="text-[9px]" style={{ color: zoneColor(entryDeg) }}>{zoneLabel(entryDeg)}</div>
-                          <div className="mt-1 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (entryDeg / 360) * 100)}%`, background: zoneColor(entryDeg) }} />
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-[9px] text-zinc-500 mb-0.5">CCW = climb cut</div>
-                          <div className="text-[10px] text-zinc-300 leading-snug">Use CCW for finish passes. CW = conventional (more rubbing)</div>
-                        </div>
-                      </div>
-                      {entryDeg > 150 && (
-                        <p className="text-[10px] text-amber-400 mt-1">⚠ High engagement — increase radial passes or reduce step per pass</p>
-                      )}
-                    </div>
-                    {/* Phase 3 — Finish */}
-                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
-                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">③ Finish Pass</div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-400">Engagement (0.007" stock)</span>
-                        <span className="text-[10px] font-semibold" style={{ color: zoneColor(finishDeg) }}>{finishDeg.toFixed(1)}° — {zoneLabel(finishDeg)}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Leave stock</span>
-                        <span className="text-[10px] font-semibold text-sky-300">0.005–0.010" for cleanup pass</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Feed on finish</span>
-                        <span className="text-[10px] font-semibold text-sky-300">50–70% of roughing feed</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* circ_interp 3-phase advisory moved to results panel */}
             </div>
             <div className="flex-1 min-w-0 space-y-2">
               <div className="flex items-center justify-between">
@@ -7158,6 +7074,116 @@ ${stabSection}
                   </div>
                 </>
               ) : null}
+
+              {/* Circular Interpolation Advisory — shown after KPIs when circ_interp */}
+              {form.mode === "circ_interp" && customer && form.tool_dia > 0 && (() => {
+                const D = form.tool_dia;
+                const entryBore = form.existing_hole_dia > 0 ? form.existing_hole_dia : 0;
+                const targetBore = form.target_hole_dia > entryBore ? form.target_hole_dia : 0;
+                const radialWall = customer.ci_a_e_in ?? ((targetBore - entryBore) / 2);
+                if (radialWall <= 0) return null;
+                const passes = Math.max(1, Math.ceil(radialWall / (D * 0.25)));
+                const aePerPass = radialWall / passes;
+                const aeFinish = 0.007;
+                const radialClearance = entryBore > 0 ? (entryBore - D) / 2 : null;
+                const feedCam = customer.feed_ipm ?? 0;
+                const feedPeripheral = customer.peripheral_feed_ipm ?? 0;
+                const engAngle = (ae: number) => {
+                  const arg = Math.max(-1, Math.min(1, 1 - (2 * ae) / D));
+                  return 2 * Math.acos(arg) * (180 / Math.PI);
+                };
+                const zoneColor = (deg: number) =>
+                  deg < 90 ? "#4ade80" : deg < 150 ? "#facc15" : deg <= 180 ? "#fb923c" : "#f87171";
+                const zoneLabel = (deg: number) =>
+                  deg < 90 ? "Light" : deg < 150 ? "Moderate" : deg <= 180 ? "Heavy" : "Too High";
+                const entryDeg = engAngle(aePerPass);
+                const finishDeg = engAngle(aeFinish);
+                const phaseStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
+                return (
+                  <div className="mt-3 rounded-xl border border-indigo-600/40 bg-indigo-950/20 px-3 py-3 space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 mb-1">Circular Interpolation — Process Advisory</div>
+                    {/* Feed summary */}
+                    <div className="rounded-md px-2 py-1.5 flex items-center justify-between gap-4" style={phaseStyle}>
+                      <div>
+                        <div className="text-[9px] text-zinc-500 mb-0.5">CAM Feed (tool centerline)</div>
+                        <div className="text-sm font-bold text-white">{feedCam.toFixed(2)} IPM</div>
+                        <div className="text-[9px] text-amber-300">Enter this in CAM</div>
+                      </div>
+                      {feedPeripheral > 0 && (
+                        <div>
+                          <div className="text-[9px] text-zinc-500 mb-0.5">Peripheral Feed (at wall)</div>
+                          <div className="text-sm font-bold text-amber-400">{feedPeripheral.toFixed(2)} IPM</div>
+                          <div className="text-[9px] text-zinc-400">Actual chip load</div>
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-[9px] text-zinc-500 mb-0.5">Radial wall</div>
+                        <div className="text-sm font-bold text-white">{radialWall.toFixed(4)}"</div>
+                        <div className="text-[9px] text-zinc-400">{passes} pass{passes !== 1 ? "es" : ""} · {aePerPass.toFixed(4)}"/pass</div>
+                      </div>
+                    </div>
+                    {/* Phase 1 — Entry */}
+                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">① Entry</div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-zinc-400">Bore clearance</span>
+                        <span className="text-[10px] font-semibold" style={{ color: radialClearance == null ? "#94a3b8" : radialClearance >= 0.050 ? "#4ade80" : "#f87171" }}>
+                          {radialClearance != null ? `${radialClearance.toFixed(3)}" per side ${radialClearance >= 0.050 ? "✓" : "⚠ tight"}` : "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Entry type</span>
+                        <span className="text-[10px] font-semibold text-sky-300">Sweep / Roll-in preferred</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Ramp angle (if no pre-drill)</span>
+                        <span className="text-[10px] font-semibold text-sky-300">≤2°</span>
+                      </div>
+                    </div>
+                    {/* Phase 2 — Cutting */}
+                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">② Cutting — {passes} radial pass{passes !== 1 ? "es" : ""} · {aePerPass.toFixed(4)}"/pass</div>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <div className="text-[9px] text-zinc-500 mb-0.5">Engagement / pass</div>
+                          <div className="text-sm font-bold" style={{ color: zoneColor(entryDeg) }}>{entryDeg.toFixed(1)}°</div>
+                          <div className="text-[9px]" style={{ color: zoneColor(entryDeg) }}>{zoneLabel(entryDeg)}</div>
+                          <div className="mt-1 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (entryDeg / 360) * 100)}%`, background: zoneColor(entryDeg) }} />
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-[9px] text-zinc-500 mb-0.5">Direction</div>
+                          <div className="text-[10px] text-zinc-300 leading-snug">CCW = climb cut (preferred for finish). CW = conventional.</div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-[9px] text-zinc-500 mb-0.5">Bore-to-feed note</div>
+                          <div className="text-[10px] text-zinc-300 leading-snug">Larger bore → lower arc → higher feed is correct.</div>
+                        </div>
+                      </div>
+                      {entryDeg > 150 && (
+                        <p className="text-[10px] text-amber-400 mt-1">⚠ High engagement — increase radial passes or reduce step per pass</p>
+                      )}
+                    </div>
+                    {/* Phase 3 — Finish */}
+                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">③ Finish Pass</div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-zinc-400">Engagement (0.007" stock)</span>
+                        <span className="text-[10px] font-semibold" style={{ color: zoneColor(finishDeg) }}>{finishDeg.toFixed(1)}° — {zoneLabel(finishDeg)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Leave stock</span>
+                        <span className="text-[10px] font-semibold text-sky-300">0.005–0.010" for cleanup pass</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Feed on finish</span>
+                        <span className="text-[10px] font-semibold text-sky-300">50–70% of roughing · never dwell inside bore</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Spindle-Limited Advisory — shown when machine can't reach target SFM */}
               {customer?.sfm_target > 0 && customer?.rpm > 0 && form.max_rpm > 0 && (() => {
