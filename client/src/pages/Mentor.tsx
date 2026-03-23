@@ -6976,15 +6976,21 @@ ${stabSection}
                   }
                 />
                 <Kpi
-                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : UL("WOC (in)", "WOC (mm)")}
+                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "circ_interp" ? UL("Radial Wall ae (in)", "Radial Wall ae (mm)") : UL("WOC (in)", "WOC (mm)")}
+                  hint={form.mode === "circ_interp" ? "Total radial stock to remove = (target bore − existing bore) ÷ 2. This is the total wall the tool must interpolate through, split across radial passes." : undefined}
                   value={
                     <>
-                      {UC(customer.woc_in, 25.4, metric ? 2 : 4)}
-                      {customer.diameter ? (
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">
-                          ({fmtNum((customer.woc_in / customer.diameter) * 100, 1)}%)
-                        </span>
-                      ) : null}
+                      {form.mode === "circ_interp" && customer.ci_a_e_in != null
+                        ? <span>{UC(customer.ci_a_e_in, 25.4, metric ? 3 : 4)}</span>
+                        : <>
+                            {UC(customer.woc_in, 25.4, metric ? 2 : 4)}
+                            {customer.diameter ? (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                ({fmtNum((customer.woc_in / customer.diameter) * 100, 1)}%)
+                              </span>
+                            ) : null}
+                          </>
+                      }
                     </>
                   }
                 />
