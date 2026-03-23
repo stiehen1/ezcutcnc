@@ -48,6 +48,12 @@ def get_mode_defaults(mode: str, material: str):
     return woc, doc
 
 HELIX_FORCE_FACTOR = {35: 1.00, 38: 0.95, 45: 0.90}
+
+# Radial rake force factor — positive rake reduces Kc (easier cutting).
+# Normalized to 7° (standard steel/stainless tools = 1.00 baseline).
+# VXR series at 0° (neutral rake) generates ~5% more force than standard.
+# AL series at 10° (aggressive aluminum rake) generates ~5% less force.
+RAKE_FORCE_FACTOR = {0: 1.05, 7: 1.00, 8: 0.98, 10: 0.95}
 CORE_FACTOR_BY_FLUTES = {
     2: 0.75,
     3: 0.85,
@@ -240,7 +246,7 @@ def _hardness_kc_mult(hrc: float) -> float:
     return min(2.00, 1.60 + 0.040 * (hrc - 55))
 
 
-def cutting_force_per_tooth(material_group, h_eff, helix, hardness_hrc=0):
+def cutting_force_per_tooth(material_group, h_eff, helix, hardness_hrc=0, radial_rake=7):
     K = {
         # Legacy group keys
         "Steel": 180000,
@@ -277,11 +283,22 @@ def cutting_force_per_tooth(material_group, h_eff, helix, hardness_hrc=0):
         "hardened_gt55": 300000,
     }.get(material_group, 180000)
     K *= _hardness_kc_mult(hardness_hrc)
-    return K * h_eff * HELIX_FORCE_FACTOR.get(helix, 1.0)
+    # Interpolate rake factor for non-table values
+    _rake_ff = RAKE_FORCE_FACTOR.get(radial_rake)
+    if _rake_ff is None:
+        _rake_keys = sorted(RAKE_FORCE_FACTOR.keys())
+        _lo = max((k for k in _rake_keys if k <= radial_rake), default=_rake_keys[0])
+        _hi = min((k for k in _rake_keys if k >= radial_rake), default=_rake_keys[-1])
+        if _lo == _hi:
+            _rake_ff = RAKE_FORCE_FACTOR[_lo]
+        else:
+            _t = (radial_rake - _lo) / (_hi - _lo)
+            _rake_ff = RAKE_FORCE_FACTOR[_lo] + _t * (RAKE_FORCE_FACTOR[_hi] - RAKE_FORCE_FACTOR[_lo])
+    return K * h_eff * HELIX_FORCE_FACTOR.get(helix, 1.0) * _rake_ff
 
 
 def tool_deflection(force, stickout, diameter, flutes, loc=None, lbs=None, neck_dia=None,
-                    holder_gage_len=None, holder_nose_dia=None):
+                    holder_gage_len=None, holder_nose_dia=None, series_core_ratio=None):
     import math
 
     # Carbide modulus
@@ -291,19 +308,24 @@ def tool_deflection(force, stickout, diameter, flutes, loc=None, lbs=None, neck_
     # Estimate core diameter ratio based on flute count.
     # More flutes → less flute valley depth → larger core → I scales as D_core^4.
     # Stiffness vs 4-fl ref: 5fl=1.31×, 6fl=1.71×, 7fl=1.89×, 9fl=2.31×, 11fl=2.55×
-    core_ratio = {
-        2: 0.60,
-        3: 0.65,
-        4: 0.70,
-        5: 0.75,
-        6: 0.80,
-        7: 0.82,
-        8: 0.84,
-        9: 0.86,
-        10: 0.87,
-        11: 0.88,
-        12: 0.89,
-    }.get(flutes, 0.82 if flutes and flutes > 7 else 0.70)
+    # Series-specific core ratio takes priority over flute-count estimate.
+    # Provided by SERIES_CORE_RATIO in legacy_engine.py when tool_series is known.
+    if series_core_ratio is not None:
+        core_ratio = float(series_core_ratio)
+    else:
+        core_ratio = {
+            2: 0.60,
+            3: 0.65,
+            4: 0.70,
+            5: 0.75,
+            6: 0.80,
+            7: 0.82,
+            8: 0.84,
+            9: 0.86,
+            10: 0.87,
+            11: 0.88,
+            12: 0.89,
+        }.get(flutes, 0.82 if flutes and flutes > 7 else 0.70)
 
     core_diameter = diameter * core_ratio
     I_flute = (math.pi * core_diameter**4) / 64.0

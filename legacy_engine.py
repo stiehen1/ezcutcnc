@@ -476,6 +476,43 @@ SERIES_HELIX: dict[str, int] = {
     "VXR5":  39,
 }
 
+# Series-specific core diameter ratio (core_dia / cutting_dia).
+# Used in tool_deflection() — overrides flute-count-based estimate for known series.
+# VST6 has a stepped core (62% cutting zone, 70% shank); use 62% at the flute for deflection.
+# VMF series high core ratios (73–75%) make these tools significantly stiffer than generic estimates.
+SERIES_CORE_RATIO: dict[str, float] = {
+    "AL2":   0.50,
+    "AL3":   0.50,
+    "FEM5":  0.64,
+    "QTR3":  0.55,
+    "VST4":  0.55,
+    "VST5":  0.60,
+    "VST6":  0.62,  # cutting zone (70% at shank — not used for deflection)
+    "VMF7":  0.73,
+    "VMF9":  0.75,
+    "VMF11": 0.75,
+    "VXR4":  0.50,
+    "VXR5":  0.60,
+}
+
+# Radial rake angle (degrees) by series.
+# Applied as RAKE_FORCE_FACTOR in cutting_force_per_tooth().
+# Normalized to 7° baseline — VXR neutral rake (0°) increases Kc ~5%; AL series (10°) reduces ~5%.
+SERIES_RADIAL_RAKE: dict[str, int] = {
+    "AL2":   10,
+    "AL3":   10,
+    "FEM5":   7,
+    "QTR3":   8,
+    "VST4":   7,
+    "VST5":   7,
+    "VST6":   8,
+    "VMF7":   7,
+    "VMF9":   7,
+    "VMF11":  7,
+    "VXR4":   0,
+    "VXR5":   0,
+}
+
 # Chip-clearance WOC limits by flute count.
 # Tuple: (max_slot_doc_xd, max_side_woc_pct)
 #   max_slot_doc_xd  — max DOC as ×D when WOC ≥ 90% (full slot); None = no slotting
@@ -1163,6 +1200,7 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
         h_eff,
         data.get("helix", 35),
         data.get("hardness_hrc", 0),
+        data.get("radial_rake", 7),
     )
 
     # Scale with axial engagement (DOC)
@@ -1212,6 +1250,7 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
         data.get("neck_dia"),
         data.get("holder_gage_length"),
         data.get("holder_nose_dia"),
+        data.get("core_ratio"),
     )
     # Rigidity factor reduces deflection — stiffer holder/interface = less tip movement
     deflection /= rigidity
@@ -2922,12 +2961,20 @@ def run(payload=None):
     # ── Helix angle resolution ────────────────────────────────────────────────
     # Priority: payload helix_angle (SKU column) → SERIES_HELIX lookup → default 35°
     _helix_raw = payload.get("helix_angle") or payload.get("helix")
+    _series = str(payload.get("tool_series", "") or "").strip().upper()
     if _helix_raw:
         data["helix"] = int(float(_helix_raw))
     elif "helix" not in data or data["helix"] == 35:
-        _series = str(payload.get("tool_series", "") or "").strip().upper()
         if _series in SERIES_HELIX:
             data["helix"] = SERIES_HELIX[_series]
+
+    # Series-specific core ratio — used by tool_deflection() for accurate stiffness
+    if _series in SERIES_CORE_RATIO:
+        data["core_ratio"] = SERIES_CORE_RATIO[_series]
+
+    # Series-specific radial rake — applied in cutting_force_per_tooth() via RAKE_FORCE_FACTOR
+    if _series in SERIES_RADIAL_RAKE:
+        data["radial_rake"] = SERIES_RADIAL_RAKE[_series]
 
     # ── Circular Interpolation pre-processing ───────────────────────────────
     # Derive WOC and feed correction factor from hole geometry.
