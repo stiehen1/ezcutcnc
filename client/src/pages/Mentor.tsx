@@ -3850,8 +3850,8 @@ ${stabSection}
                 if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
                 return null;
               })()}
-              {/* Engagement physics mini-chart — not shown for face mode (stepover ≠ side engagement) */}
-              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && (() => {
+              {/* Engagement physics mini-chart — not shown for face or circ_interp (3-phase cards replace this) */}
+              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "circ_interp" && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 // Engine uses 2×acos(...) — full included arc entry-to-exit
