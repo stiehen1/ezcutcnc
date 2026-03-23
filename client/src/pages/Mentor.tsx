@@ -429,7 +429,7 @@ export default function Mentor() {
   async function saveMachine() {
     const e = tbEmail || localStorage.getItem("tb_email") || "";
     const t = tbToken || localStorage.getItem("tb_token") || "";
-    if (!e || !t) { setTbShowModal(true); return; }
+    if (!e || !t) { setShowSaveMachineModal(false); setTbShowModal(true); return; }
     if (!machineNickname.trim()) return;
     setMachineSaving(true);
     try {
