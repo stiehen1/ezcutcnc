@@ -458,6 +458,13 @@ export default function Mentor() {
         // Refresh saved list
         const r2 = await fetch(`/api/user-machines?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`);
         if (r2.ok) setSavedMachines(await r2.json());
+      } else if (res.status === 401) {
+        // Token expired or invalid — clear and re-prompt
+        localStorage.removeItem("tb_email"); localStorage.removeItem("tb_token");
+        setTbEmail(""); setTbToken("");
+        setTbStep("email");
+        setShowSaveMachineModal(false);
+        setTbShowModal(true);
       }
     } finally { setMachineSaving(false); }
   }
