@@ -1105,7 +1105,7 @@ export async function registerRoutes(
     const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
     const smtpUser = process.env.SMTP_USER || "";
     const smtpPass = process.env.SMTP_PASS || "";
-    const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+    const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
     const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
     const subjectLine = `Custom Reamer Quote Request — ${spec?.diameter || "?"}" ø — ${customer.name}`;
@@ -1161,7 +1161,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1185,7 +1185,7 @@ export async function registerRoutes(
     const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
     const smtpUser = process.env.SMTP_USER || "";
     const smtpPass = process.env.SMTP_PASS || "";
-    const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+    const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
     const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
     const subjectLine = `Custom Drill Quote Request — ${spec?.diameter || "?"} ø — ${customer.name}`;
@@ -1243,7 +1243,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1267,7 +1267,7 @@ export async function registerRoutes(
     const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
     const smtpUser = process.env.SMTP_USER || "";
     const smtpPass = process.env.SMTP_PASS || "";
-    const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+    const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
     const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
     const subjectLine = `Custom Thread Mill Quote — ${spec?.thread_standard || "?"} ${spec?.major_dia || "?"} × ${spec?.tpi || spec?.pitch_mm || "?"} — ${customer.name}`;
@@ -1319,7 +1319,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1359,7 +1359,7 @@ export async function registerRoutes(
       const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
       const smtpUser = process.env.SMTP_USER || "";
       const smtpPass = process.env.SMTP_PASS || "";
-      const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+      const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
       if (!smtpUser || !smtpPass) {
@@ -1374,7 +1374,7 @@ export async function registerRoutes(
 
       // Send results to user
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to: email,
         subject: "Your Core Cutter Speeds & Feeds Results",
         text: [
@@ -1390,7 +1390,7 @@ export async function registerRoutes(
 
       // Notify sales
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         subject: `New Lead — ${operation ?? "unknown op"} · ${material ?? "unknown material"} — ${email}`,
         text: [
@@ -1432,7 +1432,7 @@ export async function registerRoutes(
       const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
       const smtpUser = process.env.SMTP_USER || "";
       const smtpPass = process.env.SMTP_PASS || "";
-      const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+      const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
       console.log("[Tool Request]", { name, email, message });
@@ -1447,7 +1447,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${smtpUser}>`,
+        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: email,
         subject: `Tool Request — ${name ?? email}`,
@@ -2138,7 +2138,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
     const fromName = "EZCutCNC by Core Cutter";
-    const fromAddr = process.env.SMTP_USER || "noreply@corecutterusa.com";
+    const fromAddr = process.env.FROM_EMAIL || "noreply@corecutterusa.com";
     const mailOptions = {
       from: `"${fromName}" <${fromAddr}>`,
       to: email,
@@ -2288,9 +2288,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
       // Saved machines first, then catalog
       res.json([...savedRows, ...catalogRows.rows]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("[machines/search] error:", err);
-      res.json([]); // Return empty array rather than 500 — UI stays usable
+      res.status(500).json({ error: err?.message ?? String(err) });
     }
   });
 
