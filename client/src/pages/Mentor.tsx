@@ -7755,9 +7755,12 @@ ${stabSection}
         </div>
       )}
       {mentor.data && erStatus === "sent" && (
-        <div className="mt-5 rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 flex items-center gap-2 text-sm text-emerald-300">
-          <span className="text-base">✓</span>
-          <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
+        <div className="mt-5 rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 flex items-center justify-between gap-2 text-sm text-emerald-300">
+          <div className="flex items-center gap-2">
+            <span className="text-base">✓</span>
+            <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
+          </div>
+          <button onClick={() => setErStatus("idle")} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
         </div>
       )}
 
