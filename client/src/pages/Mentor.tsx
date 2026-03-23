@@ -366,7 +366,6 @@ export default function Mentor() {
   const [machineDropOpen, setMachineDropOpen] = React.useState(false);
   const machineTouchingDropRef = React.useRef(false);
   const machineInputRef = React.useRef<HTMLInputElement>(null);
-  const [machineDropRect, setMachineDropRect] = React.useState<{top:number;left:number;width:number} | null>(null);
   const [savedMachines, setSavedMachines] = React.useState<any[]>([]);
   const [showSaveMachineModal, setShowSaveMachineModal] = React.useState(false);
   const [machineNickname, setMachineNickname] = React.useState("");
@@ -4900,18 +4899,21 @@ ${stabSection}
                 placeholder="Search catalog — e.g. Haas VF-2, Mazak, DMG..."
                 value={machineQuery || (!machineDropOpen ? activeMachineName : "")}
                 onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
-                onFocus={() => {
-                  setMachineDropOpen(true);
-                  if (machineInputRef.current) {
-                    const r = machineInputRef.current.getBoundingClientRect();
-                    setMachineDropRect({ top: r.bottom + window.scrollY, left: r.left + window.scrollX, width: r.width });
-                  }
-                }}
-                onBlur={() => setTimeout(() => { if (!machineTouchingDropRef.current) { setMachineDropOpen(false); setMachineDropRect(null); } }, 500)}
+                onFocus={() => { setMachineDropOpen(true); }}
+                onBlur={() => setTimeout(() => { if (!machineTouchingDropRef.current) setMachineDropOpen(false); }, 500)}
                 className="text-sm"
               />
-              {machineDropOpen && machineResults.length > 0 && machineDropRect && (
-                <div style={{ position: "fixed", top: machineDropRect.top - window.scrollY + 4, left: machineDropRect.left, width: machineDropRect.width, zIndex: 9999 }}
+              {machineDropOpen && machineResults.length > 0 && (() => {
+                const rect = machineInputRef.current?.getBoundingClientRect();
+                const spaceBelow = rect ? window.innerHeight - rect.bottom : 999;
+                const showAbove = spaceBelow < 200;
+                return (
+                <div style={{ position: "fixed", zIndex: 9999,
+                  top: rect ? (showAbove ? undefined : rect.bottom + 4) : undefined,
+                  bottom: rect && showAbove ? window.innerHeight - rect.top + 4 : undefined,
+                  left: rect ? rect.left : undefined,
+                  width: rect ? rect.width : undefined,
+                }}
                   className="rounded-md border border-zinc-700 bg-zinc-900 shadow-xl max-h-60 overflow-y-auto">
                   {machineResults.map((m, i) => (
                     <button
@@ -4931,7 +4933,8 @@ ${stabSection}
                     </button>
                   ))}
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
 
