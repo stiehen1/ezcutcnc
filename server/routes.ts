@@ -2247,7 +2247,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       const tokens = q.trim().split(/\s+/).filter(Boolean);
       const params: string[] = tokens.map(t => `%${t}%`);
       const tokenConds = tokens.map((_, i) =>
-        `(brand ILIKE $${i+1} OR model ILIKE $${i+1} OR control ILIKE $${i+1} OR (brand || ' ' || model) ILIKE $${i+1} OR nickname ILIKE $${i+1})`
+        `(brand ILIKE $${i+1} OR model ILIKE $${i+1} OR control ILIKE $${i+1} OR (brand || ' ' || model) ILIKE $${i+1})`
       ).join(" AND ");
 
       const catalogRows = await pool.query(
