@@ -6988,7 +6988,7 @@ ${stabSection}
                     </>
                   }
                 />
-                {customer.recommended_stepover != null && (
+                {customer.recommended_stepover != null && form.mode !== "circ_interp" && (
                   <Kpi
                     label={UL("Rec. Step-Over (in)", "Rec. Step-Over (mm)")}
                     hint="Recommended facing step-over per pass based on (Cut Diameter − 2 × Corner Radius) × 75%. Ensures the flat face of the tool does the cutting — not the corner radius — with 25% overlap for consistent surface finish."
@@ -7004,6 +7004,22 @@ ${stabSection}
                     }
                   />
                 )}
+                {form.mode === "circ_interp" && customer.ci_a_e_in != null && (() => {
+                  const passes = Math.max(1, Math.ceil(customer.ci_a_e_in / (form.tool_dia * 0.25)));
+                  const stepPerPass = customer.ci_a_e_in / passes;
+                  return (
+                    <Kpi
+                      label={UL("Radial Step / Pass (in)", "Radial Step / Pass (mm)")}
+                      hint="Radial stock removed per pass = total radial wall ÷ number of passes. Keeps each pass load manageable and bore geometry accurate."
+                      value={
+                        <span className="text-amber-400 font-semibold">
+                          {UC(stepPerPass, 25.4, metric ? 3 : 4)}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">({passes} pass{passes !== 1 ? "es" : ""})</span>
+                        </span>
+                      }
+                    />
+                  );
+                })()}
                 {form.mode === "face" && (() => {
                   const cr = form.corner_radius ?? 0;
                   if (cr <= 0) return (
