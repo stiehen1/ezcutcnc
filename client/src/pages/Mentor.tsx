@@ -2502,8 +2502,8 @@ ${stabSection}
                     <div className="col-span-2 space-y-1.5">
                       <div className="text-xs text-muted-foreground">
                         Radial wall (a<sub>e</sub>): <strong>{radialWall.toFixed(3)}"</strong>
-                        {" · "}Feed correction: <strong>×{(form.tool_dia / form.target_hole_dia).toFixed(3)}</strong> (programmed ÷ peripheral)
                         {passes != null && <span> · <strong>{passes} radial pass{passes !== 1 ? "es" : ""}</strong> to final dia</span>}
+                        {" · "}Bore correction <strong>×{(form.tool_dia / form.target_hole_dia).toFixed(3)}</strong> applied — <span className="text-amber-300">Feed (IPM) in results = enter in CAM · Peripheral Feed = actual chip load at wall</span>
                       </div>
                       {tooBig && (
                         <p className="text-xs text-red-400">⛔ Entry bore too small — tool cannot safely enter. Entry bore must be &gt;1.1× tool diameter minimum.</p>
@@ -7865,7 +7865,7 @@ ${stabSection}
       {mentor.data && form.mode === "circ_interp" && (
         <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
           <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Circular Interpolation Tips</p>
-          <p>• <span className="text-white">Arc feed correction:</span> programmed feedrate = peripheral feed × (tool dia ÷ bore dia). The cutting edge travels faster than the tool center — always apply this or chip load will be wrong</p>
+          <p>• <span className="text-white">CAM feed vs. peripheral feed:</span> The cutting edge at the bore wall travels faster than the tool center. <strong>Feed (IPM)</strong> in results is already corrected — enter that number in your CAM. <strong>Peripheral Feed</strong> in results is the actual chip load the tool sees at the wall — use it to verify the cut, not to program.</p>
           <p>• <span className="text-white">CCW toolpath = climb milling</span> on an internal bore. Use CCW for finish passes; CW is conventional (more rubbing, better if backlash is a concern)</p>
           <p>• <span className="text-white">Leave 0.005–0.010" stock</span> for a final cleanup pass at reduced feed — bore tolerances are tight and deflection on roughing passes leaves material</p>
           <p>• <span className="text-white">Entry bore clearance:</span> radial clearance (entry bore − tool dia) ÷ 2 should be ≥0.050" for rigid entry. Tighter = rubbing risk</p>
