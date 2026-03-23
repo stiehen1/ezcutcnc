@@ -2996,12 +2996,7 @@ def run(payload=None):
             _ci_a_e_in = min(_ci_a_e_in, _d_m)
             data["woc_pct"] = (_ci_a_e_in / _d_m) * 100.0
             _ci_feed_ratio = _d_m / _d_cap   # multiply straight-calc feed by this to get programmed feed
-        # DOC defaults to full hole depth — use LOC as proxy if doc_xd not set explicitly
-        if "doc_xd" not in payload:
-            _loc = float(payload.get("loc", 0) or 0)
-            _d_m_now = float(payload.get("tool_dia", tool_dia) or tool_dia)
-            if _loc > 0 and _d_m_now > 0:
-                data["doc_xd"] = _loc / _d_m_now
+        # Bore depth is a user-entered feature dimension (doc_xd from form); no default override.
     # ── end circ_interp pre-processing ──────────────────────────────────────
 
     # Ensure these always exist even in stiffness-limited / early-exit branches

@@ -980,6 +980,7 @@ export default function Mentor() {
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
   const [tmGcodeExpanded, setTmGcodeExpanded] = React.useState(false);
+  const [modeTipsOpen, setModeTipsOpen] = React.useState(false);
 
   // EDP# / SKU lookup state
   const [edpText, setEdpText] = React.useState("");
@@ -987,6 +988,7 @@ export default function Mentor() {
   const [skuDropdownOpen, setSkuDropdownOpen] = React.useState(false);
   const [skuLocked, setSkuLocked] = React.useState(false);
   const [skuDescription, setSkuDescription] = React.useState<string>("");
+  const [edpNotFound, setEdpNotFound] = React.useState(false);
   const [optimalRec, setOptimalRec] = React.useState<any>(null);
   const [optimalLoading, setOptimalLoading] = React.useState(false);
   const [skuChamferEdgeLength, setSkuChamferEdgeLength] = React.useState<number | null>(null);
@@ -1047,14 +1049,16 @@ export default function Mentor() {
 
   // EDP# debounced search
   React.useEffect(() => {
-    if (!edpText.trim() || skuLocked) { setSkuResults([]); setSkuDropdownOpen(false); return; }
+    if (!edpText.trim() || skuLocked) { setSkuResults([]); setSkuDropdownOpen(false); setEdpNotFound(false); return; }
+    setEdpNotFound(false); // reset while user is still typing
     const t = setTimeout(async () => {
       try {
         const r = await fetch(`/api/skus?q=${encodeURIComponent(edpText.trim())}`);
         const data: SkuRecord[] = await r.json();
         setSkuResults(data);
         setSkuDropdownOpen(data.length > 0);
-      } catch { setSkuResults([]); }
+        setEdpNotFound(data.length === 0);
+      } catch { setSkuResults([]); setEdpNotFound(false); }
     }, 200);
     return () => clearTimeout(t);
   }, [edpText, skuLocked]);
@@ -1129,6 +1133,7 @@ export default function Mentor() {
     setSkuResults([]);
     setSkuDropdownOpen(false);
     setSkuChamferEdgeLength(null);
+    setEdpNotFound(false);
   }
 
   function resetAll() {
@@ -1203,7 +1208,11 @@ export default function Mentor() {
     } else if (operation === "milling" || operation === "feedmilling") {
       if (!form.mode) missing.push("Process (HEM / Conventional / Slot…)");
       if (!(form.flutes > 0)) missing.push("Flute Count");
-      if (form.mode !== "circ_interp" && !(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
+      if (form.mode === "circ_interp") {
+        if (!(form.doc_xd > 0)) missing.push("Bore Depth");
+      } else {
+        if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
+      }
       if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
     }
     if (operation === "drilling" && !(form.drill_hole_depth > 0)) missing.push("Hole Depth");
@@ -2734,6 +2743,9 @@ ${stabSection}
                 >✕</button>
               )}
             </div>
+            {edpNotFound && !skuLocked && (
+              <p className="mt-1 text-xs font-semibold text-red-500">⚠ Invalid EDP Number Entered</p>
+            )}
             {skuLocked && (
               <p className="mt-1 text-[11px] text-orange-400 flex items-center gap-2 flex-wrap">
                 <span>Auto-filled from {edpText} — fields populated from catalog.{" "}
@@ -3894,12 +3906,52 @@ ${stabSection}
             <div className="flex-1 min-w-0 space-y-2">
               {form.mode === "circ_interp" ? (
                 <div className="space-y-1">
-                  <FieldLabel hint="Total bore depth — set automatically to your tool's LOC. The engine uses this as the full axial depth for the helical interpolation pass.">Bore Depth</FieldLabel>
-                  <div className="flex h-9 items-center rounded-md border border-input bg-zinc-900 px-3 text-sm text-zinc-400 gap-1">
-                    <span>{form.loc > 0 ? `${form.loc.toFixed(3)}"` : "— set by LOC"}</span>
-                    {form.loc > 0 && form.tool_dia > 0 && <span className="ml-1 text-xs text-zinc-500">{(form.loc / form.tool_dia).toFixed(2)}xD</span>}
+                  <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
+                  <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                      value={docText}
+                      placeholder={form.loc > 0 ? form.loc.toFixed(3) : "0.000"}
+                      onChange={(e) => setDocText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(docText);
+                        const dia = form.tool_dia || 0.5;
+                        // Cap = LBS if set (reduced-neck reach), else LOC
+                        const reach = form.lbs > 0 ? form.lbs : form.loc;
+                        if (Number.isFinite(n) && n > 0) {
+                          const clamped = reach > 0 ? Math.min(n, reach) : n;
+                          const xd = clamped / dia;
+                          setForm((p) => ({ ...p, doc_xd: xd }));
+                          setDocText(clamped.toFixed(3));
+                          setDocPreset(null);
+                        } else {
+                          setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                      {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
+                    </span>
                   </div>
-                  <p className="text-[10px] text-zinc-500">Engine uses full LOC as bore depth — adjust WOC for radial step per pass</p>
+                  {/* Bore depth vs reach warnings */}
+                  {form.doc_xd > 0 && form.tool_dia > 0 && (() => {
+                    const boreIn = form.doc_xd * form.tool_dia;
+                    const reach = form.lbs > 0 ? form.lbs : form.loc;
+                    if (reach <= 0) return null;
+                    const ratio = boreIn / reach;
+                    if (ratio <= 1.0) return null;
+                    const reachLabel = form.lbs > 0 ? "LBS" : "LOC";
+                    return (
+                      <p className="text-[10px] text-red-400">
+                        ⛔ Bore depth ({boreIn.toFixed(3)}") exceeds tool {reachLabel} ({reach.toFixed(3)}") — clamped to max reach.
+                      </p>
+                    );
+                  })()}
+                  {form.loc > 0 && form.doc_xd === 0 && (
+                    <p className="text-[10px] text-zinc-500">Max depth: {form.lbs > 0 ? `${form.lbs.toFixed(3)}" LBS` : `${form.loc.toFixed(3)}" LOC`}</p>
+                  )}
                 </div>
               ) : (<>
               <div className="flex items-center justify-between">
@@ -5469,9 +5521,12 @@ ${stabSection}
                 <button
                   type="button"
                   onClick={() => copyCamParams()}
-                  className="text-[10px] font-semibold px-2 py-1 rounded border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/15 transition-colors leading-tight whitespace-nowrap"
+                  className="text-[10px] font-semibold px-2 py-1 rounded border transition-colors leading-tight whitespace-nowrap"
+                  style={camCopied
+                    ? { borderColor: "#22c55e", background: "#14532d", color: "#86efac" }
+                    : { borderColor: "#6366f1", background: "#1e1b4b", color: "#a5b4fc" }}
                 >
-                  {camCopied ? "Copied ✓" : "Copy CAM Params"}
+                  {camCopied ? "✓ Copied!" : "📋 Copy Setup Sheet"}
                 </button>
                 <button
                   type="button"
@@ -7049,7 +7104,7 @@ ${stabSection}
                     />
                     <Kpi label={UL("Deflection (in)", "Deflection (mm)")} hint="Estimated tool tip deflection under radial cutting force, modeled as a cantilever beam. Excessive deflection causes dimensional error, chatter, and poor surface finish. The stability limit is shown in the Stability Check section." value={UC(engineering?.deflection_in, 25.4, metric ? 4 : 6)} />
                     <Kpi label={UL("Chip Thick (in)", "Chip Thick (mm)")} hint="Effective chip thickness after radial chip thinning (RCTF). At low WOC, the actual chip is thinner than the programmed FPT — the engine boosts feed to compensate. Must exceed the minimum chip thickness to avoid rubbing." value={UC(engineering?.chip_thickness_in, 25.4, metric ? 4 : 6)} />
-                    <Kpi
+                    {form.mode !== "face" && <Kpi
                       label="Tooth Engagement"
                       hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
                       value={
@@ -7067,7 +7122,7 @@ ${stabSection}
                           </div>
                         ) : "—"
                       }
-                    />
+                    />}
                     <Kpi label="Chatter" hint="Chatter index — a relative indicator combining deflection, RPM, and workholding compliance. Lower is better. This is an internal diagnostic value; use the Rigidity & Chatter Audit section for actionable guidance." value={fmtNum(engineering?.chatter_index, 3)} />
                   </div>
                 </>
@@ -7183,6 +7238,66 @@ ${stabSection}
                 );
               })()}
 
+              {/* Mode-specific Setup Tips — collapsible toggle */}
+              {customer && (form.mode === "face" || form.mode === "circ_interp") && (
+                <div className="mt-3 rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setModeTipsOpen(o => !o)}
+                    className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-sky-300 hover:text-sky-100 transition-colors"
+                  >
+                    <span>{form.mode === "face" ? "Facing / Planar Milling — Setup Tips" : "Circular Interpolation — Setup Tips"}</span>
+                    <span className="text-sky-500 text-[11px]">{modeTipsOpen ? "▲ Hide" : "▼ Show"}</span>
+                  </button>
+                  {modeTipsOpen && (
+                    <div className="mt-2 space-y-1.5 border-t border-sky-800/40 pt-2">
+                      {form.mode === "face" ? (<>
+                        {form.tool_dia > 0 && form.corner_radius > 0 && (
+                          <p className="text-[10px] text-sky-200">• <span className="text-white">Optimal stepover = (D − 2×CR) × 0.75</span> = <span className="font-semibold text-sky-100">{((form.tool_dia - 2 * form.corner_radius) * 0.75).toFixed(4)}"</span> — wiper overlaps each pass by 25%, burnishing out the cusp line</p>
+                        )}
+                        {!form.corner_radius && (
+                          <p className="text-[10px] text-sky-200">• <span className="text-white">Use a corner radius tool</span> — CR 0.030"+ creates a wiper flat. Square corners leave visible lines at every stepover</p>
+                        )}
+                        {form.tool_dia > 0 && form.corner_radius > 0 && (
+                          <p className="text-[10px] text-sky-200">• <span className="text-white">DOC must exceed CR ({form.corner_radius.toFixed(4)}")</span> — below CR you're cutting only on the arc; wiper effect disappears and floor looks scalloped. Minimum DOC: {(form.corner_radius + 0.003).toFixed(4)}"</p>
+                        )}
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">0.005–0.020" finish DOC</span> is normal and correct — facing DOC is much shallower than peripheral milling</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Minimize stickout</span> — #1 rule for facing. Full diameter engages; any deflection shows as flatness error</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Climb mill on finish pass</span> — bi-directional OK for roughing. Uni-directional on finish pass only</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Spring pass:</span> re-run at zero Z offset, same direction — removes deflection bow from first pass</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Air blast over flood</span> — chips under the wiper get smeared and streak the surface</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Axial runout &lt;0.0005"</span> — Z-wobble leaves repeating witness arcs at every stepover. Use shrink-fit or precision collet, check face TIR</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Troubleshoot:</span> Scallop lines = stepover too wide or CR too small · Witness arcs = check axial runout · Wavy surface = reduce stickout + spring pass</p>
+                      </>) : (<>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">CAM feed vs. peripheral feed:</span> <strong>Feed (IPM)</strong> in results is already corrected for arc — enter that number in your CAM. <strong>Peripheral Feed</strong> is the actual chip load at the wall — use it to verify the cut, not to program.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Larger bore = higher feed is correct:</span> As bore diameter increases, arc of engagement decreases and chip thinning kicks in — the engine boosts feed automatically. Higher Feed (IPM) on a large bore is expected, not a mistake.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">CCW toolpath = climb milling</span> on an internal bore. Use CCW for finish passes; CW is conventional (better if backlash is a concern)</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Leave 0.005–0.010" stock</span> for a final cleanup pass at reduced feed — bore tolerances are tight and deflection on roughing passes leaves material</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entry bore clearance:</span> radial clearance (entry bore − tool dia) ÷ 2 should be ≥0.050" for rigid entry. Tighter = rubbing risk</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Stepover ≤15% of tool dia</span> for finishing passes — excessive stepover causes chatter and poor bore finish</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Minimize stickout</span> — at 2×D+ depth, deflection bows the bore. Keep gauge line as close to holder as part clearance allows</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">No pre-drilled hole? Use helical interpolation entry in CAM</span> — ramp in a continuous helix to bore depth, then circular passes to size the wall. Set ramp feed to <strong>40–50% of Feed (IPM)</strong>. Ramp angle ≤2°; center-cutting geometry required.</p>
+                        {(() => {
+                          const D = form.tool_dia;
+                          const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : form.bore_dia;
+                          if (!(D > 0) || !(boreDia > 0)) return (
+                            <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> Enter tool and bore diameters above to see whether helical entry leaves a standing post.</p>
+                          );
+                          const postDia = boreDia - 2 * D;
+                          if (postDia <= 0) return (
+                            <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check ✓</span> — tool ({D.toFixed(4)}") ≥ half bore ({(boreDia/2).toFixed(4)}"). No standing post.</p>
+                          );
+                          return (
+                            <p className="text-[10px] text-sky-200">• <span className="text-white text-amber-300">⚠ Core post warning:</span> Helical entry leaves a <strong className="text-amber-300">{postDia.toFixed(4)}" standing post</strong>. Use a tool ≥{(boreDia/2).toFixed(4)}" or pre-interpolate a center pocket first.</p>
+                          );
+                        })()}
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Never dwell mid-pass</span> — stopping feed inside the bore leaves a witness ring. Lead tool out past bore edge on exit</p>
+                      </>)}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Spindle-Limited Advisory — shown when machine can't reach target SFM */}
               {customer?.sfm_target > 0 && customer?.rpm > 0 && form.max_rpm > 0 && (() => {
                 const sfmActual  = customer.sfm ?? 0;
@@ -7249,8 +7364,8 @@ ${stabSection}
                 );
               })()}
 
-              {/* Tooth Engagement Advisory — hidden for slotting and circ_interp */}
-              {engineering?.teeth_in_cut != null && form.mode !== "slot" && form.mode !== "circ_interp" && (() => {
+              {/* Tooth Engagement Advisory — hidden for slotting, circ_interp, and face (wiper geometry drives facing, not arc engagement) */}
+              {engineering?.teeth_in_cut != null && form.mode !== "slot" && form.mode !== "circ_interp" && form.mode !== "face" && (() => {
                 const tic = engineering.teeth_in_cut;
                 const low = 1.0, sweetLo = 1.5, sweetHi = 2.5, high = 3.0;
                 const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
@@ -7312,8 +7427,8 @@ ${stabSection}
                 );
               })()}
 
-              {/* Engagement Angle Advisory — hidden for circ_interp (3-phase cards replace this) */}
-              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && (() => {
+              {/* Engagement Angle Advisory — hidden for circ_interp and face */}
+              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && form.mode !== "face" && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
@@ -7943,37 +8058,19 @@ ${stabSection}
         </div>
       )}
 
-      {/* Circular interpolation tips — shown at bottom of results */}
-      {mentor.data && form.mode === "circ_interp" && (
-        <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
-          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Circular Interpolation Tips</p>
-          <p>• <span className="text-white">CAM feed vs. peripheral feed:</span> The cutting edge at the bore wall travels faster than the tool center. <strong>Feed (IPM)</strong> in results is already corrected — enter that number in your CAM. <strong>Peripheral Feed</strong> in results is the actual chip load the tool sees at the wall — use it to verify the cut, not to program.</p>
-          <p>• <span className="text-white">Larger bore = higher feed is correct:</span> As bore diameter increases relative to tool diameter, the arc of engagement decreases and chip thinning becomes significant — the engine automatically boosts feed to compensate. A bore close to tool diameter approaches slotting engagement (~180°) and feed drops accordingly. Higher Feed (IPM) on a large bore is expected, not a mistake.</p>
-          <p>• <span className="text-white">CCW toolpath = climb milling</span> on an internal bore. Use CCW for finish passes; CW is conventional (more rubbing, better if backlash is a concern)</p>
-          <p>• <span className="text-white">Leave 0.005–0.010" stock</span> for a final cleanup pass at reduced feed — bore tolerances are tight and deflection on roughing passes leaves material</p>
-          <p>• <span className="text-white">Entry bore clearance:</span> radial clearance (entry bore − tool dia) ÷ 2 should be ≥0.050" for rigid entry. Tighter = rubbing risk</p>
-          <p>• <span className="text-white">Stepover ≤15% of tool dia</span> for finishing passes — excessive stepover causes chatter and poor bore finish</p>
-          <p>• <span className="text-white">Minimize stickout</span> — at 2×D+ depth, deflection bows the bore. Keep gauge line as close to holder as part clearance allows</p>
-          <p>• <span className="text-white">Ramp angle ≤2°</span> if helically ramping to depth (no pre-drilled hole). Most endmills are not designed for steep axial ramps</p>
-          <p>• <span className="text-white">Never dwell mid-pass</span> — stopping feed inside the bore leaves a witness ring. Lead tool out past bore edge on exit</p>
-        </div>
-      )}
 
-      {/* Facing tips — shown at bottom of results when face mode */}
-      {mentor.data && form.mode === "face" && (
+
+      {/* HEM / Trochoidal tips */}
+      {mentor.data && (form.mode === "hem" || form.mode === "trochoidal") && (
         <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
-          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Facing / Planar Milling Tips</p>
-          <p>• <span className="text-white">Stepover = (D − 2×CR) × 0.75</span> — keeps the wiper overlapping each adjacent pass by 25%, burnishing out the cusp line</p>
-          <p>• <span className="text-white">DOC must exceed CR</span> — if DOC &lt; CR you're cutting only on the arc (no flat contact), wiper effect disappears, floor looks scalloped. Minimum: CR + 0.003"</p>
-          <p>• DOC well below tool radius (D/2) is fine — <span className="text-white">0.005–0.020" finish DOC</span> is common and correct</p>
-          <p>• <span className="text-white">Prefer CR 0.030"+</span> — larger corner radius = wider wiper = better finish. Sharp corners leave lines at every pass</p>
-          <p>• <span className="text-white">Minimize stickout</span> — #1 rule for facing. Full diameter is engaged; any deflection shows as flatness error</p>
-          <p>• <span className="text-white">Climb mill on finish pass</span> — bi-directional OK for roughing only. Uni-directional on finish to avoid conventional passes</p>
-          <p>• <span className="text-white">Spring pass:</span> re-run at zero Z offset, same direction — removes deflection bow from first pass</p>
-          <p>• <span className="text-white">Axial runout &lt;0.0005"</span> — Z-wobble leaves repeating arc witness marks at every stepover. Even 0.001" is visible on aluminum. Use shrink-fit or precision collet, check face TIR</p>
-          <p>• <span className="text-white">Air blast over flood</span> — chips under the wiper get smeared and streak the surface. Air blast sweeps them clear</p>
-          <p>• <span className="text-white">Ramp or arc entry, lead-out past edge</span> — never plunge, never stop feed mid-pass (dwell kills finish)</p>
-          <p>• <span className="text-white">Scallop lines</span> = stepover too wide or CR too small &nbsp;|&nbsp; <span className="text-white">Witness arcs</span> = check axial runout &nbsp;|&nbsp; <span className="text-white">Wavy surface</span> = reduce stickout + spring pass</p>
+          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">HEM / Trochoidal Tips</p>
+          <p>• <span className="text-white">WOC 5–15% of tool diameter</span> is the sweet spot — keeps chip thinning in the useful range and arc of engagement low enough to prevent heat buildup</p>
+          <p>• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
+          <p>• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
+          <p>• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
+          <p>• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3° for most endmills; verify center-cutting geometry.</p>
+          <p>• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
+          <p>• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
         </div>
       )}
 

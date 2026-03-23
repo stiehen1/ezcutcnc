@@ -1389,6 +1389,62 @@ function HelixEntry() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// No Middle Post (Helical Entry Core Check)
+// ─────────────────────────────────────────────────────────────────
+function NoMiddlePost() {
+  const metric = useMetric();
+  const dU = metric ? "mm" : "in";
+  const dec = metric ? 3 : 4;
+
+  const [boreDia, setBoreDia] = React.useState("");
+  const [toolDia, setToolDia] = React.useState("");
+
+  const bd = metric ? n(boreDia) / 25.4 : n(boreDia);
+  const td = metric ? n(toolDia) / 25.4 : n(toolDia);
+
+  const postDia = bd > 0 && td > 0 ? bd - 2 * td : null;
+  const minTool  = bd > 0 ? bd / 2 : null;
+  const hasPost  = postDia !== null && postDia > 0.0001;
+  const noPost   = postDia !== null && postDia <= 0.0001;
+
+  const postDisplay  = postDia !== null ? (metric ? postDia * 25.4 : postDia) : null;
+  const minToolDisplay = minTool !== null ? (metric ? minTool * 25.4 : minTool) : null;
+
+  usePrintRegister("No Middle Post", "Arcs & Contours", bd > 0 && td > 0 ? [
+    { label: `Bore / Pocket Dia (${dU})`, value: boreDia },
+    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: "Post Diameter", value: hasPost ? `${postDisplay!.toFixed(dec)} ${dU} — POST EXISTS` : "None — tool passes center", highlight: true },
+    ...(hasPost && minToolDisplay !== null ? [{ label: `Min Tool to Clear Post (${dU})`, value: minToolDisplay.toFixed(dec), highlight: true }] : []),
+  ] : null);
+
+  return (
+    <CalcCard title="No Middle Post" category="Arcs & Contours"
+      onClear={() => { setBoreDia(""); setToolDia(""); }}>
+      <p className="text-[10px] text-gray-500 -mt-1">
+        When helically entering solid stock, a tool smaller than half the bore diameter leaves a standing core post in the center that cannot be removed. Enter bore and tool diameters to check.
+      </p>
+      <Row label="Bore / Pocket Dia" hint="Final bore or pocket diameter being machined."><NumIn value={boreDia} onChange={setBoreDia} unit={dU} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the endmill being used for helical entry."><NumIn value={toolDia} onChange={setToolDia} unit={dU} /></Row>
+      {bd > 0 && td > 0 && td >= bd && (
+        <p className="text-[11px] text-red-400">⚠ Tool diameter cannot exceed bore diameter.</p>
+      )}
+      {noPost && (
+        <Result label="Post Check" value={`✓ No post — tool (${(metric ? td*25.4 : td).toFixed(dec)}) ≥ half bore (${(metric ? (bd/2)*25.4 : bd/2).toFixed(dec)})`} highlight />
+      )}
+      {hasPost && postDisplay !== null && (
+        <>
+          <Result label="Standing Post Diameter" value={`${postDisplay.toFixed(dec)} ${dU}`} highlight />
+          {minToolDisplay !== null && <Result label={`Min Tool to Avoid Post (${dU})`} value={minToolDisplay.toFixed(dec)} highlight />}
+          <p className="text-[10px] text-amber-400 mt-1">
+            ⚠ This tool leaves a {postDisplay.toFixed(dec)} {dU} core post. Options: use a tool ≥{minToolDisplay?.toFixed(dec)} {dU}, pre-drill / pre-interpolate a center pocket, or use a center-cutting plunge mill.
+          </p>
+        </>
+      )}
+    </CalcCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Bolt Circle
 // ─────────────────────────────────────────────────────────────────
 function BoltCircle() {
@@ -2140,7 +2196,7 @@ function ChamferMill() {
 const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
   { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement"] },
   { heading: "Surface Finish",  color: "#10b981", ids: ["cusp","eff-dia","surf-finish","ballnose-vel"] },
-  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","bolt-circle","chord-sag","corner-clear","chamfer-mill","entry-spike"] },
+  { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","no-middle-post","bolt-circle","chord-sag","corner-clear","chamfer-mill","entry-spike"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
   { heading: "Power & MRR",     color: "#f43f5e", ids: ["mrr"] },
   { heading: "Materials",       color: "#a78bfa", ids: ["hardness","mat-cond"] },
@@ -2160,6 +2216,7 @@ const CALC_MAP: Record<string, React.ReactNode> = {
   "arc-feed":     <FeedArcCorrection />,
   "helix-entry":  <HelixEntry />,
   "bore-enlarge": <BoreEnlargement />,
+  "no-middle-post": <NoMiddlePost />,
   "bolt-circle":  <BoltCircle />,
   "chord-sag":    <ChordSagitta />,
   "corner-clear": <CornerClearance />,
@@ -2192,6 +2249,7 @@ export default function Calculators() {
     "arc-feed":     "feed correction arc inside outside concave convex",
     "helix-entry":  "helix entry ramp angle pitch helical interpolation pocket plunge",
     "bore-enlarge": "bore enlargement circular interpolation radial pass arc engagement woc feed multiplier",
+    "no-middle-post": "core post helical entry solid stock standing post endmill bore pocket diameter minimum tool",
     "bolt-circle":  "bolt circle hole pattern xy coordinates bcd radius",
     "chord-sag":    "chord sagitta arc height curved surface depth",
     "corner-clear": "corner radius clearance tool fits pocket inside corner",
