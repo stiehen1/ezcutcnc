@@ -4903,18 +4903,8 @@ ${stabSection}
                 onBlur={() => setTimeout(() => { if (!machineTouchingDropRef.current) setMachineDropOpen(false); }, 500)}
                 className="text-sm"
               />
-              {machineDropOpen && machineResults.length > 0 && (() => {
-                const rect = machineInputRef.current?.getBoundingClientRect();
-                const spaceBelow = rect ? window.innerHeight - rect.bottom : 999;
-                const showAbove = spaceBelow < 200;
-                return (
-                <div style={{ position: "fixed", zIndex: 9999,
-                  top: rect ? (showAbove ? undefined : rect.bottom + 4) : undefined,
-                  bottom: rect && showAbove ? window.innerHeight - rect.top + 4 : undefined,
-                  left: rect ? rect.left : undefined,
-                  width: rect ? rect.width : undefined,
-                }}
-                  className="rounded-md border border-zinc-700 bg-zinc-900 shadow-xl max-h-60 overflow-y-auto">
+              {machineDropOpen && machineResults.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl max-h-60 overflow-y-auto">
                   {machineResults.map((m, i) => (
                     <button
                       key={`${m._saved ? "u" : "c"}-${m.id}-${i}`}
@@ -4933,8 +4923,7 @@ ${stabSection}
                     </button>
                   ))}
                 </div>
-                );
-              })()}
+              )}
             </div>
           </div>
 
