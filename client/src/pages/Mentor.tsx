@@ -4073,8 +4073,8 @@ ${stabSection}
                   </div>
                 );
               })()}
-              {/* DOC out-of-range note */}
-              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (() => {
+              {/* DOC out-of-range note — suppressed for circ_interp (DOC = full bore depth, not axial pitch) */}
+              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && form.mode !== "circ_interp" && (() => {
                 const dp = DOC_PRESETS[form.mode];
                 const isHem = form.mode === "hem" || form.mode === "trochoidal";
                 const locXd = form.loc > 0 && form.tool_dia > 0 ? form.loc / form.tool_dia : null;
@@ -7225,8 +7225,8 @@ ${stabSection}
                 );
               })()}
 
-              {/* Tooth Engagement Advisory — hidden for slotting (always pegged) */}
-              {engineering?.teeth_in_cut != null && form.mode !== "slot" && (() => {
+              {/* Tooth Engagement Advisory — hidden for slotting and circ_interp */}
+              {engineering?.teeth_in_cut != null && form.mode !== "slot" && form.mode !== "circ_interp" && (() => {
                 const tic = engineering.teeth_in_cut;
                 const low = 1.0, sweetLo = 1.5, sweetHi = 2.5, high = 3.0;
                 const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
@@ -7288,8 +7288,8 @@ ${stabSection}
                 );
               })()}
 
-              {/* Engagement Angle Advisory */}
-              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && (() => {
+              {/* Engagement Angle Advisory — hidden for circ_interp (3-phase cards replace this) */}
+              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);

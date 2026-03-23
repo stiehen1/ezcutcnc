@@ -4906,8 +4906,8 @@ def run(payload=None):
     _doc_xd_cc  = float(data.get("doc_xd", 1.0) or 1.0)
     _max_slot_xd, _max_side_woc = flute_woc_limits(_fl_cc)
 
-    if (data.get("mode") or "").lower() == "face":
-        pass  # facing: high WOC is intentional stepover, not chip-clearance concern
+    if (data.get("mode") or "").lower() in ("face", "circ_interp"):
+        pass  # face: high WOC is intentional stepover; circ_interp: WOC = radial wall, not chip-clearance concern
     elif _woc_pct_cc >= 90.0:
         # Slotting check
         if _max_slot_xd is None:
