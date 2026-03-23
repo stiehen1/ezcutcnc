@@ -7082,8 +7082,8 @@ ${stabSection}
                 const targetBore = form.target_hole_dia > entryBore ? form.target_hole_dia : 0;
                 const radialWall = customer.ci_a_e_in ?? ((targetBore - entryBore) / 2);
                 if (radialWall <= 0) return null;
-                const passes = Math.max(1, Math.ceil(radialWall / (D * 0.25)));
-                const aePerPass = radialWall / passes;
+                const aePerPass = Math.max(0.001, (form.woc_pct / 100) * D);
+                const passes = Math.max(1, Math.ceil(radialWall / aePerPass));
                 const aeFinish = 0.007;
                 const radialClearance = entryBore > 0 ? (entryBore - D) / 2 : null;
                 const feedCam = customer.feed_ipm ?? 0;
