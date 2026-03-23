@@ -3901,7 +3901,7 @@ ${stabSection}
                   </div>
                   <p className="text-[10px] text-zinc-500">Engine uses full LOC as bore depth — adjust WOC for radial step per pass</p>
                 </div>
-              ) : (
+              ) : (<>
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC</FieldLabel>
                 {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (
@@ -4014,7 +4014,7 @@ ${stabSection}
                   </p>
                 );
               })()}
-              )}
+              </>)}
               {/* Tool Stickout — lives under DOC */}
               <div className="mt-3 space-y-2">
                 <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
