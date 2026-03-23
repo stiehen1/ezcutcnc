@@ -1161,7 +1161,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1243,7 +1243,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1319,7 +1319,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1374,11 +1374,11 @@ export async function registerRoutes(
 
       // Send results to user
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to: email,
         subject: "Your Core Cutter Speeds & Feeds Results",
         text: [
-          "Here are your machining parameters from the Core Cutter Machining Advisor.",
+          "Here are your machining parameters from the Core Cutter Machining App.",
           "",
           results_text ?? "(no results attached)",
           "",
@@ -1390,7 +1390,7 @@ export async function registerRoutes(
 
       // Notify sales
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         subject: `New Lead — ${operation ?? "unknown op"} · ${material ?? "unknown material"} — ${email}`,
         text: [
@@ -1447,7 +1447,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Advisor" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to,
         replyTo: email,
         subject: `Tool Request — ${name ?? email}`,
