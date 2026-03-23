@@ -1,5 +1,5 @@
 modules = ["nodejs-20", "web", "python-3.11", "postgresql-16"]
-run = "npm run dev"
+run = "pm2-runtime start dist/index.cjs -i max"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
@@ -36,5 +36,5 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "pm2-runtime start dist/index.cjs -i max"
 waitForPort = 5000
