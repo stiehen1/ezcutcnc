@@ -933,7 +933,7 @@ export default function Mentor() {
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
     slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
-    circ_interp: { low: 0.25,med: 0.5,  high: 1.0 },
+    circ_interp: { low: 0.05, med: 0.10, high: 0.25 },
   };
   const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
   const [docPreset, setDocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
