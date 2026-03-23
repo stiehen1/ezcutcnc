@@ -1203,7 +1203,7 @@ export default function Mentor() {
     } else if (operation === "milling" || operation === "feedmilling") {
       if (!form.mode) missing.push("Process (HEM / Conventional / Slot…)");
       if (!(form.flutes > 0)) missing.push("Flute Count");
-      if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
+      if (form.mode !== "circ_interp" && !(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
       if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
     }
     if (operation === "drilling" && !(form.drill_hole_depth > 0)) missing.push("Hole Depth");
