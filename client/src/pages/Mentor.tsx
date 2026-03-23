@@ -2453,69 +2453,7 @@ ${stabSection}
             )}
 
 
-            {/* Circular Interpolation hole dimensions */}
-            {form.mode === "circ_interp" && (
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <FieldLabel hint="Diameter of the existing pre-drilled or pre-bored hole the tool will enter. Must be larger than the tool diameter.">{UL("Existing Hole Ø (in)", "Existing Hole Ø (mm)")}</FieldLabel>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="e.g. 0.750"
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
-                    value={existingHoleText}
-                    onChange={(e) => setExistingHoleText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseFloat(existingHoleText);
-                      if (Number.isFinite(n) && n > 0) {
-                        const val = metric ? n / 25.4 : n;
-                        setForm((p) => ({ ...p, existing_hole_dia: val }));
-                        setExistingHoleText(metric ? n.toFixed(2) : val.toFixed(3));
-                      } else {
-                        setExistingHoleText(form.existing_hole_dia > 0 ? form.existing_hole_dia.toFixed(3) : "");
-                      }
-                    }}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabel hint="Final target hole diameter after circular interpolation. The radial wall removed per pass = (Target − Existing) / 2.">{UL("Target Hole Ø (in)", "Target Hole Ø (mm)")}</FieldLabel>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="e.g. 1.250"
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
-                    value={targetHoleText}
-                    onChange={(e) => setTargetHoleText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseFloat(targetHoleText);
-                      if (Number.isFinite(n) && n > 0) {
-                        const val = metric ? n / 25.4 : n;
-                        setForm((p) => ({ ...p, target_hole_dia: val }));
-                        setTargetHoleText(metric ? n.toFixed(2) : val.toFixed(3));
-                      } else {
-                        setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(3) : "");
-                      }
-                    }}
-                  />
-                </div>
-                {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && form.tool_dia > 0 && (() => {
-                  const tooBig = form.existing_hole_dia < form.tool_dia * 1.1;
-                  const radialClearance = (form.existing_hole_dia - form.tool_dia) / 2;
-                  const tightClearance = radialClearance > 0 && radialClearance < 0.050;
-                  if (!tooBig && !tightClearance) return null;
-                  return (
-                    <div className="col-span-2 space-y-1">
-                      {tooBig && (
-                        <p className="text-xs text-red-400">⛔ Entry bore too small — tool cannot safely enter. Entry bore must be &gt;1.1× tool diameter minimum.</p>
-                      )}
-                      {!tooBig && tightClearance && (
-                        <p className="text-xs text-amber-400">⚠ Radial clearance {radialClearance.toFixed(3)}" — tight (&lt;0.050"). Risk of rubbing on entry.</p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
+            {/* circ_interp hole dimensions moved to CUT ENGAGEMENT section */}
           </div>
 
           {/* Material */}
@@ -3744,6 +3682,55 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Cut Engagement</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+          {/* circ_interp: hole dimensions live here */}
+          {form.mode === "circ_interp" && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="space-y-1.5">
+                <FieldLabel hint="Diameter of the existing pre-drilled or pre-bored hole the tool will enter. Must be larger than the tool diameter.">{UL("Existing Hole Ø (in)", "Existing Hole Ø (mm)")}</FieldLabel>
+                <input type="text" inputMode="decimal" placeholder="e.g. 0.750"
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
+                  value={existingHoleText}
+                  onChange={(e) => setExistingHoleText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(existingHoleText);
+                    if (Number.isFinite(n) && n > 0) {
+                      const val = metric ? n / 25.4 : n;
+                      setForm((p) => ({ ...p, existing_hole_dia: val }));
+                      setExistingHoleText(metric ? n.toFixed(2) : val.toFixed(3));
+                    } else { setExistingHoleText(form.existing_hole_dia > 0 ? form.existing_hole_dia.toFixed(3) : ""); }
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel hint="Final target hole diameter after circular interpolation. The radial wall removed per pass = (Target − Existing) / 2.">{UL("Target Hole Ø (in)", "Target Hole Ø (mm)")}</FieldLabel>
+                <input type="text" inputMode="decimal" placeholder="e.g. 1.250"
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
+                  value={targetHoleText}
+                  onChange={(e) => setTargetHoleText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(targetHoleText);
+                    if (Number.isFinite(n) && n > 0) {
+                      const val = metric ? n / 25.4 : n;
+                      setForm((p) => ({ ...p, target_hole_dia: val }));
+                      setTargetHoleText(metric ? n.toFixed(2) : val.toFixed(3));
+                    } else { setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(3) : ""); }
+                  }}
+                />
+              </div>
+              {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && form.tool_dia > 0 && (() => {
+                const tooBig = form.existing_hole_dia < form.tool_dia * 1.1;
+                const radialClearance = (form.existing_hole_dia - form.tool_dia) / 2;
+                const tightClearance = radialClearance > 0 && radialClearance < 0.050;
+                if (!tooBig && !tightClearance) return null;
+                return (
+                  <div className="col-span-2 space-y-1">
+                    {tooBig && <p className="text-xs text-red-400">⛔ Entry bore too small — must be &gt;1.1× tool diameter.</p>}
+                    {!tooBig && tightClearance && <p className="text-xs text-amber-400">⚠ Radial clearance {radialClearance.toFixed(3)}" per side — tight, rubbing risk on entry.</p>}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
           <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
@@ -3905,6 +3892,16 @@ ${stabSection}
               {/* circ_interp 3-phase advisory moved to results panel */}
             </div>
             <div className="flex-1 min-w-0 space-y-2">
+              {form.mode === "circ_interp" ? (
+                <div className="space-y-1">
+                  <FieldLabel hint="Total bore depth — set automatically to your tool's LOC. The engine uses this as the full axial depth for the helical interpolation pass.">Bore Depth</FieldLabel>
+                  <div className="flex h-9 items-center rounded-md border border-input bg-zinc-900 px-3 text-sm text-zinc-400 gap-1">
+                    <span>{form.loc > 0 ? `${form.loc.toFixed(3)}"` : "— set by LOC"}</span>
+                    {form.loc > 0 && form.tool_dia > 0 && <span className="ml-1 text-xs text-zinc-500">{(form.loc / form.tool_dia).toFixed(2)}xD</span>}
+                  </div>
+                  <p className="text-[10px] text-zinc-500">Engine uses full LOC as bore depth — adjust WOC for radial step per pass</p>
+                </div>
+              ) : (
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC</FieldLabel>
                 {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (
@@ -4017,6 +4014,7 @@ ${stabSection}
                   </p>
                 );
               })()}
+              )}
               {/* Tool Stickout — lives under DOC */}
               <div className="mt-3 space-y-2">
                 <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
