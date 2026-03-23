@@ -3910,15 +3910,16 @@ ${stabSection}
                   </div>
                 );
               })()}
-              {/* Bore enlargement arc engagement — entry pass vs finish pass */}
+              {/* Bore enlargement arc engagement — 3-phase layout */}
               {form.mode === "circ_interp" && form.tool_dia > 0 && (() => {
                 const D = form.tool_dia;
                 const entryBore = form.existing_hole_dia > 0 ? form.existing_hole_dia : 0;
                 const targetBore = form.target_hole_dia > entryBore ? form.target_hole_dia : 0;
-                // Entry pass: ae = total radial wall (worst case single pass or first roughing pass)
-                const aeEntry = entryBore > 0 && targetBore > 0 ? (targetBore - entryBore) / 2 : (form.woc_pct / 100) * D;
-                // Finish pass: 0.007" stock removal (light cleanup)
+                const radialWall = entryBore > 0 && targetBore > 0 ? (targetBore - entryBore) / 2 : (form.woc_pct / 100) * D;
+                const passes = Math.max(1, Math.ceil(radialWall / (D * 0.25)));
+                const aePerPass = radialWall / passes;
                 const aeFinish = 0.007;
+                const radialClearance = entryBore > 0 ? (entryBore - D) / 2 : null;
                 const engAngle = (ae: number) => {
                   const arg = Math.max(-1, Math.min(1, 1 - (2 * ae) / D));
                   return 2 * Math.acos(arg) * (180 / Math.PI);
@@ -3927,34 +3928,62 @@ ${stabSection}
                   deg < 90 ? "#4ade80" : deg < 150 ? "#facc15" : deg <= 180 ? "#fb923c" : "#f87171";
                 const zoneLabel = (deg: number) =>
                   deg < 90 ? "Light" : deg < 150 ? "Moderate" : deg <= 180 ? "Heavy" : "Too High";
-                const entryDeg = engAngle(aeEntry);
+                const entryDeg = engAngle(aePerPass);
                 const finishDeg = engAngle(aeFinish);
-                const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
+                const phaseStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
                 return (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex gap-1.5">
-                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}
-                        title="Arc engagement on first/roughing pass — highest engagement of the operation. Bore curvature at entry makes actual engagement slightly higher than shown.">
-                        <div className="text-[9px] uppercase tracking-widest mb-1 text-slate-500">Entry Pass</div>
-                        <div className="text-sm font-bold leading-tight" style={{ color: zoneColor(entryDeg) }}>{entryDeg.toFixed(1)}°</div>
-                        <div className="text-[9px] mt-0.5" style={{ color: zoneColor(entryDeg) }}>{zoneLabel(entryDeg)}</div>
-                        <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (entryDeg / 360) * 100)}%`, background: zoneColor(entryDeg) }} />
-                        </div>
+                  <div className="mt-2 space-y-1.5">
+                    {/* Phase 1 — Entry */}
+                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">① Entry</div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-zinc-400">Bore clearance</span>
+                        <span className="text-[10px] font-semibold" style={{ color: radialClearance == null ? "#94a3b8" : radialClearance >= 0.050 ? "#4ade80" : "#f87171" }}>
+                          {radialClearance != null ? `${radialClearance.toFixed(3)}" per side ${radialClearance >= 0.050 ? "✓" : "⚠ tight"}` : "—"}
+                        </span>
                       </div>
-                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}
-                        title="Arc engagement on finish pass (0.007&quot; stock removal) — lightest engagement. As the bore opens toward final diameter, each pass removes less material and engagement drops.">
-                        <div className="text-[9px] uppercase tracking-widest mb-1 text-slate-500">Finish Pass</div>
-                        <div className="text-sm font-bold leading-tight" style={{ color: zoneColor(finishDeg) }}>{finishDeg.toFixed(1)}°</div>
-                        <div className="text-[9px] mt-0.5" style={{ color: zoneColor(finishDeg) }}>{zoneLabel(finishDeg)}</div>
-                        <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (finishDeg / 360) * 100)}%`, background: zoneColor(finishDeg) }} />
-                        </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Entry type</span>
+                        <span className="text-[10px] font-semibold text-sky-300">Sweep / Roll-in preferred</span>
                       </div>
                     </div>
-                    {entryDeg > 150 && (
-                      <p className="text-[10px] text-amber-400">⚠ High entry engagement — use multiple radial passes to reduce force on first cut</p>
-                    )}
+                    {/* Phase 2 — Cutting */}
+                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">② Cutting — {passes} radial pass{passes !== 1 ? "es" : ""} · {aePerPass.toFixed(4)}"/pass</div>
+                      <div className="flex gap-1.5">
+                        <div className="flex-1">
+                          <div className="text-[9px] text-zinc-500 mb-0.5">Engagement / pass</div>
+                          <div className="text-sm font-bold" style={{ color: zoneColor(entryDeg) }}>{entryDeg.toFixed(1)}°</div>
+                          <div className="text-[9px]" style={{ color: zoneColor(entryDeg) }}>{zoneLabel(entryDeg)}</div>
+                          <div className="mt-1 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (entryDeg / 360) * 100)}%`, background: zoneColor(entryDeg) }} />
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-[9px] text-zinc-500 mb-0.5">CCW = climb cut</div>
+                          <div className="text-[10px] text-zinc-300 leading-snug">Use CCW for finish passes. CW = conventional (more rubbing)</div>
+                        </div>
+                      </div>
+                      {entryDeg > 150 && (
+                        <p className="text-[10px] text-amber-400 mt-1">⚠ High engagement — increase radial passes or reduce step per pass</p>
+                      )}
+                    </div>
+                    {/* Phase 3 — Finish */}
+                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">③ Finish Pass</div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-zinc-400">Engagement (0.007" stock)</span>
+                        <span className="text-[10px] font-semibold" style={{ color: zoneColor(finishDeg) }}>{finishDeg.toFixed(1)}° — {zoneLabel(finishDeg)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Leave stock</span>
+                        <span className="text-[10px] font-semibold text-sky-300">0.005–0.010" for cleanup pass</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[10px] text-zinc-400">Feed on finish</span>
+                        <span className="text-[10px] font-semibold text-sky-300">50–70% of roughing feed</span>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
