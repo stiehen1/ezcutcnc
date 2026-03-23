@@ -6914,8 +6914,8 @@ ${stabSection}
                 <Kpi label="RPM" hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting." value={fmtInt(customer.rpm)} />
                 <Kpi label={UL("SFM", "m/min")} hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing." value={UC(customer.sfm, 0.3048, metric ? 1 : 0)} />
                 <Kpi
-                  label={UL("Feed (IPM)", "Feed (mm/min)")}
-                  hint="Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."
+                  label={form.mode === "circ_interp" ? UL("Feed (IPM) — tool centerline", "Feed (mm/min) — tool centerline") : UL("Feed (IPM)", "Feed (mm/min)")}
+                  hint={form.mode === "circ_interp" ? "ENTER THIS NUMBER IN YOUR CAM. This is the tool centerline feed — already corrected for bore geometry. The cutting edge at the wall travels faster; see Peripheral Feed for the actual chip load the tool sees." : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
                   value={
                     <>
                       {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
