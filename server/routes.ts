@@ -901,8 +901,18 @@ export async function registerRoutes(
 
       const curFlutes = Number(payload.flutes ?? 0);
 
+      // QTR3, QTR3-RN, CMH, CMS are geometry-specialized series — their coating
+      // is fixed for the application (small-diameter work). Never score 0 due to
+      // coating-material mismatch; treat coating as neutral (1) on any material.
+      const GEOM_SPECIALIZED = ["qtr3", "cmh", "cms"];
+      function isGeomSpecialized(row: any): boolean {
+        const s = (row.tool_series ?? "").toLowerCase();
+        return GEOM_SPECIALIZED.some(prefix => s.startsWith(prefix));
+      }
+
       function scoreSku(row: any): number {
-        let s = scoreGeometry(row.geometry) + scoreCoating(row.coating);
+        const coatScore = isGeomSpecialized(row) ? 1 : scoreCoating(row.coating);
+        let s = scoreGeometry(row.geometry) + coatScore;
         if (row.variable_pitch) s += 1;
         if (row.variable_helix) s += 1;
         return s;

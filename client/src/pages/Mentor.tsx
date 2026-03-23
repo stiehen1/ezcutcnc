@@ -4050,6 +4050,21 @@ ${stabSection}
                 }
                 return null;
               })()}
+              {/* DOC > LOC warning */}
+              {form.doc_xd > 0 && form.loc > 0 && form.tool_dia > 0 && (() => {
+                const docIn = form.doc_xd * form.tool_dia;
+                const ratio = docIn / form.loc;
+                if (ratio <= 1.05) return null;
+                const isRed = ratio > 1.30;
+                return (
+                  <p className={`text-xs mt-1 ${isRed ? "text-red-400" : "text-amber-400"}`}>
+                    {isRed
+                      ? `⛔ DOC (${docIn.toFixed(3)}") exceeds LOC (${form.loc.toFixed(3)}") — tool cannot reach at this depth. Select a longer reach or reduced-neck (RN) tool.`
+                      : `⚠ DOC (${docIn.toFixed(3)}") is approaching LOC (${form.loc.toFixed(3)}") — consider a longer reach or reduced-neck (RN) tool.`}
+                    {" "}A reduced-neck version may be available — check EDP suffix -RN.
+                  </p>
+                );
+              })()}
               {/* Tool Stickout — lives under DOC */}
               <div className="mt-3 space-y-2">
                 <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
@@ -7085,6 +7100,72 @@ ${stabSection}
                   </div>
                 </>
               ) : null}
+
+              {/* Spindle-Limited Advisory — shown when machine can't reach target SFM */}
+              {customer?.sfm_target > 0 && customer?.rpm > 0 && form.max_rpm > 0 && (() => {
+                const sfmActual  = customer.sfm ?? 0;
+                const sfmTarget  = customer.sfm_target;
+                const sfmPct     = sfmActual / sfmTarget;      // 0–1
+                const dia        = form.tool_dia ?? 0;
+                // Only fire when genuinely RPM-limited (>3% below target)
+                if (sfmPct >= 0.97) return null;
+
+                const isAmber = sfmPct >= 0.60;
+                const isRed   = sfmPct < 0.40;
+                const borderColor = isRed ? "border-red-500" : isAmber ? "border-amber-500" : "border-orange-500";
+                const bgColor     = isRed ? "bg-red-500/10"  : isAmber ? "bg-amber-500/10"  : "bg-orange-500/10";
+                const textColor   = isRed ? "text-red-400"   : isAmber ? "text-amber-400"   : "text-orange-400";
+
+                // ── #2: Min diameter to hit target SFM at max RPM ──────────
+                // target_rpm = (sfm_target × 3.82) / dia  →  dia = (sfm_target × 3.82) / max_rpm
+                const minDiaForSfm = (sfmTarget * 3.82) / (form.max_rpm * (form.rpm_util_pct ?? 0.95));
+
+                // ── #3: Speeder threshold ───────────────────────────────────
+                const suggestSpeeder = dia <= 0.375 && sfmPct < 0.70;
+                const suggestSpeederStrong = dia <= 0.250 && sfmPct < 0.70;
+
+                return (
+                  <div className={`rounded-lg border ${borderColor} ${bgColor} px-3 py-2.5 space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${textColor}`}>
+                        Spindle Limited
+                      </span>
+                      <span className={`text-xs font-bold ${textColor}`}>
+                        {Math.round(sfmPct * 100)}% of target SFM
+                      </span>
+                    </div>
+
+                    {/* #1 — RPM-limited SFM warning */}
+                    <p className="text-xs text-zinc-300">
+                      Your machine achieves <span className={`font-semibold ${textColor}`}>{Math.round(sfmActual)} SFM</span> of the{" "}
+                      <span className="font-semibold text-white">{Math.round(sfmTarget)} SFM</span> target at{" "}
+                      {form.max_rpm.toLocaleString()} RPM max.{" "}
+                      {isRed
+                        ? "Productivity is severely reduced — tool life will be longer but MRR is a fraction of what's possible."
+                        : "Feed rate and MRR are proportionally reduced."}
+                    </p>
+
+                    {/* #2 — Min diameter to reach full SFM */}
+                    {minDiaForSfm > dia && (
+                      <p className="text-xs text-zinc-400">
+                        <span className="text-zinc-200 font-semibold">Larger tool option:</span>{" "}
+                        A diameter of <span className="font-semibold text-white">≥{minDiaForSfm.toFixed(3)}"</span> would reach{" "}
+                        {Math.round(sfmTarget)} SFM at your spindle's max RPM — if the feature geometry allows it, a larger tool will cut significantly faster.
+                      </p>
+                    )}
+
+                    {/* #3 — Spindle speeder recommendation */}
+                    {suggestSpeeder && (
+                      <p className="text-xs text-zinc-400">
+                        <span className="text-zinc-200 font-semibold">
+                          {suggestSpeederStrong ? "Spindle speed increaser recommended:" : "Spindle speed increaser may help:"}
+                        </span>{" "}
+                        A speeder head (e.g. NSK, IBAG, Parlec) multiplies your spindle RPM 3–5× and can unlock full SFM for small-diameter tools like this. Commonly used for tools ≤¼" diameter on standard VMCs.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Tooth Engagement Advisory — hidden for slotting (always pegged) */}
               {engineering?.teeth_in_cut != null && form.mode !== "slot" && (() => {
