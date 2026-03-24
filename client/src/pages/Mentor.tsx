@@ -4967,8 +4967,8 @@ ${stabSection}
                       key={`${m._saved ? "u" : "c"}-${m.id}-${i}`}
                       type="button"
                       onMouseDown={e => { e.preventDefault(); applyMachineToForm(m); }}
-                      onTouchStart={() => { machineTouchingDropRef.current = true; }}
-                      onTouchEnd={e => { e.preventDefault(); machineTouchingDropRef.current = false; applyMachineToForm(m); }}
+                      onTouchStart={e => { machineTouchingDropRef.current = true; (e.currentTarget as any)._touchY = e.touches[0].clientY; }}
+                      onTouchEnd={e => { const startY = (e.currentTarget as any)._touchY ?? 0; const moved = Math.abs(e.changedTouches[0].clientY - startY); machineTouchingDropRef.current = false; if (moved < 8) { e.preventDefault(); applyMachineToForm(m); } }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 flex items-baseline gap-2"
                     >
                       <span className="font-semibold text-orange-400">
