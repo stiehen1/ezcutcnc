@@ -8,6 +8,7 @@ import { useMentor } from "@/hooks/use-mentor";
 import { trackCalculation, trackPdfExport } from "@/lib/analytics";
 import Calculators from "./Calculators";
 import ToolFinder from "./ToolFinder";
+import Toolbox from "./Toolbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -314,7 +315,7 @@ export default function Mentor() {
   const [matSearchLoading, setMatSearchLoading] = React.useState(false);
   const [matMatchResult, setMatMatchResult]   = React.useState<{ key: string; label: string; confidence: string; source: string; note: string | null } | null>(null);
   const [matMatchError, setMatMatchError]     = React.useState<string | null>(null);
-  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmilling" | "toolfinder">("milling");
+  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmilling" | "toolfinder" | "toolbox">("milling");
   const [units, setUnits] = React.useState<"imperial" | "metric">("imperial");
 
   // ── Engineering / Customer mode ──────────────────────────────────────────
@@ -812,6 +813,9 @@ export default function Mentor() {
     quiet: true,
   };
   const [form, setForm] = React.useState(INITIAL_FORM);
+
+  // ── Sync active operation to localStorage for context-aware Help tab ──────
+  React.useEffect(() => { localStorage.setItem("cc_operation", operation); }, [operation]);
 
   // ── Restore form from Toolbox "Re-run this setup" ────────────────────────
   React.useEffect(() => {
@@ -2226,15 +2230,15 @@ ${stabSection}
   }
 
   // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
-  const ALL_OPS = ["toolfinder","feedmilling","milling","drilling","reaming","threadmilling","keyseat","dovetail"] as const;
+  const ALL_OPS = ["toolfinder","feedmilling","toolbox","milling","drilling","reaming","threadmilling","keyseat","dovetail"] as const;
   const OP_LABELS: Record<string, string> = {
-    toolfinder: "Tool Finder", feedmilling: "Calculators",
+    toolfinder: "Tool Finder", feedmilling: "Calculators", toolbox: "Toolbox",
     milling: "Milling", drilling: "Drilling", reaming: "Reaming", threadmilling: "Thread Milling",
     keyseat: "Keyseat", dovetail: "Dovetail",
   };
   function SharedTabBar() {
     return (
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6 items-center">
         {ALL_OPS.map((op) => (
           <button key={op} type="button"
             onClick={() => { setOperation(op); mentor.reset(); }}
@@ -2248,6 +2252,15 @@ ${stabSection}
             {OP_LABELS[op]}
           </button>
         ))}
+        {/* Eng mode indicator */}
+        {engMode ? (
+          <div className="flex items-center gap-1 ml-auto">
+            <span className="text-[10px] font-bold px-2 py-1 rounded border" style={{ backgroundColor: "#f59e0b22", borderColor: "#f59e0b", color: "#f59e0b" }}>ENG MODE ✓</span>
+            <button type="button" onClick={exitEngMode} className="text-[10px] text-zinc-500 hover:text-white">×</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="ml-auto text-zinc-700 hover:text-zinc-500 text-sm" title="Engineering mode">🔒</button>
+        )}
       </div>
     );
   }
@@ -2258,36 +2271,6 @@ ${stabSection}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
         <img src="/CCLogo-long-blackback TRANSPARENT-01.png" alt="Core Cutter" className="h-10 w-auto" />
         <div className="flex items-center gap-3">
-          {/* Toolbox */}
-          {tbEmail && tbToken ? (
-            <a href="/toolbox" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
-              </svg>
-              <span className="text-[10px] text-orange-400 font-semibold">Toolbox</span>
-              {tbItemCount !== null && tbItemCount > 0 && (
-                <span className="text-[9px] font-bold bg-orange-500 text-white rounded-full px-1.5 py-0.5 leading-none">{tbItemCount}</span>
-              )}
-            </a>
-          ) : (
-            <button type="button" onClick={() => setTbShowModal(true)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-600 hover:border-orange-500/60 hover:bg-orange-500/10 transition-colors group">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400 group-hover:text-orange-400">
-                <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
-              </svg>
-              <span className="text-[10px] text-zinc-300 group-hover:text-orange-400">Toolbox</span>
-            </button>
-          )}
-          {/* Eng Mode */}
-          {engMode ? (
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f59e0b", color: "#000" }}>ENG MODE</span>
-              <button type="button" onClick={exitEngMode} className="text-[10px] text-gray-400 hover:text-white underline">Exit</button>
-            </div>
-          ) : (
-            <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-[10px] text-zinc-500 hover:text-white underline">Eng Mode</button>
-          )}
           <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
         </div>
       </div>
@@ -2304,7 +2287,13 @@ ${stabSection}
           <Calculators />
         </div>
       )}
-      {operation !== "feedmilling" && operation !== "toolfinder" && <div className="grid grid-cols-1 md:grid-cols-2 md:gap-5 gap-4 items-start">
+      {operation === "toolbox" && (
+        <div>
+          <SharedTabBar />
+          <Toolbox />
+        </div>
+      )}
+      {operation !== "feedmilling" && operation !== "toolfinder" && operation !== "toolbox" && <div className="grid grid-cols-1 md:grid-cols-2 md:gap-5 gap-4 items-start">
 
       {/* LEFT — INPUT CARD */}
       <Card className="rounded-2xl">
@@ -2317,14 +2306,24 @@ ${stabSection}
               className="h-[86px] w-auto flex-shrink-0"
               style={{ mixBlendMode: "screen" }}
             />
-            {/* IN/MM toggle — vertical stack */}
-            <div className="flex flex-col rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold flex-shrink-0">
-              {(["imperial", "metric"] as const).map((u) => (
-                <button key={u} type="button" onClick={() => setUnits(u)} className="px-2 py-1 transition-colors"
-                  style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : "#9ca3af" }}>
-                  {u === "imperial" ? "IN" : "MM"}
-                </button>
-              ))}
+            {/* IN/MM toggle + Eng Mode — vertical stack */}
+            <div className="flex flex-col items-center gap-8 flex-shrink-0 mt-2">
+              <div className="flex flex-col rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold">
+                {(["imperial", "metric"] as const).map((u) => (
+                  <button key={u} type="button" onClick={() => setUnits(u)} className="px-2 py-1 transition-colors"
+                    style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : "#9ca3af" }}>
+                    {u === "imperial" ? "IN" : "MM"}
+                  </button>
+                ))}
+              </div>
+              {engMode ? (
+                <div className="flex items-center gap-0.5">
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border" style={{ backgroundColor: "#f59e0b22", borderColor: "#f59e0b", color: "#f59e0b" }}>ENG ✓</span>
+                  <button type="button" onClick={exitEngMode} className="text-[10px] text-zinc-500 hover:text-white leading-none">×</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-zinc-700 hover:text-zinc-500 text-xs" title="Engineering mode">🔒</button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -2342,6 +2341,7 @@ ${stabSection}
               {([
                 { op: "toolfinder",  label: "Tool Finder", icon: "🔍" },
                 { op: "feedmilling", label: "Calculators",  icon: "⊞" },
+                { op: "toolbox",     label: "Toolbox",      icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 90 90" fill="none"><g transform="translate(0 0)"><path d="M87.67 90H2.33c-.552 0-1-.447-1-1V52.941c0-.553.448-1 1-1h85.34c.553 0 1 .447 1 1V89c0 .553-.447 1-1 1zM3.33 88h83.34V53.941H3.33V88z" fill="currentColor"/><path d="M24.877 69.574h-10.04c-.552 0-1-.447-1-1V52.941c0-.553.448-1 1-1h10.04c.552 0 1 .447 1 1v15.633c0 .553-.447 1-1 1zm-9.04-2h8.04V53.941h-8.04V67.574zM75.163 69.574h-10.04c-.553 0-1-.447-1-1V52.941c0-.553.447-1 1-1h10.04c.553 0 1 .447 1 1v15.633c0 .553-.447 1-1 1zm-9.04-2h8.04V53.941h-8.04V67.574zM31.074 53.941h-9.796c-.552 0-1-.447-1-1v-11.75c0-.552.448-1 1-1h9.796c.552 0 1 .448 1 1v11.75c0 .553-.448 1-1 1zm-8.796-2h7.796v-9.75h-7.796V51.941zM49.255 53.941h-7.732c-.552 0-1-.447-1-1V37.752c-3.723-1.843-6.092-5.627-6.092-9.821 0-4.166 2.32-7.917 6.055-9.791.308-.156.678-.14.974.043.295.182.475.504.475.851v6.658c0 1.905 1.55 3.455 3.455 3.455s3.455-1.55 3.455-3.455v-6.658c0-.347.18-.669.475-.851.297-.182.664-.199.974-.043 3.735 1.874 6.056 5.625 6.056 9.791 0 4.193-2.37 7.978-6.093 9.821v15.189c0 .553-.447 1-1 1zm-6.733-2h5.732V37.11c0-.402.241-.765.611-.921 3.33-1.404 5.481-4.646 5.481-8.258 0-2.828-1.31-5.423-3.504-7.099v4.859c0 3.008-2.447 5.455-5.455 5.455s-5.455-2.447-5.455-5.455v-4.859c-2.194 1.676-3.503 4.271-3.503 7.099 0 3.613 2.151 6.854 5.481 8.258.371.156.611.519.611.921V51.941z" fill="currentColor"/><path d="M87.67 51.941H2.33c-.552 0-1-.447-1-1v-8.75c0-.552.448-1 1-1h85.34c.553 0 1 .448 1 1v8.75c0 .553-.447 1-1 1zm-84.34-2h83.34v-6.75H3.33v6.75z" fill="currentColor"/></g></svg> },
               ] as const).map(({ op, label, icon }) => {
                 const active = (operation as string) === op;
                 return (
@@ -2362,7 +2362,7 @@ ${stabSection}
                     }}
                   >
                     <span>{label}</span>
-                    <span className="text-lg leading-none">{icon}</span>
+                    <span className="text-lg leading-none flex items-center justify-center">{icon}</span>
                   </button>
                 );
               })}
@@ -3828,6 +3828,7 @@ ${stabSection}
                 <input
                   type="text"
                   inputMode="decimal"
+                  placeholder="e.g. .050 or 5%"
                   className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
                   value={wocText}
                   onChange={(e) => setWocText(e.target.value)}
@@ -8063,7 +8064,7 @@ ${stabSection}
               >
                 {tbSaved ? "✓ Saved" : tbSaving ? "Saving…" : "Save Setup"}
               </button>
-              <a href="/toolbox" className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</a>
+              <button type="button" onClick={() => setOperation("toolbox")} className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</button>
             </div>
           </div>
         </div>

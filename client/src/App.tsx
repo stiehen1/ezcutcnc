@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -120,6 +120,231 @@ function BrevoNudge() {
   );
 }
 
+const HELP_SECTIONS = [
+  {
+    title: "Tool Finder",
+    icon: "🔍",
+    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the advisor.",
+  },
+  {
+    title: "Calculators",
+    icon: "🧮",
+    body: "Standalone reference calculators — chip thinning, minimum chip thickness, arc entry, no-post bore sizing, and more. Static reference tools.",
+  },
+  {
+    title: "Milling & Chamfer Advisor",
+    icon: "⚙️",
+    body: "Speeds, feeds, and full stability analysis for standard Core Cutter end mills and chamfer mills. Enter your material, tool, machine, and cut parameters — the engine delivers RPM, feed, chip load, HP draw, and a complete stability audit including chatter risk analysis.",
+  },
+  {
+    title: "Specials Advisor (Dovetail, Keyseat, Thread Mill & more)",
+    icon: "📐",
+    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the advisor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically.",
+  },
+  {
+    title: "Toolbox",
+    icon: "🗂️",
+    body: "Save your machines and machine info per your shop for quick reference. Sign in with your email, save a setup, and click Re-run this setup anytime to restore all inputs — no re-entering parameters.",
+  },
+];
+
+function WelcomeModal() {
+  const [open, setOpen] = React.useState(() => !localStorage.getItem("welcome_seen"));
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="px-6 pt-6 pb-3 border-b border-zinc-800">
+          <p className="text-base font-bold text-white">Welcome to CoreCutCNC</p>
+          <p className="text-[11px] text-zinc-400 mt-0.5">Your physics-based advisor where our engine integrates Core Cutter tool geometry, coating behavior, and cutting data directly into the model — so every recommendation is tailored to the exact cutter you're running.</p>
+        </div>
+        <div className="overflow-y-auto flex-1 px-6 py-4 flex flex-col gap-4">
+          {HELP_SECTIONS.map(s => (
+            <div key={s.title}>
+              <p className="text-xs font-semibold text-white mb-0.5">{s.icon} {s.title}</p>
+              <p className="text-[11px] text-zinc-400 leading-relaxed">{s.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-4 border-t border-zinc-800">
+          <button
+            onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); }}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2 rounded-lg"
+          >
+            Got it, let's go →
+          </button>
+          <p className="text-[10px] text-zinc-600 text-center mt-2">Tap the Pro Tips tab anytime to review this guide.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const OPERATION_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
+  milling: {
+    title: "End Mill Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose the ISO category and specific material you're cutting. The engine uses calibrated SFM and chip load values validated for each material." },
+      { heading: "2. Enter Tool Info", body: "Enter diameter, flute count, and LOC. Enter an EDP number to auto-fill geometry from the Core Cutter catalog." },
+      { heading: "3. Set Your Machine", body: "Search for your machine or enter spindle HP, max RPM, taper, and toolholder. These drive the HP and stability calculations." },
+      { heading: "4. Cut Engagement", body: "Select a cut mode (HEM, Traditional, Finish, Face, Slot, Circ Interp) and set WOC and DOC. Use Low/Med/High presets as a starting point." },
+      { heading: "5. Calculate", body: "Hit Calculate to get RPM, feed, chip load, HP draw, and a full stability audit with chatter risk analysis and ranked improvement suggestions." },
+    ],
+  },
+  feedmilling: {
+    title: "Chamfer Mill Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose the material you're chamfering. SFM and chip load are calibrated per material for chamfer mill geometry." },
+      { heading: "2. Enter Tool Info", body: "Enter the chamfer mill diameter, included angle, and edge length. Enter an EDP number to auto-fill from the Core Cutter catalog." },
+      { heading: "3. Set Your Machine", body: "Enter spindle HP, max RPM, and toolholder. The engine checks HP draw against your available spindle power." },
+      { heading: "4. Cut Parameters", body: "Set your chamfer depth and contact length. The engine calculates the effective cutting diameter at depth and adjusts RPM accordingly." },
+      { heading: "5. Calculate", body: "Hit Calculate to get RPM, feed rate, and chip load tailored to your chamfer geometry." },
+    ],
+  },
+  drilling: {
+    title: "Drilling Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose your material — the engine uses drill-specific SFM and feed per rev values for each." },
+      { heading: "2. Enter Tool Info", body: "Enter drill diameter, flute length, and point angle. Enter an EDP number to auto-fill from the Core Cutter drill catalog." },
+      { heading: "3. Set Your Machine", body: "Enter spindle HP, max RPM, and toolholder. Drilling torque and thrust are checked against your machine." },
+      { heading: "4. Hole Parameters", body: "Enter hole depth and select a peck cycle if needed. The engine accounts for full-depth vs. peck chip evacuation." },
+      { heading: "5. Calculate", body: "Hit Calculate to get RPM, feed rate, cycle time, and HP draw for your drill operation." },
+    ],
+  },
+  reaming: {
+    title: "Reaming Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose your material — reaming SFM is significantly lower than drilling for the same material." },
+      { heading: "2. Enter Tool Info", body: "Enter reamer diameter and flute count. The engine uses reamer-specific chip load values." },
+      { heading: "3. Tolerance Class", body: "Select H6, H7, or H8 tolerance class. The engine calculates the correct finished bore diameter and required stock removal." },
+      { heading: "4. Pre-Drill Diameter", body: "Enter your pre-drilled hole diameter. The engine verifies the stock removal is within reaming range." },
+      { heading: "5. Calculate", body: "Hit Calculate to get RPM, feed rate, and chip load optimized for your reaming operation." },
+    ],
+  },
+  threadmilling: {
+    title: "Thread Mill Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose your material — thread milling SFM and chip load are calibrated per material." },
+      { heading: "2. Enter Tool Info", body: "Enter thread mill diameter and enter your EDP number to auto-fill Core Cutter thread mill geometry." },
+      { heading: "3. Thread Specification", body: "Enter the major diameter and TPI (inch) or pitch (metric). The engine calculates the correct helical path geometry." },
+      { heading: "4. Thread Engagement", body: "Set your thread engagement depth. The engine calculates the cutting forces and HP draw for the full thread profile." },
+      { heading: "5. G-Code Output", body: "Hit Calculate to get RPM, feed, and a ready-to-use G-code helical interpolation block for your thread." },
+    ],
+  },
+  keyseat: {
+    title: "Keyseat Cutter Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose your material — keyseat cutters operate at lower SFM due to their side-cutting geometry." },
+      { heading: "2. Enter Tool Info", body: "Enter the keyseat cutter diameter, width, and arbor diameter. Enter an EDP number to auto-fill from the Core Cutter catalog." },
+      { heading: "3. Slot Dimensions", body: "Enter the keyway width and depth. The engine calculates WOC and DOC based on your keyway geometry." },
+      { heading: "4. Calculate", body: "Hit Calculate to get RPM, feed rate, and chip load for your keyseat operation." },
+    ],
+  },
+  dovetail: {
+    title: "Dovetail Cutter Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose your material — dovetail cutters use side-cutting geometry with specific force characteristics." },
+      { heading: "2. Enter Tool Info", body: "Enter the dovetail cutter diameter and included angle. Enter an EDP number to auto-fill from the Core Cutter catalog." },
+      { heading: "3. Dovetail Geometry", body: "Enter the slot depth and width. The engine calculates the effective cutting diameter and adjusts speeds accordingly." },
+      { heading: "4. Calculate", body: "Hit Calculate to get RPM, feed rate, and chip load for your dovetail operation." },
+    ],
+  },
+};
+
+const PAGE_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
+  "/": {
+    title: "Milling & Chamfer Advisor",
+    sections: [],  // replaced dynamically by operation
+  },
+  "/catalog": {
+    title: "Tool Finder",
+    sections: [
+      { heading: "Quick Search", body: "Type a diameter, series name, flute count, or coating into the search bar. Results update instantly as you type." },
+      { heading: "EDP Numbers", body: "Each tool has a unique EDP number. Copy it into the Milling Advisor's EDP field to auto-fill tool geometry for your calculation." },
+      { heading: "Filters", body: "Use the ISO category, coating, and corner condition filters to narrow results to exactly what you need." },
+      { heading: "Not finding what you need?", body: "Use the 'Contact us' link at the bottom of the page — Core Cutter can quote a special to your print." },
+    ],
+  },
+  "/toolbox": {
+    title: "Toolbox",
+    sections: [
+      { heading: "Sign In", body: "Enter your email address to receive a one-time code. No password needed — the code signs you in and keeps you logged in on this device." },
+      { heading: "Save a Setup", body: "After running a calculation in the Milling Advisor, click Save Setup. Give it a name or use the default. It saves your full input set." },
+      { heading: "Re-run a Setup", body: "Click Re-run this setup on any saved item to restore all inputs back into the Milling Advisor — ready to calculate or adjust." },
+      { heading: "Save Your Machines", body: "Save your shop machines with spindle HP, taper, RPM, and toolholder info for quick recall on any future job." },
+    ],
+  },
+  "/calculators": {
+    title: "Calculators",
+    sections: [
+      { heading: "Speed & Feed", body: "Chip thinning, minimum chip thickness, and feed rate converters. Use these to validate or adjust values from the advisor." },
+      { heading: "Arcs & Contours", body: "Arc entry feed adjustment, helical entry sizing, and no-post bore calculator. Essential for circ interp and helical toolpaths." },
+      { heading: "How to Use", body: "All calculators are standalone — just enter your values and results update instantly. No connection to the engine required." },
+    ],
+  },
+};
+
+function HelpButton() {
+  const [open, setOpen] = React.useState(false);
+  const [location] = useLocation();
+
+  // On the main advisor page, use operation-specific tips
+  let pageHelp = PAGE_HELP[location] ?? null;
+  if (location === "/") {
+    const op = localStorage.getItem("cc_operation") || "milling";
+    pageHelp = OPERATION_HELP[op] ?? OPERATION_HELP["milling"];
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed right-0 z-50 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 36px)" }}
+        aria-label="Pro Tips"
+      >
+        Pro Tips
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+          <div
+            className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+              <p className="text-sm font-semibold text-white">Welcome to CoreCutCNC</p>
+              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 flex flex-col gap-5">
+              {/* Page-specific help */}
+              {pageHelp && (
+                <div className="mb-1">
+                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-3">{pageHelp.title} — Tips</p>
+                  {pageHelp.sections.map(s => (
+                    <div key={s.heading} className="mb-3">
+                      <p className="text-xs font-semibold text-white mb-0.5">{s.heading}</p>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">{s.body}</p>
+                    </div>
+                  ))}
+                  <div className="border-t border-zinc-800 my-4" />
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">App Overview</p>
+                </div>
+              )}
+              {/* General overview */}
+              {HELP_SECTIONS.map(s => (
+                <div key={s.title}>
+                  <p className="text-xs font-semibold text-white mb-1">{s.icon} {s.title}</p>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">{s.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function FeedbackButton() {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState("Bug");
@@ -149,8 +374,8 @@ function FeedbackButton() {
       {/* Floating tab */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg writing-mode-vertical"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "translateY(-50%) rotate(180deg)" }}
+        className="fixed right-0 z-50 bg-zinc-700 hover:bg-zinc-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 36px)" }}
         aria-label="Send feedback"
       >
         Feedback
@@ -239,7 +464,9 @@ function App() {
       <TooltipProvider>
         <Router />
         <Toaster />
+        <WelcomeModal />
         <FeedbackButton />
+        <HelpButton />
         <BrevoNudge />
         <AddToHomeScreenBanner />
       </TooltipProvider>
