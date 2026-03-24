@@ -146,6 +146,11 @@ const HELP_SECTIONS = [
     icon: "🗂️",
     body: "Save your machines and machine info per your shop for quick reference. Sign in with your email, save a setup, and click Re-run this setup anytime to restore all inputs — no re-entering parameters.",
   },
+  {
+    title: "Use CoreCutCNC as a Mobile App",
+    icon: "📱",
+    body: "No app store needed — save CoreCutCNC directly to your home screen for instant access. On iPhone/iPad: tap the Share button in Safari, then \"Add to Home Screen\". On Android: tap the ⋮ menu in Chrome, then \"Add to Home Screen\". It launches full screen just like a native app.",
+  },
 ];
 
 function WelcomeModal() {
