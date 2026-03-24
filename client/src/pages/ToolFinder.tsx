@@ -1677,6 +1677,17 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       </div>
     )}
 
+    {/* Persistent contact link — always visible */}
+    <div className="px-4 py-3 text-center border-t border-zinc-800 mt-2">
+      <button
+        type="button"
+        onClick={() => { setShowTfContact(true); setTfContactStatus("idle"); }}
+        className="text-xs text-zinc-500 hover:text-orange-400 transition-colors"
+      >
+        Not sure which tool you need? Contact us →
+      </button>
+    </div>
+
     {/* Contact Modal */}
     {showTfContact && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowTfContact(false); setTfContactStatus("idle"); }}>
