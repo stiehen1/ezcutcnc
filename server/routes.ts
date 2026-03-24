@@ -1471,6 +1471,36 @@ export async function registerRoutes(
     }
   });
 
+  // ── Beta Feedback Form ───────────────────────────────────────────────────
+  app.post("/api/feedback", async (req, res) => {
+    try {
+      const { type, message, email } = (req.body ?? {}) as { type?: string; message?: string; email?: string };
+      if (!message?.trim()) return res.status(400).json({ error: "Message required." });
+
+      const smtpUser = process.env.SMTP_USER || "";
+      const smtpPass = process.env.SMTP_PASS || "";
+      const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+
+      if (smtpUser && smtpPass) {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({
+          from: `"CoreCutCNC Feedback" <${smtpUser}>`,
+          to: "scott@corecutterusa.com",
+          subject: `[${type || "Feedback"}] CoreCutCNC beta`,
+          text: `Type: ${type || "—"}\nFrom: ${email || "anonymous"}\n\n${message}`,
+        });
+      }
+
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: "Failed to send feedback." });
+    }
+  });
+
   // ── Beta Feedback / Newsletter Signup ────────────────────────────────────
   app.post("/api/newsletter-signup", async (req, res) => {
     try {
@@ -1503,6 +1533,28 @@ export async function registerRoutes(
         } catch (e: any) {
           console.warn("[Newsletter] Brevo API failed:", e?.message);
         }
+      }
+
+      // Notify scott
+      try {
+        const smtpUser = process.env.SMTP_USER || "";
+        const smtpPass = process.env.SMTP_PASS || "";
+        const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+        const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+        if (smtpUser && smtpPass) {
+          const transporter = nodemailer.createTransport({
+            host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+            auth: { user: smtpUser, pass: smtpPass },
+          });
+          await transporter.sendMail({
+            from: `"CoreCutCNC" <${smtpUser}>`,
+            to: "scott@corecutterusa.com",
+            subject: "New beta signup — CoreCutCNC",
+            text: `New email signup from the beta feedback nudge:\n\n${email}`,
+          });
+        }
+      } catch (e: any) {
+        console.warn("[Newsletter] Notification email failed:", e?.message);
       }
 
       return res.json({ ok: true });

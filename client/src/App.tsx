@@ -120,6 +120,107 @@ function BrevoNudge() {
   );
 }
 
+function FeedbackButton() {
+  const [open, setOpen] = React.useState(false);
+  const [type, setType] = React.useState("Bug");
+  const [message, setMessage] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [sent, setSent] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setSending(true);
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, message, email }),
+      });
+      setSent(true);
+      setTimeout(() => { setOpen(false); setSent(false); setMessage(""); setEmail(""); setType("Bug"); }, 2500);
+    } catch { setOpen(false); }
+    setSending(false);
+  };
+
+  return (
+    <>
+      {/* Floating tab */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg writing-mode-vertical"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "translateY(-50%) rotate(180deg)" }}
+        aria-label="Send feedback"
+      >
+        Feedback
+      </button>
+
+      {/* Slide-in panel */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+          <div
+            className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-white">Send Feedback</p>
+              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            {sent ? (
+              <p className="text-sm text-green-400 mt-4">Thanks! We got your feedback.</p>
+            ) : (
+              <form onSubmit={submit} className="flex flex-col gap-3 flex-1">
+                <div>
+                  <label className="text-[11px] text-zinc-400 mb-1 block">Type</label>
+                  <select
+                    value={type}
+                    onChange={e => setType(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-orange-500"
+                  >
+                    <option>Bug</option>
+                    <option>Suggestion</option>
+                    <option>Compliment</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 mb-1 block">Message <span className="text-red-400">*</span></label>
+                  <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    rows={5}
+                    placeholder="Tell us what's on your mind..."
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-orange-500 resize-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 mb-1 block">Your email <span className="text-zinc-600">(optional)</span></label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="so we can follow up"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-orange-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="mt-auto bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold py-2 rounded disabled:opacity-50"
+                >
+                  {sending ? "Sending…" : "Send Feedback"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -138,6 +239,7 @@ function App() {
       <TooltipProvider>
         <Router />
         <Toaster />
+        <FeedbackButton />
         <BrevoNudge />
         <AddToHomeScreenBanner />
       </TooltipProvider>
