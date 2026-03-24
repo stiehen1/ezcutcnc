@@ -2300,7 +2300,7 @@ ${stabSection}
             <img
               src="/COREcutCNC_HORZ.png"
               alt="CoreCutCNC"
-              className="h-24 w-auto flex-shrink-0"
+              className="h-14 w-auto flex-shrink-0"
               style={{ mixBlendMode: "screen" }}
             />
             {/* IN/MM toggle */}
