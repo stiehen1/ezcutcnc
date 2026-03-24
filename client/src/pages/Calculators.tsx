@@ -1484,7 +1484,7 @@ function BoltCircle() {
     if (!pts) return "";
     const xf = (v: number) => v.toFixed(dec);
     const zf  = (v: number) => v.toFixed(metric ? 3 : 4);
-    const lines: string[] = ["(Bolt Circle — EZCutCNC)", "G90 G17"];
+    const lines: string[] = ["(Bolt Circle — CoreCutCNC)", "G90 G17"];
     if (gcMode === "g81") {
       const zVal = ZD !== 0 ? -Math.abs(ZD) : -0.500;
       const rVal = Math.abs(ZR);
@@ -2274,7 +2274,7 @@ export default function Calculators() {
     const now = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
     const divider = "─".repeat(44);
     const lines: string[] = [
-      "EZCutCNC — Calculator Results",
+      "CoreCutCNC — Calculator Results",
       `Generated: ${now}`,
       divider,
       "",
@@ -2289,7 +2289,7 @@ export default function Calculators() {
       lines.push("");
     }
     lines.push(divider);
-    lines.push("Produced with EZCutCNC by Core Cutter LLC  |  corecuttertool.com");
+    lines.push("Produced with CoreCutCNC by Core Cutter LLC  |  corecutcnc.com");
     lines.push(`© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.`);
     navigator.clipboard.writeText(lines.join("\n")).then(() => {
       setTextCopied(true);
@@ -2317,7 +2317,7 @@ export default function Calculators() {
     @media print{body{padding:0}}</style></head><body>
     <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;border-bottom:2px solid #e55a00;padding-bottom:12px;margin-bottom:20px;gap:12px">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="${window.location.origin}/EZCutCNC_dark_horizontal.png" alt="EZcutCNC" style="height:48px;width:auto">
+        <img src="${window.location.origin}/CoreCutCNC_dark_horizontal.png" alt="CoreCutCNC" style="height:48px;width:auto">
       </div>
       <div style="text-align:center;color:#555;font-size:10px">
         <strong style="font-size:13px;color:#111;display:block">Calculator Results</strong>

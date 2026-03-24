@@ -213,7 +213,7 @@ export default function Admin() {
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Calculator</Link>
         <div className="flex items-center gap-2">
           <img src="/CCLogo-long-blackback.png" alt="Core Cutter" className="h-6 w-auto" />
-          <span className="text-sm font-bold tracking-widest text-orange-500">EZCutCNC</span>
+          <span className="text-sm font-bold tracking-widest text-orange-500">CoreCutCNC</span>
           <span className="text-sm font-semibold text-muted-foreground">/ Admin</span>
         </div>
         <button

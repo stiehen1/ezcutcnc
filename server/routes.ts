@@ -1394,7 +1394,7 @@ export async function registerRoutes(
           "",
           "─────────────────────────────────────",
           "Questions? Contact us at sales@corecutterusa.com",
-          "corecuttertool.com",
+          "corecutcnc.com",
         ].join("\n"),
       }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
 
@@ -1461,7 +1461,7 @@ export async function registerRoutes(
         to,
         replyTo: email,
         subject: `Tool Request — ${name ?? email}`,
-        text: [`Name:    ${name ?? "—"}`, `Email:   ${email}`, ``, message ?? "(no message)", ``, `Submitted via EZCutCNC Tool Finder`].join("\n"),
+        text: [`Name:    ${name ?? "—"}`, `Email:   ${email}`, ``, message ?? "(no message)", ``, `Submitted via CoreCutCNC Tool Finder`].join("\n"),
       }).catch((e: any) => console.warn("[Tool Request] Email failed:", e?.message));
 
       return res.json({ ok: true });
@@ -1773,12 +1773,12 @@ export async function registerRoutes(
           code: machiningMentorCode,
           language: "python",
         });
-        console.log("Created EZCutCNC snippet");
+        console.log("Created CoreCutCNC snippet");
       } else {
         await storage.updateSnippet(machMentor.id, {
           code: machiningMentorCode,
         });
-        console.log("Updated EZCutCNC snippet");
+        console.log("Updated CoreCutCNC snippet");
       }
     }
   } catch (err) {
@@ -2114,7 +2114,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     // 1. Domain blocklist
     const domainBlock = await pool.query(`SELECT 1 FROM blocked_domains WHERE domain = $1`, [domain]);
     if (domainBlock.rows.length > 0) {
-      return res.status(403).json({ error: "This email domain is not authorized to access EZCutCNC." });
+      return res.status(403).json({ error: "This email domain is not authorized to access CoreCutCNC." });
     }
 
     // 2. User-level block
@@ -2128,7 +2128,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     if (Number(allowCount) > 0) {
       const allowed = await pool.query(`SELECT 1 FROM allowed_emails WHERE email = $1`, [emailLower]);
       if (allowed.rows.length === 0) {
-        return res.status(403).json({ error: "Access to EZCutCNC is by invitation only. Contact sales@corecutterusa.com to request access." });
+        return res.status(403).json({ error: "Access to CoreCutCNC is by invitation only. Contact sales@corecutterusa.com to request access." });
       }
     }
     // ──────────────────────────────────────────────────────────────────────
@@ -2147,13 +2147,13 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       secure: false,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
-    const fromName = "EZCutCNC by Core Cutter";
+    const fromName = "CoreCutCNC by Core Cutter";
     const fromAddr = process.env.FROM_EMAIL || "noreply@corecutterusa.com";
     const mailOptions = {
       from: `"${fromName}" <${fromAddr}>`,
       to: email,
-      subject: "Your EZCutCNC Toolbox Access Code",
-      text: `Your EZCutCNC Toolbox verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, you can ignore this email.\n\n— Core Cutter LLC\n120 Technology Drive, Gardiner, ME 04345\nsales@corecutterusa.com`,
+      subject: "Your CoreCutCNC Toolbox Access Code",
+      text: `Your CoreCutCNC Toolbox verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, you can ignore this email.\n\n— Core Cutter LLC\n120 Technology Drive, Gardiner, ME 04345\nsales@corecutterusa.com`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -2164,7 +2164,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         <!-- Header -->
         <tr>
           <td style="background:#111111;padding:24px 32px;text-align:center;">
-            <div style="font-size:22px;font-weight:900;letter-spacing:4px;color:#ea6c00;">EZCutCNC</div>
+            <div style="font-size:22px;font-weight:900;letter-spacing:4px;color:#ea6c00;">CoreCutCNC</div>
             <div style="font-size:11px;color:#888;margin-top:4px;letter-spacing:1px;">POWERED BY CORE CUTTER LLC</div>
           </td>
         </tr>
@@ -2172,7 +2172,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         <tr>
           <td style="padding:32px;">
             <p style="margin:0 0 8px;font-size:15px;color:#111;font-weight:600;">Your Toolbox Access Code</p>
-            <p style="margin:0 0 24px;font-size:13px;color:#555;">Enter this code in the EZCutCNC app to access your Toolbox.</p>
+            <p style="margin:0 0 24px;font-size:13px;color:#555;">Enter this code in the CoreCutCNC app to access your Toolbox.</p>
             <div style="background:#f4f4f5;border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
               <div style="font-size:42px;font-weight:900;letter-spacing:12px;color:#ea6c00;">${otp}</div>
             </div>

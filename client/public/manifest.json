@@ -1,6 +1,6 @@
 {
-  "name": "EZCutCNC",
-  "short_name": "EZCutCNC",
+  "name": "CoreCutCNC",
+  "short_name": "CoreCutCNC",
   "description": "Core Cutter machining advisor — speeds, feeds, and stability analysis",
   "start_url": "/",
   "display": "standalone",

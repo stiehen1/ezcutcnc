@@ -1,4 +1,4 @@
-# EZCutCNC — Machining Advisor by Core Cutter LLC
+# CoreCutCNC — Machining Advisor by Core Cutter LLC
 
 A full-stack machining advisor for CNC shops. Calculates speeds, feeds, depths of cut, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, and threadmilling. Deployed at [corecuttertool.com](https://corecuttertool.com).
 

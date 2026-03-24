@@ -107,7 +107,7 @@ export default function Toolbox() {
           <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">← Back to Calculator</Link>
         </div>
         <div className="flex items-center gap-2">
-          <img src="/EZCutCNC_dark_horizontal.png" alt="EZCutCNC" className="h-8 w-auto" style={{ mixBlendMode: "screen" }} />
+          <img src="/CoreCutCNC_dark_horizontal.png" alt="CoreCutCNC" className="h-8 w-auto" style={{ mixBlendMode: "screen" }} />
           <span className="text-sm font-semibold text-muted-foreground">/ Toolbox</span>
         </div>
         {step === "items" && (
