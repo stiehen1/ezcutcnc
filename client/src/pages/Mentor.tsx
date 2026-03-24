@@ -7306,7 +7306,7 @@ ${stabSection}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Air blast over flood</span> — chips under the wiper get smeared and streak the surface</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Axial runout &lt;0.0005"</span> — Z-wobble leaves repeating witness arcs at every stepover. Use shrink-fit or precision collet, check face TIR</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Troubleshoot:</span> Scallop lines = stepover too wide or CR too small · Witness arcs = check axial runout · Wavy surface = reduce stickout + spring pass</p>
-                      </>) : (<>
+                      </>) : form.mode === "circ_interp" ? (<>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">CAM feed vs. peripheral feed:</span> <strong>Feed (IPM)</strong> in results is already corrected for arc — enter that number in your CAM. <strong>Peripheral Feed</strong> is the actual chip load at the wall — use it to verify the cut, not to program.</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Larger bore = higher feed is correct:</span> As bore diameter increases, arc of engagement decreases and chip thinning kicks in — the engine boosts feed automatically. Higher Feed (IPM) on a large bore is expected, not a mistake.</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">CCW toolpath = climb milling</span> on an internal bore. Use CCW for finish passes; CW is conventional (better if backlash is a concern)</p>
@@ -7330,15 +7330,7 @@ ${stabSection}
                           );
                         })()}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Never dwell mid-pass</span> — stopping feed inside the bore leaves a witness ring. Lead tool out past bore edge on exit</p>
-                      </>) : (<>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">WOC 5–15% of tool diameter</span> is the sweet spot — keeps chip thinning in the useful range and arc of engagement low enough to prevent heat buildup</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3°; verify center-cutting geometry.</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
-                      </>) : (<>
+                      </>) : form.mode === "finish" ? (<>
                         <p className="text-[10px] text-sky-200">• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
                         <p className="text-[10px] text-sky-200">• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Climb mill always</span> — less rubbing, better Ra, longer tool life</p>
@@ -7348,6 +7340,14 @@ ${stabSection}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Increase SFM 10–15%, reduce feed 15–25%</span> vs roughing</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
+                      </>) : (<>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">WOC 5–15% of tool diameter</span> is the sweet spot — keeps chip thinning in the useful range and arc of engagement low enough to prevent heat buildup</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3°; verify center-cutting geometry.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
                       </>)}
                     </div>
                   )}
