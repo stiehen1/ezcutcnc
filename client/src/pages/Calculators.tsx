@@ -1319,6 +1319,88 @@ function EngagementAngle() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Minimum Chip Thickness
+// ─────────────────────────────────────────────────────────────────
+function MinChipThickness() {
+  const metric = useMetric();
+  const dU = metric ? "mm" : "in";
+
+  const [edgeRad, setEdgeRad]   = React.useState(""); // edge radius in μin or μm
+  const [toolDia, setToolDia]   = React.useState("");
+  const [woc,     setWoc]       = React.useState("");
+  const [fpt,     setFpt]       = React.useState("");
+
+  const er_in  = metric ? n(edgeRad) / 1000 / 25.4 : n(edgeRad) / 1e6; // convert μin→in or μm→in
+  const td     = metric ? n(toolDia) / 25.4 : n(toolDia);
+  const woc_in = metric ? n(woc) / 25.4 : n(woc);
+  const fpt_in = metric ? n(fpt) / 25.4 : n(fpt);
+
+  const wocFrac = td > 0 && woc_in > 0 ? woc_in / td : 0;
+  const chipThinFactor = wocFrac > 0 ? Math.sqrt(wocFrac / (2 - wocFrac)) : null;
+
+  // Min chip thickness = 20–30% of edge radius (use 25% as midpoint)
+  const minChip_in   = er_in > 0 ? 0.25 * er_in : null;
+  const minFpt_in    = minChip_in !== null && chipThinFactor !== null && chipThinFactor > 0
+    ? minChip_in / chipThinFactor : null;
+
+  const disp = (v: number | null) => {
+    if (v === null) return null;
+    return metric ? (v * 25400).toFixed(2) + " μm" : (v * 1e6).toFixed(1) + " μin";
+  };
+  const dispIn = (v: number | null) => {
+    if (v === null) return null;
+    return metric ? (v * 25.4).toFixed(4) + " mm" : v.toFixed(5) + '"';
+  };
+
+  const rubbing = fpt_in > 0 && minFpt_in !== null ? fpt_in < minFpt_in : null;
+
+  usePrintRegister("Min Chip Thickness", "Speed & Feed", minChip_in !== null ? [
+    { label: `Edge Radius (${metric ? "μm" : "μin"})`, value: edgeRad },
+    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: "Radial WOC", value: woc },
+    { label: "Min Chip Thickness", value: disp(minChip_in) ?? "" },
+    ...(minFpt_in !== null ? [{ label: "Min FPT to avoid rubbing", value: dispIn(minFpt_in) ?? "" }] : []),
+    ...(fpt_in > 0 && rubbing !== null ? [{ label: "Current FPT status", value: rubbing ? "⚠ Below min — tool is rubbing" : "✓ Above min — cutting" }] : []),
+  ] : null);
+
+  return (
+    <CalcCard title="Min Chip Thickness" category="Speed & Feed"
+      onClear={() => { setEdgeRad(""); setToolDia(""); setWoc(""); setFpt(""); }}>
+      <p className="text-[10px] text-gray-500 -mt-1">
+        Chip must be ≥20–30% of the cutting edge radius or the tool rubs instead of cuts — accelerating wear.
+      </p>
+      <Row label={`Edge Radius (${metric ? "μm" : "μin"})`} hint="Cutting edge hone radius from tool spec sheet. Typical uncoated carbide: 20–50 μin. Coated/honed: 50–200 μin. Ask your tool rep if unsure.">
+        <NumIn value={edgeRad} onChange={setEdgeRad} placeholder={metric ? "e.g. 5" : "e.g. 100"} />
+      </Row>
+      <Row label={`Tool Diameter (${dU})`} hint="Cutting diameter of the endmill.">
+        <NumIn value={toolDia} onChange={setToolDia} unit={dU} />
+      </Row>
+      <Row label={`Radial WOC (${dU})`} hint="Width of cut — used to calculate chip thinning factor.">
+        <NumIn value={woc} onChange={setWoc} unit={dU} />
+      </Row>
+      <Row label={`Current FPT (${dU})`} hint="Optional — enter your programmed feed per tooth to check if you're above the minimum.">
+        <NumIn value={fpt} onChange={setFpt} unit={dU} placeholder="optional" />
+      </Row>
+      {minChip_in !== null && (
+        <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
+          <Result label={`Min Chip Thickness`} value={disp(minChip_in) ?? ""} highlight />
+          {chipThinFactor !== null && <Result label="Chip Thinning Factor" value={chipThinFactor.toFixed(3)} />}
+          {minFpt_in !== null && <Result label={`Min FPT to cut (not rub)`} value={dispIn(minFpt_in) ?? ""} highlight />}
+          {fpt_in > 0 && rubbing !== null && (
+            <p className={`text-[10px] px-1 font-semibold ${rubbing ? "text-red-400" : "text-emerald-400"}`}>
+              {rubbing
+                ? `⚠ Current FPT is below minimum — tool is rubbing, not cutting. Increase feed or reduce edge radius.`
+                : `✓ Current FPT exceeds minimum — tool is cutting properly.`}
+            </p>
+          )}
+          <p className="text-[10px] text-gray-500 px-1">Rule of thumb: min chip = 25% × edge radius. Range: 20–30% depending on material.</p>
+        </div>
+      )}
+    </CalcCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Helix Entry / Ramp Angle
 // ─────────────────────────────────────────────────────────────────
 function HelixEntry() {
@@ -2194,7 +2276,7 @@ function ChamferMill() {
 // Main page
 // ─────────────────────────────────────────────────────────────────
 const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
-  { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement"] },
+  { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement","min-chip"] },
   { heading: "Surface Finish",  color: "#10b981", ids: ["cusp","eff-dia","surf-finish","ballnose-vel"] },
   { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","no-middle-post","bolt-circle","chord-sag","corner-clear","chamfer-mill","entry-spike"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
@@ -2209,6 +2291,7 @@ const CALC_MAP: Record<string, React.ReactNode> = {
   "peripheral":  <PeripheralFeed />,
   "chip-thin":   <ChipThinning />,
   "engagement":  <EngagementAngle />,
+  "min-chip":    <MinChipThickness />,
   "cusp":        <CuspHeight />,
   "eff-dia":     <EffectiveDia />,
   "surf-finish":  <SurfaceFinishFlat />,
