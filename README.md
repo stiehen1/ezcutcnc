@@ -1,6 +1,6 @@
 # CoreCutCNC — Machining Advisor by Core Cutter LLC
 
-A full-stack machining advisor for CNC shops. Calculates speeds, feeds, depths of cut, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, and threadmilling. Deployed at [corecuttertool.com](https://corecuttertool.com).
+A full-stack machining advisor for CNC shops. Calculates speeds, feeds, depths of cut, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, and threadmilling. Deployed at [corecutcnc.com](https://corecutcnc.com).
 
 Two access modes: **Customer mode** (requires an EDP# or Core Cutter print PDF) and **Engineering mode** (unrestricted parameter input).
 
@@ -606,12 +606,11 @@ The Python engine runs as a subprocess of Express — no separate Python server 
 
 ## Deployment
 
-Production at [corecuttertool.com](https://corecuttertool.com).
+Production at [corecutcnc.com](https://corecutcnc.com) — hosted on Replit Autoscale Deployments.
 
-```bash
-git pull
-npm run build    # compile React frontend to dist/
-# restart server: pm2 restart / npm start
-```
+**Deploy steps:**
+1. Push changes from VS Code: `git push origin main`
+2. In Replit shell: `git fetch origin && git reset --hard origin/main`
+3. Click **Republish** in the Replit Deployments tab
 
-The Express server serves the compiled React frontend as static files in production.
+The Express server serves the compiled React frontend as static files in production. Replit Deployments runs the build (`npm run build`) and starts the server (`node dist/index.cjs`) automatically on republish.

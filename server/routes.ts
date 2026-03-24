@@ -1471,6 +1471,46 @@ export async function registerRoutes(
     }
   });
 
+  // ── Beta Feedback / Newsletter Signup ────────────────────────────────────
+  app.post("/api/newsletter-signup", async (req, res) => {
+    try {
+      const { email } = (req.body ?? {}) as { email?: string };
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Valid email required." });
+      }
+
+      // Store in DB leads table
+      try {
+        const { pool } = await import("./db");
+        await pool.query(
+          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [email.toLowerCase().trim(), "newsletter_signup", null, null, "Beta feedback nudge"]
+        );
+      } catch (dbErr: any) {
+        console.warn("[Newsletter] DB insert failed:", dbErr?.message);
+      }
+
+      // Add to Brevo contacts via REST API
+      const apiKey = process.env.BREVO_API_KEY;
+      if (apiKey) {
+        try {
+          await fetch("https://api.brevo.com/v3/contacts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "api-key": apiKey },
+            body: JSON.stringify({ email: email.toLowerCase().trim(), updateEnabled: true, attributes: { SOURCE: "beta_nudge" } }),
+          });
+        } catch (e: any) {
+          console.warn("[Newsletter] Brevo API failed:", e?.message);
+        }
+      }
+
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: "Signup failed." });
+    }
+  });
+
   // Seed data — wrapped in try/catch so a Neon cold-start ECONNRESET doesn't crash the server
   let snippets: Awaited<ReturnType<typeof storage.getSnippets>> = [];
   try {

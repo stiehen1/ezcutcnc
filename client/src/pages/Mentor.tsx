@@ -5,6 +5,7 @@ function stpUrl(edp: string): string {
   return `${STP_CDN}/${encodeURIComponent("Core_Cutter_" + edp + " v1.step")}`;
 }
 import { useMentor } from "@/hooks/use-mentor";
+import { trackCalculation, trackPdfExport } from "@/lib/analytics";
 import Calculators from "./Calculators";
 import ToolFinder from "./ToolFinder";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1277,6 +1278,7 @@ export default function Mentor() {
         debug: false,
       });
       setFormDirty(false);
+      trackCalculation(form.material, form.mode, form.tool_dia);
       setOptimalRec(null);
       // Fetch optimal tool recommendation if a specific EDP is locked
       const isQtr3 = /^qtr3/i.test(form.tool_series ?? "");
@@ -1677,6 +1679,7 @@ ${stabSection}
 
   const downloadPDF = async () => {
     if (!result) return;
+    trackPdfExport(form.mode);
     // Re-use same HTML but strip the auto-print script
     const printBtn = document.querySelector("[data-print-trigger]") as HTMLButtonElement | null;
     // Generate the HTML by temporarily patching window.open to capture it
