@@ -418,7 +418,7 @@ export default function Mentor() {
       machine_type: m.machine_type ?? p.machine_type,
     }));
     setActiveMachineId(m.id ?? null);
-    const _namePart = [m.brand, m.model].filter(Boolean).join(" ");
+    const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
     const _machNo = m.shop_machine_no ? ` #${m.shop_machine_no}` : "";
     setActiveMachineName(_namePart ? `${_namePart}${_machNo}${m.nickname ? ` (${m.nickname})` : ""}` : `${m.nickname ?? ""}${_machNo}`);
     setMachineQuery("");
@@ -4951,7 +4951,12 @@ ${stabSection}
                 placeholder="Search catalog — e.g. Haas VF-2, Mazak, DMG..."
                 value={machineQuery || (!machineDropOpen ? activeMachineName : "")}
                 onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
-                onFocus={() => { setMachineDropOpen(true); }}
+                onFocus={() => {
+                  setMachineDropOpen(true);
+                  const e = tbEmail || localStorage.getItem("tb_email") || "";
+                  const t = tbToken || localStorage.getItem("tb_token") || "";
+                  if (e && t) fetch(`/api/user-machines?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`).then(r => r.ok ? r.json() : []).then(setSavedMachines).catch(() => {});
+                }}
                 onBlur={() => setTimeout(() => { if (!machineTouchingDropRef.current) setMachineDropOpen(false); }, 500)}
                 className="text-sm"
               />
