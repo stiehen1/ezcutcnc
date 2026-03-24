@@ -124,7 +124,7 @@ const HELP_SECTIONS = [
   {
     title: "Tool Finder",
     icon: "🔍",
-    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the advisor.",
+    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the advisor. Each tool includes a downloadable STP file for direct use in your CAM system.",
   },
   {
     title: "Calculators",
@@ -134,12 +134,12 @@ const HELP_SECTIONS = [
   {
     title: "Milling & Chamfer Advisor",
     icon: "⚙️",
-    body: "Speeds, feeds, and full stability analysis for standard Core Cutter end mills and chamfer mills. Enter your material, tool, machine, and cut parameters — the engine delivers RPM, feed, chip load, HP draw, and a complete stability audit including chatter risk analysis.",
+    body: "Speeds, feeds, and full stability analysis for standard Core Cutter end mills and chamfer mills. Enter your material, tool, machine, and cut parameters — the engine delivers RPM, feed, chip load, HP draw, and a complete stability audit including chatter risk analysis. Results can be exported as a formatted PDF report or a CAM setup sheet for notepad/CNC use — your email is required for all exports.",
   },
   {
     title: "Specials Advisor (Dovetail, Keyseat, Thread Mill & more)",
     icon: "📐",
-    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the advisor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically.",
+    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the advisor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. PDF and CAM setup sheet exports are available here too — email required.",
   },
   {
     title: "Toolbox",
@@ -189,6 +189,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
       { heading: "3. Set Your Machine", body: "Search for your machine or enter spindle HP, max RPM, taper, and toolholder. These drive the HP and stability calculations." },
       { heading: "4. Cut Engagement", body: "Select a cut mode (HEM, Traditional, Finish, Face, Slot, Circ Interp) and set WOC and DOC. Use Low/Med/High presets as a starting point." },
       { heading: "5. Calculate", body: "Hit Calculate to get RPM, feed, chip load, HP draw, and a full stability audit with chatter risk analysis and ranked improvement suggestions." },
+      { heading: "Exports", body: "Export results as a formatted PDF report or a CAM setup sheet for notepad/CNC use. Your email is required for all exports." },
     ],
   },
   feedmilling: {
@@ -262,6 +263,7 @@ const PAGE_HELP: Record<string, { title: string; sections: { heading: string; bo
       { heading: "Quick Search", body: "Type a diameter, series name, flute count, or coating into the search bar. Results update instantly as you type." },
       { heading: "EDP Numbers", body: "Each tool has a unique EDP number. Copy it into the Milling Advisor's EDP field to auto-fill tool geometry for your calculation." },
       { heading: "Filters", body: "Use the ISO category, coating, and corner condition filters to narrow results to exactly what you need." },
+      { heading: "STP File Downloads", body: "Every EDP has a downloadable STP file for direct use in your CAM system — find the tool and grab the file in one step." },
       { heading: "Not finding what you need?", body: "Use the 'Contact us' link at the bottom of the page — Core Cutter can quote a special to your print." },
     ],
   },
