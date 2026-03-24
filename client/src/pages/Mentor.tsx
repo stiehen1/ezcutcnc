@@ -1509,11 +1509,37 @@ export default function Mentor() {
         ${kpiBox("Torque (in-lbf)", eng.torque_in_lbf != null ? eng.torque_in_lbf.toFixed(1) : null)}
         ${kpiBox("Deflection (in)", eng.deflection_in != null ? eng.deflection_in.toFixed(6) : null)}
         ${kpiBox("Chip Thick (in)", eng.chip_thickness_in != null ? eng.chip_thickness_in.toFixed(6) : null)}
-        ${kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null)}
-        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
+        ${form.mode !== "face" && form.mode !== "circ_interp" ? kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null) : ""}
+        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" && form.mode !== "circ_interp" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
       </div>
       ${ticGauge}
       ${engAngleGauge}
+      ${form.mode === "face" ? `
+      <div style="margin-top:10px;padding:8px 10px;border:1px solid #e55a00;border-radius:6px;background:#fff7f0;">
+        <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#e55a00;margin-bottom:6px;">Facing / Planar Milling — Setup Notes</p>
+        <ul style="font-size:9px;color:#333;line-height:1.6;padding-left:12px;">
+          ${form.tool_dia > 0 && form.corner_radius > 0 ? `<li>Optimal stepover: (D − 2×CR) × 0.75 = <strong>${((form.tool_dia - 2 * form.corner_radius) * 0.75).toFixed(4)}"</strong> — wiper overlaps each pass by 25%</li>` : ""}
+          ${form.corner_radius > 0 ? `<li>DOC must exceed CR (${form.corner_radius.toFixed(4)}") — below CR the wiper effect disappears and floor looks scalloped</li>` : ""}
+          <li>0.005–0.020" finish DOC is normal — facing DOC is much shallower than peripheral milling</li>
+          <li>Minimize stickout — #1 rule for facing. Full diameter engages; any deflection shows as flatness error</li>
+          <li>Climb mill on finish pass — bi-directional OK for roughing, uni-directional on finish pass only</li>
+          <li>Spring pass: re-run at zero Z offset, same direction — removes deflection bow from first pass</li>
+          <li>Air blast over flood — chips under the wiper get smeared and streak the surface</li>
+          <li>Axial runout &lt;0.0005" — Z-wobble leaves repeating witness arcs. Use shrink-fit or precision collet, check face TIR</li>
+        </ul>
+      </div>` : ""}
+      ${form.mode === "circ_interp" ? `
+      <div style="margin-top:10px;padding:8px 10px;border:1px solid #e55a00;border-radius:6px;background:#fff7f0;">
+        <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#e55a00;margin-bottom:6px;">Circular Interpolation — Setup Notes</p>
+        <ul style="font-size:9px;color:#333;line-height:1.6;padding-left:12px;">
+          <li>Feed shown is tool centerline (CAM programmed feed) — peripheral cutting edge moves faster</li>
+          <li>Use CCW direction for climb milling — conventional milling shortens tool life in bore work</li>
+          <li>Leave 0.005–0.010" stock for a final light cleanup pass at reduced feed for bore tolerance</li>
+          <li>Minimize stickout — bore work amplifies deflection into roundness error</li>
+          <li>Never dwell at the bottom — marks the bore wall</li>
+          <li>No pre-hole? Use helical interpolation entry in CAM — ramp feed typically 40–50% of lateral feed</li>
+        </ul>
+      </div>` : ""}
       ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.</p>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
