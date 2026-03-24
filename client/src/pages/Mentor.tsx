@@ -7277,14 +7277,14 @@ ${stabSection}
               })()}
 
               {/* Mode-specific Setup Tips — collapsible toggle */}
-              {customer && (form.mode === "face" || form.mode === "circ_interp") && (
+              {customer && (form.mode === "face" || form.mode === "circ_interp" || form.mode === "hem" || form.mode === "trochoidal") && (
                 <div className="mt-3 rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
                   <button
                     type="button"
                     onClick={() => setModeTipsOpen(o => !o)}
                     className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-sky-300 hover:text-sky-100 transition-colors"
                   >
-                    <span>{form.mode === "face" ? "Facing / Planar Milling — Setup Tips" : "Circular Interpolation — Setup Tips"}</span>
+                    <span>{form.mode === "face" ? "Facing / Planar Milling — Setup Tips" : form.mode === "circ_interp" ? "Circular Interpolation — Setup Tips" : "HEM / Trochoidal — Setup Tips"}</span>
                     <span className="text-sky-500 text-[11px]">{modeTipsOpen ? "▲ Hide" : "▼ Show"}</span>
                   </button>
                   {modeTipsOpen && (
@@ -7330,6 +7330,14 @@ ${stabSection}
                           );
                         })()}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Never dwell mid-pass</span> — stopping feed inside the bore leaves a witness ring. Lead tool out past bore edge on exit</p>
+                      </>) : (<>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">WOC 5–15% of tool diameter</span> is the sweet spot — keeps chip thinning in the useful range and arc of engagement low enough to prevent heat buildup</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3°; verify center-cutting geometry.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
                       </>)}
                     </div>
                   )}
@@ -8098,19 +8106,6 @@ ${stabSection}
 
 
 
-      {/* HEM / Trochoidal tips */}
-      {mentor.data && (form.mode === "hem" || form.mode === "trochoidal") && (
-        <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
-          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">HEM / Trochoidal Tips</p>
-          <p>• <span className="text-white">WOC 5–15% of tool diameter</span> is the sweet spot — keeps chip thinning in the useful range and arc of engagement low enough to prevent heat buildup</p>
-          <p>• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
-          <p>• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
-          <p>• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
-          <p>• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3° for most endmills; verify center-cutting geometry.</p>
-          <p>• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
-          <p>• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
-        </div>
-      )}
 
       {/* Disclaimer */}
       <div className="mt-6 px-1 text-[11px] text-muted-foreground/60 leading-relaxed border-t border-border pt-4">
