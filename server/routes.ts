@@ -1482,6 +1482,17 @@ export async function registerRoutes(
       const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
+      // Store in DB
+      try {
+        const { pool } = await import("./db");
+        await pool.query(
+          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
+          [(email || "anonymous").toLowerCase().trim(), "feedback", null, type || "Other", message.trim()]
+        );
+      } catch (dbErr: any) {
+        console.warn("[Feedback] DB insert failed:", dbErr?.message);
+      }
+
       if (smtpUser && smtpPass) {
         const transporter = nodemailer.createTransport({
           host: smtpHost, port: smtpPort, secure: smtpPort === 465,
