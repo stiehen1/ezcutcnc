@@ -2294,23 +2294,24 @@ ${stabSection}
       {/* LEFT — INPUT CARD */}
       <Card className="rounded-2xl">
         <CardHeader className="pt-0 pb-0">
-          {/* Header: logo left, controls right */}
-          <div className="flex items-start justify-between pt-1 pb-1 gap-3">
-            {/* Logo */}
+          {/* Header: logo full width, toggle below right */}
+          <div className="flex flex-col pt-1 pb-1">
             <img
               src="/COREcutCNC_HORZ.png"
               alt="CoreCutCNC"
-              className="h-20 w-auto flex-shrink-0"
+              className="h-20 w-auto"
               style={{ mixBlendMode: "screen" }}
             />
-            {/* IN/MM toggle */}
-            <div className="flex rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold mt-4">
-              {(["imperial", "metric"] as const).map((u) => (
-                <button key={u} type="button" onClick={() => setUnits(u)} className="px-3 py-1 transition-colors"
-                  style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : "#9ca3af" }}>
-                  {u === "imperial" ? "IN" : "MM"}
-                </button>
-              ))}
+            {/* IN/MM toggle — below logo, right-aligned */}
+            <div className="flex justify-end mt-1">
+              <div className="flex rounded-md border border-zinc-600 overflow-hidden text-xs font-semibold">
+                {(["imperial", "metric"] as const).map((u) => (
+                  <button key={u} type="button" onClick={() => setUnits(u)} className="px-3 py-1 transition-colors"
+                    style={{ backgroundColor: units === u ? "#6366f1" : "transparent", color: units === u ? "#fff" : "#9ca3af" }}>
+                    {u === "imperial" ? "IN" : "MM"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </CardHeader>
