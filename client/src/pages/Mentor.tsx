@@ -5108,7 +5108,7 @@ ${stabSection}
                           const isMillTurn = key === "mill_turn";
                           const isLatheLike = isLathe || isMillTurn;
                           // workholding default
-                          const defaultWH = isLatheLike ? "3_jaw_chuck" as const : "vise" as const;
+                          const defaultWH = isLatheLike ? "3_jaw_chuck" as const : key === "hmc" ? "rigid_fixture" as const : "vise" as const;
                           // toolholder — reset if switching away from a lathe-incompatible holder
                           const latheSafe = ["er_collet","hp_collet","weldon","hydraulic","shrink_fit","capto"] as const;
                           const thReset = isLatheLike && !(latheSafe as readonly string[]).includes(p.toolholder) ? "er_collet" as const : p.toolholder;
@@ -5458,7 +5458,6 @@ ${stabSection}
                       { key: "tombstone",     label: "Tombstone"     },
                       { key: "dovetail",      label: "Dovetail"      },
                       { key: "vise",          label: "Vise"          },
-                      { key: "toe_clamps",    label: "Toe Clamps"    },
                       { key: "soft_jaws",     label: "Soft Jaws"     },
                     ] as const)
                   : form.machine_type === "5axis"
