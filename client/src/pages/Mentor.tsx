@@ -7277,14 +7277,14 @@ ${stabSection}
               })()}
 
               {/* Mode-specific Setup Tips — collapsible toggle */}
-              {customer && (form.mode === "face" || form.mode === "circ_interp" || form.mode === "hem" || form.mode === "trochoidal") && (
+              {customer && (form.mode === "face" || form.mode === "circ_interp" || form.mode === "hem" || form.mode === "trochoidal" || form.mode === "finish") && (
                 <div className="mt-3 rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
                   <button
                     type="button"
                     onClick={() => setModeTipsOpen(o => !o)}
                     className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-sky-300 hover:text-sky-100 transition-colors"
                   >
-                    <span>{form.mode === "face" ? "Facing / Planar Milling — Setup Tips" : form.mode === "circ_interp" ? "Circular Interpolation — Setup Tips" : "HEM / Trochoidal — Setup Tips"}</span>
+                    <span>{form.mode === "face" ? "Facing / Planar Milling — Setup Tips" : form.mode === "circ_interp" ? "Circular Interpolation — Setup Tips" : form.mode === "finish" ? "Finishing — Setup Tips" : "HEM / Trochoidal — Setup Tips"}</span>
                     <span className="text-sky-500 text-[11px]">{modeTipsOpen ? "▲ Hide" : "▼ Show"}</span>
                   </button>
                   {modeTipsOpen && (
@@ -7338,6 +7338,16 @@ ${stabSection}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3°; verify center-cutting geometry.</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
+                      </>) : (<>
+                        <p className="text-[10px] text-sky-200">• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
+                        <p className="text-[10px] text-sky-200">• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Climb mill always</span> — less rubbing, better Ra, longer tool life</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Spring pass:</span> repeat same path at zero offset to remove deflection stock</p>
+                        <p className="text-[10px] text-sky-200">• Leave <span className="text-white">0.005–0.015" stock</span> after roughing before finishing</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Stickout ≤3×D</span> — check this before adjusting speeds if chatter appears</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Increase SFM 10–15%, reduce feed 15–25%</span> vs roughing</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
                       </>)}
                     </div>
                   )}
@@ -8088,21 +8098,6 @@ ${stabSection}
         </div>
       )}
 
-      {/* Finishing tips — shown at bottom of results when finish mode */}
-      {mentor.data && form.mode === "finish" && (
-        <div className="mt-4 rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-[11px] text-sky-200 space-y-1">
-          <p className="font-bold text-sky-100 text-[11px] uppercase tracking-wide mb-1">Finishing Tips</p>
-          <p>• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
-          <p>• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
-          <p>• <span className="text-white">Climb mill</span> always — less rubbing, better Ra, longer tool life</p>
-          <p>• <span className="text-white">Spring pass:</span> repeat same path at zero offset to remove deflection stock</p>
-          <p>• Leave <span className="text-white">0.005–0.015" stock</span> after roughing before finishing</p>
-          <p>• <span className="text-white">Stickout ≤3×D</span> — check this before adjusting speeds if chatter appears</p>
-          <p>• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
-          <p>• <span className="text-white">Increase SFM 10–15%, reduce feed 15–25%</span> vs roughing</p>
-          <p>• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
-        </div>
-      )}
 
 
 
