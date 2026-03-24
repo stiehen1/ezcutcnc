@@ -813,6 +813,18 @@ export default function Mentor() {
   };
   const [form, setForm] = React.useState(INITIAL_FORM);
 
+  // ── Restore form from Toolbox "Re-run this setup" ────────────────────────
+  React.useEffect(() => {
+    const saved = localStorage.getItem("cc_restore_form");
+    if (saved) {
+      try {
+        const restored = JSON.parse(saved);
+        setForm(f => ({ ...f, ...restored }));
+        localStorage.removeItem("cc_restore_form");
+      } catch {}
+    }
+  }, []);
+
   // ── Flute+Material aware WOC/DOC med lookup ─────────────────────────────
   // Returns { wocMed (%), docMed (xD) } for HEM and Traditional.
   // DOC is always capped at LOC (caller must apply cap).

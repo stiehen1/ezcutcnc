@@ -252,7 +252,12 @@ export default function Toolbox() {
                     )}
                     <button
                       className="mt-3 text-xs text-indigo-400 hover:text-indigo-300"
-                      onClick={() => { window.location.href = "/"; }}
+                      onClick={() => {
+                        if (item.data?.inputs) {
+                          localStorage.setItem("cc_restore_form", JSON.stringify(item.data.inputs));
+                        }
+                        window.location.href = "/";
+                      }}
                     >
                       Re-run this setup →
                     </button>
