@@ -1571,6 +1571,15 @@ export default function Mentor() {
   .suggestions li { margin-bottom: 3px; }
   .edp { color: #b45309; font-weight: 700; }
   .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
+  h2 { page-break-after: avoid; }
+  h3 { page-break-after: avoid; }
+  .kpi-grid { page-break-inside: avoid; }
+  .kpi { page-break-inside: avoid; }
+  table { page-break-inside: avoid; }
+  .verdict { page-break-inside: avoid; }
+  .suggestions { page-break-inside: avoid; }
+  .disclaimer { page-break-inside: avoid; }
+  tr { page-break-inside: avoid; }
   @media print { body { padding: 12px 18px; } }
 </style>
 </head>
