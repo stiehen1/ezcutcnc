@@ -2317,7 +2317,7 @@ export default function Calculators() {
     @media print{body{padding:0}}</style></head><body>
     <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;border-bottom:2px solid #e55a00;padding-bottom:12px;margin-bottom:20px;gap:12px">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="${window.location.origin}/CoreCutCNC_dark_horizontal.png" alt="CoreCutCNC" style="height:48px;width:auto">
+        <img src="${window.location.origin}/COREcutCNC_HORZ.png" alt="CoreCutCNC" style="height:48px;width:auto">
       </div>
       <div style="text-align:center;color:#555;font-size:10px">
         <strong style="font-size:13px;color:#111;display:block">Calculator Results</strong>
