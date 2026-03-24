@@ -1446,7 +1446,7 @@ export default function Mentor() {
       `Reduce WOC% or use fewer flutes.`;
     const maxDisplay = 4.0;
     const pctBar = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
-    const ticGauge = tic != null ? `
+    const ticGauge = tic != null && form.mode !== "face" && form.mode !== "circ_interp" && form.mode !== "slot" ? `
       <div style="margin:8px 0 4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
@@ -1481,7 +1481,7 @@ export default function Mentor() {
       : printEngZone === "extreme" ? "Near-full slot — reduce WOC% to extend tool life."
       : "";
     const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
-    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" ? `
+    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" && form.mode !== "circ_interp" ? `
       <div style="margin:8px 0 4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Engagement Angle</span>
