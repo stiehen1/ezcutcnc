@@ -305,6 +305,75 @@ function reamFlutes(D: number): number {
   return 8;
 }
 
+const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> = {
+  hem: [
+    { title: "HEM is a force control strategy, not just a toolpath.", body: "Controlling engagement angle controls heat, deflection, and tool life. Target 8–15% WOC with 1.0–2.5×D axial DOC. Deep DOC and light WOC is modern high-performance cutting — most shops leave money on the table by running shallow DOC and wide WOC." },
+    { title: "Engagement angle is the only knob that matters.", body: "Steel/stainless target 20°–35° (8–15% WOC). HRSA and titanium target 10°–25° (5–10% WOC). This keeps cutting forces consistent, heat in the chip, and deflection predictable. Too light means rubbing; too heavy means force spikes and chatter." },
+    { title: "Low engagement requires higher feed — or you're rubbing.", body: "At ~10% WOC, increase IPT 1.5–2.0×. At ~5% WOC, increase IPT 2.0–2.5×. The engine calculates chip thinning and adjusts FPT automatically. If you don't compensate, you rub instead of cut — heat skyrockets and tool life tanks with no obvious cause." },
+    { title: "Stickout is the silent killer.", body: "Deflection scales with L³ — a 20% increase in stickout means ~73% more deflection. Shorten stickout before touching feeds or speeds. Reduced neck tools remove shank interference so cutting edges work at full LOC, but drop WOC to 5–12% and use adaptive toolpaths only — no slotting." },
+    { title: "Variable pitch and variable helix kill chatter.", body: "These geometry features break up the harmonic frequency that causes chatter. The engine accounts for them in the stability calculation — make sure variable_pitch and variable_helix are set correctly. Gain: up to 1.50× and 1.25× chatter limit respectively, or 1.75× when both are active." },
+    { title: "Entry strategy protects tool life.", body: "Never drop straight into full-width material. Use helical ramp, 2–5° ramp-in, or a pre-drilled entry for deep work. CAM defaults often spike engagement at inside corners and chip tools silently — add corner smoothing and eliminate 90° inside corners from your toolpath." },
+    { title: "Know when NOT to HEM.", body: "HEM breaks down when the tool is too long, the machine lacks rigidity, or workholding is weak. In those cases a hybrid strategy — higher WOC, lower DOC, slower feed — outperforms pure HEM. The stability panel tells you where you are. Red means HEM isn't your answer today." },
+    { title: "Coolant by material.", body: "Steel/stainless/HRSA — air blast or light coolant; avoid thermal shock with premium coatings. Aluminum — flood or mist, chip evacuation is priority #1. Through-coolant tools are a major advantage in deep pockets. Sound is your chatter indicator; chip color is your heat indicator." },
+  ],
+  traditional: [
+    { title: "Slotting is the highest-load traditional condition — treat it that way.", body: "Full-width engagement means no chip thinning, high heat, and limited chip escape. Keep DOC conservative (0.5–1.0×D), reduce IPT to 50–70% of side-milling values. Only AL2/AL3 for non-ferrous and VST4 for ferrous/titanium are approved for full slotting. VST6 and VMF are never slotting tools." },
+    { title: "Side milling sweet spot is 50–65% WOC.", body: "This is bread-and-butter traditional roughing. You get lower engagement than slotting while still removing material efficiently. VST5 shines here — strong core and variable pitch give stable, heavy side milling. Balance radial engagement against deflection and climb mill only." },
+    { title: "Ramp entry is non-negotiable.", body: "Never straight plunge into solid material unless the tool is specifically designed for it. Use a linear ramp at 2–5° or helical entry. This reduces axial shock load, maintains chip formation, and dramatically extends tool life — especially critical for 5-flute tools in stainless and hard materials." },
+    { title: "Chip thinning still applies in traditional roughing.", body: "When WOC drops below 50%, actual chip thickness falls below your programmed IPT. At 30% WOC add 8–12% to IPT; at 15% WOC add 18–28%. Ignore this and the tool rubs — heat rises, finish degrades, and tool life tanks without an obvious cause." },
+    { title: "Stickout controls everything.", body: "Every extra inch of stickout multiplies deflection by L³. Traditional roughing generates higher radial forces than HEM so the impact is even greater. Fix stickout before any feeds/speeds adjustment — going from 3\" to 2\" stickout can double your achievable feed rate." },
+    { title: "Traditional roughing still wins in the right setups.", body: "Short LOC, rigid setup, open geometry, high-HP machine, or simple CAM environment? Traditional roughing beats HEM on cycle time with less programming complexity. It struggles in deep cavities, long reach, hard materials, and low-rigidity setups — that's where you switch strategies." },
+    { title: "Climb mill only — and listen to the cut.", body: "Conventional milling in traditional roughing increases tool pressure, heat, and surface roughness. Climb mill on every pass. The cut talks louder in traditional roughing than HEM — use sound as your primary sensor: smooth and consistent means you're in the zone; any pulsing or screaming means back off WOC first." },
+  ],
+  finish: [
+    { title: "Finishing is force management — not timid cutting.", body: "Target 1–5% WOC. This keeps cutting forces low, deflection minimal, and surface finish consistent. Most shops run finishing too slow and too light — that's the wrong direction. A high-performance finish pass runs fast, controlled, and consistent. Think of it as precision force control, not babying the tool." },
+    { title: "Maintain chip thickness or you're rubbing.", body: "The most common finishing mistake: light cut = slow feed. Wrong. At low WOC you must increase FPT to maintain chip thickness. Target 40–70% of roughing IPT. Too low and you rub — heat rises, finish smears, and edge wear accelerates with no obvious cause. The engine adjusts for chip thinning automatically." },
+    { title: "Run 20–40% higher SFM than roughing.", body: "Higher surface speed reduces cutting forces, improves shearing action, and enhances finish quality. This is counterintuitive to shops used to babying finish passes — push the spindle, not the feed. Finishing RPM is often noticeably higher than roughing RPM, and that's exactly right." },
+    { title: "The spring pass is free accuracy.", body: "Run the same toolpath twice with no stock change. The first pass deflects slightly; the second removes that bow. Mandatory for tight-tolerance walls, thin features, and any setup with moderate stickout. It costs almost no cycle time and pays for itself every time — make it a habit, not an exception." },
+    { title: "Semi-finish before you finish — every time.", body: "Jumping to a finish pass leaves inconsistent stock that causes variable engagement and unpredictable deflection. Semi-finish at 8–12% WOC to leave uniform 0.005–0.010\" stock, then run the finish pass at 1–3%. That final pass sees consistent load and delivers consistent results." },
+    { title: "Reduce DOC before reducing feed when finish breaks down.", body: "When surface quality degrades, the instinct is to slow the feed — that often makes it worse by causing rubbing. First move: reduce axial depth. Then reduce radial engagement slightly. Only reduce feed if needed. Keeping feed up maintains chip thickness; dropping it below the rubbing threshold destroys the finish." },
+    { title: "Short stickout always wins.", body: "Even 0.0005\" of deflection creates visible finish issues. Use the shortest possible stickout, reduced neck tools for reach, and the largest diameter the geometry allows. Going from 1/2\" to 5/8\" gives ~2.4× stiffness — often the best finishing upgrade available and cheaper than any toolholder upgrade." },
+  ],
+  face: [
+    { title: "Facing with solid carbide is engagement control — let the diameter do the work.", body: "DOC: 0.005–0.030\". Stepover: 40–75% of diameter. Light axial cuts with moderate radial engagement. Aggressive DOC in facing creates deflection that shows directly as flatness error across the full surface. Keep it shallow and keep the tool moving — productivity comes from feed rate, not depth." },
+    { title: "Keep the cutter center off the surface — avoid centerline rubbing.", body: "Effective SFM drops to near zero at the tool center. Rubbing at center means heat, poor finish, and accelerated wear. Drive the path so more cutting falls on the outer flute. Let the tool hang slightly past the edge rather than forcing engagement near center. This is the #1 technique difference in quality facing." },
+    { title: "Variable pitch tools want 40–70% WOC — not extremes.", body: "All Core Cutter series use variable pitch flute spacing. It shines in the 40–70% WOC zone: distributes force timing and suppresses chatter. Below 25% WOC — inconsistent load. Above 80% — harmonics start to re-sync. Moderate, consistent engagement is where variable pitch geometry earns its keep." },
+    { title: "Climb mill always — smooth toolpaths amplify the variable pitch advantage.", body: "Reversals in zig-zag paths reintroduce instability that variable pitch is designed to eliminate. One-way climb passes with arc entry and exit give the geometry what it needs: consistent direction and consistent load. Sharp 90° turns spike engagement and leave witness marks — use arc-in/arc-out moves at all direction changes." },
+    { title: "Short rigid tool outperforms long tool every time in facing.", body: "Stickout deflection in facing shows directly as flatness error across the surface. Use the largest practical diameter, shortest LOC, and biggest shank available. A 5/8\" tool is ~2.4× stiffer than 1/2\" — usually the most impactful facing upgrade you can make. Diameter is your friend in facing." },
+    { title: "Keep feed up — light cuts don't mean light chip load.", body: "The most common facing mistake is reducing feed too aggressively. Below minimum chip thickness the tool polishes instead of cuts: heat rises, finish smears, edge wear accelerates. Even at 0.010\" DOC, feed per tooth still needs to be real. If finish degrades — reduce DOC first, check chip load before touching feed." },
+    { title: "Recutting chips is the #1 facing finish killer.", body: "Chips from earlier in the pass get dragged back under the cutter. Air blast aimed into the cut — even with flood coolant present — dramatically improves finish by clearing the surface ahead of the tool. This matters most on large-surface facing where chips have further to travel before clearing the cut zone." },
+  ],
+  slot: [
+    { title: "Core Cutter slotting is series-controlled — not every tool is approved.", body: "Non-ferrous: AL2, AL3, AL3-CB. Ferrous & titanium: VST4, VST4-CB, VST5/VST5-CB (≤0.5×D only). VST6, VMF, and all other series are hard-blocked for slotting. These geometries are built for high-efficiency peripheral cutting — not chip-packed full-width engagement. Using them in a true slot causes rapid failure." },
+    { title: "Chip breaker series (CB) is strongly preferred for slotting.", body: "Slots trap chips. CB geometry breaks chips into shorter pieces, improving evacuation in the most chip-congested milling condition. AL3-CB for non-ferrous, VST4-CB for ferrous/titanium, VST5-CB for limited ferrous slotting. When chip evacuation is the #1 failure mode — and in slotting it almost always is — CB tools remove that risk." },
+    { title: "Reduce feed to 50–75% of your side-milling IPT.", body: "Slotting does not benefit from radial chip thinning. At 100% engagement, chips are thicker at the same IPT than in side milling. Running standard profile chip loads in a full slot overloads the tool fast. Start at 50–70% of normal IPT and adjust up only after confirming stable load, sound, and chip shape." },
+    { title: "Entry method is the fastest way to kill a good tool.", body: "Never straight plunge into solid material unless the tool is center-cutting and the depth is short. Use helical entry, linear ramp, pre-drill, or enter from an open edge. This reduces shock load at the core, avoids poor cutting conditions at center, and dramatically improves corner life on the first pass." },
+    { title: "Chip evacuation failure is the real slotting failure mode.", body: "Slotting failures look like speed and feed problems but are almost always chip evacuation failures. Signs: squealing after a few tenths of depth, recut marks in the slot bottom, heat discoloration, sudden corner breakdown. Fix: through-coolant first, then strong flood directed into the slot, air blast in aluminum." },
+    { title: "Keep stickout at absolute minimum — slotting amplifies deflection from both walls.", body: "In a slot, both walls are engaged simultaneously and chips are trapped between them. Deflection is amplified compared to side milling. Use the most rigid holder available, minimize gage length, and avoid reduced neck tools unless reach genuinely requires it. Every extra inch of stickout is working against you." },
+    { title: "Ask whether slotting is even the right process.", body: "A high-performance endmill can physically cut a slot — that doesn't mean it should. Pre-drill then slot, open with trochoidal/adaptive then finish the walls, or use a smaller tool to rough and a larger one to finish. The smartest slotting move is often reducing how much true slotting you actually do." },
+  ],
+  circ_interp: [
+    { title: "Circular interpolation is a controlled low-engagement milling process — not drilling.", body: "Target 5–15% WOC. Ideal tool size is 65–75% of bore diameter — more clearance means better chip evacuation and lower engagement. VST4-CB and AL3-CB are preferred: chipbreaker geometry prevents chip packing in the closed bore, which is the #1 failure mode in circular interpolation." },
+    { title: "Engagement spikes at entry and exit arcs — control them.", body: "Even if you program 10% WOC, actual engagement spikes at the start and end of each revolution. Fix: always use a lead-in arc (never linear entry), offset the start position away from the wall, and make the interpolation diameter slightly larger on roughing passes. Consistent true engagement is what keeps the tool alive." },
+    { title: "Helix pitch is your load control knob.", body: "Helix pitch directly controls chip thickness, axial load, and heat. Steel/stainless: 0.02–0.03\" per revolution. Aluminum: 0.04–0.08\" per revolution. If chatter starts — tighten the helix before touching feed. A tighter helix distributes the load across more revolutions and usually eliminates chatter immediately." },
+    { title: "Rough → semi-finish → spring pass is the only way to hit bore tolerance.", body: "One-pass interpolation to size is a mistake. Rough to leave 0.005–0.010\", semi-finish to stabilize the wall, then a spring pass with zero radial stock. This removes deflection error from each previous pass and gives boring-bar level accuracy with an endmill. Skipping steps shows up as out-of-round or tapered bore." },
+    { title: "Chip evacuation in a closed bore requires active management.", body: "There's no natural chip escape path inside a bore. Through-coolant is first choice; directed flood is second. With CB tools, chips break before they pack and bird-nest in the flute. Without CB tools, add a micro-retract every few revolutions to let chips clear. Deep bores are limited by chip evacuation more than by cutting power." },
+    { title: "Feed rate is lying to you — chip thinning is active at low WOC.", body: "At 5–10% WOC, actual chip thickness is much lower than programmed IPT. Increase FPT by 1.5–2.2× to compensate. Skip this and you're rubbing the bore wall, work-hardening stainless, and burning tools while the spindle load meter looks completely fine. The engine calculates this automatically." },
+    { title: "Climb mill and always finish with a spring pass.", body: "Climb milling gives better finish, lower heat, and more stable cutting in circular interpolation. The spring pass (same circle, same depth, zero stock) eliminates the deflection bow from roughing passes. This separates interpolated bores that look like drilled holes from bores with genuine roundness and wall quality." },
+  ],
+  surfacing: [
+    { title: "Program scallop height, not stepover — it's the only way to control finish quality.", body: "Fixed stepover gives inconsistent finish as surface angle changes. Constant scallop adjusts stepover automatically to maintain the same cusp height across the entire surface. Rough: 0.002–0.004\" scallop. Semi-finish: 0.001–0.002\". Fine: 0.0002–0.001\". Ultra: below 0.0002\". This single change is the biggest upgrade most shops can make in 3D surfacing." },
+    { title: "The ball nose tip is a dead zone — never cut there if you can avoid it.", body: "Surface speed at the tip is zero. Chip thickness is near-zero. Heat spikes and the tool rubs instead of cuts. Use a stepover large enough to keep D_eff above 30% of tool OD, or apply 5–15° of tool tilt. Even small tilt dramatically raises effective cutting velocity at the contact point — the live preview shows exactly how much." },
+    { title: "Increase RPM significantly for finishing — you're running at a fraction of tool OD.", body: "D_eff at shallow step-down is much smaller than tool diameter. At the same RPM, effective SFM at the contact point is proportionally lower. Finishing RPM is often 1.5–2× roughing RPM. If you don't increase RPM, you're running well below target SFM and rubbing the surface instead of cutting it." },
+    { title: "Too small a stepover creates worse cutting conditions — not better.", body: "Smaller stepover means smaller chip thickness. Below minimum chip thickness for the material, the tool rubs: surface finish degrades, heat builds, and tool life collapses. Run a slightly larger stepover and maintain real chip load. Mirror finishes come from process stability and engagement control, not just tiny stepovers." },
+    { title: "Tool tilt (5–15°) is a game changer for ball nose finishing.", body: "Tilt shifts the contact zone away from the dead tip, raises D_eff, increases effective cutting velocity, and dramatically improves tool life and surface quality. If your setup has 3+2 or 5-axis, always use tilt for finishing. The app shows the gain — at 10° tilt on a 1/2\" ball nose, D_eff can more than double compared to 0° tilt." },
+    { title: "Semi-finish with a bull nose, finish with a ball nose.", body: "Bull nose tools have stronger edges and higher feed capability. Use them to remove semi-finish stock (0.003–0.010\" remaining) at moderate engagement. Then the ball nose finish pass sees consistent light stock with predictable engagement. Skipping semi-finish sends the ball nose into variable stock, causing engagement spikes that print directly onto the surface." },
+    { title: "Stickout control is more critical in surfacing than almost any other operation.", body: "Deflection at the contact zone causes chatter that shows as periodic surface waviness — subtle and nearly impossible to fix by adjusting feeds after the fact. Shorten stickout first, every time. Reduce WOC before DOC. Going from 4\" to 3\" stickout gives a massive stiffness gain at the contact point." },
+    { title: "Coolant, chip evacuation, and tool freshness matter most in long surfacing cycles.", body: "Aluminum: air blast — chip recutting leaves marks even at finishing engagement. Steel/stainless: consistent flood or TSC. Titanium/Inconel: high-pressure coolant mandatory, never dwell. Use fresh tools for finish passes — a slightly worn tool pushes material instead of cutting it and creates a surface haze that won't polish out." },
+  ],
+};
+MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
+
 export default function Mentor() {
   const { toast } = useToast();
   const mentor = useMentor();
@@ -315,7 +384,7 @@ export default function Mentor() {
   const [matSearchLoading, setMatSearchLoading] = React.useState(false);
   const [matMatchResult, setMatMatchResult]   = React.useState<{ key: string; label: string; confidence: string; source: string; note: string | null } | null>(null);
   const [matMatchError, setMatMatchError]     = React.useState<string | null>(null);
-  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmilling" | "toolfinder" | "toolbox">("milling");
+  const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmill" | "feedmilling" | "toolfinder" | "toolbox">("milling");
   const [units, setUnits] = React.useState<"imperial" | "metric">("imperial");
 
   // ── Engineering / Customer mode ──────────────────────────────────────────
@@ -711,8 +780,8 @@ export default function Mentor() {
 
   // This matches shared/routes.ts input schema keys (or is trivially mappable)
   const INITIAL_FORM = {
-    operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail",
-    mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "",
+    operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmill",
+    mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "surfacing" | "",
     material: "steel_alloy",
     tool_dia: 0,
     flutes: 0,
@@ -731,6 +800,13 @@ export default function Mentor() {
     tool_series: "",
     helix_angle: 0,
 
+    // Surfacing (3D contouring)
+    surfacing_input_mode: "scallop" as "scallop" | "stepover",
+    surfacing_scallop_in: 0,
+    surfacing_stepover_in: 0,
+    surfacing_ap_in: 0,
+    surfacing_tilt_deg: 0,
+
     // Chamfer mill
     chamfer_series: "CMH" as "CMS" | "CMH",
     chamfer_angle: 90,
@@ -744,7 +820,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -795,6 +871,10 @@ export default function Mentor() {
     // Dovetail-specific
     dovetail_angle: 0,
 
+    // Feed mill-specific
+    lead_angle: 20,
+    feedmill_doc_in: 0,
+
     // Thread milling-specific
     thread_standard: "unc" as "unc" | "unf" | "unef" | "metric" | "npt" | "nptf",
     thread_major_dia: 0,
@@ -817,6 +897,36 @@ export default function Mentor() {
   // ── Sync active operation to localStorage for context-aware Help tab ──────
   React.useEffect(() => { localStorage.setItem("cc_operation", operation); }, [operation]);
   React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
+  React.useEffect(() => { localStorage.setItem("cc_mode", form.mode || ""); }, [form.mode]);
+
+  // ── Chamfer upgrade suggestion — fires when depth exceeds current tool's max ──
+  React.useEffect(() => {
+    if (form.tool_type !== "chamfer_mill" || !(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) {
+      setChamferUpgradeSuggestion(null); return;
+    }
+    const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+    const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+    const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
+    if (form.chamfer_depth <= maxDepth) { setChamferUpgradeSuggestion(null); return; }
+    const edgeLengthNeeded = form.chamfer_depth / Math.sin(halfRad);
+    const params = new URLSearchParams({
+      tool_type: "chamfer_mill",
+      chamfer_angle: String(form.chamfer_angle),
+      series: form.chamfer_series,
+      required_chamfer_length: edgeLengthNeeded.toFixed(5),
+    });
+    fetch(`/api/tools/search?${params}`)
+      .then(r => r.json())
+      .then((rows: any[]) => {
+        if (rows?.length > 0) {
+          const t = rows[0];
+          setChamferUpgradeSuggestion({ edp: t.edp, dia: Number(t.cutting_diameter_in), desc: t.description1 ?? "" });
+        } else {
+          setChamferUpgradeSuggestion(null);
+        }
+      })
+      .catch(() => setChamferUpgradeSuggestion(null));
+  }, [form.tool_type, form.chamfer_depth, form.tool_dia, form.chamfer_angle, form.chamfer_tip_dia, form.chamfer_series]);
 
   // ── Restore form from Toolbox "Re-run this setup" ────────────────────────
   React.useEffect(() => {
@@ -967,6 +1077,9 @@ export default function Mentor() {
   const [wocText, setWocText] = React.useState("");
   const [docText, setDocText] = React.useState("");
   const [crText, setCrText] = React.useState("");
+  const [surfScallopText, setSurfScallopText] = React.useState("");
+  const [surfStepoverText, setSurfStepoverText] = React.useState("");
+  const [surfApText, setSurfApText] = React.useState("");
   const [toolDiaText, setToolDiaText] = React.useState("");
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
@@ -992,6 +1105,7 @@ export default function Mentor() {
   const [raText, setRaText] = React.useState("");
   const [chamferTipDiaText, setChamferTipDiaText] = React.useState("");
   const [chamferDepthText, setChamferDepthText] = React.useState("");
+  const [chamferUpgradeSuggestion, setChamferUpgradeSuggestion] = React.useState<{edp: string, dia: number, desc: string} | null>(null);
   const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
   const [tmTpiText, setTmTpiText] = React.useState("");
   const [tmPitchMmText, setTmPitchMmText] = React.useState("");
@@ -1243,6 +1357,7 @@ export default function Mentor() {
       }
       if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
     }
+    if (operation === "feedmill" && !(form.flutes > 0)) missing.push("Flute Count");
     if (operation === "drilling" && !(form.drill_hole_depth > 0)) missing.push("Hole Depth");
     if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0)) missing.push("Pre-Drill / Existing Hole Diameter");
     if (missing.length > 0) {
@@ -1300,6 +1415,7 @@ export default function Mentor() {
     try {
       const runResult: any = await mentor.mutateAsync({
         ...form,
+        operation: (["milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"].includes(operation) ? operation : "milling") as any,
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
         stickout: form.stickout || form.loc * 1.25,
         debug: false,
@@ -1371,6 +1487,7 @@ export default function Mentor() {
     const MODE_LABELS: Record<string, string> = {
       hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
       face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation",
+      surfacing: "3D Surface Contouring",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
     const opLabel = operation === "milling" ? (MODE_LABELS[form.mode] ?? baseOpLabel) : baseOpLabel;
@@ -1391,8 +1508,10 @@ export default function Mentor() {
         ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox("Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
-        ${kpiBox(form.mode === "face" ? "Step-Over (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
-        ${kpiBox(form.mode === "face" ? "Pass Depth (in)" : "DOC (in)", mil.doc_in != null ? `${mil.doc_in.toFixed(4)}" (${(mil.doc_in / (form.tool_dia || 0.5)).toFixed(2)}xD)` : null)}
+        ${form.mode === "surfacing" && mil.d_eff_in != null ? kpiBox("D_eff (in)", `${mil.d_eff_in.toFixed(4)}" (${((mil.d_eff_in / (form.tool_dia || 0.5)) * 100).toFixed(0)}% of Ø)`) : ""}
+        ${form.mode === "surfacing" && mil.scallop_height_in != null ? kpiBox("Scallop Height", `${mil.scallop_height_in.toFixed(6)}" / ${(mil.scallop_height_in * 25400).toFixed(0)} µm`) : ""}
+        ${kpiBox(form.mode === "face" ? "Step-Over (in)" : form.mode === "surfacing" ? "Stepover ae (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
+        ${kpiBox(form.mode === "face" ? "Pass Depth (in)" : form.mode === "surfacing" ? "Step-Down ap (in)" : "DOC (in)", mil.doc_in != null ? `${mil.doc_in.toFixed(4)}" (${(mil.doc_in / (form.tool_dia || 0.5)).toFixed(2)}xD)` : null)}
         ${kpiBox("MRR (in³/min)", mil.mrr_in3_min != null ? mil.mrr_in3_min.toFixed(4) : null)}
         ${kpiBox("HP Required", mil.hp_required != null ? mil.hp_required.toFixed(2) : null)}
         ${(() => {
@@ -1555,6 +1674,20 @@ export default function Mentor() {
           <li>Spring pass: re-run at zero Z offset, same direction — removes deflection bow from first pass</li>
           <li>Air blast over flood — chips under the wiper get smeared and streak the surface</li>
           <li>Axial runout &lt;0.0005" — Z-wobble leaves repeating witness arcs. Use shrink-fit or precision collet, check face TIR</li>
+        </ul>
+      </div>` : ""}
+      ${form.mode === "surfacing" ? `
+      <div style="margin-top:10px;padding:8px 10px;border:1px solid #0ea5e9;border-radius:6px;background:#f0f9ff;">
+        <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#0369a1;margin-bottom:6px;">3D Surface Contouring — Setup Notes</p>
+        <ul style="font-size:9px;color:#333;line-height:1.6;padding-left:12px;">
+          <li>RPM and SFM calculated at D_eff (contact point) — actual spindle speed is lower than equivalent OD milling</li>
+          ${form.corner_condition === "ball" ? `<li>Ball nose: D_eff = 2√(2R·ap − ap²) — at very low ap, D_eff ≪ OD. If D_eff &lt; 30% of OD, consider adding 10–15° tool tilt to raise effective cutting velocity</li>` : ""}
+          ${form.corner_condition === "corner_radius" && form.corner_radius > 0 ? `<li>Bull nose: D_eff uses the corner radius when ap ≤ CR (${form.corner_radius.toFixed(4)}"). At deeper ap, full OD engages</li>` : ""}
+          <li>Scallop height drives finish quality — target ≤0.0005" for smooth appearance; ≤0.0001" for near-mirror</li>
+          <li>Program in climb milling direction — conventional milling at light WOC causes rubbing and chatter</li>
+          <li>Use shortest stickout possible — deflection at contact scales with length³ and shows as waviness</li>
+          <li>Flood coolant or mist — chip re-cutting at low WOC wears the edge quickly without coolant</li>
+          <li>Run a semi-finish pass before the finish pass — leaves uniform 0.010–0.020" stock for consistent engagement</li>
         </ul>
       </div>` : ""}
       ${form.mode === "circ_interp" ? `
@@ -1757,8 +1890,9 @@ ${stabSection}
   const reamResult    = result?.reaming    ?? null;
   const threadResult  = result?.thread_mill ?? null;
   const chamferResult = result?.chamfer    ?? null;
-  const keyseatResult = result?.keyseat    ?? null;
+  const keyseatResult  = result?.keyseat   ?? null;
   const dovetailResult = result?.dovetail  ?? null;
+  const feedmillResult = result?.feedmill  ?? null;
 
   // ── Machining Stability Index ─────────────────────────────────────────────
   function calcStabilityIndex(
@@ -1827,6 +1961,7 @@ ${stabSection}
       hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
       face: "Facing (Planar Milling)", slot: "Slotting",
       trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation",
+      surfacing: "3D Surface Contouring",
     };
     const isRoughing = form.mode === "hem" || form.mode === "traditional" || form.mode === "trochoidal";
 
@@ -2241,11 +2376,11 @@ ${stabSection}
   }
 
   // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
-  const ALL_OPS = ["toolfinder","feedmilling","toolbox","milling","drilling","reaming","threadmilling","keyseat","dovetail"] as const;
+  const ALL_OPS = ["toolfinder","feedmilling","toolbox","milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"] as const;
   const OP_LABELS: Record<string, string> = {
     toolfinder: "Tool Finder", feedmilling: "Calculators", toolbox: "Toolbox",
     milling: "Milling", drilling: "Drilling", reaming: "Reaming", threadmilling: "Thread Milling",
-    keyseat: "Keyseat", dovetail: "Dovetail",
+    keyseat: "Keyseat", dovetail: "Dovetail", feedmill: "Feed Mill",
   };
   function SharedTabBar() {
     return (
@@ -2518,6 +2653,7 @@ ${stabSection}
                 <option value="face">Facing (Planar Milling)</option>
                 <option value="slot">Slotting</option>
                 <option value="circ_interp">Circular Interpolation</option>
+                <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
               </select>
             )}
 
@@ -2833,7 +2969,11 @@ ${stabSection}
             )}
             {skuDropdownOpen && skuResults.length > 0 && (
               <div className="absolute z-50 left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-52 overflow-y-auto">
-                {skuResults.map((s) => (
+                {skuResults.filter(s => {
+                  if (form.mode !== "surfacing") return true;
+                  const cc = String(s.corner_condition ?? "square").toLowerCase();
+                  return cc === "ball" || (!isNaN(Number(cc)) && Number(cc) > 0);
+                }).map((s) => (
                   <button
                     key={s.EDP ?? s.edp}
                     type="button"
@@ -3214,6 +3354,17 @@ ${stabSection}
                     );
                   })()}
                 </div>
+                {/* Col 2: suggest a larger tool when depth exceeds max */}
+                {chamferUpgradeSuggestion && (
+                  <div className="flex items-start">
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 text-xs w-full">
+                      <div className="text-amber-400 font-semibold text-[10px] uppercase tracking-wide mb-1">Suggested Larger Tool</div>
+                      <div className="font-mono text-amber-300 font-semibold">{chamferUpgradeSuggestion.edp}</div>
+                      <div className="text-zinc-400 text-[10px] mt-0.5">{chamferUpgradeSuggestion.dia.toFixed(4)}" dia — reaches this depth</div>
+                      {chamferUpgradeSuggestion.desc && <div className="text-zinc-500 text-[10px] mt-0.5 leading-tight">{chamferUpgradeSuggestion.desc}</div>}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -3247,9 +3398,12 @@ ${stabSection}
 
           {/* Corner Condition — endmill only */}
           {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
-            <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = honed edge for strength. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
+            <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = bull nose for 3D contouring. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
+            {form.mode === "surfacing" && (
+              <p className="text-[10px] text-amber-400">3D surfacing requires a ball or bull nose tool — square corner excluded.</p>
+            )}
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["square", "corner_radius"] as const).map((key) => {
+              {(["square", "corner_radius"] as const).filter(k => form.mode !== "surfacing" || k !== "square").map((key) => {
                 const label = key === "square" ? "Square" : "Corner Radius";
                 const tt = key === "square" ? "endmill" : "corner_radius";
                 return (
@@ -3954,22 +4108,26 @@ ${stabSection}
                 className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
                 onClick={() => setMachiningTipsOpen(o => !o)}
               >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <div>
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  {form.mode && MILLING_MODE_TIPS[form.mode] && (
+                    <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
+                      — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring"}[form.mode] ?? ""}
+                    </span>
+                  )}
+                </div>
                 <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
               </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">HEM is a force control strategy, not just a toolpath.</span> Controlling engagement angle controls heat, deflection, and tool life. Target 8–15% WOC with 1.0–2.5×D axial DOC. This flips the old-school mindset — deep DOC and light WOC is modern high-performance cutting. Most shops leave money on the table by running shallow DOC and wide WOC.</div>
-                  <div><span className="font-semibold text-white">WOC is your #1 control knob.</span> If something goes wrong — adjust WOC first. Long reach or reduced neck: 5–8%. Rigid setup: up to 15–20%. The engagement angle sweet spot is 15–35°. Below 10° and chips get too thin (rubbing risk). Above 45° and force spikes return.</div>
-                  <div><span className="font-semibold text-white">Low engagement requires higher feed.</span> When WOC drops below ~50% of diameter, chip thickness drops. You must increase feed per tooth to compensate or you rub, burn tools, and wonder why HEM "doesn't work." The engine calculates chip thinning and adjusts FPT automatically.</div>
-                  <div><span className="font-semibold text-white">Reduced neck tooling enables deep, stable cuts.</span> Without a reduced neck, the shank rubs the wall when going deep — adding heat, forcing deflection, and limiting axial DOC. Reduced neck removes that interference so the cutting edges can do their job at full LOC. Trade-off: you lose cross-sectional stiffness, so drop WOC to 5–12% and use adaptive toolpaths only — no slotting.</div>
-                  <div><span className="font-semibold text-white">Deflection is always the governor.</span> Even when the numbers look right, deflection causes poor finish, chatter, and oversize features. Control hierarchy: shorten stickout first (L³ relationship — massive impact), then increase diameter (D⁴ stiffness gain), then reduce WOC, then reduce DOC. Going from 1/2" to 5/8" diameter gives ~2.4× stiffness — often better than any feed adjustment.</div>
-                  <div><span className="font-semibold text-white">Variable pitch and variable helix kill chatter.</span> These geometry features break up the harmonic frequency that causes chatter. The engine accounts for them in the stability calculation — make sure the SKU fields are populated correctly to get the full benefit.</div>
-                  <div><span className="font-semibold text-white">Entry strategy protects tool life.</span> Never drop straight into full-width material. Use helical ramp, 2–5° ramp-in, or a pre-drilled entry for deep work. Avoid sharp corners in toolpaths — CAM defaults often spike engagement at corners and chip tools silently.</div>
-                  <div><span className="font-semibold text-white">Know when NOT to HEM.</span> HEM breaks down when the tool is too long, the machine lacks rigidity, or the workholding is weak. In those cases a hybrid strategy (higher WOC, lower DOC, slower feed) outperforms pure HEM. The stability panel tells you where you are.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Coolant by material:</span> Steel/stainless/HRSA — air blast or light coolant, avoid thermal shock with premium coatings. Aluminum — flood or mist, chip evacuation is priority #1. Through-coolant tools are a major advantage in deep pockets and slotting. Listen to the cut — sound is your chatter indicator, chip color is your heat indicator.</div>
-                </div>
-              )}
+              {machiningTipsOpen && (() => {
+                const tips = MILLING_MODE_TIPS[form.mode] ?? MILLING_MODE_TIPS.hem;
+                return (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    {tips.map((tip, i) => (
+                      <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -4029,7 +4187,169 @@ ${stabSection}
               })()}
             </div>
           )}
-          <div className="flex gap-3 items-start">
+          {/* ── Surfacing 3D contouring inputs (replaces WOC/DOC) ─────────────── */}
+          {form.mode === "surfacing" && (
+            <div className="space-y-4">
+              {/* Input mode toggle */}
+              <div className="space-y-1.5">
+                <FieldLabel hint="Drive by Scallop: enter target cusp height and the app computes the required stepover. Drive by Stepover: enter stepover directly and the app shows the resulting scallop height.">Surfacing Input Mode</FieldLabel>
+                <div className="flex gap-1.5">
+                  {(["scallop", "stepover"] as const).map(m => (
+                    <button key={m} type="button"
+                      onClick={() => setForm(p => ({ ...p, surfacing_input_mode: m }))}
+                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                      style={{ backgroundColor: form.surfacing_input_mode === m ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.surfacing_input_mode === m ? "#fff" : "#6366f1" }}
+                    >{m === "scallop" ? "Drive by Scallop Height" : "Drive by Stepover"}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Scallop or Stepover */}
+                <div className="space-y-1.5">
+                  <FieldLabel hint={form.surfacing_input_mode === "scallop"
+                    ? `Target scallop (cusp) height — ridges left between passes. 0.001in ≈ rough, 0.0005in ≈ medium, 0.0001in ≈ fine. Stepover is computed automatically.`
+                    : "Lateral distance between passes. Ball nose: stepover = sqrt(8 × R × scallop). Smaller stepover = better finish, more passes."
+                  }>{form.surfacing_input_mode === "scallop" ? "Scallop Height (in)" : "Stepover (in)"}</FieldLabel>
+                  {form.surfacing_input_mode === "scallop" ? (
+                    <Input type="text" inputMode="decimal" placeholder="e.g. 0.0005"
+                      className={`no-spinners ${!(form.surfacing_scallop_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                      value={surfScallopText}
+                      onChange={e => setSurfScallopText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(surfScallopText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_scallop_in: n })); setSurfScallopText(n.toFixed(5)); }
+                        else setSurfScallopText(form.surfacing_scallop_in > 0 ? form.surfacing_scallop_in.toFixed(5) : "");
+                      }}
+                    />
+                  ) : (
+                    <Input type="text" inputMode="decimal" placeholder="e.g. 0.050"
+                      className={`no-spinners ${!(form.surfacing_stepover_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                      value={surfStepoverText}
+                      onChange={e => setSurfStepoverText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(surfStepoverText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_stepover_in: n })); setSurfStepoverText(n.toFixed(4)); }
+                        else setSurfStepoverText(form.surfacing_stepover_in > 0 ? form.surfacing_stepover_in.toFixed(4) : "");
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Step-down (ap) */}
+                <div className="space-y-1.5">
+                  <FieldLabel hint={`Axial depth per pass (Z-step). Finishing: 0.010–0.050" typical. Smaller ap tracks surface more accurately but requires more passes.`}>Step-Down / ap (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" placeholder="e.g. 0.020"
+                    className={`no-spinners ${!(form.surfacing_ap_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                    value={surfApText}
+                    onChange={e => setSurfApText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(surfApText);
+                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_ap_in: n })); setSurfApText(n.toFixed(4)); }
+                      else setSurfApText(form.surfacing_ap_in > 0 ? form.surfacing_ap_in.toFixed(4) : "");
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Tool tilt (ball nose only) */}
+              {form.corner_condition === "ball" && (
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Tilt the spindle axis away from the surface normal to shift the contact point away from the dead center of the ball. Even 10–15° significantly raises D_eff and cutting velocity, improving surface finish. 0° = no tilt (tip-cutting).">Tool Tilt Angle (°) <span className="text-xs font-normal text-muted-foreground">— ball nose only, optional</span></FieldLabel>
+                  <div className="flex items-center gap-3">
+                    <Input type="number" inputMode="decimal" min="0" max="30" step="1" placeholder="0"
+                      className="no-spinners w-24"
+                      value={form.surfacing_tilt_deg || ""}
+                      onChange={e => {
+                        const n = parseFloat(e.target.value);
+                        setForm(p => ({ ...p, surfacing_tilt_deg: Number.isFinite(n) ? Math.max(0, Math.min(30, n)) : 0 }));
+                      }}
+                    />
+                    <div className="flex gap-1">
+                      {[0, 5, 10, 15].map(v => (
+                        <button key={v} type="button"
+                          onClick={() => setForm(p => ({ ...p, surfacing_tilt_deg: v }))}
+                          className="rounded px-2 py-1 text-[10px] font-semibold border transition-all"
+                          style={{ background: form.surfacing_tilt_deg === v ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.surfacing_tilt_deg === v ? "#fff" : "#6366f1" }}
+                        >{v}°</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Live D_eff / stepover / scallop preview */}
+              {form.tool_dia > 0 && form.surfacing_ap_in > 0 && (form.surfacing_scallop_in > 0 || form.surfacing_stepover_in > 0) && (() => {
+                const D = form.tool_dia; const R = D / 2;
+                const CR = form.corner_radius || 0; const cc = form.corner_condition;
+                const ap = form.surfacing_ap_in;
+                const tiltDeg = form.surfacing_tilt_deg || 0;
+                const tiltRad = tiltDeg * Math.PI / 180;
+                let d_eff = D;
+                if (cc === "ball") {
+                  if (tiltRad > 0.0001) {
+                    const tiltOffset = R * Math.cos(tiltRad);
+                    const apAdj = Math.min(ap, R + tiltOffset);
+                    const inner = R ** 2 - (tiltOffset - apAdj) ** 2;
+                    d_eff = 2 * Math.sqrt(Math.max(0, inner));
+                  } else {
+                    const ap_c = Math.max(0.0001, Math.min(ap, R));
+                    d_eff = 2 * Math.sqrt(Math.max(0, 2 * R * ap_c - ap_c ** 2));
+                  }
+                } else if (cc === "corner_radius" && CR > 0 && ap <= CR) {
+                  const ap_c = Math.max(0.0001, Math.min(ap, CR));
+                  d_eff = (D - 2 * CR) + 2 * Math.sqrt(Math.max(0, 2 * CR * ap_c - ap_c ** 2));
+                }
+                d_eff = Math.min(Math.max(0.001, d_eff), D);
+                const R_sc = cc === "ball" ? R : (cc === "corner_radius" && CR > 0 && ap <= CR) ? CR : R;
+                let ae = 0, scallop = 0;
+                if (form.surfacing_input_mode === "scallop" && form.surfacing_scallop_in > 0) {
+                  ae = Math.min(Math.sqrt(8 * R_sc * form.surfacing_scallop_in), D * 0.5);
+                  scallop = form.surfacing_scallop_in;
+                } else if (form.surfacing_stepover_in > 0) {
+                  ae = form.surfacing_stepover_in;
+                  scallop = R_sc > 0 ? (ae ** 2) / (8 * R_sc) : 0;
+                }
+                if (!(d_eff > 0) || !(ae > 0)) return null;
+                return (
+                  <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2.5 text-xs space-y-1.5">
+                    <div className="flex gap-4 flex-wrap">
+                      <div><span className="text-zinc-400">D_eff at contact </span><span className="font-mono font-semibold text-sky-300">{d_eff.toFixed(4)}"</span></div>
+                      <div><span className="text-zinc-400">Stepover </span><span className="font-mono font-semibold text-emerald-300">{ae.toFixed(4)}" ({(ae / D * 100).toFixed(1)}% Ø)</span></div>
+                      <div><span className="text-zinc-400">Scallop </span><span className="font-mono font-semibold text-orange-300">{(scallop * 1000).toFixed(3)} thou</span></div>
+                    </div>
+                    {d_eff < D * 0.3 && cc === "ball" && tiltDeg === 0 && <p className="text-amber-400 text-[10px]">⚠ D_eff is {(d_eff / D * 100).toFixed(0)}% of tool Ø — near dead center. Add 10–15° tool tilt to raise D_eff and cutting velocity significantly.</p>}
+                    {d_eff < D * 0.3 && cc === "ball" && tiltDeg > 0 && <p className="text-amber-400 text-[10px]">⚠ D_eff still low at {tiltDeg}° tilt — try increasing ap or tilt angle.</p>}
+                    {cc === "ball" && tiltDeg > 0 && d_eff >= D * 0.3 && (() => {
+                      // Show no-tilt D_eff for comparison
+                      const ap_c0 = Math.max(0.0001, Math.min(ap, R));
+                      const d_eff_0 = Math.min(2 * Math.sqrt(Math.max(0, 2 * R * ap_c0 - ap_c0 ** 2)), D);
+                      return <p className="text-emerald-400 text-[10px]">✓ {tiltDeg}° tilt raised D_eff from {d_eff_0.toFixed(4)}" → {d_eff.toFixed(4)}" (+{((d_eff / d_eff_0 - 1) * 100).toFixed(0)}% cutting velocity)</p>;
+                    })()}
+                  </div>
+                );
+              })()}
+
+              {/* Stickout for surfacing */}
+              <div className="space-y-1.5">
+                <FieldLabel hint="Distance from toolholder face to tool tip.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
+                <Input type="text" inputMode="decimal" className="no-spinners" placeholder="e.g. 2.000"
+                  value={stickoutText}
+                  onChange={e => setStickoutText(e.target.value)}
+                  onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
+                  onBlur={() => {
+                    const n = parseDim(stickoutText);
+                    const val = metric ? n / 25.4 : n;
+                    if (Number.isFinite(val) && val > 0) { setForm(p => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3)); }
+                    else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── Standard WOC/DOC (hidden for surfacing mode) ─────────────────── */}
+          {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC</FieldLabel>
@@ -4373,7 +4693,7 @@ ${stabSection}
                 />
               </div>
             </div>
-          </div>
+          </div>}
           {form.mode === "face" && (
             <div className="mt-3 w-52 space-y-2">
               <FieldLabel hint="Target surface roughness in micro-inches (µin). Common finish specs: 63 µin = machined, 32 µin = smooth machined, 16 µin = fine, 8 µin = very fine. The advisor will show the theoretical Ra with your current parameters and the max feed needed to hit this target.">Target Ra (µin) <span className="text-xs font-normal text-muted-foreground">(optional)</span></FieldLabel>
@@ -5005,8 +5325,8 @@ ${stabSection}
           </>)}
 
 
-          {/* ── Keyseat / Dovetail Tool Geometry ─────────────────────────────────────── */}
-          {(operation === "keyseat" || operation === "dovetail") && (<>
+          {/* ── Keyseat / Dovetail / Feed Mill Tool Geometry ─────────────────────────── */}
+          {(operation === "keyseat" || operation === "dovetail" || operation === "feedmill") && (<>
             <div className="flex items-center gap-3 my-7">
               <div className="flex-1 border-t-2 border-orange-500" />
               <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
@@ -5069,7 +5389,7 @@ ${stabSection}
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
-                <FieldLabel hint="Cutting diameter (keyseat width for keyseat cutters, max cutting diameter for dovetail cutters).">Cut Dia (in)</FieldLabel>
+                <FieldLabel hint="Cutting diameter (keyseat width for keyseat cutters, max cutting diameter for dovetail cutters, body diameter for feed mills).">Cut Dia (in)</FieldLabel>
                 <Input type="text" inputMode="decimal" className="no-spinners"
                   placeholder="e.g. 0.750"
                   value={toolDiaText}
@@ -5088,7 +5408,7 @@ ${stabSection}
                 <Input type="number" step="1" className="no-spinners" value={form.flutes || ""} onChange={onNum("flutes")} />
               </div>
               <div className="space-y-2">
-                <FieldLabel hint="Length of cut — for keyseat cutters this is the disc width (tooth width).">LOC (in)</FieldLabel>
+                <FieldLabel hint="Length of cut — for keyseat cutters: disc width. For feed mills: axial flute length / overall cutting length from print.">LOC (in)</FieldLabel>
                 <Input type="text" inputMode="decimal" className="no-spinners"
                   placeholder="e.g. 0.1875"
                   value={locText}
@@ -5277,6 +5597,92 @@ ${stabSection}
                     <div><span className="font-semibold text-white">Air blast is the preferred coolant.</span> Goal is chip evacuation, not cooling. Mist is also good. Flood is acceptable but watch for chip packing. Through-spindle is rarely applicable.</div>
                     <div><span className="font-semibold text-white">If it sounds wrong, it is wrong.</span> Dovetail cutters don't chatter and recover — reduce stickout, then reduce radial pass depth, then reduce chip load.</div>
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tip chipping = too high IPT. Neck break = excess WOC or stickout. Chatter = poor rigidity. Built-up edge = SFM too low (especially aluminum). Tool pullout = weak holder.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Feed Mill specific fields */}
+            {operation === "feedmill" && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <FieldLabel hint="Primary corner radius from the print (inches). The dual-radius geometry uses this for the DOC advisory: rec DOC = 0.8 × CR, max DOC = 1.5 × CR.">Corner Radius (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.060"
+                    value={form.corner_radius > 0 ? form.corner_radius.toFixed(4) : ""}
+                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n >= 0) setForm(p => ({ ...p, corner_radius: n, corner_condition: "corner_radius" })); }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Stickout from holder nose to tool tip in inches. Feed mills are designed for long-reach — stickout advisory still applies for lateral loads on entry/exit moves.">Stickout (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 3.000"
+                    value={form.stickout > 0 ? form.stickout.toFixed(3) : ""}
+                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, stickout: n })); }}
+                  />
+                </div>
+              </div>
+            )}
+            {operation === "feedmill" && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="space-y-2">
+                  <FieldLabel hint="Lead angle from the print (degrees). This is the angle between the cutting edge and the radial plane. At 20°, the engine programs FPT at 2.92× the actual chip — this is correct and intentional.">Lead Angle (°)</FieldLabel>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[10, 12, 15, 17, 20].map(a => (
+                      <button key={a} type="button"
+                        onClick={() => setForm(p => ({ ...p, lead_angle: a }))}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold border transition-all ${form.lead_angle === a ? "bg-indigo-600 border-indigo-500 text-white" : "bg-zinc-800 border-zinc-600 text-zinc-300 hover:border-indigo-500"}`}
+                      >{a}°</button>
+                    ))}
+                    <Input type="number" step="1" className="no-spinners w-16 h-7 text-xs"
+                      placeholder="°"
+                      value={form.lead_angle || ""}
+                      onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, lead_angle: n })); }}
+                    />
+                  </div>
+                  {form.lead_angle > 0 && (
+                    <div className="text-[10px] text-indigo-400 font-mono">
+                      CTF: {(1/Math.sin(form.lead_angle * Math.PI / 180)).toFixed(3)}× → prog FPT ≈ {form.tool_dia > 0 ? ((0.005 * form.tool_dia) / Math.sin(form.lead_angle * Math.PI / 180)).toFixed(5) : "—"}"
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel hint="Axial depth per pass (inches). Feed mills run shallow — typically 0.8–1.5× corner radius. The engine will suggest a safe starting DOC based on the corner radius from your print. Leave 0 to use the recommended value.">DOC per Pass (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder={form.corner_radius > 0 ? `rec. ${(form.corner_radius * 0.8).toFixed(4)}"` : "e.g. 0.040"}
+                    value={form.feedmill_doc_in > 0 ? form.feedmill_doc_in.toFixed(4) : ""}
+                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n >= 0) setForm(p => ({ ...p, feedmill_doc_in: n })); }}
+                  />
+                  {form.corner_radius > 0 && (
+                    <div className="text-[10px] text-zinc-500">
+                      Rec: {(form.corner_radius * 0.8).toFixed(4)}" · Max: {(form.corner_radius * 1.5).toFixed(4)}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Machining Tips accordion — feed mill */}
+            {operation === "feedmill" && (
+              <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+                <button type="button"
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                  onClick={() => setMachiningTipsOpen(o => !o)}
+                >
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks — High-Feed Milling</span>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    <div><span className="font-semibold text-white">The lead angle is everything.</span> At 20°, the programmed FPT is 2.92× the actual chip on the tool. This is not a mistake — program the high number. The lead angle redirects force axially into the spindle, not radially into the tool.</div>
+                    <div><span className="font-semibold text-white">Keep DOC shallow.</span> Target 0.8× corner radius per pass. Max 1.5× CR before you overload the dual-radius contact zone. Exceeding this is the primary cause of corner chipping on high-feed tools.</div>
+                    <div><span className="font-semibold text-white">Ramp angle up to {form.lead_angle > 0 ? Math.max(2, form.lead_angle - 3).toFixed(0) : 17}°.</span> Feed mills can ramp much steeper than standard endmills — use this for deep pocket entry. Z-level ramping is the preferred strategy for tight pockets with long reach.</div>
+                    <div><span className="font-semibold text-white">Designed for long reach.</span> The axial force model keeps radial load low even with extended gage lengths. Use the stickout advisory — deflection is rarely the issue, but HP draw at high feeds can be.</div>
+                    <div><span className="font-semibold text-white">WOC flexibility.</span> Can run full diameter width or step over at 50–75% D for 3D roughing. Reduce WOC (not DOC) if spindle load is the constraint — MRR drop is proportional.</div>
+                    <div><span className="font-semibold text-white">Chip evacuation matters.</span> High feeds at shallow DOC generate a flood of thin chips. Flood coolant aimed at the insert helps. In deep pockets, through-spindle coolant or air blast prevents chip re-cutting.</div>
+                    <div><span className="font-semibold text-white">Climb mill only.</span> Positive rake geometry is unforgiving on conventional entry — corners chip on the exit. Use smooth entry arcs where possible.</div>
+                    <div><span className="font-semibold text-white">Hardness limit: 52 HRC.</span> Above this, expect rapid corner wear. Consider swapping to a CBN-coated or ceramic solution for ≥55 HRC.</div>
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Corner chipping = DOC too deep. Premature wear = SFM too high or wrong coating. Chip packing in pocket = add air assist. Vibration at entry = reduce ramp angle or use roll-in arc.</div>
                   </div>
                 )}
               </div>
@@ -5882,11 +6288,14 @@ ${stabSection}
                     ] as const)
                   : form.machine_type === "hmc"
                   ? ([
-                      { key: "rigid_fixture", label: "Rigid Fixture" },
-                      { key: "tombstone",     label: "Tombstone"     },
-                      { key: "dovetail",      label: "Dovetail"      },
-                      { key: "vise",          label: "Vise"          },
-                      { key: "soft_jaws",     label: "Soft Jaws"     },
+                      { key: "rigid_fixture", label: "Rigid Fixture"    },
+                      { key: "tombstone",     label: "Tombstone"        },
+                      { key: "dovetail",      label: "Dovetail"         },
+                      { key: "vise",          label: "Vise"             },
+                      { key: "soft_jaws",     label: "Soft Jaws"        },
+                      { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
+                      { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
+                      { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                     ] as const)
                   : form.machine_type === "5axis"
                   ? ([
@@ -5897,12 +6306,15 @@ ${stabSection}
                       { key: "soft_jaws",     label: "Soft Jaws"      },
                     ] as const)
                   : /* vmc default */ ([
-                      { key: "rigid_fixture", label: "Rigid Fixture"  },
-                      { key: "5th_axis_vise", label: "5th-Axis Vise"  },
-                      { key: "dovetail",      label: "Dovetail"       },
-                      { key: "vise",          label: "Vise"           },
-                      { key: "toe_clamps",    label: "Toe Clamps"     },
-                      { key: "soft_jaws",     label: "Soft Jaws"      },
+                      { key: "rigid_fixture", label: "Rigid Fixture"    },
+                      { key: "5th_axis_vise", label: "5th-Axis Vise"    },
+                      { key: "dovetail",      label: "Dovetail"         },
+                      { key: "vise",          label: "Vise"             },
+                      { key: "toe_clamps",    label: "Toe Clamps"       },
+                      { key: "soft_jaws",     label: "Soft Jaws"        },
+                      { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
+                      { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
+                      { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                     ] as const)
                 ).map(({ key, label }) => (
                   <button
@@ -7235,6 +7647,53 @@ ${stabSection}
                 );
               })()}
 
+              {/* Feed Mill Details */}
+              {feedmillResult && (
+                <div className="mb-3 rounded-xl border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-widest text-cyan-400">High-Feed Mill Details</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Lead Angle</span>
+                      <span className="ml-2 font-semibold">{feedmillResult.lead_angle_deg}°</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Lead CTF</span>
+                      <span className="ml-2 font-semibold text-cyan-400">{feedmillResult.lead_ctf?.toFixed(3)}×</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Programmed FPT</span>
+                      <span className="ml-2 font-mono font-semibold text-white">{feedmillResult.programmed_fpt_in?.toFixed(5)}"</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Actual Chip</span>
+                      <span className="ml-2 font-mono font-semibold text-zinc-400">{feedmillResult.actual_chip_in?.toFixed(5)}"</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">DOC per Pass</span>
+                      <span className="ml-2 font-semibold">{feedmillResult.doc_in?.toFixed(4)}"</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Rec DOC</span>
+                      <span className="ml-2 font-semibold text-emerald-400">{feedmillResult.rec_doc_in?.toFixed(4)}"</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Max DOC</span>
+                      <span className="ml-2 font-semibold text-amber-400">{feedmillResult.max_doc_in?.toFixed(4)}"</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Max Ramp Angle</span>
+                      <span className="ml-2 font-semibold text-indigo-400">{feedmillResult.ramp_angle_max_deg?.toFixed(0)}°</span>
+                    </div>
+                  </div>
+                  <div className="pt-1 border-t border-zinc-700/50 text-[10px] text-zinc-500 leading-relaxed">
+                    Programmed FPT is {feedmillResult.lead_ctf?.toFixed(2)}× the actual chip — this is correct. The lead angle redirects cutting force axially into the spindle.
+                  </div>
+                  {feedmillResult.tips?.slice(0, 2).map((tip: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
+                  ))}
+                </div>
+              )}
+
               {/* Optimal Tool Recommendation Card */}
               {optimalLoading && (
                 <div className="mb-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
@@ -7434,8 +7893,38 @@ ${stabSection}
                   />
                 ) : null}
 
+                {form.mode === "surfacing" && customer.d_eff_in != null && (
+                  <Kpi
+                    label={UL("D_eff (in)", "D_eff (mm)")}
+                    hint={`Effective cutting diameter at the contact point — smaller than tool OD when ap is shallow. RPM and SFM are calculated at D_eff, not at the tool OD. ${form.surfacing_tilt_deg > 0 ? `Tool tilt of ${form.surfacing_tilt_deg}° shifts the contact point away from dead center, raising D_eff.` : "Adding tool tilt (10–15°) raises D_eff and cutting velocity significantly."}`}
+                    value={
+                      <>
+                        {UC(customer.d_eff_in, 25.4, metric ? 3 : 4)}
+                        {customer.diameter ? (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            ({fmtNum((customer.d_eff_in / customer.diameter) * 100, 0)}% of Ø)
+                          </span>
+                        ) : null}
+                      </>
+                    }
+                  />
+                )}
+                {form.mode === "surfacing" && customer.scallop_height_in != null && (
+                  <Kpi
+                    label={UL("Scallop Height (in)", "Scallop Height (µm)")}
+                    hint="Peak-to-valley cusp height between adjacent passes. Lower scallop = better surface finish but more passes. Ra ≈ scallop / 4 for a rough estimate."
+                    value={
+                      <span className={customer.scallop_height_in <= 0.0005 ? "text-emerald-400 font-semibold" : customer.scallop_height_in <= 0.002 ? "font-semibold" : "text-amber-400 font-semibold"}>
+                        {metric
+                          ? `${(customer.scallop_height_in * 25400).toFixed(0)} µm`
+                          : `${customer.scallop_height_in.toFixed(6)}"`}
+                      </span>
+                    }
+                  />
+                )}
                 <Kpi
-                  label={form.mode === "face" ? UL("Pass Depth (in)", "Pass Depth (mm)") : UL("DOC (in)", "DOC (mm)")}
+                  label={form.mode === "face" ? UL("Pass Depth (in)", "Pass Depth (mm)") : form.mode === "surfacing" ? UL("Step-Down ap (in)", "Step-Down ap (mm)") : UL("DOC (in)", "DOC (mm)")}
+                  hint={form.mode === "surfacing" ? "Axial depth of cut (step-down) per surfacing pass. Drives D_eff at the contact point — shallower ap means smaller effective cutting diameter and lower cutting velocity." : undefined}
                   value={
                     <>
                       {UC(customer.doc_in, 25.4, metric ? 2 : 4)}
@@ -7448,7 +7937,7 @@ ${stabSection}
                   }
                 />
                 <Kpi
-                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "circ_interp" ? UL("Radial Wall ae (in)", "Radial Wall ae (mm)") : UL("WOC (in)", "WOC (mm)")}
+                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "surfacing" ? UL("Stepover ae (in)", "Stepover ae (mm)") : form.mode === "circ_interp" ? UL("Radial Wall ae (in)", "Radial Wall ae (mm)") : UL("WOC (in)", "WOC (mm)")}
                   hint={form.mode === "circ_interp" ? "Total radial stock to remove = (target bore − existing bore) ÷ 2. This is the total wall the tool must interpolate through, split across radial passes." : undefined}
                   value={
                     <>

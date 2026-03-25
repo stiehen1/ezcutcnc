@@ -50,7 +50,7 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 | Route | Page | Description |
 |---|---|---|
-| `/` | Mentor | Main machining advisor. Milling (endmill + chamfer mill), drilling, reaming, feed milling, threadmilling |
+| `/` | Mentor | Main machining advisor. Milling (endmill + chamfer mill), drilling, reaming, feed milling, threadmilling, keyseat, dovetail, 3D surface contouring |
 | `/toolbox` | Toolbox | SKU catalog browser, EDP lookup, tool specifications with STEP file download |
 | `/calculators` | Calculators | Standalone shop calculators: Speeds & Feeds, Bolt Circle (with G-code output), Chamfer Mill, Entry Load Spike, and others |
 | `/admin` | Admin | Password-protected admin panel — allowlist management and domain blocklist for access control |
@@ -117,12 +117,14 @@ React Query  -->  Mentor.tsx (KPI cards, stability panel, advisory notes)
 ## Operations Supported
 
 ### 1. Milling (Endmill)
-Modes: HEM/trochoidal, traditional, finish, face, slot, circular interpolation.
+Modes: `hem`, `trochoidal`, `traditional`, `finish`, `face`, `slot`, `circ_interp`, `surfacing`.
 
-- HEM SFM = 2x conventional for all materials
+- HEM SFM = 2× conventional for all materials
 - Chip thinning compensation applied automatically
 - Variable pitch/helix multipliers applied to deflection limit
 - Chipbreaker and truncated rougher geometry support with engagement-dependent force reduction
+- **Machining Tips & Tricks accordion** — collapsible panel of shop-floor best practices, dynamically keyed to the active mode (different tips for HEM, Traditional, Finishing, Facing, Slotting, Circular Interpolation, and 3D Surfacing)
+- `surfacing` mode drives D_eff-based RPM, scallop↔stepover conversion, and tilt angle — see [3D Surface Contouring](#9-3d-surface-contouring-ball-nose--bull-nose)
 
 ### 2. Milling (Chamfer Mill)
 Series CMS (2/4 flute) and CMH (3/5 flute, 30° shear angle).
@@ -171,6 +173,20 @@ High-feed mill specific physics (chip thinning from lead angle, axial force comp
 - Radial Pass Depth + Final Wall Depth — correct terminology for lateral engagement
 - Multi-pass radial wall strategy
 
+### 9. 3D Surface Contouring (Ball Nose / Bull Nose)
+For finishing complex 3D surfaces and contoured profiles with ball nose or bull nose endmills.
+
+- **Input mode:** Drive by scallop height (enter target cusp height, stepover computed automatically) or drive by stepover (enter stepover directly, scallop height shown as output)
+- **D_eff at contact point** — RPM and SFM are calculated at the effective cutting diameter, not the tool OD:
+  - Ball nose: `D_eff = 2√(2R·ap − ap²)`
+  - Bull nose (ap ≤ CR): `D_eff = (D − 2·CR) + 2√(2·CR·ap − ap²)`
+- **Tool tilt angle** (ball nose only, 0–30°) — shifts the contact point away from the dead center of the ball tip, raising D_eff and effective cutting velocity. Formula: `D_eff = 2√(R² − (R·cos(θ) − ap)²)`. Live preview shows velocity gain vs. 0° baseline.
+- **Scallop ↔ stepover conversion:** `ae = √(8·R·h)` / `h = ae² / (8·R)` where R is the corner radius (bull nose uses CR when ap ≤ CR)
+- Chip thinning based on stepover/D_eff ratio (not WOC/OD)
+- WOC/DOC inputs hidden; replaced by ap + stepover/scallop inputs
+- Results display: D_eff (% of OD), scallop height (color-coded green ≤0.0005", amber >0.002"), stepover ae, step-down ap
+- Print export: surfacing setup notes panel with tilt, climb milling, and semi-finish pass recommendations
+
 ---
 
 ## API Schema
@@ -182,7 +198,12 @@ Defined in `shared/routes.ts` using Zod. The full `MentorInput` and `MentorRespo
 | Field | Type | Description |
 |---|---|---|
 | `operation` | enum | `milling`, `drilling`, `reaming`, `threadmilling`, `keyseat`, `dovetail` |
-| `mode` | enum | `hem`, `traditional`, `finish`, `face`, `slot`, `trochoidal`, `circ_interp` |
+| `mode` | enum | `hem`, `traditional`, `finish`, `face`, `slot`, `trochoidal`, `circ_interp`, `surfacing` |
+| `surfacing_input_mode` | enum | `scallop`, `stepover` — drives whether scallop height or stepover is the primary input |
+| `surfacing_scallop_in` | number | Target scallop (cusp) height in inches — stepover computed automatically |
+| `surfacing_stepover_in` | number | Lateral stepover between passes in inches |
+| `surfacing_ap_in` | number | Axial step-down (ap) per pass in inches |
+| `surfacing_tilt_deg` | number | Tool tilt angle in degrees (0–30°), ball nose only — raises D_eff at contact point |
 | `material` | string | Material key (see material system) |
 | `tool_dia` | number | Cutting diameter (inches) |
 | `flutes` | number | Flute count |
@@ -509,7 +530,25 @@ Rigidity factor divides tool deflection in `calc_state()`:
 
 Workholding compliance multiplies chatter index. Rigidity order from most to least rigid:
 
-`between_centers` (0.75) → `rigid_fixture` (0.80) → `tombstone` (0.82) → `collet_chuck` (0.85) → `4_jaw_chuck` (0.88) → `5th_axis_vise` (0.88) → `dovetail` (0.90) → `face_plate` (0.93) → `vise` (1.00, baseline) → `3_jaw_chuck` (1.05) → `soft_jaws` (1.20)
+`between_centers` (0.75) → `rigid_fixture` (0.80) → `tombstone` (0.82) → `collet_chuck` (0.85) → `4_jaw_chuck` (0.88) → `5th_axis_vise` (0.88) → `dovetail` (0.90) → `trunnion_4th` (0.91) → `face_plate` (0.93) → `vise` (1.00, baseline) → `3_jaw_chuck` (1.05) → `toe_clamps` (1.08) → `soft_jaws` (1.20)
+
+| Key | Factor | Context |
+|---|---|---|
+| `between_centers` | 0.75 | Shaft between centers — most rigid setup possible |
+| `rigid_fixture` | 0.80 | Bolted/doweled fixture plate |
+| `tombstone` | 0.82 | HMC pallet tombstone |
+| `collet_chuck` | 0.85 | Bar stock collet chuck |
+| `4_jaw_chuck` | 0.88 | Independent 4-jaw — rigid when dialed in; mill rotary/4th-axis use |
+| `5th_axis_vise` | 0.88 | Precision 5-axis vise (Mate, Schunk, etc.) |
+| `dovetail` | 0.90 | Mechanical pull-out lock |
+| `trunnion_4th` | 0.91 | 4th-axis trunnion with axis locked via brake |
+| `face_plate` | 0.93 | Face plate with clamps |
+| `vise` | 1.00 | Standard Kurt-style vise — baseline |
+| `3_jaw_chuck` | 1.05 | Self-centering 3-jaw; mill rotary table / 4th-axis indexer use |
+| `toe_clamps` | 1.08 | Direct clamping, some flex under radial load |
+| `soft_jaws` | 1.20 | Custom soft jaws — most compliant |
+
+**Mill context for chucks:** `3_jaw_chuck` and `4_jaw_chuck` are available on VMC/HMC machine types for rotary table, 4th-axis, and indexer setups. `trunnion_4th` covers dedicated trunnion tables where the axis locks rigid for cutting.
 
 ---
 

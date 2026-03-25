@@ -268,6 +268,21 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
       { heading: "7. Calculate Your Results", body: "Hit Calculate to get RPM, feed rate, chip load per tooth, HP draw, deflection, and a pass-by-pass depth strategy. Watch for deflection warnings — keyseat tools are force-dominated and deflection is the primary failure predictor, not HP." },
     ],
   },
+  surfacing: {
+    title: "3D Surface Contouring Advisor",
+    sections: [
+      { heading: "1. Select Your Material", body: "Choose your material — surfacing SFM is based on the effective cutting diameter at the contact point, not the tool OD. Soft materials like aluminum allow very high SFM even at small D_eff; tough materials like stainless and titanium need conservative SFM to avoid edge burn at the contact zone. Also confirm your hardness if known — it adjusts SFM automatically." },
+      { heading: "2. Tool Setup — Corner Condition", body: "Select Ball Nose or Bull Nose (corner radius) — square-corner endmills are not available in surfacing mode. For bull nose tools, enter the corner radius accurately — D_eff calculation depends on it when step-down (ap) is shallower than the CR." },
+      { heading: "3. Surfacing Input Mode", body: "Choose how you want to drive the calculation:\n\n• Drive by Scallop Height — enter your target cusp height (the ridges left between passes) and the app calculates the required stepover automatically. 0.001\" ≈ rough, 0.0005\" ≈ medium, 0.0001\" ≈ fine finish.\n• Drive by Stepover — enter your stepover directly and the app shows the resulting scallop height. Use this if your CAM system drives stepover directly." },
+      { heading: "4. Step-Down (ap)", body: "Enter your axial depth per pass — how far the tool steps down in Z between contouring passes. Typical finishing range: 0.010\"–0.050\". Smaller ap follows the surface more accurately and produces smaller D_eff (slower effective cutting velocity). Larger ap increases D_eff and productivity but reduces surface conformance on curved surfaces." },
+      { heading: "5. Tool Tilt (Ball Nose Only)", body: "Ball nose tools have a dead zone at the very tip — cutting velocity is zero at center and only builds as D_eff increases. Adding tool tilt shifts the contact point away from the tip:\n\n• 0° = tip cutting — lowest D_eff, lowest surface velocity, poorest finish\n• 10–15° = recommended for most finishing — significantly higher D_eff and cutting velocity\n• The live preview panel shows exactly how much tilt raises D_eff vs. 0°\n\nUse 0° only when your CAM or machine axis configuration doesn't allow tilt." },
+      { heading: "6. Live Preview Panel", body: "Before you run the calculation, the preview panel shows your current D_eff, stepover, and scallop height in real time as you adjust inputs. Use it to dial in your parameters before hitting Calculate. A green note confirms when tilt has meaningfully raised D_eff; an amber warning flags when D_eff is still very low and tilt or larger ap is recommended." },
+      { heading: "7. Enter Tool Info", body: "Enter your Core Cutter EDP # to auto-fill all tool geometry — or upload your CC print PDF. Ball nose and bull nose tools are both supported. Stickout is required for the stability audit — enter the distance from the toolholder face to the tool tip." },
+      { heading: "8. Set Your Machine", body: "Search from over 429 machines in our database or build your own. Selecting a machine pre-fills spindle HP, max RPM, taper, and drive type. For 5-axis surfacing setups, max RPM is particularly important — tilt moves can drive the spindle higher than expected at small D_eff values." },
+      { heading: "9. Tool Holder & Coolant", body: "Shrink fit or hydraulic is strongly preferred for surfacing — tool runout directly translates to surface waviness. Keep stickout as short as possible; deflection at the contact zone causes chatter that shows as periodic surface scallop distortion. Flood or mist coolant is recommended — light engagement at low WOC causes chip re-cutting without coolant." },
+      { heading: "10. Calculate Your Results", body: "Hit Calculate to get RPM and SFM at D_eff (actual contact velocity, not OD velocity), feed rate, chip load, and HP draw. The results panel shows D_eff, the computed scallop height, and the actual stepover ae. The stability audit checks for chatter risk at your stickout." },
+    ],
+  },
   dovetail: {
     title: "Dovetail Cutter Advisor",
     sections: [
@@ -340,7 +355,14 @@ function HelpButton() {
       pageHelp = PAGE_HELP["/toolbox"] ?? null;
     } else if (op === "milling") {
       const toolType = localStorage.getItem("cc_tool_type") || "endmill";
-      pageHelp = toolType === "chamfer_mill" ? OPERATION_HELP["feedmilling"] : OPERATION_HELP["milling"];
+      const mode = localStorage.getItem("cc_mode") || "";
+      if (toolType === "chamfer_mill") {
+        pageHelp = OPERATION_HELP["feedmilling"];
+      } else if (mode === "surfacing") {
+        pageHelp = OPERATION_HELP["surfacing"];
+      } else {
+        pageHelp = OPERATION_HELP["milling"];
+      }
     } else {
       pageHelp = OPERATION_HELP[op] ?? OPERATION_HELP["milling"];
     }

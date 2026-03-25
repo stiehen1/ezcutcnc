@@ -290,7 +290,7 @@ COATING_LIFE_MULT: dict[str, dict[str, float]] = {
 # Applied in calc_state() to base_sfm after material lookup, before hardness penalty
 # D-Max on ferrous: 0.90 (incompatible — warns in UI, penalizes here)
 COATING_SFM_MULT: dict[str, dict[str, float]] = {
-    "t-max":    {"default": 1.10},
+    "t-max":    {"inconel": 1.00, "titanium": 1.00, "default": 1.10},
     "a-max":    {"default": 1.00},
     "p-max":    {"steel": 1.05, "stainless": 1.03, "default": 1.02},
     "c-max":    {"stainless": 1.07, "steel": 1.05, "default": 1.03},
@@ -434,6 +434,7 @@ WORKHOLDING_COMPLIANCE = {
     "4_jaw_chuck":     0.88,  # independent 4-jaw — rigid when dialed in
     "5th_axis_vise":   0.88,  # precision 5-axis vise (Mate, Schunk, etc.)
     "dovetail":        0.90,  # mechanical pull-out lock, some lateral compliance
+    "trunnion_4th":    0.91,  # 4th-axis trunnion, axis locked — rigid but rotary axis adds slight compliance
     "face_plate":      0.93,  # face plate with clamps
     "vise":            1.00,  # standard Kurt-style vise — baseline
     "3_jaw_chuck":     1.05,  # standard 3-jaw self-centering chuck
@@ -2478,6 +2479,74 @@ KEYSEAT_SFM = {
 # impact loading and heat at the edge, warranting a modest SFM reduction.
 DOVETAIL_SFM = {k: round(v * 0.88) for k, v in KEYSEAT_SFM.items()}
 
+# Feed mill SFM — solid carbide high-feed endwork tools.
+# Light axial DOC + lead-angle chip thinning lets feed mills run faster SFM than keyseat/dovetail.
+# Upper limit: 52 HRC (hardness_sfm_mult handles derating above that).
+FEEDMILL_SFM = {
+    # Aluminum
+    "Aluminum":              1200,
+    "aluminum_wrought":      1200,
+    "aluminum_wrought_hs":    900,
+    "aluminum_cast":          700,
+    "non_ferrous":            550,
+    # Steel
+    "Steel":                  450,
+    "steel_mild":             500,
+    "steel_free":             550,
+    "steel_alloy":            425,
+    "tool_steel_p20":         375,
+    "tool_steel_a2":          300,
+    "tool_steel_h13":         275,
+    "tool_steel_s7":          300,
+    "tool_steel_d2":          220,
+    "cpm_10v":                 80,
+    "hardened_lt55":           175,
+    "hardened_gt55":            70,   # above 52 HRC: not recommended
+    "armor_milspec":           175,
+    "armor_ar400":             130,
+    "armor_ar500":              95,
+    "armor_ar600":              55,
+    # Stainless
+    "Stainless":               225,
+    "stainless_fm":            300,
+    "stainless_ferritic":      250,
+    "stainless_410":           230,
+    "stainless_420":           200,
+    "stainless_440c":          210,
+    "stainless_304":           225,
+    "stainless_316":           200,
+    "stainless_ph":            240,
+    "stainless_duplex":        175,
+    "stainless_superduplex":   150,
+    "stainless_martensitic":   230,
+    "stainless_austenitic":    220,
+    # Cast iron
+    "Cast Iron":               500,
+    "cast_iron_gray":          500,
+    "cast_iron_ductile":       450,
+    "cast_iron_cgi":           375,
+    "cast_iron_malleable":     375,
+    # Titanium
+    "Titanium":                225,
+    "titanium_cp":             225,
+    "titanium_64":             200,
+    # Superalloys / Inconel
+    "Inconel":                  90,
+    "inconel_625":              90,
+    "inconel_718":              90,
+    "hastelloy_x":              75,
+    "inconel_617":              70,
+    "waspaloy":                 60,
+    "mp35n":                    55,
+    "monel_k500":               95,
+    "hiTemp_fe":               100,
+    "hiTemp_co":               120,
+    # Plastics / composites
+    "plastic_unfilled":        400,
+    "plastic_filled":          300,
+    "composite_tpc":           275,
+}
+
 
 def run_keyseat(payload: dict) -> dict:
     """Speed & feed calc for keyseat / flute key cutters.
@@ -2868,6 +2937,195 @@ def run_dovetail(payload: dict) -> dict:
     }
 
 
+def run_feedmill(payload: dict) -> dict:
+    """Speed & feed calc for solid carbide high-feed endmills (endwork / 3D roughing).
+    Lead angle chip thinning: programmed FPT = actual chip / sin(lead_angle).
+    Axial force is dominant — deflection is low; HP and chip evacuation are the constraints.
+    """
+    D           = float(payload.get("tool_dia", 0.5) or 0.5)
+    flutes      = int(payload.get("flutes", 4) or 4)
+    loc         = float(payload.get("loc", 0.5) or 0.5)
+    stickout    = float(payload.get("stickout", 2.0) or 2.0)
+    corner_r    = float(payload.get("corner_radius", 0.0) or 0.0)
+    lead_angle  = float(payload.get("lead_angle", 20.0) or 20.0)
+    mat         = str(payload.get("material", "steel_alloy") or "steel_alloy")
+    mat_group   = get_material_group(mat)
+    toolholder  = str(payload.get("toolholder", "er_collet") or "er_collet").lower()
+    coolant     = str(payload.get("coolant", "flood") or "flood").lower()
+    _spindle_drive = str(payload.get("spindle_drive", "direct") or "direct").lower()
+    _drive_eff     = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.96)
+    machine_hp     = float(payload.get("machine_hp", 10.0) or 10.0) * _drive_eff
+    max_rpm        = float(payload.get("max_rpm", 12000) or 12000)
+    rpm_util       = float(payload.get("rpm_util_pct", 0.95) or 0.95)
+
+    # Hardness
+    _hv  = float(payload.get("hardness_value", 0) or 0)
+    _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
+    hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
+
+    # Lead angle chip thinning factor
+    lead_rad   = math.radians(max(1.0, min(lead_angle, 45.0)))
+    lead_sin   = math.sin(lead_rad)
+    lead_ctf   = 1.0 / lead_sin   # programmed FPT multiplier (e.g. 2.92× at 20°)
+
+    # SFM and RPM
+    base_sfm   = FEEDMILL_SFM.get(mat, FEEDMILL_SFM.get(mat_group, 300))
+    sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    rpm        = min(target_rpm, max_rpm * rpm_util)
+    rpm        = max(1.0, rpm)
+    sfm_actual = (rpm * math.pi * D) / 12.0
+
+    # Chip load — base IPT from standard milling table, then amplify by lead CTF
+    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D
+    programmed_fpt = ipt_base * lead_ctf   # what gets programmed in CAM
+
+    # Feed rate
+    feed_ipm = rpm * flutes * programmed_fpt
+
+    # DOC — user-supplied or advisory default
+    # Max safe DOC for a feed mill is ≈ corner_radius × 1.5 (geometry-limited by ball contact)
+    if corner_r > 0:
+        max_doc_in  = corner_r * 1.5
+        rec_doc_in  = corner_r * 0.8   # conservative recommended starting depth
+    else:
+        max_doc_in  = D * 0.06         # fallback: 6% dia if no corner radius given
+        rec_doc_in  = D * 0.04
+    doc_in = float(payload.get("feedmill_doc_in", 0.0) or 0.0)
+    if doc_in <= 0:
+        doc_in = rec_doc_in
+
+    # WOC — feed mills can run full width or partial; default to 50% for 3D roughing
+    woc_pct = float(payload.get("woc_pct", 50.0) or 50.0)
+    woc_in  = (woc_pct / 100.0) * D
+
+    # MRR
+    mrr = feed_ipm * doc_in * woc_in
+
+    # HP
+    _hp_unit    = HP_PER_CUIN.get(mat, HP_PER_CUIN.get(mat_group, 1.0))
+    hp_required = max(0.01, mrr * _hp_unit * hardness_kc_mult(hrc))
+    hp_util_pct = (hp_required / machine_hp * 100.0) if machine_hp > 0 else 0.0
+
+    # Deflection — axial force dominant so radial deflection is low,
+    # but long-reach setups can still deflect laterally on entry/exit.
+    # Use a reduced radial fraction (0.15) vs standard milling (0.30).
+    total_force  = (hp_required * 33000.0) / max(1.0, feed_ipm / 12.0)
+    radial_force = total_force * 0.15
+    rigidity     = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
+    if payload.get("dual_contact", False):
+        rigidity *= 1.08
+    deflection = tool_deflection(
+        radial_force, stickout, D, flutes, loc, 0.0, None,
+        payload.get("holder_gage_length"), payload.get("holder_nose_dia"),
+    )
+    deflection /= rigidity
+
+    # Max ramp angle — feed mill can ramp steeper than a standard endmill because
+    # axial force goes into the spindle. Conservative limit: lead_angle − 3°.
+    ramp_angle_max = max(2.0, lead_angle - 3.0)
+
+    # Stability — feed mills rarely deflect into chatter; flag if long reach
+    ld_ratio = stickout / D if D > 0 else 0.0
+    stability_pct = round((deflection / 0.0005) * 100.0, 1)  # 0.0005" threshold for endwork
+
+    # Warnings
+    notes = []
+    if doc_in > max_doc_in:
+        notes.append(
+            f"DOC ({doc_in:.4f}\") exceeds recommended max ({max_doc_in:.4f}\") for corner radius "
+            f"{corner_r:.4f}\". Reduce to avoid overloading the ball contact zone."
+        )
+    if hrc > 52:
+        notes.append(
+            f"Material hardness ({hrc:.0f} HRC) exceeds this tool's 52 HRC design limit. "
+            "Expect significantly reduced tool life."
+        )
+    if ld_ratio > 6:
+        notes.append(
+            f"L/D ratio ({ld_ratio:.1f}×) is high for a feed mill. "
+            "Keep radial entry moves slow to protect the corner geometry."
+        )
+    if hp_util_pct > 90:
+        notes.append(
+            f"HP utilization ({hp_util_pct:.0f}%) is high. "
+            "Reduce WOC or feed rate to stay within machine capacity."
+        )
+
+    # Tool life
+    _coolant_factor = COOLANT_LIFE.get(coolant, 1.0)
+    _base_life      = BASE_LIFE_MIN.get(mat, BASE_LIFE_MIN.get(mat_group, 60.0)) * 1.20  # light DOC = longer life
+    _sfm_ratio      = sfm_actual / max(1.0, sfm_target)
+    tool_life_min   = (_base_life / max(0.20, _sfm_ratio ** 0.35)) * _coolant_factor
+
+    tips = [
+        f"Lead angle chip thinning at {lead_angle:.0f}°: program FPT at {programmed_fpt:.5f}\" "
+        f"— actual chip on the tool is only {ipt_base:.5f}\". This is normal and correct.",
+        f"Max ramp angle: {ramp_angle_max:.0f}°. Feed mills can ramp much steeper than standard endmills "
+        "because axial forces drive into the spindle rather than bending the tool.",
+        f"Target DOC: {rec_doc_in:.4f}\" (0.8 × CR). Max: {max_doc_in:.4f}\" (1.5 × CR). "
+        "Exceeding max DOC overloads the dual-radius corner zone.",
+        "Ideal for 3D roughing, Z-level roughing, deep pocket entry, and long-reach setups. "
+        "The low DOC + high feed strategy removes material efficiently while keeping radial force low.",
+        "Run climb milling whenever possible. The positive rake geometry and light DOC makes conventional "
+        "milling entry more aggressive on the corner radius.",
+    ]
+
+    return {
+        "customer": {
+            "material":         mat,
+            "diameter":         D,
+            "flutes":           flutes,
+            "rpm":              round(rpm),
+            "sfm":              round(sfm_actual, 1),
+            "sfm_target":       round(sfm_target, 1),
+            "feed_ipm":         round(feed_ipm, 2),
+            "doc_in":           round(doc_in, 4),
+            "woc_in":           round(woc_in, 3),
+            "mrr_in3_min":      round(mrr, 3),
+            "spindle_load_pct": round(hp_util_pct, 1),
+            "hp_required":      round(hp_required, 3),
+            "fpt":              round(programmed_fpt, 6),
+            "adj_fpt":          round(ipt_base, 6),
+            "status":           "warning" if (notes and any("HRC" in n or "DOC" in n for n in notes)) else "ok",
+            "status_hint":      notes[0] if notes else None,
+            "risk":             "high" if stability_pct > 175 else ("medium" if stability_pct > 100 else "low"),
+            "notes":            notes if notes else None,
+        },
+        "engineering": {
+            "deflection_in":         round(deflection, 5),
+            "chip_thickness_in":     round(ipt_base, 6),
+            "chatter_index":         round(stability_pct / 100.0, 3),
+            "teeth_in_cut":          round(flutes * (woc_pct / 100.0), 2),
+            "tool_life_min":         round(tool_life_min, 1),
+            "force_lbf":             round(total_force, 2),
+            "radial_force_lbf":      round(radial_force, 2),
+        },
+        "stability": {
+            "stickout_in":         round(stickout, 4),
+            "l_over_d":            round(ld_ratio, 2),
+            "deflection_in":       round(deflection, 5),
+            "deflection_limit_in": 0.0005,
+            "deflection_pct":      stability_pct,
+            "stability_pct":       stability_pct,
+            "suggestions":         [],
+        },
+        "feedmill": {
+            "lead_angle_deg":    lead_angle,
+            "lead_ctf":          round(lead_ctf, 3),
+            "programmed_fpt_in": round(programmed_fpt, 6),
+            "actual_chip_in":    round(ipt_base, 6),
+            "doc_in":            round(doc_in, 4),
+            "rec_doc_in":        round(rec_doc_in, 4),
+            "max_doc_in":        round(max_doc_in, 4),
+            "ramp_angle_max_deg": round(ramp_angle_max, 1),
+            "corner_radius_in":  corner_r if corner_r > 0 else None,
+            "tips":              tips,
+        },
+        "debug": None,
+    }
+
+
 def run(payload=None):
     payload = payload or {}
 
@@ -2882,6 +3140,10 @@ def run(payload=None):
     # Route to thread milling engine
     if str(payload.get("operation", "milling")).lower() == "threadmilling":
         return run_thread_mill(payload)
+
+    # Route to feed mill engine
+    if str(payload.get("operation", "milling")).lower() == "feedmill":
+        return run_feedmill(payload)
 
     # Route to keyseat engine
     if str(payload.get("operation", "milling")).lower() == "keyseat":
@@ -3084,6 +3346,71 @@ def run(payload=None):
             data["doc_xd"] = doc_xd
     # --- end defaults ---
 
+    # ── Surfacing (3D contouring) — D_eff at contact point ────────────────────
+    _surf_d_eff        = None
+    _surf_scallop_h    = None
+    _surf_stepover_in  = None
+    _surf_stepover_pct = None
+
+    if mode == "surfacing":
+        auto_doc_woc = False  # no HEM optimizer for 3D surfacing
+        _surf_ap  = float(data.get("surfacing_ap_in")  or 0.0)
+        _surf_D   = float(data.get("diameter",  0.5))
+        _surf_R   = _surf_D / 2.0
+        _surf_cc  = (data.get("corner_condition") or "ball").lower()
+        _surf_CR  = float(data.get("corner_radius") or 0.0)
+        _input_m  = str(data.get("surfacing_input_mode") or "stepover").lower()
+
+        # Tool tilt angle (degrees from vertical / surface normal)
+        _surf_tilt_deg = float(data.get("surfacing_tilt_deg") or 0.0)
+        _surf_tilt_rad = math.radians(max(0.0, min(30.0, _surf_tilt_deg)))
+
+        # D_eff at the contact point
+        if _surf_cc == "ball":
+            if _surf_tilt_rad > 0.0001:
+                # Tilted ball nose: contact shifts away from dead zone
+                # D_eff = 2 × sqrt(R² − (R·cos(θ) − ap)²)
+                _tilt_offset = _surf_R * math.cos(_surf_tilt_rad)
+                _ap_adj = min(_surf_ap, _surf_R + _tilt_offset)  # max depth reachable
+                _inner = _surf_R**2 - (_tilt_offset - _ap_adj)**2
+                _surf_d_eff = 2.0 * math.sqrt(max(0.0, _inner))
+            else:
+                _ap_c = max(0.0001, min(_surf_ap, _surf_R))
+                _surf_d_eff = 2.0 * math.sqrt(max(0.0, 2.0 * _surf_R * _ap_c - _ap_c**2))
+        elif _surf_cc == "corner_radius" and _surf_CR > 0:
+            if _surf_ap <= _surf_CR:
+                _ap_c = max(0.0001, min(_surf_ap, _surf_CR))
+                _surf_d_eff = (_surf_D - 2.0*_surf_CR) + 2.0 * math.sqrt(max(0.0, 2.0*_surf_CR*_ap_c - _ap_c**2))
+            else:
+                _surf_d_eff = _surf_D
+        else:
+            _surf_d_eff = _surf_D
+        _surf_d_eff = min(max(0.001, _surf_d_eff), _surf_D)  # cap at full OD
+
+        # Scallop radius for cusp height formula
+        if _surf_cc == "ball":
+            _R_sc = _surf_R
+        elif _surf_cc == "corner_radius" and _surf_CR > 0 and _surf_ap <= _surf_CR:
+            _R_sc = _surf_CR
+        else:
+            _R_sc = _surf_R
+
+        # Stepover: derive from scallop target or use direct input
+        if _input_m == "scallop":
+            _sc_target = float(data.get("surfacing_scallop_in") or 0.001)
+            _surf_ae = math.sqrt(8.0 * _R_sc * _sc_target) if _R_sc > 0 else _surf_D * 0.10
+            _surf_ae = min(_surf_ae, _surf_D * 0.5)
+        else:
+            _surf_ae = float(data.get("surfacing_stepover_in") or _surf_D * 0.10)
+
+        _surf_scallop_h    = (_surf_ae**2) / (8.0 * _R_sc) if _R_sc > 0 else 0.0
+        _surf_stepover_in  = _surf_ae
+        _surf_stepover_pct = (_surf_ae / _surf_D * 100.0) if _surf_D > 0 else 0.0
+
+        # Override WOC/DOC so downstream MRR, force, deflection use surfacing geometry
+        data["woc_pct"] = (_surf_ae / _surf_D * 100.0) if _surf_D > 0 else 10.0
+        data["doc_xd"]  = (_surf_ap / _surf_D) if _surf_D > 0 and _surf_ap > 0 else 0.1
+
     if ball_finish_mode:
         auto_doc_woc = False  # no HEM optimizer / auto DOC-WOC for ball finish
 
@@ -3122,10 +3449,12 @@ def run(payload=None):
     _coating_key = str(data.get("coating") or "").strip()
     base_sfm *= _coating_sfm_factor(_coating_key, material_group)
 
-    target_rpm = (base_sfm * 3.82) / data["diameter"]
+    # Surfacing: RPM driven by D_eff at contact point, not tool OD
+    _sfm_dia = _surf_d_eff if (mode == "surfacing" and _surf_d_eff) else data["diameter"]
+    target_rpm = (base_sfm * 3.82) / _sfm_dia
     rpm_cap = data["max_rpm"] * data["rpm_util_pct"]
     rpm = min(target_rpm, rpm_cap)
-    sfm_actual = (rpm * data["diameter"]) / 3.82
+    sfm_actual = (rpm * _sfm_dia) / 3.82
     # Detect RPM-limited condition — spindle ceiling prevents reaching target SFM
     _rpm_limited = rpm < (target_rpm * 0.97)  # >3% below target = genuinely capped
     _sfm_pct_of_target = (sfm_actual / base_sfm * 100) if base_sfm > 0 else 100.0
@@ -3135,7 +3464,12 @@ def run(payload=None):
     # Apply holder runout correction: lower runout holders can exploit more of the rated IPT
     _runout_factor = HOLDER_RUNOUT_FACTOR.get(data.get("toolholder", "er_collet"), 0.92)
     ipt *= _runout_factor
-    chip_factor = chip_thinning_factor(data["woc_pct"], data["diameter"])
+    # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
+    if mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
+        _surf_ae_pct = (_surf_stepover_in / _surf_d_eff) * 100.0
+        chip_factor = chip_thinning_factor(_surf_ae_pct, _surf_d_eff)
+    else:
+        chip_factor = chip_thinning_factor(data["woc_pct"], data["diameter"])
     ipt *= chip_factor
     # HEM/trochoidal programmed chip load boost (on top of chip thinning)
     if data["mode"] in ("hem", "trochoidal"):
@@ -5004,6 +5338,10 @@ def run(payload=None):
             "recommended_stepover": _rec_so,
             "ra_actual_uin": _ra_actual,
             "ra_feed_capped": _ra_feed_capped,
+            "d_eff_in":          round(_surf_d_eff,        5) if _surf_d_eff        is not None else None,
+            "scallop_height_in": round(_surf_scallop_h,    6) if _surf_scallop_h    is not None else None,
+            "stepover_in":       round(_surf_stepover_in,  5) if _surf_stepover_in  is not None else None,
+            "stepover_pct_d":    round(_surf_stepover_pct, 2) if _surf_stepover_pct is not None else None,
             "status": feed_limiter,
             "status_hint": feed_limiter_hint,
             "risk": _cc_risk,

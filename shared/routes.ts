@@ -16,8 +16,8 @@ export const errorSchemas = {
 
 export const mentorSchemas = {
   input: z.object({
-    operation: z.enum(["milling", "drilling", "reaming", "threadmilling", "keyseat", "dovetail"]).default("milling"),
-    mode: z.enum(["hem", "traditional", "finish", "face", "slot", "trochoidal", "circ_interp", ""]).default("hem"),
+    operation: z.enum(["milling", "drilling", "reaming", "threadmilling", "keyseat", "dovetail", "feedmill"]).default("milling"),
+    mode: z.enum(["hem", "traditional", "finish", "face", "slot", "trochoidal", "circ_interp", "surfacing", ""]).default("hem"),
     material: z.string().default("steel"),
 
     tool_dia: z.number().positive().default(0.5),
@@ -35,6 +35,13 @@ export const mentorSchemas = {
     coating: z.string().default(""),
     target_ra_uin: z.number().min(0).default(0),
 
+    // Surfacing (3D contouring) specific
+    surfacing_input_mode: z.enum(["scallop", "stepover"]).default("scallop"),
+    surfacing_scallop_in: z.number().min(0).default(0),
+    surfacing_stepover_in: z.number().min(0).default(0),
+    surfacing_ap_in: z.number().min(0).default(0),
+    surfacing_tilt_deg: z.number().min(0).max(30).default(0),
+
     // Chamfer mill specific
     chamfer_series: z.enum(["CMS", "CMH"]).default("CMH"),
     chamfer_angle: z.number().min(0).max(180).default(90),
@@ -48,7 +55,7 @@ export const mentorSchemas = {
     holder_gage_length: z.number().min(0).default(0),
     holder_nose_dia: z.number().min(0).default(0),
     dual_contact: z.boolean().default(false),
-    workholding: z.enum(["rigid_fixture", "tombstone", "dovetail", "vise", "soft_jaws", "5th_axis_vise", "3_jaw_chuck", "4_jaw_chuck", "collet_chuck", "between_centers", "face_plate"]).default("vise"),
+    workholding: z.enum(["rigid_fixture", "tombstone", "dovetail", "vise", "soft_jaws", "5th_axis_vise", "3_jaw_chuck", "4_jaw_chuck", "collet_chuck", "between_centers", "face_plate", "trunnion_4th"]).default("vise"),
     coolant: z.enum(["dry", "mist", "flood", "tsc_low", "tsc_high"]).default("flood"),
 
     max_rpm: z.number().int().min(0).default(12000),
@@ -113,6 +120,10 @@ export const mentorSchemas = {
     // Dovetail-specific
     dovetail_angle: z.number().min(0).max(180).default(60),
 
+    // Feed mill-specific
+    lead_angle: z.number().min(1).max(45).default(20),
+    feedmill_doc_in: z.number().min(0).default(0),
+
     quiet: z.boolean().default(true),
     debug: z.boolean().default(false),
   }),
@@ -149,6 +160,11 @@ export const mentorSchemas = {
       recommended_stepover: z.number().nullable().optional(),
       ra_actual_uin: z.number().nullable().optional(),
       ra_feed_capped: z.boolean().optional(),
+
+      d_eff_in: z.number().nullable().optional(),
+      scallop_height_in: z.number().nullable().optional(),
+      stepover_in: z.number().nullable().optional(),
+      stepover_pct_d: z.number().nullable().optional(),
 
       status: z.string().nullable().optional(),
       status_hint: z.string().nullable().optional(),
@@ -290,6 +306,19 @@ export const mentorSchemas = {
         max_safe_doc_in: z.number(),
         aggressive: z.boolean(),
       }).nullable().optional(),
+      tips: z.array(z.string()),
+    }).nullable().optional(),
+
+    feedmill: z.object({
+      lead_angle_deg: z.number(),
+      lead_ctf: z.number(),
+      programmed_fpt_in: z.number(),
+      actual_chip_in: z.number(),
+      doc_in: z.number(),
+      rec_doc_in: z.number(),
+      max_doc_in: z.number(),
+      ramp_angle_max_deg: z.number(),
+      corner_radius_in: z.number().nullable().optional(),
       tips: z.array(z.string()),
     }).nullable().optional(),
 

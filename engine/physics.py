@@ -30,6 +30,9 @@ def get_mode_defaults(mode: str, material: str):
     elif mode == "face":
         woc = 60.0
         doc = 0.10
+    elif mode == "surfacing":
+        woc = 10.0   # overridden by surfacing preprocessing (stepover/D_eff)
+        doc = 0.10   # overridden by surfacing preprocessing (ap)
     else:
         woc = 8.0
         doc = 0.5
