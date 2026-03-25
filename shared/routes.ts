@@ -317,8 +317,12 @@ export const mentorSchemas = {
       doc_in: z.number(),
       rec_doc_in: z.number(),
       max_doc_in: z.number(),
+      woc_pct: z.number().optional(),
+      woc_in: z.number().optional(),
       ramp_angle_max_deg: z.number(),
       corner_radius_in: z.number().nullable().optional(),
+      ld_ratio: z.number().optional(),
+      ld_derated: z.boolean().optional(),
       tips: z.array(z.string()),
     }).nullable().optional(),
 

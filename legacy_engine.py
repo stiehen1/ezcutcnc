@@ -2976,27 +2976,52 @@ def run_feedmill(payload: dict) -> dict:
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
 
-    # Chip load — base IPT from standard milling table, then amplify by lead CTF
-    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D
+    # Chip load — base IPT from standard milling table × 1.15 feed mill boost,
+    # then amplify by lead CTF.
+    # The 1.15× accounts for feed mill geometry running hotter chip loads than
+    # a conventional endmill at the same diameter (shop-validated chart data).
+    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D * 1.15
     programmed_fpt = ipt_base * lead_ctf   # what gets programmed in CAM
+
+    # L/D ratio — used for long-reach derating
+    ld_ratio = stickout / D if D > 0 else 0.0
+
+    # Long-reach derating: reduce DOC and IPT when stickout is high.
+    # Feed mills are forgiving radially but axial overload increases with reach.
+    if ld_ratio > 6.0:
+        _ld_doc_factor = 0.65   # 35% DOC reduction at L/D > 6
+        _ld_ipt_factor = 0.80   # 20% IPT reduction
+    elif ld_ratio > 4.0:
+        _ld_doc_factor = 0.80   # 20% DOC reduction at L/D 4–6
+        _ld_ipt_factor = 0.90   # 10% IPT reduction
+    else:
+        _ld_doc_factor = 1.00
+        _ld_ipt_factor = 1.00
+
+    ipt_base       *= _ld_ipt_factor
+    programmed_fpt  = ipt_base * lead_ctf
 
     # Feed rate
     feed_ipm = rpm * flutes * programmed_fpt
 
-    # DOC — user-supplied or advisory default
-    # Max safe DOC for a feed mill is ≈ corner_radius × 1.5 (geometry-limited by ball contact)
-    if corner_r > 0:
-        max_doc_in  = corner_r * 1.5
-        rec_doc_in  = corner_r * 0.8   # conservative recommended starting depth
-    else:
-        max_doc_in  = D * 0.06         # fallback: 6% dia if no corner radius given
-        rec_doc_in  = D * 0.04
+    # DOC — two constraints: corner radius geometry limit + axial depth limit
+    # CR limit: max = 1.5×CR (overloads dual-radius contact zone beyond this)
+    # Axial limit: max = 0.15×D (shop-validated for solid carbide HFM)
+    # Recommended: 0.10×D or 0.8×CR, whichever is smaller
+    cr_max_doc   = corner_r * 1.5 if corner_r > 0 else D * 0.15
+    axial_max    = D * 0.15
+    max_doc_in   = min(cr_max_doc, axial_max) * _ld_doc_factor
+    rec_doc_in   = min(corner_r * 0.8 if corner_r > 0 else D * 0.10, D * 0.12) * _ld_doc_factor
+    rec_doc_in   = max(rec_doc_in, D * 0.02)   # floor: at least 2% dia
+
     doc_in = float(payload.get("feedmill_doc_in", 0.0) or 0.0)
     if doc_in <= 0:
         doc_in = rec_doc_in
 
-    # WOC — feed mills can run full width or partial; default to 50% for 3D roughing
-    woc_pct = float(payload.get("woc_pct", 50.0) or 50.0)
+    # WOC — HFM sweet spot is 6–12% of diameter. Default to 8%.
+    # Do NOT use the standard milling woc_pct (50%) — that would destroy a feed mill.
+    _woc_payload = float(payload.get("woc_pct", 0.0) or 0.0)
+    woc_pct = _woc_payload if (_woc_payload > 0 and _woc_payload <= 25.0) else 8.0
     woc_in  = (woc_pct / 100.0) * D
 
     # MRR
@@ -3026,30 +3051,35 @@ def run_feedmill(payload: dict) -> dict:
     ramp_angle_max = max(2.0, lead_angle - 3.0)
 
     # Stability — feed mills rarely deflect into chatter; flag if long reach
-    ld_ratio = stickout / D if D > 0 else 0.0
     stability_pct = round((deflection / 0.0005) * 100.0, 1)  # 0.0005" threshold for endwork
 
     # Warnings
     notes = []
-    if doc_in > max_doc_in:
+    if doc_in > max_doc_in * 1.05:   # 5% tolerance
         notes.append(
-            f"DOC ({doc_in:.4f}\") exceeds recommended max ({max_doc_in:.4f}\") for corner radius "
-            f"{corner_r:.4f}\". Reduce to avoid overloading the ball contact zone."
+            f"DOC ({doc_in:.4f}\") exceeds recommended max ({max_doc_in:.4f}\") for this tool size. "
+            f"Reduce to avoid overloading the dual-radius corner zone."
         )
     if hrc > 52:
+        # Hard derating above design limit — already baked into sfm_target via hardness_sfm_mult,
+        # but add explicit user warning
         notes.append(
             f"Material hardness ({hrc:.0f} HRC) exceeds this tool's 52 HRC design limit. "
-            "Expect significantly reduced tool life."
+            "SFM has been derated. Expect significantly shorter tool life — inspect after every pocket."
         )
     if ld_ratio > 6:
         notes.append(
-            f"L/D ratio ({ld_ratio:.1f}×) is high for a feed mill. "
-            "Keep radial entry moves slow to protect the corner geometry."
+            f"L/D ratio ({ld_ratio:.1f}×) — DOC and IPT auto-derated 35%/20% for long reach. "
+            "Use helical ramp entry and smooth constant-engagement paths."
+        )
+    elif ld_ratio > 4:
+        notes.append(
+            f"L/D ratio ({ld_ratio:.1f}×) — DOC and IPT auto-derated 20%/10% for extended reach."
         )
     if hp_util_pct > 90:
         notes.append(
-            f"HP utilization ({hp_util_pct:.0f}%) is high. "
-            "Reduce WOC or feed rate to stay within machine capacity."
+            f"HP utilization ({hp_util_pct:.0f}%) is high. Reduce WOC first, then DOC — "
+            "never reduce IPT below minimum chip thickness or you'll rub instead of cut."
         )
 
     # Tool life
@@ -3060,16 +3090,21 @@ def run_feedmill(payload: dict) -> dict:
 
     tips = [
         f"Lead angle chip thinning at {lead_angle:.0f}°: program FPT at {programmed_fpt:.5f}\" "
-        f"— actual chip on the tool is only {ipt_base:.5f}\". This is normal and correct.",
-        f"Max ramp angle: {ramp_angle_max:.0f}°. Feed mills can ramp much steeper than standard endmills "
-        "because axial forces drive into the spindle rather than bending the tool.",
-        f"Target DOC: {rec_doc_in:.4f}\" (0.8 × CR). Max: {max_doc_in:.4f}\" (1.5 × CR). "
-        "Exceeding max DOC overloads the dual-radius corner zone.",
-        "Ideal for 3D roughing, Z-level roughing, deep pocket entry, and long-reach setups. "
-        "The low DOC + high feed strategy removes material efficiently while keeping radial force low.",
-        "Run climb milling whenever possible. The positive rake geometry and light DOC makes conventional "
-        "milling entry more aggressive on the corner radius.",
+        f"— actual chip on the tool is only {ipt_base:.5f}\". This is correct. Do not reduce feed.",
+        f"WOC is your control knob. Running at {woc_pct:.0f}% ({woc_in:.4f}\"). "
+        f"Sweet spot is 6–12% of diameter. Adjust WOC first if anything goes wrong — not feed.",
+        f"Ramp angle up to {ramp_angle_max:.0f}°. Feed mills ramp far steeper than standard endmills "
+        "because axial force drives into the spindle. Use helical or ramp entry — no straight plunge.",
+        f"Target DOC: {rec_doc_in:.4f}\". Max: {max_doc_in:.4f}\". "
+        "High DOC + low WOC unlocks HFM performance. Low DOC + high WOC defeats it.",
+        "Do not use for slotting, side milling, or finishing walls. HFM lives on controlled radial "
+        "engagement + high feed — full slot engagement will break it.",
     ]
+    if _ld_doc_factor < 1.0:
+        tips.append(
+            f"Long reach detected (L/D {ld_ratio:.1f}×): parameters auto-derated. "
+            "Use adaptive/constant-engagement toolpaths and smooth corner linking — no sharp direction changes."
+        )
 
     return {
         "customer": {
@@ -3111,16 +3146,20 @@ def run_feedmill(payload: dict) -> dict:
             "suggestions":         [],
         },
         "feedmill": {
-            "lead_angle_deg":    lead_angle,
-            "lead_ctf":          round(lead_ctf, 3),
-            "programmed_fpt_in": round(programmed_fpt, 6),
-            "actual_chip_in":    round(ipt_base, 6),
-            "doc_in":            round(doc_in, 4),
-            "rec_doc_in":        round(rec_doc_in, 4),
-            "max_doc_in":        round(max_doc_in, 4),
+            "lead_angle_deg":     lead_angle,
+            "lead_ctf":           round(lead_ctf, 3),
+            "programmed_fpt_in":  round(programmed_fpt, 6),
+            "actual_chip_in":     round(ipt_base, 6),
+            "doc_in":             round(doc_in, 4),
+            "rec_doc_in":         round(rec_doc_in, 4),
+            "max_doc_in":         round(max_doc_in, 4),
+            "woc_pct":            round(woc_pct, 1),
+            "woc_in":             round(woc_in, 4),
             "ramp_angle_max_deg": round(ramp_angle_max, 1),
-            "corner_radius_in":  corner_r if corner_r > 0 else None,
-            "tips":              tips,
+            "corner_radius_in":   corner_r if corner_r > 0 else None,
+            "ld_ratio":           round(ld_ratio, 2),
+            "ld_derated":         _ld_doc_factor < 1.0,
+            "tips":               tips,
         },
         "debug": None,
     }

@@ -7703,6 +7703,11 @@ ${stabSection}
               {feedmillResult && (
                 <div className="mb-3 rounded-xl border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 space-y-3">
                   <div className="text-xs font-bold uppercase tracking-widest text-cyan-400">High-Feed Mill Details</div>
+                  {feedmillResult.ld_derated && (
+                    <div className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1">
+                      L/D {feedmillResult.ld_ratio?.toFixed(1)}× — DOC &amp; IPT auto-derated for long reach
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
                     <div>
                       <span className="text-muted-foreground">Lead Angle</span>
@@ -7719,6 +7724,10 @@ ${stabSection}
                     <div>
                       <span className="text-muted-foreground">Actual Chip</span>
                       <span className="ml-2 font-mono font-semibold text-zinc-400">{feedmillResult.actual_chip_in?.toFixed(5)}"</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">WOC</span>
+                      <span className="ml-2 font-semibold">{feedmillResult.woc_pct?.toFixed(0)}% ({feedmillResult.woc_in?.toFixed(4)}")</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">DOC per Pass</span>
@@ -7738,7 +7747,7 @@ ${stabSection}
                     </div>
                   </div>
                   <div className="pt-1 border-t border-zinc-700/50 text-[10px] text-zinc-500 leading-relaxed">
-                    Programmed FPT is {feedmillResult.lead_ctf?.toFixed(2)}× the actual chip — this is correct. The lead angle redirects cutting force axially into the spindle.
+                    Programmed FPT is {feedmillResult.lead_ctf?.toFixed(2)}× the actual chip — correct. Do not reduce feed if it sounds light; increase WOC slightly instead.
                   </div>
                   {feedmillResult.tips?.slice(0, 2).map((tip: string, i: number) => (
                     <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
