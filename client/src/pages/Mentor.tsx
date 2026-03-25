@@ -477,16 +477,23 @@ export default function Mentor() {
   }, [tbEmail, tbToken]);
 
   function applyMachineToForm(m: any) {
-    const dualContact = m.taper?.startsWith("HSK") || m.taper?.startsWith("CAPTO") || m.dual_contact;
-    const drive = m.drive_type ?? "direct";
+    // Normalize DB values — case variations ("VMC", "Direct", "cat40") would fail Zod
+    const rawTaper = typeof m.taper === "string" ? m.taper.trim() : null;
+    const rawDrive = typeof m.drive_type === "string" ? m.drive_type.trim().toLowerCase() : null;
+    const rawMachType = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
+    const validDrives = ["direct", "belt", "gear"];
+    const validMachTypes = ["vmc", "hmc", "5axis", "mill_turn", "lathe"];
+    const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
+    const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : null) ?? m.machine_type;
+    const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
     setForm(p => ({
       ...p,
       max_rpm: m.max_rpm ?? p.max_rpm,
       machine_hp: m.spindle_hp ? Number(m.spindle_hp) : p.machine_hp,
-      spindle_taper: m.taper ?? p.spindle_taper,
+      spindle_taper: rawTaper ?? p.spindle_taper,
       spindle_drive: drive as any,
       dual_contact: dualContact,
-      machine_type: m.machine_type ?? p.machine_type,
+      machine_type: machType ?? p.machine_type,
     }));
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
@@ -2522,6 +2529,7 @@ ${stabSection}
                 { op: "threadmilling", label: "Thread Milling",icon: "⌇" },
                 { op: "keyseat",       label: "Keyseat",       icon: "⊟" },
                 { op: "dovetail",      label: "Dovetail",      icon: "◇" },
+                { op: "feedmill",      label: "Feed Mill",     icon: "⌖" },
               ] as const).map(({ op, label, icon }) => {
                 const active = operation === op;
                 return (
@@ -4190,49 +4198,108 @@ ${stabSection}
           {/* ── Surfacing 3D contouring inputs (replaces WOC/DOC) ─────────────── */}
           {form.mode === "surfacing" && (
             <div className="space-y-4">
-              {/* Input mode toggle */}
+              {/* Surface Finish Goal — primary entry point */}
               <div className="space-y-1.5">
-                <FieldLabel hint="Drive by Scallop: enter target cusp height and the app computes the required stepover. Drive by Stepover: enter stepover directly and the app shows the resulting scallop height.">Surfacing Input Mode</FieldLabel>
-                <div className="flex gap-1.5">
-                  {(["scallop", "stepover"] as const).map(m => (
-                    <button key={m} type="button"
-                      onClick={() => setForm(p => ({ ...p, surfacing_input_mode: m }))}
-                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                      style={{ backgroundColor: form.surfacing_input_mode === m ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.surfacing_input_mode === m ? "#fff" : "#6366f1" }}
-                    >{m === "scallop" ? "Drive by Scallop Height" : "Drive by Stepover"}</button>
-                  ))}
+                <FieldLabel hint="Select the finish quality your print calls for. The app sets the scallop height automatically. Use Custom to enter a specific scallop height or stepover directly.">Surface Finish Goal</FieldLabel>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {([
+                    { key: "rough",      label: "Rough",       ra: "63–125 µin", scallop: 0.003  },
+                    { key: "semi",       label: "Semi-Finish", ra: "32–63 µin",  scallop: 0.001  },
+                    { key: "fine",       label: "Fine",        ra: "8–32 µin",   scallop: 0.0003 },
+                    { key: "mirror",     label: "Mirror",      ra: "<8 µin",     scallop: 0.0001 },
+                    { key: "custom",     label: "Custom",      ra: "",           scallop: 0      },
+                  ] as const).map(({ key, label, ra, scallop }) => {
+                    const active = (() => {
+                      if (key === "custom") return !["rough","semi","fine","mirror"].some(k =>
+                        k === "rough"  ? form.surfacing_scallop_in === 0.003  :
+                        k === "semi"   ? form.surfacing_scallop_in === 0.001  :
+                        k === "fine"   ? form.surfacing_scallop_in === 0.0003 :
+                                         form.surfacing_scallop_in === 0.0001
+                      );
+                      return (
+                        key === "rough"  ? form.surfacing_scallop_in === 0.003  :
+                        key === "semi"   ? form.surfacing_scallop_in === 0.001  :
+                        key === "fine"   ? form.surfacing_scallop_in === 0.0003 :
+                                          form.surfacing_scallop_in === 0.0001
+                      );
+                    })();
+                    return (
+                      <button key={key} type="button"
+                        onClick={() => {
+                          if (key !== "custom" && scallop > 0) {
+                            setForm(p => ({ ...p, surfacing_input_mode: "scallop", surfacing_scallop_in: scallop }));
+                            setSurfScallopText(scallop.toFixed(5));
+                          }
+                          // custom: just reveal the toggle below, no scallop change
+                        }}
+                        className="rounded-lg flex flex-col items-center justify-center gap-0.5 px-1 py-2 text-center border transition-all"
+                        style={{ backgroundColor: active ? "#6366f1" : "transparent", borderColor: "#6366f1", color: active ? "#fff" : "#6366f1" }}
+                      >
+                        <span className="text-[11px] font-semibold leading-tight">{label}</span>
+                        {ra && <span className="text-[9px] opacity-75 leading-tight">{ra}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 {/* Scallop or Stepover */}
                 <div className="space-y-1.5">
-                  <FieldLabel hint={form.surfacing_input_mode === "scallop"
-                    ? `Target scallop (cusp) height — ridges left between passes. 0.001in ≈ rough, 0.0005in ≈ medium, 0.0001in ≈ fine. Stepover is computed automatically.`
-                    : "Lateral distance between passes. Ball nose: stepover = sqrt(8 × R × scallop). Smaller stepover = better finish, more passes."
-                  }>{form.surfacing_input_mode === "scallop" ? "Scallop Height (in)" : "Stepover (in)"}</FieldLabel>
+                  <div className="flex items-center justify-between">
+                    <FieldLabel hint={form.surfacing_input_mode === "scallop"
+                      ? "Cusp height left between passes — the ridges the ball nose leaves on the surface. Stepover is computed from this automatically."
+                      : "Lateral distance between passes. Enter directly; scallop height is shown as a live preview."
+                    }>{form.surfacing_input_mode === "scallop" ? "Scallop Height (in)" : "Stepover (in)"}</FieldLabel>
+                    <div className="flex gap-1 mb-1">
+                      {(["scallop", "stepover"] as const).map(m => (
+                        <button key={m} type="button"
+                          onClick={() => setForm(p => ({ ...p, surfacing_input_mode: m }))}
+                          className="rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-all"
+                          style={{ backgroundColor: form.surfacing_input_mode === m ? "#52525b" : "transparent", borderColor: "#52525b", color: form.surfacing_input_mode === m ? "#fff" : "#71717a" }}
+                        >{m === "scallop" ? "Scallop" : "Stepover"}</button>
+                      ))}
+                    </div>
+                  </div>
                   {form.surfacing_input_mode === "scallop" ? (
-                    <Input type="text" inputMode="decimal" placeholder="e.g. 0.0005"
-                      className={`no-spinners ${!(form.surfacing_scallop_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-                      value={surfScallopText}
-                      onChange={e => setSurfScallopText(e.target.value)}
-                      onBlur={() => {
-                        const n = parseFloat(surfScallopText);
-                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_scallop_in: n })); setSurfScallopText(n.toFixed(5)); }
-                        else setSurfScallopText(form.surfacing_scallop_in > 0 ? form.surfacing_scallop_in.toFixed(5) : "");
-                      }}
-                    />
+                    <>
+                      <Input type="text" inputMode="decimal" placeholder="e.g. 0.0005"
+                        className={`no-spinners ${!(form.surfacing_scallop_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                        value={surfScallopText}
+                        onChange={e => setSurfScallopText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(surfScallopText);
+                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_scallop_in: n })); setSurfScallopText(n.toFixed(5)); }
+                          else setSurfScallopText(form.surfacing_scallop_in > 0 ? form.surfacing_scallop_in.toFixed(5) : "");
+                        }}
+                      />
+                      {form.surfacing_scallop_in > 0 && form.tool_dia > 0 && (() => {
+                        const R = form.tool_dia / 2;
+                        const h = form.surfacing_scallop_in;
+                        const raUin = Math.round((h * 1000000) / 4);
+                        return <div className="text-[10px] text-zinc-400 mt-0.5">≈ {raUin} µin Ra theoretical</div>;
+                      })()}
+                    </>
                   ) : (
-                    <Input type="text" inputMode="decimal" placeholder="e.g. 0.050"
-                      className={`no-spinners ${!(form.surfacing_stepover_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-                      value={surfStepoverText}
-                      onChange={e => setSurfStepoverText(e.target.value)}
-                      onBlur={() => {
-                        const n = parseFloat(surfStepoverText);
-                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_stepover_in: n })); setSurfStepoverText(n.toFixed(4)); }
-                        else setSurfStepoverText(form.surfacing_stepover_in > 0 ? form.surfacing_stepover_in.toFixed(4) : "");
-                      }}
-                    />
+                    <>
+                      <Input type="text" inputMode="decimal" placeholder="e.g. 0.050"
+                        className={`no-spinners ${!(form.surfacing_stepover_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                        value={surfStepoverText}
+                        onChange={e => setSurfStepoverText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(surfStepoverText);
+                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_stepover_in: n })); setSurfStepoverText(n.toFixed(4)); }
+                          else setSurfStepoverText(form.surfacing_stepover_in > 0 ? form.surfacing_stepover_in.toFixed(4) : "");
+                        }}
+                      />
+                      {form.surfacing_stepover_in > 0 && form.tool_dia > 0 && (() => {
+                        const R = form.tool_dia / 2;
+                        const ae = form.surfacing_stepover_in;
+                        const scallop = ae > 0 && R > 0 ? (ae * ae) / (8 * R) : 0;
+                        const raUin = scallop > 0 ? Math.round((scallop * 1000000) / 4) : 0;
+                        return raUin > 0 ? <div className="text-[10px] text-zinc-400 mt-0.5">≈ {scallop.toFixed(5)}" scallop / {raUin} µin Ra</div> : null;
+                      })()}
+                    </>
                   )}
                 </div>
 
@@ -4352,8 +4419,8 @@ ${stabSection}
           {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
-                <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC</FieldLabel>
-                {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (
+                <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
+                {WOC_PRESETS[form.mode] && (
                   <button
                     type="button"
                     className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
@@ -4562,8 +4629,8 @@ ${stabSection}
                 </div>
               ) : (<>
               <div className="flex items-center justify-between">
-                <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC</FieldLabel>
-                {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (
+                <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC <span className="font-normal text-zinc-500">(Axial)</span></FieldLabel>
+                {DOC_PRESETS[form.mode] && (
                   <button
                     type="button"
                     className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
@@ -8770,8 +8837,14 @@ ${stabSection}
       {/* MACHINING STABILITY INDEX */}
       {stabilityIndex && (() => {
         const si = stabilityIndex.overall;
-        const siLabel = si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 50 ? "Moderate" : si >= 35 ? "Caution" : "High Risk";
-        const siColor = si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-red-400";
+        const deflPct = stability?.deflection_pct ?? 0;
+        // Deflection overrides the composite label — never show "Moderate" when chatter risk is high
+        const siLabel = deflPct >= 175 ? "High Chatter Risk"
+          : deflPct >= 100 ? "Chatter Risk"
+          : si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 50 ? "Moderate" : si >= 35 ? "Caution" : "High Risk";
+        const siColor = deflPct >= 175 ? "text-red-400"
+          : deflPct >= 100 ? "text-amber-400"
+          : si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-red-400";
         return (
         <Card className="rounded-none border-0 border-b border-amber-500/20">
           <CardContent className="pt-4 pb-3">
@@ -8798,34 +8871,34 @@ ${stabSection}
                   const minCt   = (result?.customer?.fpt ?? 0) * 0.30;
 
                   const deflResult = deflPct != null
-                    ? deflPct < 100  ? `✓ Deflection is within safe zone (${deflPct.toFixed(0)}% of limit).`
-                    : deflPct < 175  ? `⚠ Deflection exceeds safe limit (${deflPct.toFixed(0)}% of limit) — reduce stickout.`
-                    :                  `⚠ Significant over-deflection (${deflPct.toFixed(0)}% of limit) — adjust setup.`
+                    ? deflPct < 100  ? `✓ Tool flex is good — well within the safe zone.`
+                    : deflPct < 175  ? `⚠ Tool is flexing ${(deflPct/100).toFixed(1)}× what it should. Shorten stickout first.`
+                    :                  `⚠ Tool is flexing ${(deflPct/100).toFixed(1)}× too much — chatter and breakage risk. Shorten stickout before running.`
                     : null;
 
                   const loadResult = loadPct != null
-                    ? loadPct < 50   ? `✓ Light load — ${loadPct.toFixed(0)}% of available HP. Plenty of headroom.`
-                    : loadPct < 80   ? `✓ Moderate load — ${loadPct.toFixed(0)}% of available HP.`
-                    : loadPct < 100  ? `⚠ High load — ${loadPct.toFixed(0)}% of available HP. Monitor for stall.`
-                    :                  `⚠ Over limit — ${loadPct.toFixed(0)}% of available HP. Reduce feedrate.`
+                    ? loadPct < 50   ? `✓ Light power draw — ${loadPct.toFixed(0)}% of available HP. Plenty of headroom.`
+                    : loadPct < 80   ? `✓ Normal power draw — ${loadPct.toFixed(0)}% of available HP.`
+                    : loadPct < 100  ? `⚠ Heavy power draw — ${loadPct.toFixed(0)}% of HP. Watch for spindle stall.`
+                    :                  `⚠ Over the machine's limit — reduce feed rate.`
                     : null;
 
                   const chipResult = ct != null
-                    ? ct >= minCt    ? `✓ Chip thickness ${ct.toFixed(5)}" — tool is cutting cleanly.`
-                    :                  `⚠ Chip thickness ${ct.toFixed(5)}" is near rubbing threshold (min ~${minCt.toFixed(5)}") — consider increasing feed.`
+                    ? ct >= minCt    ? `✓ Tool is cutting cleanly — chip thickness is healthy.`
+                    :                  `⚠ Chip is very thin — tool may be rubbing instead of cutting. Try increasing feed.`
                     : null;
 
                   const ldResult = ld != null
-                    ? ld <= 3        ? `✓ L/D is ${ld.toFixed(1)}× — excellent rigidity.`
-                    : ld <= 5        ? `⚠ L/D is ${ld.toFixed(1)}× — moderate vibration risk. Reduce stickout if possible.`
-                    :                  `⚠ L/D is ${ld.toFixed(1)}× — high chatter risk. Reduce stickout.`
+                    ? ld <= 3        ? `✓ Stickout is ${ld.toFixed(1)}× the tool diameter — very stiff, no vibration concern.`
+                    : ld <= 5        ? `⚠ Stickout is ${ld.toFixed(1)}× the tool diameter — watch for chatter. Shorten if possible.`
+                    :                  `⚠ Stickout is ${ld.toFixed(1)}× the tool diameter — too long for reliable cutting. Shorten stickout.`
                     : null;
 
                   return ([
-                    ["Defl Score",   stabilityIndex.defl, "Tool deflection score (higher = better). 100 = well within safe limit; 0 = deflection at or beyond safe limit — chatter very likely. See '% of safe limit' below for the raw deflection figure.",     deflResult],
-                    ["Mach Load",    stabilityIndex.load, "Spindle power usage vs. available HP. 100 = very light load; drops as HP required approaches machine limit. Only shown when Machine HP is entered.", loadResult],
-                    ["Chip Quality", stabilityIndex.chip, "Chip thickness relative to the minimum needed to cut cleanly (~30% of chipload). Too thin = rubbing instead of cutting, which accelerates wear and heat.", null],
-                    ["L/D Ratio",    stabilityIndex.ld,   "Length-to-diameter ratio of tool stickout. Below 3× is ideal; above 5× introduces significant vibration risk. Shorter is always stiffer.", ldResult],
+                    ["Tool Flex",     stabilityIndex.defl, "How much the tool tip flexes under cutting force. High flex causes chatter, poor surface finish, and tool breakage. The single biggest fix is always shortening stickout.", deflResult],
+                    ["Spindle Load",  stabilityIndex.load, "How hard the spindle is working compared to what it has available. Under 80% is comfortable. Above 100% the machine will struggle or stall. Only shown when machine HP is entered.", loadResult],
+                    ["Chip Health",   stabilityIndex.chip, "Is the tool actually cutting or rubbing? A chip that's too thin means the tool is skating across the surface instead of shearing material — generates heat and kills the edge fast. Increase feed rate if this is low.", chipResult],
+                    ["Reach",         stabilityIndex.ld,   "Stickout length compared to tool diameter. Under 3× is stiff and predictable. Over 5× and you're fighting the tool. Shorter stickout is the most effective single change you can make.", ldResult],
                   ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
                   <div key={label} className="flex items-center gap-2">
                     <TooltipProvider delayDuration={200}>
@@ -8860,7 +8933,7 @@ ${stabSection}
                 })()}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">Machining Stability Index — composite of deflection, spindle load, chip quality, and L/D ratio</p>
+            <p className="text-[10px] text-muted-foreground mt-2">Setup Score — how ready this setup is to cut well. Based on tool flex, spindle load, chip thickness, and stickout reach. Tap any label for details.</p>
           </CardContent>
         </Card>
         );
@@ -8879,7 +8952,7 @@ ${stabSection}
             const verdict =
               pct >= 175 ? "High Chatter Risk" :
               pct >= 100 ? "Chatter Risk" :
-                           "Setup Looks Stable";
+                           "Setup Looks Good";
 
             const verdictColor =
               isRed    ? "text-red-400" :
@@ -8888,10 +8961,10 @@ ${stabSection}
 
             const explanation =
               pct >= 175
-                ? "Deflection is significantly over the safe limit — chatter, vibration, and poor surface finish are likely. Review the suggestions below and adjust setup before running."
+                ? "The tool is flexing too much for this setup — chatter, vibration, and rough surface finish are likely. Don't run this as-is. Follow the suggestions below to fix it."
                 : pct >= 100
-                ? "Deflection exceeds the safe limit. The setup may run with careful monitoring, but expect some vibration and reduced surface finish or tool life. Review suggestions below."
-                : "Deflection is within the safe zone. This setup should produce good surface finish and tool life.";
+                ? "Tool flex is above the safe zone. It may cut, but expect some chatter or rough finish. Review the suggestions below before you run."
+                : "This setup looks solid. Tool flex is in the safe zone — good surface finish and tool life expected.";
 
             // First suggestion that is an actual action (not info/lbs)
             const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info");
@@ -8900,7 +8973,7 @@ ${stabSection}
               <Card className="rounded-none border-0">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base leading-tight">Rigidity & Chatter Audit</CardTitle>
+                    <CardTitle className="text-base leading-tight">Chatter & Vibration Check</CardTitle>
                     <span className={`text-sm font-semibold whitespace-nowrap ${verdictColor}`}>
                       {verdict}
                     </span>
@@ -8917,11 +8990,12 @@ ${stabSection}
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>
                       Stickout <span className="font-medium text-foreground">{UC(stability.stickout_in, 25.4, metric ? 1 : 2)}{metric ? "mm" : "\""}</span>
-                      {" · "}L/D <span className="font-medium text-foreground">{fmtNum(stability.l_over_d, 1)}</span>
-                      <span className="ml-1 text-muted-foreground/60">(length-to-diameter ratio)</span>
+                      {" · "}Reach <span className="font-medium text-foreground">{fmtNum(stability.l_over_d, 1)}× tool diameter</span>
                     </span>
                     <span className={`font-medium ${verdictColor}`}>
-                      {fmtNum(pct, 0)}% of safe limit
+                      {pct < 100
+                        ? `${fmtNum(pct, 0)}% of flex limit`
+                        : `flexing ${(pct / 100).toFixed(1)}× the safe limit`}
                     </span>
                   </div>
 
@@ -8944,7 +9018,7 @@ ${stabSection}
                             {actionItems.length > 0 && (
                               <>
                                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">
-                                  Possible Improvements
+                                  What You Can Do
                                 </div>
                                 <ul className="space-y-2">
                                   {actionItems.map((s: any, idx: number) => {

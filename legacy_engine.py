@@ -4630,6 +4630,8 @@ def run(payload=None):
         else:
             print("Finish Class (predicted from scallop+feed): Rough")
 
+    required_stepover = 0.0
+    required_pct = 0.0
     if "target_scallop" in data:
         target_h = data["target_scallop"]
         R = data["diameter"] / 2
@@ -4641,7 +4643,7 @@ def run(payload=None):
     if "suggested_stepover" in state:
         allowed_stepover = state["suggested_stepover"]
 
-        if required_stepover > allowed_stepover:
+        if required_stepover > 0 and required_stepover > allowed_stepover:
             print("⚠ Target finish stepover exceeds deflection limit")
             print(f"⚠ Max allowable stepover at current feed: {allowed_stepover:.4f} in")
             current_feed = state.get("feed", 0)

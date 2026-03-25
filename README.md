@@ -148,8 +148,18 @@ Series CMS (2/4 flute) and CMH (3/5 flute, 30° shear angle).
 - Helix angle and coating recommendations by material
 - Depth-to-diameter rating (ok / caution / warning)
 
-### 5. Feed Milling
-High-feed mill specific physics (chip thinning from lead angle, axial force component).
+### 5. Feed Milling (High-Feed Mill)
+Solid carbide high-feed mill physics for Core Cutter specials. Lead angle 20°, dual-radius geometry, 4 and 5 flute, ≤52 HRC rated.
+
+- **Lead angle chip thinning (CTF):** `programmed_FPT = actual_chip / sin(lead_angle)`. At 20°: CTF = 2.924×. Programmed FPT is always shown alongside actual chip thickness so the machinist knows what's really happening at the edge.
+- **WOC default:** 8% of diameter (sweet spot 6–12%). Engine rejects user WOC > 25% — silently floors to 8%.
+- **Dual-radius DOC constraint:** `max_doc = min(CR × 1.5, D × 0.15)`. Both the corner radius geometric limit and axial depth limit are enforced.
+- **L/D derating:** L/D > 4 → DOC −20% / IPT −10%; L/D > 6 → DOC −35% / IPT −20%. Derate badge shown in results.
+- **Axial-dominant force model:** `radial_frac = 0.15` (vs 0.30 for standard milling) — lead angle redirects force into the spindle.
+- **Ramp angle limit:** `arctan(max_doc / (π × D))` — shown in results for CAM setup.
+- **Coating pairing:** T-Max for ferrous (steel, stainless, HRSA); D-Max (DLC) for aluminum and non-ferrous.
+- **Pro Tips panel:** Full "High-Feed Mill Advisor" — 7 sections covering chip thinning philosophy, WOC control, entry strategy, corner engagement, L/D behavior, and how to read results.
+- **Machining Tips & Tricks accordion:** 11 shop-floor tips + starting parameters table by material (Steel, Stainless, Titanium, Inconel, Cast Iron, Aluminum).
 
 ### 6. Threadmilling
 - UN (UNC/UNF/UNEF), Metric, NPT, NPTF thread standards
@@ -176,7 +186,9 @@ High-feed mill specific physics (chip thinning from lead angle, axial force comp
 ### 9. 3D Surface Contouring (Ball Nose / Bull Nose)
 For finishing complex 3D surfaces and contoured profiles with ball nose or bull nose endmills.
 
-- **Input mode:** Drive by scallop height (enter target cusp height, stepover computed automatically) or drive by stepover (enter stepover directly, scallop height shown as output)
+- **Surface Finish Goal presets** — primary entry point: Rough (63–125 µin Ra), Semi-Finish (32–63 µin), Fine (8–32 µin), Mirror (<8 µin), Custom. Selecting a preset auto-fills the scallop height. Custom reveals the scallop/stepover toggle directly.
+- **Live Ra preview** — both scallop and stepover fields show a real-time theoretical Ra estimate as you type, so machinists can relate the input to a print callout without running the full calc.
+- **Input mode (secondary):** Drive by scallop height (enter target cusp height, stepover computed automatically) or drive by stepover (enter stepover directly, scallop height shown). Accessible via small toggle in the field header.
 - **D_eff at contact point** — RPM and SFM are calculated at the effective cutting diameter, not the tool OD:
   - Ball nose: `D_eff = 2√(2R·ap − ap²)`
   - Bull nose (ap ≤ CR): `D_eff = (D − 2·CR) + 2√(2·CR·ap − ap²)`
@@ -197,9 +209,11 @@ Defined in `shared/routes.ts` using Zod. The full `MentorInput` and `MentorRespo
 
 | Field | Type | Description |
 |---|---|---|
-| `operation` | enum | `milling`, `drilling`, `reaming`, `threadmilling`, `keyseat`, `dovetail` |
+| `operation` | enum | `milling`, `drilling`, `reaming`, `threadmilling`, `keyseat`, `dovetail`, `feedmill` |
 | `mode` | enum | `hem`, `traditional`, `finish`, `face`, `slot`, `trochoidal`, `circ_interp`, `surfacing` |
-| `surfacing_input_mode` | enum | `scallop`, `stepover` — drives whether scallop height or stepover is the primary input |
+| `lead_angle` | number | Feed mill lead angle in degrees (default 20°). Drives chip thinning factor (CTF). |
+| `feedmill_doc_in` | number | Feed mill axial DOC per pass in inches (0 = auto from dual-radius constraint) |
+| `surfacing_input_mode` | enum | `scallop`, `stepover` — secondary control; Surface Finish Goal presets are the primary UI |
 | `surfacing_scallop_in` | number | Target scallop (cusp) height in inches — stepover computed automatically |
 | `surfacing_stepover_in` | number | Lateral stepover between passes in inches |
 | `surfacing_ap_in` | number | Axial step-down (ap) per pass in inches |
@@ -241,6 +255,7 @@ The response is split into logical sections:
 - **`thread_mill`** — pitch, passes, G-code, deflection check
 - **`keyseat`** — DOC, multi-pass plan, tips
 - **`dovetail`** — angle, DOC, multi-pass plan, lead CTF
+- **`feedmill`** — lead_angle_deg, lead_ctf, programmed_fpt_in, actual_chip_in, doc_in, rec_doc_in, max_doc_in, woc_pct, woc_in, ramp_angle_max_deg, ld_ratio, ld_derated, tips[]
 - **`entry_moves`** — ramp/helix entry parameters, sweep arc, straight entry IPM
 
 ---
@@ -480,9 +495,31 @@ MRR = feed × depth × woc × 0.5          -- triangular cross-section
 
 ## Stability Advisor
 
-When `deflection > limit`, suggestions are presented in this order:
+The stability section is split into two cards displayed below the main results:
 
-1. **Reduce stickout** — minimum = LOC + flute_wash + 15% dia
+### Setup Score card
+Composite score (0–100) with four sub-scores. **Deflection overrides the label** — if deflection is ≥ 100% of the safe limit, the top label always reflects that regardless of the composite score (prevents "Moderate" showing alongside "High Chatter Risk").
+
+| Sub-score label | What it measures |
+|---|---|
+| **Tool Flex** | How much the tool tip flexes under cutting force (was "Defl Score") |
+| **Spindle Load** | Power draw vs. available HP (was "Mach Load") |
+| **Chip Health** | Whether the tool is cutting or rubbing — chip thickness vs. minimum (was "Chip Quality") |
+| **Reach** | Stickout relative to tool diameter — shorter is always stiffer (was "L/D Ratio") |
+
+Score label priority: deflection ≥ 175% → **High Chatter Risk** (red); ≥ 100% → **Chatter Risk** (amber); otherwise composite-driven (Excellent / Good / Moderate / Caution / High Risk).
+
+### Chatter & Vibration Check card (was "Rigidity & Chatter Audit")
+Plain-language verdict + "What You Can Do" suggestions. Uses machinist-facing language throughout:
+
+- "260% of safe limit" → **"flexing 2.6× the safe limit"**
+- "L/D 3.1 (length-to-diameter ratio)" → **"Reach: 3.1× tool diameter"**
+- "Setup Looks Stable" → **"Setup Looks Good"**
+- "Possible Improvements" → **"What You Can Do"**
+
+**Suggestion order when deflection > limit:**
+
+1. **Shorten stickout** — minimum = LOC + flute_wash + 15% dia
 2. **Upgrade toolholder** — next step up in rigidity hierarchy
 3. **Dual contact FYI** — info note (dimmed); fires only for CAT/BT tapers when dual_contact=False
 4. **Reduced-neck tool** — composite beam deflection model
@@ -492,13 +529,13 @@ When `deflection > limit`, suggestions are presented in this order:
 8. **Increase flute count** — next 1–2 steps; skipped when gain < 6%
 9. **Increase tool diameter**
 
-**Chatter thresholds (Mentor.tsx):**
+**Chatter thresholds:**
 
-| Deflection % | Status |
-|---|---|
-| < 100% | Setup Looks Stable (green) |
-| 100–175% | Chatter Risk (amber) |
-| ≥ 175% | High Chatter Risk (red) |
+| Deflection | Status | Color |
+|---|---|---|
+| < 100% of limit | Setup Looks Good | Green |
+| 100–175% of limit | Chatter Risk | Amber |
+| ≥ 175% of limit | High Chatter Risk | Red |
 
 All messages are advisory — no "do not run" language.
 
