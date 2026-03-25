@@ -972,6 +972,10 @@ export default function Mentor() {
   const [lbsText, setLbsText] = React.useState("");
   const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
   const [machiningTipsOpen, setMachiningTipsOpen] = React.useState(false);
+  const [stepReqOpen, setStepReqOpen] = React.useState(false);
+  const [stepReqEmail, setStepReqEmail] = React.useState("");
+  const [stepReqSent, setStepReqSent] = React.useState(false);
+  const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
   React.useEffect(() => {
     setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
@@ -2872,6 +2876,42 @@ ${stabSection}
                     {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
                   </span>
                   <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                  {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
                 </label>
               )}
             </div>
@@ -3315,6 +3355,42 @@ ${stabSection}
                   {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
                 </span>
                 <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
               </label>
             </div>
           )}
@@ -3612,6 +3688,42 @@ ${stabSection}
                   {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
                 </span>
                 <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
               </label>
             )}
           </div>
@@ -4772,6 +4884,42 @@ ${stabSection}
                   {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
                 </span>
                 <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
               </label>
             )}
           </div>
@@ -4879,6 +5027,42 @@ ${stabSection}
                     {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
                   </span>
                   <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                  {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
                 </label>
               )}
             </div>

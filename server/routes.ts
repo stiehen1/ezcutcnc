@@ -1512,6 +1512,47 @@ export async function registerRoutes(
     }
   });
 
+  // ── STEP File Request ────────────────────────────────────────────────────
+  app.post("/api/step-request", async (req, res) => {
+    try {
+      const { email, tool_number } = (req.body ?? {}) as { email?: string; tool_number?: string };
+      if (!email?.trim()) return res.status(400).json({ error: "Email required." });
+
+      // Log to leads table
+      try {
+        const { pool } = await import("./db");
+        await pool.query(
+          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
+          [email.toLowerCase().trim(), "step_request", null, tool_number?.trim() || null, "STEP file request"]
+        );
+      } catch (dbErr: any) {
+        console.warn("[StepRequest] DB insert failed:", dbErr?.message);
+      }
+
+      // Email notification
+      const smtpUser = process.env.SMTP_USER || "";
+      const smtpPass = process.env.SMTP_PASS || "";
+      const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+      if (smtpUser && smtpPass) {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({
+          from: `"CoreCutCNC" <${smtpUser}>`,
+          to: "scott@corecutterusa.com",
+          subject: `STEP file request — ${tool_number || "unknown tool"}`,
+          text: `STEP file requested by: ${email}\nTool number: ${tool_number || "not specified"}\n\nSend the .STEP file to: ${email}`,
+        });
+      }
+
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: "Failed to submit request." });
+    }
+  });
+
   // ── Beta Feedback / Newsletter Signup ────────────────────────────────────
   app.post("/api/newsletter-signup", async (req, res) => {
     try {
