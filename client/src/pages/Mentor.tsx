@@ -5674,15 +5674,67 @@ ${stabSection}
                 </button>
                 {machiningTipsOpen && (
                   <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                    <div><span className="font-semibold text-white">The lead angle is everything.</span> At 20°, the programmed FPT is 2.92× the actual chip on the tool. This is not a mistake — program the high number. The lead angle redirects force axially into the spindle, not radially into the tool.</div>
-                    <div><span className="font-semibold text-white">Keep DOC shallow.</span> Target 0.8× corner radius per pass. Max 1.5× CR before you overload the dual-radius contact zone. Exceeding this is the primary cause of corner chipping on high-feed tools.</div>
-                    <div><span className="font-semibold text-white">Ramp angle up to {form.lead_angle > 0 ? Math.max(2, form.lead_angle - 3).toFixed(0) : 17}°.</span> Feed mills can ramp much steeper than standard endmills — use this for deep pocket entry. Z-level ramping is the preferred strategy for tight pockets with long reach.</div>
-                    <div><span className="font-semibold text-white">Designed for long reach.</span> The axial force model keeps radial load low even with extended gage lengths. Use the stickout advisory — deflection is rarely the issue, but HP draw at high feeds can be.</div>
-                    <div><span className="font-semibold text-white">WOC flexibility.</span> Can run full diameter width or step over at 50–75% D for 3D roughing. Reduce WOC (not DOC) if spindle load is the constraint — MRR drop is proportional.</div>
-                    <div><span className="font-semibold text-white">Chip evacuation matters.</span> High feeds at shallow DOC generate a flood of thin chips. Flood coolant aimed at the insert helps. In deep pockets, through-spindle coolant or air blast prevents chip re-cutting.</div>
-                    <div><span className="font-semibold text-white">Climb mill only.</span> Positive rake geometry is unforgiving on conventional entry — corners chip on the exit. Use smooth entry arcs where possible.</div>
-                    <div><span className="font-semibold text-white">Hardness limit: 52 HRC.</span> Above this, expect rapid corner wear. Consider swapping to a CBN-coated or ceramic solution for ≥55 HRC.</div>
-                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Corner chipping = DOC too deep. Premature wear = SFM too high or wrong coating. Chip packing in pocket = add air assist. Vibration at entry = reduce ramp angle or use roll-in arc.</div>
+
+                    <div><span className="font-semibold text-white">This is a chip thinning machine — not a conventional rougher.</span> The lead angle creates extreme radial chip thinning. You MUST run high IPT. If it sounds smooth and light, you're rubbing. If it feels aggressive, you're in the right zone. Babying a high-feed tool kills it faster than running it hard.</div>
+
+                    <div><span className="font-semibold text-white">WOC is your #1 control knob.</span> Target 6–12% of diameter. Sweet spot is 8–10%. This is what enables the high feed rate — low engagement angle = thin chip = high IPT. If something goes wrong, adjust WOC first, DOC second, then feed. Never kill feed as your first move.</div>
+
+                    <div><span className="font-semibold text-white">DOC goes deeper than you think.</span> Unlike traditional roughing, HFM trades radial engagement for axial engagement. Typical DOC: 0.5–1.5×D. Some setups push 2×D. This is the opposite of conventional logic — embrace it.</div>
+
+                    <div><span className="font-semibold text-white">Lead angle redirects forces axially.</span> The low entering angle (~20°) thins the chip, pushes cutting force into the spindle (not radially into the tool), and reduces deflection. This is why HFM excels on long-reach setups and less rigid machines — forces go where the machine is strongest.</div>
+
+                    <div><span className="font-semibold text-white">Radial engagement spikes in corners will break tools.</span> Your programmed WOC may be 8%, but in a corner it can spike to 30–60%. That's where tools fail. Use constant engagement toolpaths (adaptive/HEM-style), add corner smoothing, and avoid sharp direction changes. Toolpath quality matters more than parameters.</div>
+
+                    <div><span className="font-semibold text-white">Entry strategy is non-negotiable.</span> Never straight plunge unless the tool is specifically designed for it. Use helical ramp (2–3° angle), ramp entry, or a pre-drilled entry hole for deep cuts. Bad entry = instant corner wear on the first pass.</div>
+
+                    <div><span className="font-semibold text-white">Know what it's NOT for.</span> No slotting. No heavy side cutting. No finishing walls. No tight internal corners. No thin walls. HFM is for controlled radial engagement + high-feed material removal — period. Using it like an endmill destroys it.</div>
+
+                    <div><span className="font-semibold text-white">Chip shape tells you everything.</span> Short, slightly curved, consistent chips = perfect. Dust = rubbing (increase IPT). Long strings = WOC too high. Blue or burnt chips = heat problem (feed too low or coolant issue). Trust chip shape over machine sound.</div>
+
+                    <div><span className="font-semibold text-white">Coolant-through is a game changer.</span> Especially in stainless, titanium, Inconel, and deep pockets. Strong flood is the minimum. Through-spindle coolant dramatically improves chip evacuation and extends tool life. If your machine has it, use it.</div>
+
+                    <div><span className="font-semibold text-white">Tilt the tool 5–10° if you have 3+2 or 5-axis.</span> Eliminates the center dead zone, improves chip thickness consistency, and dramatically extends tool life. Most programmers miss this. It's one of the highest-value adjustments you can make.</div>
+
+                    <div><span className="font-semibold text-white">Hardness limit: 52 HRC.</span> This tool is designed for ≤52 HRC. Above that, expect rapid corner wear. Pair with T-Max coating for ferrous materials (mold steel, stainless, HRSA) or D-Max (DLC) for aluminum and non-ferrous.</div>
+
+                    {/* Starting parameters reference */}
+                    <div className="pt-2 border-t border-zinc-700">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-2">Starting Parameters by Material (4-flute, 8% WOC, rigid setup)</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[10px] text-zinc-400 border-collapse">
+                          <thead>
+                            <tr className="border-b border-zinc-700 text-zinc-500">
+                              <th className="text-left py-1 pr-3">Material</th>
+                              <th className="text-right pr-3">SFM</th>
+                              <th className="text-right pr-3">IPT</th>
+                              <th className="text-right pr-3">WOC</th>
+                              <th className="text-right">DOC</th>
+                            </tr>
+                          </thead>
+                          <tbody className="space-y-1">
+                            {[
+                              { mat: "Steel (4140/P20)",    sfm: "325–350", ipt: "0.009–0.011", woc: "8%D",  doc: "0.5–0.7×D" },
+                              { mat: "Stainless (304/316)", sfm: "220–240", ipt: "0.0075–0.009", woc: "8%D", doc: "0.4–0.6×D" },
+                              { mat: "Titanium (Ti-6Al-4V)",sfm: "160–170", ipt: "0.006–0.007",  woc: "6–8%D",doc: "0.4–0.6×D" },
+                              { mat: "Inconel / HRSA",      sfm: "110–120", ipt: "0.0045–0.006", woc: "5–8%D",doc: "0.3–0.5×D" },
+                              { mat: "Cast Iron",           sfm: "300–330", ipt: "0.0085–0.011", woc: "8%D",  doc: "0.5–0.8×D" },
+                              { mat: "Aluminum",            sfm: "800–900", ipt: "0.012–0.016",  woc: "8–10%D",doc:"0.6–1.0×D" },
+                            ].map((r, i) => (
+                              <tr key={i} className="border-b border-zinc-800/50">
+                                <td className="py-1 pr-3 text-zinc-300">{r.mat}</td>
+                                <td className="text-right pr-3">{r.sfm}</td>
+                                <td className="text-right pr-3 font-mono">{r.ipt}</td>
+                                <td className="text-right pr-3">{r.woc}</td>
+                                <td className="text-right">{r.doc}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="text-[10px] text-zinc-600 mt-1.5">Scale IPT with diameter: larger tools → higher IPT. Reduce DOC 20–35% for long reach. Reduce IPT 10–15% for stainless/titanium as tool wears.</div>
+                    </div>
+
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Bottom line:</span> Low WOC + high feed + moderate DOC + constant engagement path = insane MRR with stable cutting. If you remember one thing: WOC is the lever — adjust it before anything else.</div>
                   </div>
                 )}
               </div>
