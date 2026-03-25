@@ -2,7 +2,9 @@
 
 A full-stack machining advisor for CNC shops. Calculates speeds, feeds, depths of cut, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, and threadmilling. Deployed at [corecutcnc.com](https://corecutcnc.com).
 
-Two access modes: **Customer mode** (requires an EDP# or Core Cutter print PDF) and **Engineering mode** (unrestricted parameter input).
+Two access modes: **Customer mode** (requires an EDP# or Core Cutter print PDF) and **Engineering mode** (password-gated, unrestricted parameter input).
+
+Each operation includes a **Pro Tips panel** (how to use the app) and a collapsible **Machining Tips & Tricks accordion** (shop-floor best practices per operation type).
 
 ---
 
@@ -154,16 +156,20 @@ High-feed mill specific physics (chip thinning from lead angle, axial force comp
 - Spring pass recommendation
 - G-code output (Fanuc and Siemens dialects)
 - Deflection check at thread mill tool
+- Auto cut direction (top-down/bottom-up) based on material and hole type — user can override
+- Thread Details section shown before Tool Geometry (define thread requirement first)
 
 ### 7. Keyseat Milling
-- Arbor diameter input
-- Multi-pass DOC strategy
-- Chip room / engagement guidance
+- Arbor/neck diameter input for two-segment deflection model
+- Multi-pass axial depth strategy (pass-by-pass plan to Final Slot Depth)
+- Full-slot force model (no chip thinning, 180° engagement)
+- Cut Pass Depth + Final Slot Depth — required user inputs, pulse yellow when empty
 
 ### 8. Dovetail Milling
-- Dovetail angle input
-- Lead cutting force factor (CTF)
-- Multi-pass DOC strategy
+- Dovetail angle input — effective cutting diameter adjusted for angled engagement
+- Lateral-entry-only model (no plunge; neck narrower than cutting head)
+- Radial Pass Depth + Final Wall Depth — correct terminology for lateral engagement
+- Multi-pass radial wall strategy
 
 ---
 
@@ -586,6 +592,8 @@ Database tables: `toolbox_sessions` (email, token, OTP), `toolbox_items` (saved 
 |---|---|
 | `DATABASE_URL` | Neon PostgreSQL connection string |
 | `ADMIN_PASSWORD` | Admin panel access password |
+| `ENG_PASSWORD` | Engineering mode password |
+| `ANTHROPIC_API_KEY` | Claude Vision API key for CC print PDF extraction |
 | `PYTHONIOENCODING` | Set to `utf-8` — required for Windows cp1252 compatibility |
 | SMTP credentials | For OTP email delivery (nodemailer) |
 

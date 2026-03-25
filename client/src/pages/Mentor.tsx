@@ -816,6 +816,7 @@ export default function Mentor() {
 
   // ── Sync active operation to localStorage for context-aware Help tab ──────
   React.useEffect(() => { localStorage.setItem("cc_operation", operation); }, [operation]);
+  React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
 
   // ── Restore form from Toolbox "Re-run this setup" ────────────────────────
   React.useEffect(() => {
@@ -970,7 +971,11 @@ export default function Mentor() {
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
   const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
+  const [machiningTipsOpen, setMachiningTipsOpen] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
+  React.useEffect(() => {
+    setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
+  }, [form.tool_type]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
@@ -979,6 +984,7 @@ export default function Mentor() {
   const [drillHoleDepthText, setDrillHoleDepthText] = React.useState("");
   const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
   const [stepLenTexts, setStepLenTexts] = React.useState<string[]>([]);
+  const [reamStepDiaText, setReamStepDiaText] = React.useState("");
   const [raText, setRaText] = React.useState("");
   const [chamferTipDiaText, setChamferTipDiaText] = React.useState("");
   const [chamferDepthText, setChamferDepthText] = React.useState("");
@@ -986,7 +992,8 @@ export default function Mentor() {
   const [tmTpiText, setTmTpiText] = React.useState("");
   const [tmPitchMmText, setTmPitchMmText] = React.useState("");
   const [tmEngText, setTmEngText] = React.useState("");
-  // Reaming mode
+  // Drilling / Reaming mode
+  const [drillMode, setDrillMode] = React.useState<"print" | "manual">("print");
   const [reamMode, setReamMode] = React.useState<"print" | "known">("print");
   const [reamTolClass, setReamTolClass] = React.useState<"H6" | "H7" | "H8">("H7");
   const [reamFinishedDiaText, setReamFinishedDiaText] = React.useState("");
@@ -2713,7 +2720,7 @@ ${stabSection}
             <div className="space-y-2">
               <FieldLabel hint={form.drill_steps > 0 ? `How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. For step drills, this must be greater than the last step length (${(Math.max(...form.drill_step_lengths.slice(0, form.drill_steps).filter(l => l > 0)) || 0).toFixed(3)}") so all diameters fully engage. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle.` : "How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle."}>Hole Depth (in)</FieldLabel>
               <Input
-                type="text" inputMode="decimal" className="no-spinners"
+                type="text" inputMode="decimal" className={`no-spinners ${!(form.drill_hole_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                 placeholder="e.g. 1.25"
                 value={drillHoleDepthText}
                 onChange={(e) => setDrillHoleDepthText(e.target.value)}
@@ -2753,6 +2760,19 @@ ${stabSection}
               </div>
             </div>
           </div>
+
+          {/* Feed Safety Factor — auto-applied based on depth and material, not shown to user */}
+          {operation === "drilling" && (() => {
+            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
+            const iso = isoCategory;
+            let factor = 0.90;
+            if (depthD > 7 || iso === "S") factor = 0.70;
+            else if (depthD > 3 || iso === "M") factor = 0.80;
+            if (form.drill_feed_util_pct !== factor) {
+              setTimeout(() => setForm((p) => ({ ...p, drill_feed_util_pct: factor })), 0);
+            }
+            return null;
+          })()}
           </>)}
 
           {/* Tool Geometry — adapts per operation */}
@@ -3115,7 +3135,7 @@ ${stabSection}
                   <Input
                     type="text"
                     inputMode="decimal"
-                    className="no-spinners"
+                    className={`no-spinners ${!(form.chamfer_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                     placeholder={(() => {
                       if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "e.g. 0.050";
                       const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
@@ -3155,6 +3175,33 @@ ${stabSection}
                   })()}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Machining Tips accordion — chamfer mill */}
+          {form.tool_type === "chamfer_mill" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">Think "wipe the edge" — not "cut the edge."</span> Chamfer tools concentrate load at the tip. Keep radial engagement under 10–15% of diameter and axial depth just enough to hit size. Light, consistent engagement protects the tip and produces a cleaner edge than aggressive cuts.</div>
+                  <div><span className="font-semibold text-white">Helical flutes (CMH style) are a major advantage.</span> Straight flutes hit the full edge instantly — helical flutes engage progressively along the cutting edge, dramatically reducing tip shock. This eliminates micro-chipping, reduces vibration, improves chip evacuation, and makes chamfer milling behave more like an endmill than a scraper. CMH geometry shines in production work, tough materials, and interrupted cuts (cross-holes, cast edges, flame-cut stock).</div>
+                  <div><span className="font-semibold text-white">Always use helical or rolling entry.</span> Never plunge straight onto an edge. Use a helical interpolation entry or a lead-in arc to let the helix engage progressively — this is where you unlock the full benefit of helical geometry. Lead-out the same way.</div>
+                  <div><span className="font-semibold text-white">Chip load lives in a narrow window.</span> Too low = rubbing = poor finish and rapid wear. Too high = instant tip failure. Start at 0.0005–0.002 IPT depending on tool size and material. Keep feed consistent through corners — feed drops cause rubbing at the tip.</div>
+                  <div><span className="font-semibold text-white">Z-depth controls chamfer size.</span> A 0.001" Z shift produces a noticeable chamfer size change. Use your Z wear offset to dial in size — not reprogramming. This is how tight-tolerance chamfers are held in production.</div>
+                  <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
+                  <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
+                  <div><span className="font-semibold text-white">Run 10–20% lower SFM than endmilling.</span> Tip concentration and thin edge geometry mean chamfer tools don't tolerate the same surface speeds as full-diameter endmills.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3277,8 +3324,25 @@ ${stabSection}
               <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
-          {/* Drilling tool fields */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Eng mode: mode toggle */}
+          {engMode && (
+            <div className="flex gap-2 mt-3 mb-1">
+              {(["print", "manual"] as const).map((m) => (
+                <button key={m} type="button"
+                  onClick={() => setDrillMode(m)}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: drillMode === m ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: drillMode === m ? "#fff" : "#6366f1",
+                  }}>
+                  {m === "print" ? "📐 From CC Print" : "🔧 Manual Entry"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Drilling tool fields — eng manual mode only */}
+          {engMode && drillMode === "manual" && <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <FieldLabel hint="Entry diameter — the smallest (tip) diameter. SFM is set by the largest step diameter; feed (IPR) is set by this entry diameter.">{form.drill_steps > 0 ? "Entry Dia (in)" : "Drill Dia (in)"}</FieldLabel>
               <Input
@@ -3320,7 +3384,10 @@ ${stabSection}
                 }}
               />
             </div>
-          </div>
+          </div>}
+
+          {/* Steps + Coolant + Geometry — eng manual mode only */}
+          {engMode && drillMode === "manual" && (<>
           {/* Steps selector */}
           <div className="space-y-1.5 mt-3">
             <FieldLabel hint="Standard = single diameter drill. Step Drill = enter the largest diameter; SFM is set by the largest diameter, feed (IPR) by the entry (smallest) diameter.">Drill Type</FieldLabel>
@@ -3341,33 +3408,27 @@ ${stabSection}
               ))}
             </div>
           </div>
-
-          {/* Step drill — largest diameter only */}
           {form.drill_steps > 0 && (
-            <div className="mt-3">
-              <div className="space-y-1">
-                <FieldLabel hint="Largest diameter on the step drill. SFM and RPM are calculated on this diameter.">Largest Dia (in)</FieldLabel>
-                <Input
-                  type="text" inputMode="decimal" className="no-spinners"
-                  placeholder="e.g. 0.500"
-                  value={stepDiaTexts[0] ?? ""}
-                  onChange={(e) => setStepDiaTexts([e.target.value])}
-                  onBlur={() => {
-                    const n = parseDim(stepDiaTexts[0] ?? "");
-                    if (Number.isFinite(n) && n > 0) {
-                      setForm((p) => ({ ...p, drill_step_diameters: [n] }));
-                      setStepDiaTexts([n.toFixed(4)]);
-                    }
-                  }}
-                />
-              </div>
+            <div className="mt-3 space-y-1">
+              <FieldLabel hint="Largest diameter on the step drill. SFM and RPM are calculated on this diameter.">Largest Dia (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 0.500"
+                value={stepDiaTexts[0] ?? ""}
+                onChange={(e) => setStepDiaTexts([e.target.value])}
+                onBlur={() => {
+                  const n = parseDim(stepDiaTexts[0] ?? "");
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm((p) => ({ ...p, drill_step_diameters: [n] }));
+                    setStepDiaTexts([n.toFixed(4)]);
+                  }
+                }}
+              />
             </div>
           )}
-
-
-          {/* Coolant Fed — drill tool property */}
+          {/* Coolant Fed */}
           <div className="space-y-1.5 mt-3">
-            <FieldLabel hint="Coolant-fed drills have internal through-holes that deliver coolant directly to the cutting edge. This significantly improves chip evacuation, extends tool life, and allows deeper holes without pecking vs non-coolant-fed drills.">Coolant Delivery</FieldLabel>
+            <FieldLabel hint="Coolant-fed drills have internal through-holes that deliver coolant directly to the cutting edge.">Coolant Delivery</FieldLabel>
             <div className="flex gap-2">
               {([{ val: false, label: "Non-Coolant Fed" }, { val: true, label: "Coolant Fed (Through)" }] as const).map(({ val, label }) => (
                 <button key={String(val)} type="button"
@@ -3381,59 +3442,33 @@ ${stabSection}
               ))}
             </div>
           </div>
-
-          {/* Flute Geometry */}
+          {/* Flute Geometry — full selector for eng */}
           {(() => {
             const iso = isoCategory;
             const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
             const isDeep = depthD > 5;
             const isVeryDeep = depthD > 7;
             const hasCoolant = form.drill_coolant_fed;
-
-            // Base recommendation by material
-            let recGeo: string[] = [];
-            if (iso === "N" || iso === "K") {
-              recGeo = ["standard"];
-            } else if (iso === "P") {
-              recGeo = isDeep ? ["med_helix"] : ["standard"];
-            } else if (iso === "M") {
-              recGeo = isDeep ? ["high_helix"] : ["med_helix"];
-            } else if (iso === "S") {
-              recGeo = ["high_helix"];
-            } else if (iso === "H") {
-              recGeo = ["standard", "med_helix"];
-            }
-
-            // Coolant-through: can step down one level (coolant does evacuation work)
-            if (hasCoolant && recGeo.includes("high_helix") && !isVeryDeep) {
-              recGeo = ["med_helix"];
-            } else if (hasCoolant && recGeo.includes("med_helix") && !isDeep) {
-              recGeo = ["standard"];
-            }
-
-            // No coolant + deep: nudge up
-            if (!hasCoolant && isDeep && recGeo.includes("standard")) {
-              recGeo = ["med_helix"];
-            }
-            if (!hasCoolant && isVeryDeep && recGeo.includes("med_helix")) {
-              recGeo = ["high_helix"];
-            }
-
-            const hasRec = recGeo.length > 0;
+            let recGeo: string[] = ["standard"];
+            if (iso === "M") recGeo = [isDeep ? "high_helix" : "med_helix"];
+            else if (iso === "S") recGeo = ["high_helix"];
+            else if (iso === "P") recGeo = [isDeep ? "med_helix" : "standard"];
+            if (hasCoolant && recGeo.includes("high_helix") && !isVeryDeep) recGeo = ["med_helix"];
+            else if (hasCoolant && recGeo.includes("med_helix") && !isDeep) recGeo = ["standard"];
+            if (!hasCoolant && isDeep && recGeo.includes("standard")) recGeo = ["med_helix"];
+            if (!hasCoolant && isVeryDeep && recGeo.includes("med_helix")) recGeo = ["high_helix"];
             return (
               <div className="space-y-1.5 mt-3">
                 <div className="flex items-center justify-between">
-                  <FieldLabel hint="Flute geometry determines chip storage capacity and evacuation speed. Standard: up to 5×D. Med Helix: 5–7×D, better chip lift. High Helix: 7–9×D, steep flute for deep hole chip flow. Coolant-through can allow one step lower geometry.">Flute Geometry</FieldLabel>
-                  {hasRec && (
-                    <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
-                  )}
+                  <FieldLabel hint="Flute geometry determines chip storage and evacuation speed. Standard: up to 5×D. Med Helix: 5–7×D. High Helix: 7–9×D.">Flute Geometry</FieldLabel>
+                  {recGeo.length > 0 && <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>}
                 </div>
                 <div className="flex gap-2">
                   {([
-                    { val: "standard",   label: "Standard",   depth: "up to 5×D", desc: "General purpose twist drill" },
-                    { val: "med_helix",  label: "Med Helix",  depth: "5–7×D",     desc: "Moderate helix, better chip lift" },
-                    { val: "high_helix", label: "High Helix", depth: "7–9×D",     desc: "Steep helix, deep hole chip flow" },
-                  ] as const).map(({ val, label, depth, desc }) => {
+                    { val: "standard",   label: "Standard",   depth: "up to 5×D" },
+                    { val: "med_helix",  label: "Med Helix",  depth: "5–7×D" },
+                    { val: "high_helix", label: "High Helix", depth: "7–9×D" },
+                  ] as const).map(({ val, label, depth }) => {
                     const active = form.drill_geometry === val;
                     const isRec = recGeo.includes(val);
                     return (
@@ -3443,13 +3478,9 @@ ${stabSection}
                         style={{
                           backgroundColor: active ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
                           borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
-                        }}
-                      >
-                        <div className={`text-xs font-semibold leading-tight ${active ? "text-white" : isRec ? "text-amber-400" : "text-indigo-400"}`}>
-                          {label}{isRec && !active ? " ★" : ""}
-                        </div>
+                        }}>
+                        <div className={`text-xs font-semibold ${active ? "text-white" : isRec ? "text-amber-400" : "text-indigo-400"}`}>{label}{isRec && !active ? " ★" : ""}</div>
                         <div className={`text-[10px] font-bold mt-0.5 ${active ? "text-indigo-200" : isRec ? "text-amber-500" : "text-indigo-500"}`}>{depth}</div>
-                        <div className={`text-[9px] leading-tight mt-0.5 ${active ? "text-indigo-100" : "text-muted-foreground"}`}>{desc}</div>
                       </button>
                     );
                   })}
@@ -3457,45 +3488,28 @@ ${stabSection}
               </div>
             );
           })()}
-
-          {/* Point Angle */}
+          {/* Point Angle — full selector with recommendations for eng */}
           {(() => {
-            // Recommend point angle based on material, depth, and hole type
             const iso = isoCategory;
             const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
             const isDeep = depthD > 5;
             const isBlind = form.drill_blind;
-
             let recommended: number[] = [];
-            if (iso === "N") {
-              recommended = [118];
-            } else if (iso === "P") {
-              recommended = isDeep ? [135, 140] : [130, 135];
-            } else if (iso === "K") {
-              recommended = [118, 130];
-            } else if (iso === "M") {
-              recommended = isDeep ? [140, 145] : [135, 140];
-            } else if (iso === "S") {
-              recommended = [140, 145];
-            } else if (iso === "H") {
-              recommended = [135, 140];
-            }
-            // Blind holes favor higher angle (stronger edge)
+            if (iso === "N") recommended = [118];
+            else if (iso === "P") recommended = isDeep ? [135, 140] : [130, 135];
+            else if (iso === "K") recommended = [118, 130];
+            else if (iso === "M") recommended = isDeep ? [140, 145] : [135, 140];
+            else if (iso === "S") recommended = [140, 145];
+            else if (iso === "H") recommended = [135, 140];
             if (isBlind && recommended.length > 0) {
               const max = Math.max(...recommended);
-              if (!recommended.includes(max + 5) && max < 145) recommended = [max];
-              else recommended = [Math.min(...recommended) + 5 <= 145 ? Math.min(...recommended) + 5 : max];
+              recommended = [max < 145 ? max + 5 : max];
             }
-
-            const hasRecommendation = recommended.length > 0;
-
             return (
               <div className="space-y-1.5 mt-3">
                 <div className="flex items-center justify-between">
-                  <FieldLabel hint="Controls cutting aggressiveness, chip formation, and centering. 118° = soft materials & aluminum. 130° = general purpose carbide (alloy/stainless). 135° = stainless & tough alloys. 140° = high-performance / deep holes. 145° = superalloys & aerospace (Inconel, Ti).">Point Angle</FieldLabel>
-                  {hasRecommendation && (
-                    <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
-                  )}
+                  <FieldLabel hint="118°=aluminum/soft. 130°=general carbide. 135°=stainless/alloy. 140°=deep holes. 145°=superalloys.">Point Angle</FieldLabel>
+                  {recommended.length > 0 && <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>}
                 </div>
                 <div className="flex gap-2">
                   {([118, 130, 135, 140, 145] as const).map((pa) => {
@@ -3517,6 +3531,69 @@ ${stabSection}
               </div>
             );
           })()}
+          </>)}
+
+          {/* Customer mode: auto-apply flute geo silently, show read-only point angle */}
+          {!engMode && (() => {
+            const iso = isoCategory;
+            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
+            const isDeep = depthD > 5;
+            const isVeryDeep = depthD > 7;
+            const hasCoolant = form.drill_coolant_fed;
+            let recGeo: "standard" | "med_helix" | "high_helix" = "standard";
+            if (iso === "M") recGeo = isDeep ? "high_helix" : "med_helix";
+            else if (iso === "S") recGeo = "high_helix";
+            else if (iso === "P") recGeo = isDeep ? "med_helix" : "standard";
+            if (hasCoolant && recGeo === "high_helix" && !isVeryDeep) recGeo = "med_helix";
+            else if (hasCoolant && recGeo === "med_helix" && !isDeep) recGeo = "standard";
+            if (!hasCoolant && isDeep && recGeo === "standard") recGeo = "med_helix";
+            if (!hasCoolant && isVeryDeep && recGeo === "med_helix") recGeo = "high_helix";
+            if (form.drill_geometry !== recGeo) setTimeout(() => setForm((p) => ({ ...p, drill_geometry: recGeo })), 0);
+            return (
+              <div className="space-y-1.5 mt-3">
+                <FieldLabel hint="Point angle as specified on the CC drill print.">Point Angle</FieldLabel>
+                <div className="flex gap-2">
+                  {([118, 130, 135, 140, 145] as const).map((pa) => {
+                    const isSelected = form.drill_point_angle === pa;
+                    return (
+                      <div key={pa} className="flex-1 rounded py-2 text-xs font-semibold border text-center"
+                        style={{
+                          backgroundColor: isSelected ? "#6366f1" : "transparent",
+                          borderColor: isSelected ? "#6366f1" : "#3f3f46",
+                          color: isSelected ? "#fff" : "#52525b",
+                        }}>{pa}°</div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          {/* Machining Tips accordion — drilling */}
+          {operation === "drilling" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">Never baby a carbide drill — it needs load to live.</span> Low feed causes rubbing and work hardening, especially in stainless and HRSA. Maintain proper chip load and avoid hesitation feed at any point in the cycle.</div>
+                  <div><span className="font-semibold text-white">Through-spindle coolant changes everything.</span> Chip evacuation becomes force-assisted, heat is removed at the cutting edge, and you can drill deeper, faster, and more reliably. Under 3×D: no peck needed. 3–5×D: light chip break if needed. 5×D+: controlled peck or high-pressure coolant required. Coolant pressure matters — 300+ PSI minimum, 1000+ PSI for stainless and Inconel.</div>
+                  <div><span className="font-semibold text-white">No coolant = your responsibility to manage chips.</span> Without through coolant you must peck — no exceptions on deeper holes. 1–2×D: light peck. 3×D+: mandatory peck cycle. Use G73 (high-speed peck) for most carbide drilling; G83 (full retract) for deep holes or poor chip formers. Air blast and MQL help significantly — avoid running completely dry if possible.</div>
+                  <div><span className="font-semibold text-white">Spot drill angle must equal or exceed your drill point angle.</span> If the spot angle is smaller than the drill point angle, the chisel edge contacts first — the drill walks, loads unevenly, and chips. Common pairings: 118° drill → 120–140° spot; 135° drill → 140° spot; 140°+ drill → match or exceed. Only spot deep enough to create a chamfered seat — spot diameter ≈ drill diameter.</div>
+                  <div><span className="font-semibold text-white">Control chip shape without coolant.</span> You want short 6's and 9's — not stringers or bird nests. Increase feed to shorten chips; reduce SFM to reduce heat and stringing. Non-coolant drilling typically runs 20–40% lower SFM than coolant-fed.</div>
+                  <div><span className="font-semibold text-white">Entry and exit control.</span> Always spot or chamfer before drilling, especially on holes deeper than 3×D. Reduce feed 30–50% at breakthrough to prevent edge grabbing and chip packing on exit.</div>
+                  <div><span className="font-semibold text-white">Runout is a silent killer.</span> Target ≤0.0005" TIR — beyond that one flute does all the work and the drill fails instantly. Hydraulic or shrink-fit holders preferred; avoid long ER stickout.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Margin chipping = poor chip evacuation. Corner breakdown = feed too low (rubbing). Catastrophic break = chip packing or coolant loss. Built-up edge = aluminum or stainless without lubrication. Work hardening = stainless/HRSA with hesitation feed or too low chip load.</div>
+                </div>
+              )}
+            </div>
+          )}
+
           </>) : null}
 
           {/* Reaming Tool Geometry */}
@@ -3538,58 +3615,39 @@ ${stabSection}
               </label>
             )}
           </div>
-          {/* Mode toggle */}
-          <div className="flex gap-2 mt-3">
-            {(["print", "known"] as const).map((m) => (
-              <button key={m} type="button"
-                onClick={() => setReamMode(m)}
-                className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                style={{
-                  backgroundColor: reamMode === m ? "#6366f1" : "transparent",
-                  borderColor: "#6366f1", color: reamMode === m ? "#fff" : "#6366f1",
-                }}>
-                {m === "print" ? "📐 From Print Dimension" : "🔧 I Know My Reamer Size"}
-              </button>
-            ))}
-          </div>
-
-          {reamMode === "print" ? (<>
-            {/* Print-dimension workflow */}
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <div>
-                <FieldLabel hint="The finished hole diameter called out on the print. The reamer will be ground to this nominal size.">
-                  {UL("Finished Hole Dia (in.)", "Finished Hole Dia (mm)")}
-                </FieldLabel>
-                <Input type="text" inputMode="decimal" className="no-spinners"
-                  placeholder={metric ? "e.g. 12.700" : "e.g. 0.5000"}
-                  value={reamFinishedDiaText}
-                  onChange={(e) => setReamFinishedDiaText(e.target.value)}
-                  onBlur={() => {
-                    const n = parseDim(reamFinishedDiaText);
-                    if (Number.isFinite(n) && n > 0) {
-                      const stock = reamStockRange(n);
-                      const preDrill = stock ? +(n - stock.ideal).toFixed(4) : 0;
-                      setForm((p) => ({ ...p, tool_dia: n, ream_pre_drill_dia: preDrill }));
-                      setReamFinishedDiaText(metric ? (n * 25.4).toFixed(3) : n.toFixed(4));
-                    }
-                  }}
-                />
-              </div>
-              <div>
-                <FieldLabel hint="ISO hole tolerance class. H7 is the standard for most reaming applications. H6 is tighter (precision bores); H8 is looser (general clearance fits).">Tolerance Class</FieldLabel>
-                <div className="flex gap-1 mt-1">
-                  {(["H6","H7","H8"] as const).map((cls) => (
-                    <button key={cls} type="button"
-                      onClick={() => setReamTolClass(cls)}
-                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                      style={{
-                        backgroundColor: reamTolClass === cls ? "#6366f1" : "transparent",
-                        borderColor: "#6366f1", color: reamTolClass === cls ? "#fff" : "#6366f1",
-                      }}>{cls}</button>
-                  ))}
-                </div>
-              </div>
+          {/* Mode toggle — engineering only */}
+          {engMode && (
+            <div className="flex gap-2 mt-3">
+              {(["print", "known"] as const).map((m) => (
+                <button key={m} type="button"
+                  onClick={() => setReamMode(m)}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: reamMode === m ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: reamMode === m ? "#fff" : "#6366f1",
+                  }}>
+                  {m === "print" ? "📐 From Print Dimension" : "🔧 I Know My Reamer Size"}
+                </button>
+              ))}
             </div>
+          )}
+
+          {(reamMode === "print" || !engMode) ? (<>
+            {/* Tolerance class — engineering only */}
+            {engMode && <div className="mt-3 space-y-1.5">
+              <FieldLabel hint="ISO hole tolerance class. H7 is the standard for most reaming applications. H6 is tighter (precision bores); H8 is looser (general clearance fits).">Tolerance Class</FieldLabel>
+              <div className="flex gap-1">
+                {(["H6","H7","H8"] as const).map((cls) => (
+                  <button key={cls} type="button"
+                    onClick={() => setReamTolClass(cls)}
+                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: reamTolClass === cls ? "#6366f1" : "transparent",
+                      borderColor: "#6366f1", color: reamTolClass === cls ? "#fff" : "#6366f1",
+                    }}>{cls}</button>
+                ))}
+              </div>
+            </div>}
             {form.tool_dia > 0 && (
               <div className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2.5 text-xs space-y-1.5">
                 <div className="flex justify-between">
@@ -3684,6 +3742,46 @@ ${stabSection}
             </div>
           </>)}
 
+          {/* Reamer Type — Standard or Step */}
+          <div className="space-y-1.5 mt-3">
+            <FieldLabel hint="Standard = single diameter reamer. Step Reamer = two cutting diameters (entry and largest). SFM is set by the largest diameter; feed (IPR) is set by the entry (smallest) diameter.">Reamer Type</FieldLabel>
+            <div className="flex gap-2">
+              {([0, 1] as const).map((n) => (
+                <button key={n} type="button"
+                  onClick={() => {
+                    setReamStepDiaText("");
+                    setForm((p) => ({ ...p, ream_steps: n, ream_step_diameters: [], ream_step_lengths: [] }));
+                  }}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.ream_steps === n ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.ream_steps === n ? "#fff" : "#6366f1",
+                  }}
+                >{n === 0 ? "Standard" : "Step Reamer"}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Step reamer — largest diameter */}
+          {form.ream_steps > 0 && (
+            <div className="mt-3 space-y-1">
+              <FieldLabel hint="Largest diameter on the step reamer. SFM and RPM are calculated on this diameter; feed is set by the entry (smallest) diameter.">Largest Dia (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 0.625"
+                value={reamStepDiaText}
+                onChange={(e) => setReamStepDiaText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(reamStepDiaText);
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm((p) => ({ ...p, ream_step_diameters: [n] }));
+                    setReamStepDiaText(n.toFixed(4));
+                  }
+                }}
+              />
+            </div>
+          )}
+
           {/* Flutes + Shank — shared across both modes */}
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
@@ -3735,6 +3833,33 @@ ${stabSection}
             </div>
           </div>
           </>)}
+
+          {/* Machining Tips accordion — endmill milling */}
+          {operation === "milling" && form.tool_type !== "chamfer_mill" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">HEM is a force control strategy, not just a toolpath.</span> Controlling engagement angle controls heat, deflection, and tool life. Target 8–15% WOC with 1.0–2.5×D axial DOC. This flips the old-school mindset — deep DOC and light WOC is modern high-performance cutting. Most shops leave money on the table by running shallow DOC and wide WOC.</div>
+                  <div><span className="font-semibold text-white">WOC is your #1 control knob.</span> If something goes wrong — adjust WOC first. Long reach or reduced neck: 5–8%. Rigid setup: up to 15–20%. The engagement angle sweet spot is 15–35°. Below 10° and chips get too thin (rubbing risk). Above 45° and force spikes return.</div>
+                  <div><span className="font-semibold text-white">Low engagement requires higher feed.</span> When WOC drops below ~50% of diameter, chip thickness drops. You must increase feed per tooth to compensate or you rub, burn tools, and wonder why HEM "doesn't work." The engine calculates chip thinning and adjusts FPT automatically.</div>
+                  <div><span className="font-semibold text-white">Reduced neck tooling enables deep, stable cuts.</span> Without a reduced neck, the shank rubs the wall when going deep — adding heat, forcing deflection, and limiting axial DOC. Reduced neck removes that interference so the cutting edges can do their job at full LOC. Trade-off: you lose cross-sectional stiffness, so drop WOC to 5–12% and use adaptive toolpaths only — no slotting.</div>
+                  <div><span className="font-semibold text-white">Deflection is always the governor.</span> Even when the numbers look right, deflection causes poor finish, chatter, and oversize features. Control hierarchy: shorten stickout first (L³ relationship — massive impact), then increase diameter (D⁴ stiffness gain), then reduce WOC, then reduce DOC. Going from 1/2" to 5/8" diameter gives ~2.4× stiffness — often better than any feed adjustment.</div>
+                  <div><span className="font-semibold text-white">Variable pitch and variable helix kill chatter.</span> These geometry features break up the harmonic frequency that causes chatter. The engine accounts for them in the stability calculation — make sure the SKU fields are populated correctly to get the full benefit.</div>
+                  <div><span className="font-semibold text-white">Entry strategy protects tool life.</span> Never drop straight into full-width material. Use helical ramp, 2–5° ramp-in, or a pre-drilled entry for deep work. Avoid sharp corners in toolpaths — CAM defaults often spike engagement at corners and chip tools silently.</div>
+                  <div><span className="font-semibold text-white">Know when NOT to HEM.</span> HEM breaks down when the tool is too long, the machine lacks rigidity, or the workholding is weak. In those cases a hybrid strategy (higher WOC, lower DOC, slower feed) outperforms pure HEM. The stability panel tells you where you are.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Coolant by material:</span> Steel/stainless/HRSA — air blast or light coolant, avoid thermal shock with premium coatings. Aluminum — flood or mist, chip evacuation is priority #1. Through-coolant tools are a major advantage in deep pockets and slotting. Listen to the cut — sound is your chatter indicator, chip color is your heat indicator.</div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Cut Engagement — milling only, not chamfer mills */}
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
@@ -4205,6 +4330,26 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+          {/* Finished Hole Dia — moved here from tool geometry */}
+          <div className="space-y-1.5 mb-3">
+            <FieldLabel hint="The finished hole diameter called out on the print. The reamer will be ground to this nominal size.">
+              {UL("Finished Hole Dia (in.)", "Finished Hole Dia (mm)")}
+            </FieldLabel>
+            <Input type="text" inputMode="decimal" className={`no-spinners ${!(form.tool_dia > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+              placeholder={metric ? "e.g. 12.700" : "e.g. 0.5000"}
+              value={reamFinishedDiaText}
+              onChange={(e) => setReamFinishedDiaText(e.target.value)}
+              onBlur={() => {
+                const n = parseDim(reamFinishedDiaText);
+                if (Number.isFinite(n) && n > 0) {
+                  const stock = reamStockRange(n);
+                  const preDrill = stock ? +(n - stock.ideal).toFixed(4) : 0;
+                  setForm((p) => ({ ...p, tool_dia: n, ream_pre_drill_dia: preDrill }));
+                  setReamFinishedDiaText(metric ? (n * 25.4).toFixed(3) : n.toFixed(4));
+                }
+              }}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <FieldLabel hint="Total depth of the hole to be reamed. Used to calculate depth-to-diameter ratio and apply depth correction factors.">{UL("Hole Depth (in.)", "Hole Depth (mm)")}</FieldLabel>
@@ -4229,8 +4374,8 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Lead Chamfer */}
-          {(() => {
+          {/* Lead Chamfer — engineering only */}
+          {engMode && (() => {
             const iso = isoCategory;
             const isBlind = form.ream_blind;
 
@@ -4290,27 +4435,37 @@ ${stabSection}
               </div>
             );
           })()}
+          {/* Machining Tips accordion — reaming */}
+          {operation === "reaming" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">Pre-drill stock is everything.</span> Reamers are finishing tools — not hole makers. Too little stock = rubbing + size drift. Too much = chatter + oversize + wear. Typical allowance: ≤1/4" dia → +0.0015–0.0025"; 1/4–1/2" → +0.002–0.003"; &gt;1/2" → +0.003–0.005". The engine auto-calculates this from your finished hole diameter.</div>
+                  <div><span className="font-semibold text-white">Never baby a reamer.</span> Low feed = rubbing = poor finish + taper. Feed rates are higher than most expect: 0.0015–0.004 IPR for small tools, 0.003–0.008 IPR for larger. Run 50–70% of drilling SFM for that material.</div>
+                  <div><span className="font-semibold text-white">Feed rate controls size.</span> Oversize hole → reduce feed slightly, check runout, reduce stock allowance. Undersize → increase feed or stock slightly. Feed directly affects finished size more than most realize — you can dial tenths with feed adjustments.</div>
+                  <div><span className="font-semibold text-white">LHH + RHC is the standard for precision work.</span> Left-hand helix with right-hand cut pushes chips forward (into the hole ahead of the tool), preventing chips from dragging along the finished wall. This stabilizes cutting pressure and produces a cleaner finish. Use it for blind holes, deep holes, stainless, titanium, and tight-tolerance work — essentially everything. RH helix is only used for through-holes where chip evacuation out the back is the priority.</div>
+                  <div><span className="font-semibold text-white">Never peck a reamer.</span> No G83, no chip-breaking cycles. If chips are packing — wrong flute style, wrong coolant, or too deep for a straight flute. Switch to spiral flute or add through-spindle coolant instead.</div>
+                  <div><span className="font-semibold text-white">Chamfer the hole entry.</span> Sharp edge entry chips margins instantly. A countersink or entry chamfer before reaming dramatically improves size consistency and tool life.</div>
+                  <div><span className="font-semibold text-white">Runout kills accuracy.</span> Target ≤0.0002" TIR — absolute max 0.0005". Any runout beyond that creates an oversize hole immediately. Hydraulic or shrink-fit holders only. Avoid worn collets and long ER stickout.</div>
+                  <div><span className="font-semibold text-white">Coolant matters.</span> Through-spindle is ideal for consistent size and finish. Flood aimed directly at entry is next best. In stainless and titanium, chip evacuation matters more than speed — use the strongest coolant available and don't dwell at depth.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Oversize = runout, too much stock, or low feed. Tapered hole = deflection or poor entry alignment. Bad finish = rubbing (low feed) or chip packing. Chipping = no entry chamfer or interrupted entry. Built-up edge = wrong coating or SFM too low.</div>
+                </div>
+              )}
+            </div>
+          )}
+
           </>)}
 
           {/* Thread Details — thread milling */}
           {operation === "threadmilling" && (<>
-          {/* PDF Upload for thread milling */}
-          <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
-            {pdfExtracted ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
-                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center gap-1 cursor-pointer">
-                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-                <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
-                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
-                </span>
-                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-              </label>
-            )}
-          </div>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Thread Details</div>
@@ -4384,7 +4539,7 @@ ${stabSection}
                   Major Dia {form.thread_standard === "metric" ? "(mm)" : "(in)"}
                 </FieldLabel>
                 <Input
-                  type="text" inputMode="decimal" className="no-spinners"
+                  type="text" inputMode="decimal" className={`no-spinners ${!(form.thread_major_dia > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                   placeholder={form.thread_standard === "metric" ? "e.g. 10" : "e.g. 1/2 or 0.5000"}
                   value={tmMajorDiaText}
                   onChange={(e) => setTmMajorDiaText(e.target.value)}
@@ -4489,7 +4644,7 @@ ${stabSection}
             <div className="space-y-1.5">
               <FieldLabel hint="Axial thread depth — how far the thread mill travels in Z. Typically 1–1.5× major dia for through threads; use actual depth for blind holes.">Thread Depth (in)</FieldLabel>
               <Input
-                type="text" inputMode="decimal" className="no-spinners"
+                type="text" inputMode="decimal" className={`no-spinners ${!(form.thread_engagement > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                 placeholder="e.g. 0.500"
                 value={tmEngText}
                 onChange={(e) => setTmEngText(e.target.value)}
@@ -4528,13 +4683,16 @@ ${stabSection}
               ))}
             </div>
           </div>
-          {/* Cut Direction */}
+          {/* Cut Direction — auto-selected, user can override */}
           {(() => {
             const isTough = isoCategory === "S" || isoCategory === "H" ||
               form.material.includes("titanium") || form.material.includes("inconel") ||
               form.material.includes("hastelloy") || form.material.includes("waspaloy");
             const isBlindInternal = form.thread_internal && (form.thread_engagement > 0);
             const recDir = (isTough || isBlindInternal) ? "bottom_up" : "top_down";
+            if (form.thread_cut_direction !== recDir) {
+              setTimeout(() => setForm((p) => ({ ...p, thread_cut_direction: recDir })), 0);
+            }
             return (
               <div className="mt-3 space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -4564,6 +4722,33 @@ ${stabSection}
               </div>
             );
           })()}
+          {/* Machining Tips accordion — threadmilling */}
+          {operation === "threadmilling" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">Deflection-controlled process — not horsepower.</span> Thread accuracy comes down to deflection and radial force, not spindle load. If thread size is inconsistent it's deflection or runout — not your CAM.</div>
+                  <div><span className="font-semibold text-white">Always climb mill.</span> Lower cutting forces, better finish, less rubbing at entry/exit. Exception: thin-wall or unstable parts may need conventional to prevent pull-in. Internal threads — almost always climb.</div>
+                  <div><span className="font-semibold text-white">Radial engagement 1–5% of diameter.</span> Threadmilling is a low-engagement finishing process. Too much WOC causes chatter, pitch error, and oversized threads. If threads look oversized or "drunken" — WOC too high or deflection problem.</div>
+                  <div><span className="font-semibold text-white">Chip load balance is critical.</span> Too light = rubbing = rapid wear. Too heavy = deflection = pitch and size issues. Typical range: 0.0005–0.0025 IPT. Threadmills fail more from rubbing than overload.</div>
+                  <div><span className="font-semibold text-white">Top-down vs bottom-up:</span> Top-down is the default and works well for most blind holes and shorter threads. Bottom-up is strongly preferred for deep threads (&gt;2×D), HRSA materials (Inconel, Ti, stainless), and anywhere chip evacuation is poor — it pulls chips up and out instead of packing them in. Random breakage after good first parts is almost always chip packing from top-down in a tough material. The engine auto-selects based on material and depth — you can override if your setup requires.</div>
+                  <div><span className="font-semibold text-white">Arc lead-in and lead-out are not optional.</span> Never drop straight in or stop at the endpoint. Use a 0.5–1.0× tool dia arc entry and arc exit. Eliminates notch wear and dwell marks at the start point — the #1 cause of premature chipping.</div>
+                  <div><span className="font-semibold text-white">Deep threads (&gt;2×D):</span> Break into multiple Z passes and reduce chip load with depth. At 2×D reduce IPT ~20–30%; at 4×D consider multiple radial passes as well.</div>
+                  <div><span className="font-semibold text-white">Chip evacuation is everything.</span> Chip packing in internal threads = instant failure. Flood coolant for steel/stainless; high-pressure coolant for HRSA; air blast for aluminum. Never recut chips.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Premature wear = rubbing (increase IPT slightly). Chipping = no lead-in arc. Oversize threads = WOC or deflection too high. Poor finish = chip recutting. Breakage = chip packing (reduce DOC or improve coolant).</div>
+                </div>
+              )}
+            </div>
+          )}
+
           </>)}
 
           {/* Thread Mill Tool Geometry */}
@@ -4573,7 +4758,24 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          {/* PDF Upload for thread milling */}
+          <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
+            {pdfExtracted ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center gap-1 cursor-pointer">
+                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                </span>
+                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+              </label>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-3">
             <div className="space-y-2">
               <FieldLabel hint="Outer diameter of the thread mill cutter. Must be smaller than the thread minor diameter for internal threads.">Cutter Dia (in)</FieldLabel>
               <Input
@@ -4796,7 +4998,7 @@ ${stabSection}
                   />
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel hint="Axial depth of cut per pass in inches. Cannot exceed (cutter dia − neck dia) / 2 — the physical flute reach limit.">Cut Pass Depth (in)</FieldLabel>
+                  <FieldLabel hint="How far the cutter steps radially into the dovetail wall per pass. Dovetail cutters always enter laterally — they feed in from outside the part or a pre-slotted pocket, never plunge. Keep this conservative; the neck is narrower than the cutting head and limits how aggressively you can engage.">Radial Pass Depth (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.050"}
                     value={form.doc_xd > 0 && form.tool_dia > 0 ? (form.doc_xd * form.tool_dia).toFixed(4) : ""}
@@ -4811,16 +5013,16 @@ ${stabSection}
                       const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
                       if (n > maxDepth) {
                         setForm((p) => ({ ...p, doc_xd: maxDepth / p.tool_dia }));
-                        toast({ title: "Cut pass depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by (cutter dia − neck dia) / 2.`, variant: "destructive" });
+                        toast({ title: "Radial pass depth capped", description: `Max radial depth for this tool is ${maxDepth.toFixed(4)}" — limited by (cutter dia − neck dia) / 2.`, variant: "destructive" });
                       }
                     }}
                   />
                 </div>
               </div>
-              {/* Final Slot Depth — multi-pass strategy */}
+              {/* Final Wall Depth — multi-pass strategy */}
               <div className="mt-3 space-y-2">
-                <FieldLabel hint="Total final slot depth required in inches. Used to calculate how many passes are needed and whether a multi-pass strategy is recommended for tool survivability.">
-                  <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Slot Depth (in)</span>
+                <FieldLabel hint="Total radial depth the cutter must reach to fully form the dovetail wall — from the edge of the pre-slotted pocket to the full width of the dovetail form. The engine calculates how many lateral passes are needed and flags any survivability concerns.">
+                  <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Wall Depth (in)</span>
                 </FieldLabel>
                 <Input type="text" inputMode="decimal" className={`no-spinners ${form.final_slot_depth === 0 ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : "border-zinc-600"}`}
                   placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
@@ -4842,6 +5044,60 @@ ${stabSection}
               </>
             )}
 
+            {/* Machining Tips accordion — keyseat */}
+            {operation === "keyseat" && (
+              <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                  onClick={() => setMachiningTipsOpen(o => !o)}
+                >
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    <div><span className="font-semibold text-white">Force-dominated tool.</span> Your control knobs are chip thickness, deflection, and chip evacuation — not SFM chasing. Full 180° engagement means no chip thinning benefit and high radial load on every tooth.</div>
+                    <div><span className="font-semibold text-white">Derate chip load 30–50%</span> vs standard slotting IPT. Too much chip load snaps keyseat cutters — there is no warning, just failure.</div>
+                    <div><span className="font-semibold text-white">Depth strategy by tool size:</span> Small tools (&lt;3/8") — step down in multiple passes. Medium tools — full depth possible with reduced feed. Large tools (&gt;3/4") — 60–70% depth first pass, then finish pass at full depth with lighter feed.</div>
+                    <div><span className="font-semibold text-white">Always climb mill.</span> Reduces rubbing, improves tool life, and directs chips away from the cut.</div>
+                    <div><span className="font-semibold text-white">Never straight plunge.</span> Pre-drill or pre-mill relief if possible. If not, use an arc/roll-in entry.</div>
+                    <div><span className="font-semibold text-white">Chip evacuation is the hidden killer.</span> Recutting chips in a closed slot is the #1 cause of breakage. Through-spindle coolant is ideal; high-pressure flood aimed directly into the cut is next best; air blast assist is very effective.</div>
+                    <div><span className="font-semibold text-white">Stickout is the biggest deflection driver.</span> Keep it as short as your setup allows. Shrink fit is the top holder choice; hydraulic is good; high-quality ER is acceptable. Avoid worn collets and long gauge lengths.</div>
+                    <div><span className="font-semibold text-white">If it chatters:</span> reduce stickout first → reduce depth → reduce feed. In that order.</div>
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tooth chipping = too high IPT. Full breakage = chip packing. Tapered slot = deflection (reduce depth/add passes). Burnishing = IPT too low (increase feed slightly). Chatter = stickout or rigidity issue.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Machining Tips accordion — dovetail */}
+            {operation === "dovetail" && (
+              <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                  onClick={() => setMachiningTipsOpen(o => !o)}
+                >
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    <div><span className="font-semibold text-white">Finishing tool only — zero forgiveness.</span> Necked geometry, small effective cutting diameter, and long moment arm make these inherently weak. Treat like a form tool with no margin for error.</div>
+                    <div><span className="font-semibold text-white">Always pre-machine the slot first</span> with a square or bull nose endmill. Leave 0.005"–0.015" radial stock per side and open the full axial depth. The dovetail cutter cannot plunge — the neck is narrower than the cutting head.</div>
+                    <div><span className="font-semibold text-white">Enter laterally only.</span> Feed in from outside the part or the pre-slotted pocket. Run per side, climb cutting each wall separately. Never attempt a full-width cut.</div>
+                    <div><span className="font-semibold text-white">Radial engagement: 0.003"–0.010" per side max.</span> Axial DOC can be full depth once the slot is roughed.</div>
+                    <div><span className="font-semibold text-white">Derate chip load 30–50%</span> vs standard endmill IPT. Effective cutting diameter is small — too much chip load causes instant failure with no warning.</div>
+                    <div><span className="font-semibold text-white">Hydraulic or shrink-fit holders only.</span> Dovetail tools behave like thin cantilever beams with an offset load. Keep stickout as short as possible. Dual contact adds further stability where available.</div>
+                    <div><span className="font-semibold text-white">Air blast is the preferred coolant.</span> Goal is chip evacuation, not cooling. Mist is also good. Flood is acceptable but watch for chip packing. Through-spindle is rarely applicable.</div>
+                    <div><span className="font-semibold text-white">If it sounds wrong, it is wrong.</span> Dovetail cutters don't chatter and recover — reduce stickout, then reduce radial pass depth, then reduce chip load.</div>
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tip chipping = too high IPT. Neck break = excess WOC or stickout. Chatter = poor rigidity. Built-up edge = SFM too low (especially aluminum). Tool pullout = weak holder.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="mt-3 space-y-2">
               <FieldLabel hint="Helix angle in degrees. Enter 0 for straight flute tools. Affects cutting force direction and chip evacuation.">Helix Angle (°) — 0 = straight flute</FieldLabel>
               <Input type="number" step="1" className="no-spinners"
@@ -4860,9 +5116,9 @@ ${stabSection}
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
                 {[
-                  { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: true },
+                  { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: form.tool_type !== "chamfer_mill" },
                   { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
-                  { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: false },
+                  { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" },
                   { key: "straight", label: "Straight-In",     color: "text-amber-400 border-amber-500/60",  recommended: false },
                 ].map(({ key, label, color, recommended }) => {
                   const checked = entryTypes.includes(key);
@@ -5040,7 +5296,7 @@ ${stabSection}
                 ))}
               </div>
             </div>
-            {operation !== "drilling" && operation !== "reaming" && <div className="space-y-2 col-span-3">
+            <div className="space-y-2 col-span-3">
               <FieldLabel hint="Caps the spindle speed as a percentage of your Max RPM. Use 95% for standard work. Drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern.">Max RPM Use</FieldLabel>
               <div className="flex w-full gap-1.5">
                 {([
@@ -5065,34 +5321,7 @@ ${stabSection}
                   </button>
                 ))}
               </div>
-            </div>}
-            {operation === "drilling" && (
-              <div className="space-y-2">
-                <FieldLabel hint="Applies a safety factor to the calculated drill feed. Use 90% for standard holes. Reduce to 80–70% for deep holes (>3×D), difficult materials, or worn machines.">Feed Safety Factor</FieldLabel>
-                <div className="flex w-full gap-1.5">
-                  {([
-                    { val: 1.00, label: "100%" },
-                    { val: 0.90, label: "90%"  },
-                    { val: 0.80, label: "80%"  },
-                    { val: 0.70, label: "70%"  },
-                  ] as const).map(({ val, label }) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setForm((p) => ({ ...p, drill_feed_util_pct: val }))}
-                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all text-center"
-                      style={{
-                        backgroundColor: form.drill_feed_util_pct === val ? "#6366f1" : "transparent",
-                        borderColor: "#6366f1",
-                        color: form.drill_feed_util_pct === val ? "#fff" : "#6366f1",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Machine Setup */}
