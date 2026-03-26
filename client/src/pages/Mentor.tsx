@@ -2505,7 +2505,13 @@ ${stabSection}
         <img src="/CCLogo-long-blackback TRANSPARENT-01.png" alt="Core Cutter" className="h-10 w-auto" />
         <div className="flex flex-col items-end gap-0.5">
           {localStorage.getItem("cc_first_name") && (
-            <span className="text-xs text-zinc-400">Hi, <span className="text-orange-400 font-semibold">{localStorage.getItem("cc_first_name")}</span></span>
+            <span className="text-xs text-zinc-400">Hi, <span className="text-orange-400 font-semibold">{localStorage.getItem("cc_first_name")}</span>
+              <button type="button" onClick={() => {
+                localStorage.removeItem("cc_user_name"); localStorage.removeItem("cc_first_name");
+                localStorage.removeItem("cc_last_name"); localStorage.removeItem("er_email");
+                setShowWelcomeModal(true); setWelcomeFirstName(""); setWelcomeLastName(""); setWelcomeEmail(""); setWelcomeError("");
+              }} className="ml-1.5 text-[10px] text-zinc-600 hover:text-zinc-400 underline underline-offset-2">not you?</button>
+            </span>
           )}
           <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
         </div>
