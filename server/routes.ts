@@ -106,6 +106,17 @@ export async function registerRoutes(
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
 
+  // ── user_machines: add job/status columns if not present ─────────────────
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS job_tags JSONB DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS machine_status TEXT DEFAULT 'operational'`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS status_note TEXT`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS maintenance_date DATE`);
+  } catch (err: any) {
+    console.warn("[user_machines migration]", err?.message ?? err);
+  }
+
   // ── Leads table ───────────────────────────────────────────────────────────
   try {
     const { pool } = await import("./db");
@@ -2490,6 +2501,33 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       [email.toLowerCase()]
     );
     res.json(result.rows);
+  });
+
+  // ── User machines: update (job tags + status) ────────────────────────────
+  app.patch("/api/user-machines/:id", async (req, res) => {
+    const { email, token, job_tags, machine_status, status_note, maintenance_date } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(
+      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(
+      `UPDATE user_machines SET
+         job_tags = COALESCE($3, job_tags),
+         machine_status = COALESCE($4, machine_status),
+         status_note = $5,
+         maintenance_date = $6
+       WHERE id = $1 AND email = $2`,
+      [id, email.toLowerCase(),
+       job_tags !== undefined ? JSON.stringify(job_tags) : null,
+       machine_status || null,
+       status_note ?? null,
+       maintenance_date ?? null]
+    );
+    res.json({ ok: true });
   });
 
   // ── User machines: delete ─────────────────────────────────────────────────
