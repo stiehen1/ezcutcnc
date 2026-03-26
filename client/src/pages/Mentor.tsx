@@ -3430,7 +3430,7 @@ ${stabSection}
                 <div className="space-y-1.5">
                   <FieldLabel hint={
                     <div className="space-y-2">
-                      <p>Face width of the chamfer — the length of the angled surface as dimensioned on the print (the "L" edge in the diagram). The app converts this to Z axial depth for CAM automatically. Direct comparison to tool cutting edge length.</p>
+                      <p>Chamfer length — the length of the angled chamfer face as dimensioned on the print (the "L" edge in the diagram). Enter this directly from the print; the app calculates the Z axial depth for CAM programming automatically and compares it against the tool's cutting edge length.</p>
                       {/* Chamfer geometry diagram */}
                       <svg viewBox="0 0 160 100" width="160" height="100" className="block mx-auto">
                         {/* Tool body outline */}
