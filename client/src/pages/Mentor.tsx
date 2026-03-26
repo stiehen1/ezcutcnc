@@ -1000,16 +1000,16 @@ export default function Mentor() {
   React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
   React.useEffect(() => { localStorage.setItem("cc_mode", form.mode || ""); }, [form.mode]);
 
-  // ── Chamfer upgrade suggestion — fires when depth exceeds current tool's max ──
+  // ── Chamfer upgrade suggestion — fires when face width exceeds current tool's edge length ──
   React.useEffect(() => {
     if (form.tool_type !== "chamfer_mill" || !(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) {
       setChamferUpgradeSuggestion(null); return;
     }
     const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
     const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
-    const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
-    if (form.chamfer_depth <= maxDepth) { setChamferUpgradeSuggestion(null); return; }
-    const edgeLengthNeeded = form.chamfer_depth / Math.sin(halfRad);
+    const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+    if (form.chamfer_depth <= edgeLength) { setChamferUpgradeSuggestion(null); return; }
+    const edgeLengthNeeded = form.chamfer_depth; // input IS face width = edge length needed
     const params = new URLSearchParams({
       tool_type: "chamfer_mill",
       chamfer_angle: String(form.chamfer_angle),
@@ -1517,8 +1517,13 @@ export default function Mentor() {
     setErStatus("idle");
     setErError("");
     try {
+      // Chamfer: form stores face width (as on print); engine expects axial depth
+      const chamferAxial = form.tool_type === "chamfer_mill" && form.chamfer_angle > 0 && form.chamfer_depth > 0
+        ? form.chamfer_depth * Math.cos((form.chamfer_angle / 2) * (Math.PI / 180))
+        : form.chamfer_depth;
       const runResult: any = await mentor.mutateAsync({
         ...form,
+        chamfer_depth: chamferAxial,
         operation: (["milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"].includes(operation) ? operation : "milling") as any,
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
         stickout: form.stickout || form.loc * 1.25,
@@ -3419,7 +3424,7 @@ ${stabSection}
                 <div className="space-y-1.5">
                   <FieldLabel hint={
                     <div className="space-y-2">
-                      <p>Axial depth of the chamfer being cut. D_eff = tip_dia + 2 × depth × tan(angle/2).</p>
+                      <p>Face width of the chamfer — the length of the angled surface as dimensioned on the print (the "L" edge in the diagram). The app converts this to Z axial depth for CAM automatically. Direct comparison to tool cutting edge length.</p>
                       {/* Chamfer geometry diagram */}
                       <svg viewBox="0 0 160 100" width="160" height="100" className="block mx-auto">
                         {/* Tool body outline */}
@@ -3450,22 +3455,22 @@ ${stabSection}
                         <text x="5" y="90" fontSize="8" fill="#aaa">{form.chamfer_tip_dia > 0 ? "CMH — flat tip" : "CMS — center cutting"}</text>
                       </svg>
                     </div>
-                  }>Chamfer Depth (in)</FieldLabel>
+                  }>Chamfer Size (in)</FieldLabel>
                   <Input
                     type="text"
                     inputMode="decimal"
                     className={`no-spinners ${!(form.chamfer_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                     placeholder={(() => {
-                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "e.g. 0.050";
+                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "face width (in)";
                       const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                       const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
-                      const maxD = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
-                      if (!(maxD > 0)) return "e.g. 0.050";
-                      // Saddling sweet spot: middle 60% for CMS, middle 80% for CMH
+                      const edgeLen = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                      if (!(edgeLen > 0)) return "face width (in)";
+                      // Sweet spot: middle 60% of edge for CMS, middle 80% for CMH
                       const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
-                      const lo = maxD * skip;
-                      const hi = maxD * (1 - skip);
-                      return `saddle ${lo.toFixed(3)}"–${hi.toFixed(3)}"`;
+                      const lo = edgeLen * skip;
+                      const hi = edgeLen * (1 - skip);
+                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" face`;
                     })()}
                     value={chamferDepthText}
                     onChange={(e) => setChamferDepthText(e.target.value)}
@@ -3484,11 +3489,17 @@ ${stabSection}
                     const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                     const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                     const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
-                    const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
-                    if (form.chamfer_depth <= maxDepth) return null;
+                    const zDepth = form.chamfer_depth * Math.cos(halfRad);
+                    if (form.chamfer_depth > edgeLength) {
+                      return (
+                        <p className="mt-1 text-xs text-red-400">
+                          ⚠ Chamfer size exceeds tool edge ({edgeLength.toFixed(4)}") — need a larger tool.
+                        </p>
+                      );
+                    }
                     return (
-                      <p className="mt-1 text-xs text-red-400">
-                        ⚠ Depth exceeds max ({maxDepth.toFixed(4)}") — tool cutting edge is only {edgeLength.toFixed(4)}" long. Reduce depth or use a larger tool.
+                      <p className="mt-1 text-xs text-zinc-400">
+                        Z depth to program in CAM: <span className="text-blue-400 font-mono font-semibold">{zDepth.toFixed(4)}"</span>
                       </p>
                     );
                   })()}
@@ -7864,9 +7875,16 @@ ${stabSection}
                     <div><span className="text-muted-foreground">Series</span><span className="ml-2 font-semibold text-indigo-300">{form.chamfer_series}</span></div>
                     <div><span className="text-muted-foreground">Included Angle</span><span className="ml-2 font-semibold">{chamferResult.chamfer_angle_deg}°</span></div>
                     <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 — point (CMS)"}</span></div>
-                    <div><span className="text-muted-foreground">Cutting Edge Length</span><span className="ml-2 font-semibold">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
-                    <div><span className="text-muted-foreground">Max Achievable Depth</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.max_depth_in?.toFixed(4)}"</span></div>
-                    <div><span className="text-muted-foreground">Chamfer Depth</span><span className="ml-2 font-semibold">{chamferResult.chamfer_depth_in > 0 ? `${chamferResult.chamfer_depth_in.toFixed(4)}"` : "—"}</span></div>
+                    <div><span className="text-muted-foreground">Tool Edge Length</span><span className="ml-2 font-semibold">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
+                    <div><span className="text-muted-foreground">Max Chamfer Size</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
+                    {chamferResult.chamfer_depth_in > 0 && (() => {
+                      const halfRad = (chamferResult.chamfer_angle_deg / 2) * (Math.PI / 180);
+                      const faceWidth = Math.cos(halfRad) > 0 ? chamferResult.chamfer_depth_in / Math.cos(halfRad) : 0;
+                      return (<>
+                        <div><span className="text-muted-foreground">Chamfer Size (print)</span><span className="ml-2 font-semibold">{faceWidth.toFixed(4)}"</span></div>
+                        <div><span className="text-muted-foreground">Z Depth (CAM)</span><span className="ml-2 font-semibold text-blue-400">{chamferResult.chamfer_depth_in.toFixed(4)}"</span></div>
+                      </>);
+                    })()}
                   </div>
 
                   {/* D_eff */}
