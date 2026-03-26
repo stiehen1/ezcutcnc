@@ -2002,6 +2002,73 @@ export default function Mentor() {
         return `<p style="font-size:9px;color:#555;margin-top:2px;">Theoretical Ra: <strong>${raUin.toFixed(1)} µin</strong> (${(raUin * 0.0254).toFixed(3)} µm)${target > 0 ? ` — meets ${target} µin target ✓` : ""}.</p>${raDisclaimer}`;
       })()}` : "";
 
+    const optimalSection = (() => {
+      if (!optimalRec) return "";
+      const rec = optimalRec;
+      const recSku = rec.recommended_sku;
+      const recCust = rec.recommended_result?.customer ?? {};
+      const recEng  = rec.recommended_result?.engineering ?? {};
+      const recStab = rec.recommended_result?.stability ?? {};
+      const curMrr     = customer?.mrr_in3_min ?? 0;
+      const recMrr     = recCust?.mrr_in3_min ?? 0;
+      const curFeed    = (result as any)?.customer?.feed_ipm ?? 0;
+      const recFeed    = recCust?.feed_ipm ?? 0;
+      const curStabPct = stab?.deflection_pct ?? null;
+      const recStabPct = recStab?.deflection_pct ?? null;
+      const curForce   = eng?.force_lbf ?? null;
+      const recForce   = recEng?.force_lbf ?? null;
+      const geomLabel: Record<string, string> = { chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std" };
+      const tags = [
+        recSku.geometry && recSku.geometry !== "standard" ? geomLabel[recSku.geometry] ?? recSku.geometry : null,
+        recSku.coating ?? null,
+        recSku.series ?? null,
+        recSku.variable_pitch && recSku.variable_helix ? "Var Pitch+Helix"
+          : recSku.variable_pitch ? "Var Pitch"
+          : recSku.variable_helix ? "Var Helix" : null,
+      ].filter(Boolean).join(" · ");
+      const meaningful = (cur: number, opt: number, pct = 5) => Math.abs((opt - cur) / (cur || 1)) * 100 >= pct;
+      const rows: { label: string; cur: string; opt: string; better: boolean }[] = [];
+      if (curStabPct != null && recStabPct != null)
+        rows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct && meaningful(curStabPct, recStabPct) });
+      if (curForce != null && recForce != null)
+        rows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce && meaningful(curForce, recForce) });
+      if (curMrr > 0 && recMrr > 0)
+        rows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr && meaningful(curMrr, recMrr) });
+      if (curFeed > 0 && recFeed > 0)
+        rows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed && meaningful(curFeed, recFeed) });
+
+      const tableHtml = rows.length > 0 ? `
+        <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:10px;">
+          <thead>
+            <tr style="background:#e55a00;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+              <th style="padding:4px 8px;text-align:left;font-weight:700;text-transform:uppercase;letter-spacing:.04em;"></th>
+              <th style="padding:4px 8px;text-align:center;font-weight:700;">Current (EDP# ${form.edp ?? "—"})</th>
+              <th style="padding:4px 8px;text-align:center;font-weight:700;background:#166534;-webkit-print-color-adjust:exact;print-color-adjust:exact;">Optimized (EDP# ${recSku.edp})</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r, i) => `
+            <tr style="background:${i % 2 === 0 ? "#f9fafb" : "#fff"};-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+              <td style="padding:4px 8px;color:#555;">${r.label}</td>
+              <td style="padding:4px 8px;text-align:center;color:#333;">${r.cur}</td>
+              <td style="padding:4px 8px;text-align:center;font-weight:700;color:${r.better ? "#166534" : "#333"};">${r.opt}${r.better ? " ✓" : ""}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>` : "";
+
+      return `
+      <div style="margin:14px 0;padding:10px 14px;border:2px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&#9733; Optimized EDP Match for This Setup</span>
+          <span style="font-size:12px;font-weight:700;color:#111;">EDP# ${recSku.edp}</span>
+          ${tags ? `<span style="font-size:10px;color:#555;">&nbsp;·&nbsp;${tags}</span>` : ""}
+        </div>
+        ${tableHtml}
+        ${recSku.geometry === "chipbreaker" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate.</p>` : ""}
+        ${recSku.geometry === "truncated_rougher" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">VRX (Truncated Rougher) geometry removes more material per pass with lower cutting forces than a standard flute.</p>` : ""}
+      </div>`;
+    })();
+
     const stabSection = stab ? `
       <h3>Rigidity & Chatter Audit</h3>
       <p class="verdict ${stab.deflection_pct >= 175 ? "red" : stab.deflection_pct >= 100 ? "yellow" : "green"}">
@@ -2101,6 +2168,7 @@ export default function Mentor() {
   })()}
 </table>
 
+${optimalSection}
 <h2>Recommended Parameters</h2>
 ${milSection}
 ${entrySection}
