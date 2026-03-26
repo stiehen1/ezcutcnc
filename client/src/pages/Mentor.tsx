@@ -3088,6 +3088,11 @@ ${stabSection}
                 {matSearchLoading ? "Matching…" : "Match"}
               </button>
             </div>
+            {matSearchLoading && (
+              <div className="mt-1.5 text-xs rounded px-2.5 py-1.5 border border-zinc-600/40 bg-zinc-800/40 text-zinc-400 animate-pulse">
+                Looking…
+              </div>
+            )}
             {matMatchResult && (
               <div className={`mt-1.5 text-xs rounded px-2.5 py-1.5 border ${matMatchResult.confidence === "high" ? "border-green-500/40 bg-green-500/10 text-green-300" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-300"}`}>
                 {matMatchResult.confidence === "high" ? "✓" : "⚠"} Running as <strong>{matMatchResult.label}</strong>
