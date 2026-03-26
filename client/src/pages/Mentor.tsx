@@ -6631,7 +6631,6 @@ ${stabSection}
                     ] as const)
                   : /* vmc default */ ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
-                      { key: "5th_axis_vise", label: "5th-Axis Vise"    },
                       { key: "dovetail",      label: "Dovetail"         },
                       { key: "vise",          label: "Vise"             },
                       { key: "toe_clamps",    label: "Toe Clamps"       },
