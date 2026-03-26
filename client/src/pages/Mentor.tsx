@@ -663,6 +663,8 @@ export default function Mentor() {
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfExtracted, setPdfExtracted] = React.useState(false);
   const [pdfToolNumber, setPdfToolNumber] = React.useState<string | null>(null);
+  const [pdfFluteWash, setPdfFluteWash] = React.useState<number>(0);
+  const [pdfFluteWashText, setPdfFluteWashText] = React.useState<string>("");
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
@@ -748,6 +750,18 @@ export default function Mentor() {
         }
         return next;
       });
+      // Flute wash: not on print — estimate 20% of LOC as conservative default
+      const _pdfLoc = e.loc > 0 ? e.loc : 0;
+      const _pdfDia = e.tool_dia > 0 ? e.tool_dia : 0;
+      const _fwEst = _pdfLoc > 0 ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
+      setPdfFluteWash(_fwEst);
+      setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
+      // Set default stickout: LOC + flute_wash_est + 0.33×D
+      if (_pdfLoc > 0 && _pdfDia > 0) {
+        const _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
+        setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
+        setStickoutText(_defaultSo.toFixed(3));
+      }
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
       mentor.reset();
@@ -1314,6 +1328,9 @@ export default function Mentor() {
     setTmNeckText("");
     setTmGcodeExpanded(false);
     clearSku();
+    setActiveMachineId(null);
+    setActiveMachineName("");
+    setMachineQuery("");
     setFormDirty(false);
     mentor.reset();
   }
@@ -2523,14 +2540,14 @@ ${stabSection}
             {/* Second row: operation calculators */}
             <div className="flex flex-wrap gap-2">
               {([
-                { op: "milling",       label: "Milling",       icon: "⟳" },
-                { op: "drilling",      label: "Drilling",      icon: "↓" },
-                { op: "reaming",       label: "Reaming",       icon: "◎" },
-                { op: "threadmilling", label: "Thread Milling",icon: "⌇" },
-                { op: "keyseat",       label: "Keyseat",       icon: "⊟" },
-                { op: "dovetail",      label: "Dovetail",      icon: "◇" },
-                { op: "feedmill",      label: "Feed Mill",     icon: "⌖" },
-              ] as const).map(({ op, label, icon }) => {
+                { op: "milling",       label: "Milling",       icon: "⟳", sub: "std + special" },
+                { op: "drilling",      label: "Drilling",      icon: "↓", sub: "special only"  },
+                { op: "reaming",       label: "Reaming",       icon: "◎", sub: "special only"  },
+                { op: "threadmilling", label: "Thread Milling",icon: "⌇", sub: "special only"  },
+                { op: "keyseat",       label: "Keyseat",       icon: "⊟", sub: "special only"  },
+                { op: "dovetail",      label: "Dovetail",      icon: "◇", sub: "special only"  },
+                { op: "feedmill",      label: "Feed Mill",     icon: "⌖", sub: "special only"  },
+              ] as const).map(({ op, label, icon, sub }) => {
                 const active = operation === op;
                 return (
                   <button
@@ -2546,7 +2563,7 @@ ${stabSection}
                         ...(op === "milling" ? { mode: "" } : {}),
                       }));
                     }}
-                    className="rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all flex-1"
+                    className="rounded-lg flex flex-col items-center justify-between px-2 py-2.5 text-[10px] font-semibold border transition-all flex-1"
                     style={{
                       backgroundColor: active ? "#6366f1" : "transparent",
                       borderColor: "#6366f1",
@@ -2555,6 +2572,7 @@ ${stabSection}
                   >
                     <span>{label}</span>
                     <span className="text-lg leading-none">{icon}</span>
+                    <span className="text-[8px] font-normal leading-none mt-auto pt-1" style={{ color: active ? "rgba(255,255,255,0.65)" : "rgba(99,102,241,0.6)" }}>{sub}</span>
                   </button>
                 );
               })}
@@ -3013,9 +3031,33 @@ ${stabSection}
           {(operation === "milling") && (!skuLocked) && (
             <div className={`rounded-lg border p-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
-                  <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                    <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <FieldLabel hint="Flute wash is the distance from the end of the LOC to where the flutes fully disappear into the shank — this section must not slide into the toolholder. Not called out on CC prints; estimated at 20% of LOC. Measure from the physical tool and correct here if needed.">Flute Wash (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners w-24 h-7 text-xs"
+                      placeholder="est."
+                      value={pdfFluteWashText}
+                      onChange={e => setPdfFluteWashText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(pdfFluteWashText);
+                        const fw = Number.isFinite(n) && n >= 0 ? n : pdfFluteWash;
+                        setPdfFluteWash(fw);
+                        setPdfFluteWashText(fw > 0 ? fw.toFixed(4) : "0.0000");
+                        // Recompute default stickout with corrected flute wash
+                        const loc = form.loc; const dia = form.tool_dia;
+                        if (loc > 0 && dia > 0) {
+                          const so = Math.ceil((loc + fw + 0.33 * dia) * 200) / 200;
+                          setForm(p => ({ ...p, stickout: so, flute_wash: fw }));
+                          setStickoutText(so.toFixed(3));
+                        }
+                      }}
+                    />
+                    <span className="text-[10px] text-amber-400/70">estimated — verify with tool</span>
+                  </div>
                 </div>
               ) : (
                 <label className="flex flex-col items-center gap-1 cursor-pointer">
@@ -6393,7 +6435,7 @@ ${stabSection}
 
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
-              <FieldLabel hint="Workholding rigidity affects chatter and deflection. Rigid fixtures and between-centers setups minimize compliance; soft jaws and standard chucks introduce more vibration tendency.">Workholding</FieldLabel>
+              <FieldLabel hint="Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid: Between Centers → Rigid Fixture → Tombstone → Collet Chuck → 4-Jaw Chuck → 5th-Axis Vise → Dovetail → Trunnion 4th (axis locked) → Face Plate → Vise (baseline) → 3-Jaw Chuck → Toe Clamps → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead.">Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
                   (form.machine_type === "lathe" || form.machine_type === "mill_turn")

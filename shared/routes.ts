@@ -67,6 +67,7 @@ export const mentorSchemas = {
 
     loc: z.number().min(0).default(0.75),
     lbs: z.number().min(0).default(0),
+    flute_wash: z.number().min(0).default(0),
 
     machine_hp: z.number().min(0).default(10),
     stickout: z.number().min(0).default(2.0),
