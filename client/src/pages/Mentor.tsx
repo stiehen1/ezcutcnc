@@ -3461,7 +3461,7 @@ ${stabSection}
                         <text x="5" y="90" fontSize="8" fill="#aaa">{form.chamfer_tip_dia > 0 ? "CMH — flat tip" : "CMS — center cutting"}</text>
                       </svg>
                     </div>
-                  }>Chamfer Size (in)</FieldLabel>
+                  }>Chamfer Length (in)</FieldLabel>
                   <Input
                     type="text"
                     inputMode="decimal"
@@ -3499,7 +3499,7 @@ ${stabSection}
                     if (form.chamfer_depth > edgeLength) {
                       return (
                         <p className="mt-1 text-xs text-red-400">
-                          ⚠ Chamfer size exceeds tool edge ({edgeLength.toFixed(4)}") — need a larger tool.
+                          ⚠ Chamfer length exceeds tool edge ({edgeLength.toFixed(4)}") — need a larger tool.
                         </p>
                       );
                     }
@@ -7882,12 +7882,12 @@ ${stabSection}
                     <div><span className="text-muted-foreground">Included Angle</span><span className="ml-2 font-semibold">{chamferResult.chamfer_angle_deg}°</span></div>
                     <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 — point (CMS)"}</span></div>
                     <div><span className="text-muted-foreground">Tool Edge Length</span><span className="ml-2 font-semibold">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
-                    <div><span className="text-muted-foreground">Max Chamfer Size</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
+                    <div><span className="text-muted-foreground">Max Chamfer Length</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
                     {chamferResult.chamfer_depth_in > 0 && (() => {
                       const halfRad = (chamferResult.chamfer_angle_deg / 2) * (Math.PI / 180);
                       const faceWidth = Math.cos(halfRad) > 0 ? chamferResult.chamfer_depth_in / Math.cos(halfRad) : 0;
                       return (<>
-                        <div><span className="text-muted-foreground">Chamfer Size (print)</span><span className="ml-2 font-semibold">{faceWidth.toFixed(4)}"</span></div>
+                        <div><span className="text-muted-foreground">Chamfer Length (print)</span><span className="ml-2 font-semibold">{faceWidth.toFixed(4)}"</span></div>
                         <div><span className="text-muted-foreground">Z Depth (CAM)</span><span className="ml-2 font-semibold text-blue-400">{chamferResult.chamfer_depth_in.toFixed(4)}"</span></div>
                       </>);
                     })()}
