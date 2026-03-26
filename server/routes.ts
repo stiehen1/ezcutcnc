@@ -2716,6 +2716,51 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json({ ok: true, token: row.token });
   });
 
+  // ── Toolbox: auto-auth (for users already registered via welcome modal) ───
+  app.post("/api/toolbox/auto-auth", async (req, res) => {
+    const { email } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Valid email required" });
+    }
+    const { pool } = await import("./db");
+    const emailLower = email.toLowerCase().trim();
+    const domain = emailLower.split("@")[1];
+
+    // Domain blocklist
+    const domainBlock = await pool.query(`SELECT 1 FROM blocked_domains WHERE domain = $1`, [domain]);
+    if (domainBlock.rows.length > 0) {
+      return res.status(403).json({ error: "Email domain not authorized" });
+    }
+
+    // User-level block
+    const userRow = await pool.query(`SELECT blocked FROM toolbox_sessions WHERE email = $1`, [emailLower]);
+    if (userRow.rows.length > 0 && userRow.rows[0].blocked) {
+      return res.status(403).json({ error: "Account suspended" });
+    }
+
+    // Allowlist check
+    const { rows: [{ count: allowCount }] } = await pool.query(`SELECT COUNT(*) FROM allowed_emails`);
+    if (Number(allowCount) > 0) {
+      const allowed = await pool.query(`SELECT 1 FROM allowed_emails WHERE email = $1`, [emailLower]);
+      if (allowed.rows.length === 0) {
+        return res.status(403).json({ error: "Access by invitation only" });
+      }
+    }
+
+    // Create or return existing session (no OTP required — user already verified via welcome modal)
+    const token = crypto.randomBytes(24).toString("hex");
+    const existing = await pool.query(`SELECT token FROM toolbox_sessions WHERE email = $1`, [emailLower]);
+    if (existing.rows.length > 0) {
+      // Return existing token — don't overwrite it (preserves existing saves)
+      return res.json({ ok: true, token: existing.rows[0].token });
+    }
+    await pool.query(
+      `INSERT INTO toolbox_sessions (email, token, created_at) VALUES ($1, $2, now())`,
+      [emailLower, token]
+    );
+    res.json({ ok: true, token });
+  });
+
   // ── Toolbox: save item ────────────────────────────────────────────────────
   app.post("/api/toolbox/save", async (req, res) => {
     const { email, token, type, title, data, notes } = req.body;

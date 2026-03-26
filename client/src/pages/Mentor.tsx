@@ -610,6 +610,27 @@ export default function Mentor() {
   const [editMaintenanceDate, setEditMaintenanceDate] = React.useState("");
   const [activeJobNo, setActiveJobNo] = React.useState("");
 
+  // Auto-auth Toolbox for users who already registered via welcome modal
+  React.useEffect(() => {
+    const erEmail = localStorage.getItem("er_email");
+    const hasTbToken = localStorage.getItem("tb_token");
+    if (!erEmail || hasTbToken) return;
+    fetch("/api/toolbox/auto-auth", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: erEmail }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.ok && d.token) {
+          localStorage.setItem("tb_email", erEmail.toLowerCase());
+          localStorage.setItem("tb_token", d.token);
+          setTbEmail(erEmail.toLowerCase());
+          setTbToken(d.token);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Search catalog (+ user saved machines if logged in)
   React.useEffect(() => {
     if (machineQuery.length < 2) { setMachineResults([]); return; }
