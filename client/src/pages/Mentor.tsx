@@ -2951,11 +2951,12 @@ ${stabSection}
                   const faceStepover = mode === "face" ? Math.max(0, (dia - 2 * cr) * 0.75) : null;
                   const faceWocPct   = faceStepover !== null && dia > 0 ? (faceStepover / dia) * 100 : wp.med;
 
+                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : "med";
                   setForm((p) => ({
                     ...p,
                     mode,
                     ...(mode === "slot" ? { woc_pct: 100 } : mode === "face" ? { woc_pct: faceWocPct } : { woc_pct: wp.med }),
-                    doc_xd: dp.med,
+                    doc_xd: dp[docLevel],
                   }));
                   if (mode === "slot") {
                     setWocText(dia ? dia.toFixed(4) : "");
@@ -2967,8 +2968,7 @@ ${stabSection}
                     setWocText(((wp.med / 100) * dia).toFixed(4));
                     setWocPreset("med");
                   }
-                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : "med";
-                  setDocText((dp[docLevel] * dia).toFixed(3));
+                  setDocText(dia > 0 ? (dp[docLevel] * dia).toFixed(3) : "");
                   setDocPreset(docLevel);
                 }}
               >
