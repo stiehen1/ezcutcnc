@@ -1022,7 +1022,8 @@ export async function registerRoutes(
       if (!bestSku) return res.json({ found: false, _debug: "no_best_sku", curScore, curLoc, curFlutes, peerCount: peers.rows.length, sameLocSameFluteCount: peers.rows.filter((r: any) => Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes).length });
 
       // ── VXR rigidity gate ─────────────────────────────────────────────────
-      // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces
+      // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces.
+      // If VXR is blocked, fall back to best non-VXR peer rather than returning nothing.
       const isVxr = /^vxr/i.test(bestSku.series ?? "");
       let vxrRigidityNote: string | null = null;
       if (isVxr) {
@@ -1032,14 +1033,23 @@ export async function registerRoutes(
         const weakHolder  = holder === "er_collet";
         const weakMachine = availHp > 0 && availHp < 10;
         const smallTaper  = taper === "CAT30" || taper === "BT30" || taper === "R8";
-        // VXR needs meaningful DOC and WOC — not for shallow/low-engagement passes
-        const shallowDoc = docXd > 0 && docXd < 0.5;
-        const lowWoc     = wocPct > 0 && wocPct < 8;
-        if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) return res.json({ found: false, _debug: "vxr_gate", weakHolder, weakMachine, smallTaper, shallowDoc, lowWoc });
-        // Borderline setup — show card with a note
-        const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
-        if (borderlineHolder || (availHp > 0 && availHp < 15)) {
-          vxrRigidityNote = "VXR geometry is aggressive — best results with shrink-fit or hydraulic holder, rigid workholding, and 15+ HP.";
+        const shallowDoc  = docXd > 0 && docXd < 0.5;
+        const lowWoc      = wocPct > 0 && wocPct < 8;
+        if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) {
+          // Fall back to best non-VXR peer at same LOC + same flutes
+          const nonVxrPeers = sameLocSameFlute.filter((r: any) => !/^vxr/i.test(r.series ?? ""));
+          bestSku = null; bestScore = -1;
+          for (const row of nonVxrPeers) {
+            const sc = scoreSku(row);
+            if (sc > bestScore) { bestScore = sc; bestSku = row; }
+          }
+          if (!bestSku || bestScore <= curScore) return res.json({ found: false, _debug: "vxr_blocked_no_fallback" });
+        } else {
+          // Borderline setup — show card with a note
+          const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
+          if (borderlineHolder || (availHp > 0 && availHp < 15)) {
+            vxrRigidityNote = "VXR geometry is aggressive — best results with shrink-fit or hydraulic holder, rigid workholding, and 15+ HP.";
+          }
         }
       }
 
