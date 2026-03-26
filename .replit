@@ -36,5 +36,5 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node dist/index.cjs"
+args = "npm run build && node dist/index.cjs"
 waitForPort = 5000
