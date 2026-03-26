@@ -131,8 +131,29 @@ export async function registerRoutes(
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS name TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS city TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS region TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS country TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS postal TEXT`);
   } catch (err: any) {
     console.warn("[Leads migration]", err?.message ?? err);
+  }
+
+  // ── IP Geolocation helper ─────────────────────────────────────────────────
+  async function geoFromIp(ip: string): Promise<{ city: string|null; region: string|null; country: string|null; postal: string|null }> {
+    try {
+      if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {
+        return { city: null, region: null, country: null, postal: null };
+      }
+      const r = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) return { city: null, region: null, country: null, postal: null };
+      const d = await r.json() as any;
+      return { city: d.city || null, region: d.region || null, country: d.country_name || null, postal: d.postal || null };
+    } catch {
+      return { city: null, region: null, country: null, postal: null };
+    }
   }
 
   // ── Access control tables ──────────────────────────────────────────────────
@@ -1367,11 +1388,14 @@ export async function registerRoutes(
       }
 
       // Store lead in DB regardless of email delivery
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
       try {
         const { pool } = await import("./db");
         await pool.query(
-          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
-          [email.toLowerCase().trim(), operation ?? null, material ?? null, machine_name ?? null, results_text ?? null]
+          `INSERT INTO leads (email, operation, material, machine_name, results_text, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [email.toLowerCase().trim(), operation ?? null, material ?? null, machine_name ?? null, results_text ?? null,
+           clientIp, geo.city, geo.region, geo.country, geo.postal]
         );
       } catch (dbErr: any) {
         console.warn("[Results Email] DB insert failed:", dbErr?.message);
@@ -1440,11 +1464,13 @@ export async function registerRoutes(
       }
 
       // Store as lead
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
       try {
         const { pool } = await import("./db");
         await pool.query(
-          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
-          [email.toLowerCase().trim(), "tool_request", null, null, `Name: ${name ?? "—"}\n\n${message ?? ""}`.trim()]
+          `INSERT INTO leads (email, operation, material, machine_name, results_text, name, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [email.toLowerCase().trim(), "tool_request", null, null, `Name: ${name ?? "—"}\n\n${message ?? ""}`.trim(), name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
         );
       } catch (dbErr: any) {
         console.warn("[Tool Request] DB insert failed:", dbErr?.message);
@@ -1494,11 +1520,13 @@ export async function registerRoutes(
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
       // Store in DB
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
       try {
         const { pool } = await import("./db");
         await pool.query(
-          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
-          [(email || "anonymous").toLowerCase().trim(), "feedback", null, type || "Other", message.trim()]
+          `INSERT INTO leads (email, operation, material, machine_name, results_text, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [(email || "anonymous").toLowerCase().trim(), "feedback", null, type || "Other", message.trim(), clientIp, geo.city, geo.region, geo.country, geo.postal]
         );
       } catch (dbErr: any) {
         console.warn("[Feedback] DB insert failed:", dbErr?.message);
@@ -1530,11 +1558,13 @@ export async function registerRoutes(
       if (!email?.trim()) return res.status(400).json({ error: "Email required." });
 
       // Log to leads table
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
       try {
         const { pool } = await import("./db");
         await pool.query(
-          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)`,
-          [email.toLowerCase().trim(), "step_request", null, tool_number?.trim() || null, "STEP file request"]
+          `INSERT INTO leads (email, operation, material, machine_name, results_text, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [email.toLowerCase().trim(), "step_request", null, tool_number?.trim() || null, "STEP file request", clientIp, geo.city, geo.region, geo.country, geo.postal]
         );
       } catch (dbErr: any) {
         console.warn("[StepRequest] DB insert failed:", dbErr?.message);
@@ -1573,12 +1603,14 @@ export async function registerRoutes(
       }
 
       // Store in DB leads table
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
       try {
         const { pool } = await import("./db");
         await pool.query(
-          `INSERT INTO leads (email, operation, material, machine_name, results_text) VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO leads (email, operation, material, machine_name, results_text, ip, city, region, country) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT DO NOTHING`,
-          [email.toLowerCase().trim(), "newsletter_signup", null, null, "Beta feedback nudge"]
+          [email.toLowerCase().trim(), "newsletter_signup", null, null, "Beta feedback nudge", clientIp, geo.city, geo.region, geo.country, geo.postal]
         );
       } catch (dbErr: any) {
         console.warn("[Newsletter] DB insert failed:", dbErr?.message);
