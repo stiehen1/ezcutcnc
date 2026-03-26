@@ -2495,7 +2495,8 @@ ${stabSection}
             <img
               src="/COREcutCNC_long_dark_logo.png"
               alt="CoreCutCNC"
-              className="h-[72px] w-auto flex-shrink-0"
+              className="h-[96px] w-auto flex-shrink-0"
+              style={{ mixBlendMode: "screen" }}
             />
             {/* IN/MM toggle + Eng Mode — vertical stack */}
             <div className="flex flex-col items-center gap-8 flex-shrink-0 mt-2">
