@@ -418,7 +418,13 @@ export default function Mentor() {
   const [erError, setErError] = React.useState("");
 
   // ── Welcome modal (first-visit name + email capture) ──────────────────────
-  const [showWelcomeModal, setShowWelcomeModal] = React.useState(() => !localStorage.getItem("cc_user_name"));
+  const [showWelcomeModal, setShowWelcomeModal] = React.useState(() => {
+    // Admin bypass — pre-seed identity so modal never shows for CC staff
+    const adminEmails = ["scott@corecutterusa.com"];
+    const stored = localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "";
+    if (adminEmails.includes(stored.toLowerCase())) return false;
+    return !localStorage.getItem("cc_user_name");
+  });
   const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
   const [welcomeLastName, setWelcomeLastName] = React.useState("");
   const [welcomeEmail, setWelcomeEmail] = React.useState("");

@@ -1457,15 +1457,16 @@ export async function registerRoutes(
 
   // ── Email MX validation helper ────────────────────────────────────────────
   async function hasMxRecord(email: string): Promise<boolean> {
+    const domain = (email.split("@")[1] || "").toLowerCase();
+    if (!domain) return false;
+    // Always pass internal/admin domains
+    if (domain === "corecutterusa.com" || domain === "corecutter.com") return true;
     try {
-      const domain = email.split("@")[1];
-      if (!domain) return false;
       const { resolveMx } = await import("dns/promises");
       const records = await resolveMx(domain);
       return records.length > 0;
     } catch {
       // DNS lookup failed (timeout, NXDOMAIN, no MX records) — fail open
-      // so legitimate domains without MX records aren't blocked
       return true;
     }
   }
