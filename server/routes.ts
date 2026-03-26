@@ -920,7 +920,7 @@ export async function registerRoutes(
          ORDER BY s.edp`,
         [dia, current_edp]
       );
-      if (peers.rows.length === 0) return res.json({ found: false });
+      if (peers.rows.length === 0) return res.json({ found: false, _debug: "no_peers", dia, curLoc, curFlutes });
 
       // ISO category from material key (simple map — N/P/M/K/S/H)
       const ISO_MAP: Record<string, string> = {
@@ -939,53 +939,43 @@ export async function registerRoutes(
       const isoCategory = ISO_MAP[matKey] ?? "P";
 
       // Scoring helpers
-      const isRoughing  = ["hem", "roughing"].includes(mode);
-      const isFinishing = ["finishing", "face"].includes(mode);
-      // HEM uses intentionally low WOC — CB is beneficial regardless of WOC%.
-      // For conventional roughing, still require ≥8% WOC before recommending CB.
       const cbOk  = docXd >= 1.0 && (mode === "hem" || wocPct >= 8);
       const vrxOk = docXd >= 1.0 && wocPct >= 10;
 
-      function scoreGeometry(g: string | null): number {
+      const scoreGeometry = (g: string | null): number => {
         const geom = (g ?? "standard").toLowerCase();
         if (vrxOk && geom === "truncated_rougher") return 4;
-        // CB scores 3 whenever engagement conditions are met (≥8% WOC + ≥1×D DOC)
-        // regardless of mode — cbOk already captures the right conditions
         if (cbOk && geom === "chipbreaker")        return 3;
         if (geom === "standard")                   return 2;
-        if (geom === "chipbreaker")                return 1; // CB but conditions not met
+        if (geom === "chipbreaker")                return 1;
         return 1;
-      }
+      };
 
-      function scoreCoating(coating: string | null): number {
+      const scoreCoating = (coating: string | null): number => {
         const c = (coating ?? "").toLowerCase();
         if (isoCategory === "N") return (c.includes("zrn") || c === "uncoated" || c.includes("d-max") || c.includes("a-max") || c.includes("dlc")) ? 2 : 0;
         if (isoCategory === "P") return (c.includes("altin") || c.includes("p-max") || c.includes("alcrn") || c.includes("t-max")) ? 2 : c.includes("tin") ? 1 : 0;
-        // M (stainless) + S (superalloys): T-Max is the top pick (score 3); C-Max second (2); A-Max/P-Max acceptable (1)
         if (isoCategory === "M") return c.includes("t-max") ? 3 : (c.includes("c-max") || c.includes("alcrn")) ? 2 : (c.includes("altin") || c.includes("p-max")) ? 1 : 0;
         if (isoCategory === "S") return c.includes("t-max") ? 3 : (c.includes("altin") || c.includes("c-max") || c.includes("alcrn")) ? 2 : 0;
         if (isoCategory === "H") return (c.includes("alcrn") || c.includes("c-max") || c.includes("t-max")) ? 2 : 0;
         return 0;
-      }
+      };
 
       const curFlutes = Number(payload.flutes ?? 0);
 
-      // QTR3, QTR3-RN, CMH, CMS are geometry-specialized series — their coating
-      // is fixed for the application (small-diameter work). Never score 0 due to
-      // coating-material mismatch; treat coating as neutral (1) on any material.
       const GEOM_SPECIALIZED = ["qtr3", "cmh", "cms"];
-      function isGeomSpecialized(row: any): boolean {
+      const isGeomSpecialized = (row: any): boolean => {
         const s = (row.tool_series ?? "").toLowerCase();
         return GEOM_SPECIALIZED.some(prefix => s.startsWith(prefix));
-      }
+      };
 
-      function scoreSku(row: any): number {
+      const scoreSku = (row: any): number => {
         const coatScore = isGeomSpecialized(row) ? 1 : scoreCoating(row.coating);
         let s = scoreGeometry(row.geometry) + coatScore;
         if (row.variable_pitch) s += 1;
         if (row.variable_helix) s += 1;
         return s;
-      }
+      };
 
       // Score current EDP
       const curResult = await pool.query(
@@ -1029,7 +1019,7 @@ export async function registerRoutes(
       }
 
       // No recommendation found
-      if (!bestSku) return res.json({ found: false });
+      if (!bestSku) return res.json({ found: false, _debug: "no_best_sku", curScore, curLoc, curFlutes, peerCount: peers.rows.length, sameLocSameFluteCount: peers.rows.filter((r: any) => Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes).length });
 
       // ── VXR rigidity gate ─────────────────────────────────────────────────
       // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces
@@ -1045,7 +1035,7 @@ export async function registerRoutes(
         // VXR needs meaningful DOC and WOC — not for shallow/low-engagement passes
         const shallowDoc = docXd > 0 && docXd < 0.5;
         const lowWoc     = wocPct > 0 && wocPct < 8;
-        if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) return res.json({ found: false });
+        if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) return res.json({ found: false, _debug: "vxr_gate", weakHolder, weakMachine, smallTaper, shallowDoc, lowWoc });
         // Borderline setup — show card with a note
         const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
         if (borderlineHolder || (availHp > 0 && availHp < 15)) {
@@ -1090,11 +1080,12 @@ export async function registerRoutes(
         // Suppress only if recommended tool is materially worse (>10% MRR drop OR stability gets worse)
         const mrrWorse  = curMrrNum > 0 && recMrr > 0 && recMrr < curMrrNum * 0.90;
         const stabWorse = curStabNum > 0 && recStabPct > 0 && recStabPct > curStabNum * 1.10;
-        if (mrrWorse || stabWorse) return res.json({ found: false });
+        if (mrrWorse || stabWorse) return res.json({ found: false, _debug: "safety_filter", mrrWorse, stabWorse, recMrr, recStabPct, curMrrNum, curStabNum });
       }
 
       return res.json({
         found: true,
+        _debug: { curScore, bestScore, cbOk, vrxOk, docXd, wocPct, mode, isoCategory },
         recommended_edp: bestSku.edp,
         rigidity_note: vxrRigidityNote ?? undefined,
         recommended_sku: {
