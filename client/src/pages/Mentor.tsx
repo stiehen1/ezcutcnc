@@ -812,6 +812,15 @@ export default function Mentor() {
         else if (tt === "chamfer_mill") {
           next.tool_type = "chamfer_mill";
         }
+        // Coolant-fed detection
+        if (e.coolant_fed === true) {
+          if (tt === "drill" || tt === "step_drill") next.drill_coolant_fed = true;
+          else if (tt === "reamer") next.ream_coolant_fed = true;
+          else next.coolant = "tsc_low"; // endmill/keyseat/dovetail/etc — default to TSC low pressure
+        }
+        // Shank type detection
+        if (e.shank_type === "weldon") next.toolholder = "weldon";
+        else if (e.shank_type === "safe_lock") next.toolholder = "shrink_fit";
         return next;
       });
       // Flute wash: not on print — estimate 20% of LOC as conservative default
@@ -830,7 +839,13 @@ export default function Mentor() {
       setPdfToolNumber(e.tool_number ?? null);
       setPdfConvertedFromMm(!!e._converted_from_mm);
       mentor.reset();
-      toast({ title: "Print read successfully", description: `${e.tool_number ? `Tool ${e.tool_number} — ` : ""}${e._converted_from_mm ? "Metric print detected — dimensions converted to inches. " : ""}Review extracted dimensions below and correct any misreads before running.` });
+      const toastParts: string[] = [];
+      if (e.tool_number) toastParts.push(`Tool ${e.tool_number}`);
+      if (e._converted_from_mm) toastParts.push("Metric print — converted to inches");
+      if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
+      if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
+      else if (e.shank_type === "safe_lock") toastParts.push("Safe Lock shank — shrink fit set");
+      toast({ title: "Print read successfully", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + "Review extracted dimensions below and correct any misreads before running." });
     } catch {
       toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
     }
