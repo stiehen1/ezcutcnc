@@ -464,6 +464,114 @@ export default function Mentor() {
     }).catch(() => {});
   }
 
+  // ── ROI Calculator functions ───────────────────────────────────────────────
+  function calcRoi() {
+    const ccP = parseFloat(roiCcPrice), ccN = parseFloat(roiCcParts), ccT = parseFloat(roiCcTime);
+    const cP = parseFloat(roiCompPrice), cN = parseFloat(roiCompParts), cT = parseFloat(roiCompTime);
+    const rate = parseFloat(roiShopRate), vol = parseFloat(roiMonthlyVol);
+    if ([ccP,ccN,ccT,cP,cN,cT,rate,vol].some(v => !Number.isFinite(v) || v <= 0)) return;
+    const ccToolCost = ccP / ccN;
+    const ccMachineCost = (ccT / 60) * rate;
+    const ccTotalCost = ccToolCost + ccMachineCost;
+    const compToolCost = cP / cN;
+    const compMachineCost = (cT / 60) * rate;
+    const compTotalCost = compToolCost + compMachineCost;
+    const savingsPerPart = compTotalCost - ccTotalCost;
+    const monthlySavings = savingsPerPart * vol;
+    const annualSavings = monthlySavings * 12;
+    const savingsPct = compTotalCost > 0 ? (savingsPerPart / compTotalCost) * 100 : 0;
+    const timeSavingsPct = cT > 0 ? ((cT - ccT) / cT) * 100 : 0;
+    setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct });
+  }
+
+  async function submitRoi() {
+    if (!roiResult) return;
+    setRoiSaving(true);
+    try {
+      await fetch("/api/roi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userEmail: erEmail,
+          userName: localStorage.getItem("cc_user_name") || "",
+          material: form.material,
+          operation,
+          toolDia: form.tool_dia,
+          feedIpm: result?.customer?.feed_ipm ?? 0,
+          ccEdp: edpText || "",
+          ccToolPrice: parseFloat(roiCcPrice),
+          ccPartsPer: parseFloat(roiCcParts),
+          ccTimeInCut: parseFloat(roiCcTime),
+          compEdp: roiCompEdp,
+          compPrice: parseFloat(roiCompPrice),
+          compPartsPer: parseFloat(roiCompParts),
+          compTimeInCut: parseFloat(roiCompTime),
+          shopRate: parseFloat(roiShopRate),
+          monthlyVolume: parseFloat(roiMonthlyVol),
+          savingsPerPart: roiResult.savingsPerPart,
+          monthlySavings: roiResult.monthlySavings,
+          annualSavings: roiResult.annualSavings,
+          savingsPct: roiResult.savingsPct,
+        }),
+      });
+      setRoiEmailSent(true);
+    } catch { /* silently fail */ }
+    setRoiSaving(false);
+  }
+
+  function printRoi() {
+    if (!roiResult) return;
+    const ccFeed = result?.customer?.feed_ipm;
+    const w = window.open("", "_blank", "width=700,height=900");
+    if (!w) return;
+    const fmt = (n: number) => n.toFixed(4);
+    const fmtD = (n: number) => n.toFixed(2);
+    w.document.write(`<!DOCTYPE html><html><head><title>ROI Summary — CoreCutCNC</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a1a; }
+    h1 { color: #f97316; font-size: 22px; margin-bottom: 4px; }
+    .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #1c1c1c; color: #fff; padding: 8px 12px; text-align: left; font-size: 13px; }
+    th.cc { background: #ea580c; }
+    td { padding: 7px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+    .savings { background: #f0fdf4; }
+    .savings td { font-weight: bold; color: #16a34a; }
+    .total td { font-weight: bold; background: #f9fafb; }
+    .big { font-size: 28px; font-weight: bold; color: #16a34a; margin: 0; }
+    .bigbox { border: 2px solid #16a34a; border-radius: 8px; padding: 16px 24px; display: inline-block; margin-right: 16px; }
+    .params { font-size: 12px; color: #666; margin-bottom: 20px; }
+    @media print { body { margin: 20px; } }
+  </style></head><body>
+  <h1>CoreCutCNC ROI Summary</h1>
+  <div class="sub">Generated ${new Date().toLocaleDateString()} · ${localStorage.getItem("cc_user_name") || erEmail}</div>
+  <div class="params">
+    <strong>Run Parameters:</strong> ${form.material} · ${operation} · ${fmt(form.tool_dia)}" dia
+    ${ccFeed ? `· ${fmtD(ccFeed)} IPM` : ""}
+    ${edpText ? `· CC EDP: ${edpText}` : ""}
+    ${roiCompEdp ? `· Competitor: ${roiCompEdp}` : ""}
+  </div>
+  <div style="margin-bottom:24px">
+    <div class="bigbox"><div class="big">$${fmtD(roiResult.savingsPerPart)}</div><div style="font-size:12px;color:#666">Savings per part</div></div>
+    <div class="bigbox"><div class="big">$${fmtD(roiResult.monthlySavings)}</div><div style="font-size:12px;color:#666">Monthly savings</div></div>
+    <div class="bigbox"><div class="big">$${fmtD(roiResult.annualSavings)}</div><div style="font-size:12px;color:#666">Annual savings</div></div>
+  </div>
+  <table>
+    <tr><th></th><th class="cc">Core Cutter</th><th>Competitor</th></tr>
+    <tr><td>Tool Price</td><td>$${fmtD(parseFloat(roiCcPrice))}</td><td>$${fmtD(parseFloat(roiCompPrice))}</td></tr>
+    <tr><td>Parts per Tool</td><td>${roiCcParts}</td><td>${roiCompParts}</td></tr>
+    <tr><td>Time in Cut (min/part)</td><td>${roiCcTime}</td><td>${roiCompTime}</td></tr>
+    <tr><td>Tool Cost per Part</td><td>$${fmtD(roiResult.ccToolCost)}</td><td>$${fmtD(roiResult.compToolCost)}</td></tr>
+    <tr><td>Machine Time Cost per Part</td><td>$${fmtD(roiResult.ccMachineCost)}</td><td>$${fmtD(roiResult.compMachineCost)}</td></tr>
+    <tr class="total"><td>Total Cost per Part</td><td>$${fmtD(roiResult.ccTotalCost)}</td><td>$${fmtD(roiResult.compTotalCost)}</td></tr>
+    <tr class="savings"><td colspan="3">Savings: $${fmtD(roiResult.savingsPerPart)}/part · ${fmtD(roiResult.savingsPct)}% reduction · $${fmtD(roiResult.monthlySavings)}/mo · $${fmtD(roiResult.annualSavings)}/yr</td></tr>
+  </table>
+  <div style="font-size:11px;color:#999;margin-top:32px">Shop rate: $${roiShopRate}/hr · Monthly volume: ${roiMonthlyVol} parts · Generated by CoreCutCNC — corecutcnc.com</div>
+  <script>window.onload=()=>window.print();</script>
+  </body></html>`);
+    w.document.close();
+  }
+
   // ── Email gate (lock all outputs behind email) ─────────────────────────
   const [erGateOpen, setErGateOpen] = React.useState(false);
   const [erGatePending, setErGatePending] = React.useState<"copy" | "print" | "pdf" | "stp" | null>(null);
@@ -1213,6 +1321,28 @@ export default function Mentor() {
   const [chamferTipDiaText, setChamferTipDiaText] = React.useState("");
   const [chamferDepthText, setChamferDepthText] = React.useState("");
   const [chamferUpgradeSuggestion, setChamferUpgradeSuggestion] = React.useState<{edp: string, dia: number, desc: string} | null>(null);
+
+  // ── ROI Calculator state ───────────────────────────────────────────────────
+  const [showRoi, setShowRoi] = React.useState(false);
+  const [roiCcPrice, setRoiCcPrice] = React.useState("");
+  const [roiCcParts, setRoiCcParts] = React.useState("");
+  const [roiCcTime, setRoiCcTime] = React.useState("");
+  const [roiCompEdp, setRoiCompEdp] = React.useState("");
+  const [roiCompPrice, setRoiCompPrice] = React.useState("");
+  const [roiCompParts, setRoiCompParts] = React.useState("");
+  const [roiCompTime, setRoiCompTime] = React.useState("");
+  const [roiShopRate, setRoiShopRate] = React.useState("");
+  const [roiMonthlyVol, setRoiMonthlyVol] = React.useState("");
+  const [roiResult, setRoiResult] = React.useState<{
+    ccToolCost: number; ccMachineCost: number; ccTotalCost: number;
+    compToolCost: number; compMachineCost: number; compTotalCost: number;
+    savingsPerPart: number; monthlySavings: number; annualSavings: number;
+    savingsPct: number; timeSavingsPct: number;
+  } | null>(null);
+  const [roiSaving, setRoiSaving] = React.useState(false);
+  const [roiEmailSent, setRoiEmailSent] = React.useState(false);
+  const [roiPrinting, setRoiPrinting] = React.useState(false);
+
   const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
   const [tmTpiText, setTmTpiText] = React.useState("");
   const [tmPitchMmText, setTmPitchMmText] = React.useState("");
@@ -1418,6 +1548,9 @@ export default function Mentor() {
     setActiveMachineName("");
     setMachineQuery("");
     setFormDirty(false);
+    setShowRoi(false);
+    setRoiResult(null);
+    setRoiEmailSent(false);
     mentor.reset();
   }
 
@@ -9463,6 +9596,226 @@ ${stabSection}
 
       </div>
       </div>} {/* end grid */}
+
+      {/* ROI vs Competitor */}
+      {mentor.data && (
+        <div className="mt-5 rounded-xl border border-green-700/50 bg-green-950/20">
+          {/* Header toggle */}
+          <button
+            type="button"
+            onClick={() => setShowRoi(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <span className="text-sm font-semibold text-green-300">📊 ROI vs Competitor</span>
+            <span className="text-xs text-green-600">{showRoi ? "▲ collapse" : "▼ expand"}</span>
+          </button>
+
+          {showRoi && (
+            <div className="px-4 pb-4 space-y-4">
+              {/* 2-column form */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Left: Core Cutter */}
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-1">Core Cutter</div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 48.50"
+                      value={roiCcPrice}
+                      onChange={e => setRoiCcPrice(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 120"
+                      value={roiCcParts}
+                      onChange={e => setRoiCcParts(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Time in Cut (min/part)</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 2.4"
+                      value={roiCcTime}
+                      onChange={e => setRoiCcTime(e.target.value)}
+                    />
+                  </div>
+                  {result?.customer?.feed_ipm && (
+                    <p className="text-[10px] text-zinc-500 leading-snug">
+                      Current run: {result.customer.feed_ipm.toFixed(1)} IPM — use path length ÷ IPM × 60 to get minutes
+                    </p>
+                  )}
+                </div>
+
+                {/* Right: Competitor */}
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Competitor</div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">EDP / Part # (optional)</Label>
+                    <Input
+                      type="text"
+                      className="h-7 text-xs"
+                      placeholder="e.g. 5537795"
+                      value={roiCompEdp}
+                      onChange={e => setRoiCompEdp(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 62.00"
+                      value={roiCompPrice}
+                      onChange={e => setRoiCompPrice(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 80"
+                      value={roiCompParts}
+                      onChange={e => setRoiCompParts(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Time in Cut (min/part)</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 3.8"
+                      value={roiCompTime}
+                      onChange={e => setRoiCompTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Shop rate + monthly volume */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-zinc-400">Shop Rate ($/hr)</Label>
+                  <Input
+                    type="number"
+                    className="no-spinners h-7 text-xs"
+                    placeholder="e.g. 85"
+                    value={roiShopRate}
+                    onChange={e => setRoiShopRate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-zinc-400">Monthly Volume (parts/mo)</Label>
+                  <Input
+                    type="number"
+                    className="no-spinners h-7 text-xs"
+                    placeholder="e.g. 500"
+                    value={roiMonthlyVol}
+                    onChange={e => setRoiMonthlyVol(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={calcRoi}
+                className="rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-semibold px-4 py-1.5 transition-colors"
+              >
+                Calculate ROI
+              </button>
+
+              {/* Results */}
+              {roiResult && (
+                <div className="space-y-3 pt-1">
+                  {/* Hero savings */}
+                  <div className="rounded-lg border border-green-600/50 bg-green-950/40 px-4 py-3 text-center">
+                    <div className="text-3xl font-bold text-green-400">${roiResult.savingsPerPart.toFixed(2)}</div>
+                    <div className="text-xs text-green-600 mt-0.5">savings per part</div>
+                    {roiResult.timeSavingsPct > 0 && (
+                      <span className="inline-block mt-1.5 rounded-full bg-green-800/60 border border-green-600/40 text-green-300 text-[10px] font-semibold px-2 py-0.5">
+                        {roiResult.timeSavingsPct.toFixed(1)}% faster cycle time
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 3 stat boxes */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-lg border border-green-700/40 bg-green-950/30 px-3 py-2 text-center">
+                      <div className="text-lg font-bold text-green-300">${roiResult.monthlySavings.toFixed(2)}</div>
+                      <div className="text-[10px] text-zinc-500">Monthly savings</div>
+                    </div>
+                    <div className="rounded-lg border border-green-700/40 bg-green-950/30 px-3 py-2 text-center">
+                      <div className="text-lg font-bold text-green-300">${roiResult.annualSavings.toFixed(2)}</div>
+                      <div className="text-[10px] text-zinc-500">Annual savings</div>
+                    </div>
+                    <div className="rounded-lg border border-green-700/40 bg-green-950/30 px-3 py-2 text-center">
+                      <div className="text-lg font-bold text-green-300">{roiResult.savingsPct.toFixed(1)}%</div>
+                      <div className="text-[10px] text-zinc-500">Cost reduction</div>
+                    </div>
+                  </div>
+
+                  {/* Comparison table */}
+                  <div className="rounded-lg border border-zinc-700/50 overflow-hidden text-xs">
+                    <table className="w-full">
+                      <thead>
+                        <tr>
+                          <th className="text-left px-3 py-2 bg-zinc-800 text-zinc-400 font-medium"></th>
+                          <th className="text-right px-3 py-2 bg-orange-900/40 text-orange-300 font-semibold">Core Cutter</th>
+                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Competitor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t border-zinc-700/40">
+                          <td className="px-3 py-1.5 text-zinc-400">Tool Cost / Part</td>
+                          <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccToolCost.toFixed(4)}</td>
+                          <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compToolCost.toFixed(4)}</td>
+                        </tr>
+                        <tr className="border-t border-zinc-700/40 bg-zinc-800/30">
+                          <td className="px-3 py-1.5 text-zinc-400">Machine Cost / Part</td>
+                          <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccMachineCost.toFixed(4)}</td>
+                          <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compMachineCost.toFixed(4)}</td>
+                        </tr>
+                        <tr className="border-t border-zinc-700/40">
+                          <td className="px-3 py-1.5 text-zinc-300 font-semibold">Total Cost / Part</td>
+                          <td className="px-3 py-1.5 text-right text-orange-400 font-semibold">${roiResult.ccTotalCost.toFixed(4)}</td>
+                          <td className="px-3 py-1.5 text-right text-zinc-200 font-semibold">${roiResult.compTotalCost.toFixed(4)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={submitRoi}
+                      disabled={roiSaving || roiEmailSent}
+                      className="flex-1 rounded-lg border border-green-600/50 bg-green-900/30 hover:bg-green-900/50 disabled:opacity-50 text-green-300 text-xs font-semibold px-3 py-1.5 transition-colors"
+                    >
+                      {roiEmailSent ? "✓ Email Sent" : roiSaving ? "Sending…" : "📧 Email ROI Report"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={printRoi}
+                      className="flex-1 rounded-lg border border-zinc-600/50 bg-zinc-800/30 hover:bg-zinc-800/50 text-zinc-300 text-xs font-semibold px-3 py-1.5 transition-colors"
+                    >
+                      🖨 Print / Save PDF
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Toolbox */}
       {mentor.data && (

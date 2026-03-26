@@ -75,6 +75,42 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE skus ADD COLUMN IF NOT EXISTS max_cutting_edge_length FLOAT`);
   } catch { /* table may not exist yet — uploads will create it */ }
 
+  // ── ROI comparisons table ─────────────────────────────────────────────────
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS roi_comparisons (
+        id SERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        user_email TEXT,
+        user_name TEXT,
+        material TEXT,
+        operation TEXT,
+        tool_dia FLOAT,
+        feed_ipm FLOAT,
+        cc_edp TEXT,
+        cc_tool_price FLOAT,
+        cc_parts_per_tool FLOAT,
+        cc_time_in_cut FLOAT,
+        comp_edp TEXT,
+        comp_price FLOAT,
+        comp_parts_per_tool FLOAT,
+        comp_time_in_cut FLOAT,
+        shop_rate FLOAT,
+        monthly_volume FLOAT,
+        savings_per_part FLOAT,
+        monthly_savings FLOAT,
+        annual_savings FLOAT,
+        savings_pct FLOAT,
+        city TEXT,
+        region TEXT,
+        country TEXT,
+        ip TEXT
+      )
+    `);
+    console.log("[DB] roi_comparisons table ready");
+  } catch (e: any) { console.warn("[DB] roi_comparisons migration failed:", e?.message); }
+
   // ── Toolbox tables ────────────────────────────────────────────────────────
   try {
     const { pool } = await import("./db");
@@ -1686,6 +1722,198 @@ export async function registerRoutes(
       return res.status(500).json({ error: "Signup failed." });
     }
   });
+
+  // ── ROI Comparison ────────────────────────────────────────────────────────
+  app.post("/api/roi", async (req, res) => {
+    try {
+      const {
+        userEmail, userName, material, operation, toolDia, feedIpm,
+        ccEdp, ccToolPrice, ccPartsPer, ccTimeInCut,
+        compEdp, compPrice, compPartsPer, compTimeInCut,
+        shopRate, monthlyVolume,
+        savingsPerPart, monthlySavings, annualSavings, savingsPct,
+      } = (req.body ?? {}) as {
+        userEmail?: string; userName?: string; material?: string; operation?: string;
+        toolDia?: number; feedIpm?: number; ccEdp?: string; ccToolPrice?: number;
+        ccPartsPer?: number; ccTimeInCut?: number; compEdp?: string; compPrice?: number;
+        compPartsPer?: number; compTimeInCut?: number; shopRate?: number; monthlyVolume?: number;
+        savingsPerPart?: number; monthlySavings?: number; annualSavings?: number; savingsPct?: number;
+      };
+
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
+
+      // Insert into DB
+      try {
+        const { pool } = await import("./db");
+        await pool.query(
+          `INSERT INTO roi_comparisons (
+            user_email, user_name, material, operation, tool_dia, feed_ipm,
+            cc_edp, cc_tool_price, cc_parts_per_tool, cc_time_in_cut,
+            comp_edp, comp_price, comp_parts_per_tool, comp_time_in_cut,
+            shop_rate, monthly_volume, savings_per_part, monthly_savings, annual_savings, savings_pct,
+            city, region, country, ip
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+          [
+            userEmail || null, userName || null, material || null, operation || null,
+            toolDia ?? null, feedIpm ?? null, ccEdp || null, ccToolPrice ?? null,
+            ccPartsPer ?? null, ccTimeInCut ?? null, compEdp || null, compPrice ?? null,
+            compPartsPer ?? null, compTimeInCut ?? null, shopRate ?? null, monthlyVolume ?? null,
+            savingsPerPart ?? null, monthlySavings ?? null, annualSavings ?? null, savingsPct ?? null,
+            geo.city, geo.region, geo.country, clientIp,
+          ]
+        );
+      } catch (dbErr: any) {
+        console.warn("[ROI] DB insert failed:", dbErr?.message);
+      }
+
+      // Send email
+      const smtpUser = process.env.SMTP_USER || "";
+      const smtpPass = process.env.SMTP_PASS || "";
+      const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+      const salesTo = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
+
+      if (smtpUser && smtpPass && userEmail) {
+        const fmtD = (n: number | undefined) => (n != null ? n.toFixed(2) : "—");
+        const fmtFour = (n: number | undefined) => (n != null ? n.toFixed(4) : "—");
+        const subjectSavings = (savingsPerPart ?? 0) >= 0
+          ? `CC Saves $${fmtD(savingsPerPart)}/part`
+          : "Competitor Comparison";
+
+        const ccToolCost = (ccToolPrice ?? 0) / (ccPartsPer ?? 1);
+        const ccMachineCost = ((ccTimeInCut ?? 0) / 60) * (shopRate ?? 0);
+        const ccTotalCost = ccToolCost + ccMachineCost;
+        const compToolCost = (compPrice ?? 0) / (compPartsPer ?? 1);
+        const compMachineCost = ((compTimeInCut ?? 0) / 60) * (shopRate ?? 0);
+        const compTotalCost = compToolCost + compMachineCost;
+
+        const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#111;color:#e5e7eb;margin:0;padding:32px;">
+  <div style="max-width:620px;margin:0 auto;background:#1c1c1c;border-radius:12px;overflow:hidden;">
+    <div style="background:#ea580c;padding:20px 28px;">
+      <h1 style="margin:0;font-size:20px;color:#fff;letter-spacing:-0.3px;">CoreCutCNC ROI Summary</h1>
+      <p style="margin:4px 0 0;font-size:13px;color:#fed7aa;">Your machining cost comparison report</p>
+    </div>
+    <div style="padding:24px 28px;">
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px;">
+        <tr>
+          <td style="padding:6px 10px;color:#9ca3af;width:40%;">Material</td>
+          <td style="padding:6px 10px;color:#f3f4f6;">${material || "—"}</td>
+        </tr>
+        <tr style="background:#262626;">
+          <td style="padding:6px 10px;color:#9ca3af;">Operation</td>
+          <td style="padding:6px 10px;color:#f3f4f6;">${operation || "—"}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 10px;color:#9ca3af;">Tool Diameter</td>
+          <td style="padding:6px 10px;color:#f3f4f6;">${fmtFour(toolDia)}"</td>
+        </tr>
+        ${feedIpm ? `<tr style="background:#262626;"><td style="padding:6px 10px;color:#9ca3af;">Feed Rate</td><td style="padding:6px 10px;color:#f3f4f6;">${fmtD(feedIpm)} IPM</td></tr>` : ""}
+        ${ccEdp ? `<tr><td style="padding:6px 10px;color:#9ca3af;">CC EDP</td><td style="padding:6px 10px;color:#f3f4f6;">${ccEdp}</td></tr>` : ""}
+        ${compEdp ? `<tr style="background:#262626;"><td style="padding:6px 10px;color:#9ca3af;">Competitor EDP</td><td style="padding:6px 10px;color:#f3f4f6;">${compEdp}</td></tr>` : ""}
+        <tr>
+          <td style="padding:6px 10px;color:#9ca3af;">Shop Rate</td>
+          <td style="padding:6px 10px;color:#f3f4f6;">$${fmtD(shopRate)}/hr</td>
+        </tr>
+        <tr style="background:#262626;">
+          <td style="padding:6px 10px;color:#9ca3af;">Monthly Volume</td>
+          <td style="padding:6px 10px;color:#f3f4f6;">${monthlyVolume ?? "—"} parts</td>
+        </tr>
+      </table>
+
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
+        <thead>
+          <tr>
+            <th style="padding:10px 12px;text-align:left;background:#1a1a1a;color:#9ca3af;font-weight:500;border-bottom:2px solid #333;"></th>
+            <th style="padding:10px 12px;text-align:left;background:#ea580c;color:#fff;font-weight:600;">Core Cutter</th>
+            <th style="padding:10px 12px;text-align:left;background:#3f3f46;color:#e4e4e7;font-weight:600;">Competitor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:9px 12px;color:#9ca3af;border-bottom:1px solid #2a2a2a;">Tool Price</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">$${fmtD(ccToolPrice)}</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">$${fmtD(compPrice)}</td>
+          </tr>
+          <tr style="background:#1f1f1f;">
+            <td style="padding:9px 12px;color:#9ca3af;border-bottom:1px solid #2a2a2a;">Parts per Tool</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">${ccPartsPer ?? "—"}</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">${compPartsPer ?? "—"}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;color:#9ca3af;border-bottom:1px solid #2a2a2a;">Time in Cut (min/part)</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">${ccTimeInCut ?? "—"}</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">${compTimeInCut ?? "—"}</td>
+          </tr>
+          <tr style="background:#1f1f1f;">
+            <td style="padding:9px 12px;color:#9ca3af;border-bottom:1px solid #2a2a2a;">Tool Cost / Part</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">$${fmtD(ccToolCost)}</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">$${fmtD(compToolCost)}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;color:#9ca3af;border-bottom:1px solid #2a2a2a;">Machine Cost / Part</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">$${fmtD(ccMachineCost)}</td>
+            <td style="padding:9px 12px;color:#f3f4f6;border-bottom:1px solid #2a2a2a;">$${fmtD(compMachineCost)}</td>
+          </tr>
+          <tr style="background:#1a1a1a;">
+            <td style="padding:9px 12px;color:#f3f4f6;font-weight:700;border-bottom:1px solid #333;">Total Cost / Part</td>
+            <td style="padding:9px 12px;color:#fb923c;font-weight:700;border-bottom:1px solid #333;">$${fmtD(ccTotalCost)}</td>
+            <td style="padding:9px 12px;color:#e4e4e7;font-weight:700;border-bottom:1px solid #333;">$${fmtD(compTotalCost)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="background:#052e16;border:2px solid #16a34a;border-radius:10px;padding:20px 24px;margin-bottom:24px;">
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:120px;">
+            <div style="font-size:28px;font-weight:700;color:#4ade80;">$${fmtD(savingsPerPart)}</div>
+            <div style="font-size:12px;color:#86efac;">Savings per part</div>
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div style="font-size:24px;font-weight:700;color:#4ade80;">$${fmtD(monthlySavings)}</div>
+            <div style="font-size:12px;color:#86efac;">Monthly savings</div>
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div style="font-size:24px;font-weight:700;color:#4ade80;">$${fmtD(annualSavings)}</div>
+            <div style="font-size:12px;color:#86efac;">Annual savings</div>
+          </div>
+          <div style="flex:1;min-width:80px;">
+            <div style="font-size:24px;font-weight:700;color:#4ade80;">${fmtD(savingsPct)}%</div>
+            <div style="font-size:12px;color:#86efac;">Cost reduction</div>
+          </div>
+        </div>
+      </div>
+
+      <p style="font-size:12px;color:#6b7280;margin:0;">Generated by CoreCutCNC — <a href="https://corecutcnc.com" style="color:#ea580c;">corecutcnc.com</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+        const transporter = nodemailer.createTransport({
+          host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({
+          from: `"CoreCutCNC" <${smtpUser}>`,
+          to: userEmail,
+          cc: salesTo,
+          subject: `Your CoreCutCNC ROI Summary — ${subjectSavings}`,
+          html: htmlBody,
+        });
+      }
+
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[ROI] Error:", e?.message);
+      return res.status(500).json({ error: "Failed to save ROI comparison." });
+    }
+  });
+
 
   // Seed data — wrapped in try/catch so a Neon cold-start ECONNRESET doesn't crash the server
   let snippets: Awaited<ReturnType<typeof storage.getSnippets>> = [];
