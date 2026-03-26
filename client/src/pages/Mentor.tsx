@@ -1196,21 +1196,22 @@ export default function Mentor() {
       return { wocMed: flutes <= 2 ? 45 : 40, docMed: 0.75 };
     }
     const f = flutes <= 4 ? 4 : flutes <= 5 ? 5 : 6;
+    // Traditional roughing: ~15–20% WOC, ~1×D DOC
     const wocTable: Record<string, Record<number, number>> = {
-      P: { 4: 35, 5: 30, 6: 25 },
-      M: { 4: 30, 5: 25, 6: 20 },
-      K: { 4: 35, 5: 30, 6: 25 },
-      S: { 4: 25, 5: 20, 6: 18 },
+      P: { 4: 20, 5: 18, 6: 15 },
+      M: { 4: 18, 5: 15, 6: 12 },
+      K: { 4: 20, 5: 18, 6: 15 },
+      S: { 4: 15, 5: 12, 6: 10 },
       H: { 4:  7, 5:  6, 6:  5 },
     };
     const docTable: Record<string, Record<number, number>> = {
-      P: { 4: 1.0, 5: 1.25, 6: 1.25 },
-      M: { 4: 0.75,5: 1.0,  6: 1.0  },
-      K: { 4: 1.0, 5: 1.25, 6: 1.25 },
-      S: { 4: 0.5, 5: 0.75, 6: 0.75 },
-      H: { 4: 0.5, 5: 0.5,  6: 0.75 },
+      P: { 4: 1.0,  5: 1.0,  6: 1.0  },
+      M: { 4: 0.75, 5: 0.75, 6: 0.75 },
+      K: { 4: 1.0,  5: 1.0,  6: 1.0  },
+      S: { 4: 0.5,  5: 0.5,  6: 0.5  },
+      H: { 4: 0.25, 5: 0.25, 6: 0.25 },
     };
-    const wocMed = wocTable[iso]?.[f] ?? 30;
+    const wocMed = wocTable[iso]?.[f] ?? 18;
     const docMed = docTable[iso]?.[f] ?? 1.0;
     return { wocMed, docMed };
   }
