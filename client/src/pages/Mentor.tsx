@@ -726,6 +726,7 @@ export default function Mentor() {
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfExtracted, setPdfExtracted] = React.useState(false);
   const [pdfToolNumber, setPdfToolNumber] = React.useState<string | null>(null);
+  const [pdfConvertedFromMm, setPdfConvertedFromMm] = React.useState(false);
   const [pdfFluteWash, setPdfFluteWash] = React.useState<number>(0);
   const [pdfFluteWashText, setPdfFluteWashText] = React.useState<string>("");
 
@@ -827,8 +828,9 @@ export default function Mentor() {
       }
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
+      setPdfConvertedFromMm(!!e._converted_from_mm);
       mentor.reset();
-      toast({ title: "Print read successfully", description: `${e.tool_number ? `Tool ${e.tool_number} — ` : ""}Review extracted dimensions below and correct any misreads before running.` });
+      toast({ title: "Print read successfully", description: `${e.tool_number ? `Tool ${e.tool_number} — ` : ""}${e._converted_from_mm ? "Metric print detected — dimensions converted to inches. " : ""}Review extracted dimensions below and correct any misreads before running.` });
     } catch {
       toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
     }
@@ -3105,7 +3107,7 @@ ${stabSection}
               {pdfExtracted ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                    <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
                     <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
@@ -3672,7 +3674,7 @@ ${stabSection}
           )}
           {pdfExtracted && (
             <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
-              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
               <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
@@ -3954,7 +3956,7 @@ ${stabSection}
           <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
                 <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
@@ -5375,7 +5377,7 @@ ${stabSection}
           <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
                 <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
@@ -5518,7 +5520,7 @@ ${stabSection}
             <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""} — review fields below</span>
+                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
                   <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                 </div>
               ) : (

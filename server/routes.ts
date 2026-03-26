@@ -2192,6 +2192,12 @@ If you find "Core Cutter" but NO "CC-XXXXX" tool number, still extract all dimen
 
 If both are present, extract the tool number as "tool_number" (e.g. "CC-12650") along with all tool geometry dimensions, and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object.
 
+UNITS — CHECK FIRST:
+Look for a units indicator on the print — typically in the title block, notes section, or dimension callouts. Common indicators: "DIMENSIONS IN MM", "ALL DIMS IN MILLIMETERS", "mm", or dimension values that are clearly metric (e.g. 12.70, 6.350, 25.4).
+- If the print is in MILLIMETERS: set "units": "mm" in your response and extract all dimension values exactly as shown on the print (do NOT convert — the server will convert).
+- If the print is in INCHES (default for Core Cutter): set "units": "in" and extract as normal.
+- If uncertain, default to "units": "in".
+
 CRITICAL RULES — READ CAREFULLY:
 
 1. ALL dimensions on Core Cutter prints have tolerances. You MUST extract the NOMINAL (base) value only and discard all tolerance information:
@@ -2228,8 +2234,9 @@ CRITICAL RULES — READ CAREFULLY:
 
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
+  "units": "in|mm",
   "tool_type": "endmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
-  "tool_dia": <number, cutting diameter in inches — nominal value only, ignore tolerances>,
+  "tool_dia": <number, cutting diameter — nominal value only, in the print's native units>,
   "flutes": <integer>,
   "loc": <number, length of cut / flute length / TSC in inches — nominal value only, 0 if unknown>,
   "lbs": <number, length below shank in inches, 0 if standard>,
@@ -2303,6 +2310,23 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
           error: "Could not read print — please enter dimensions manually",
           raw: text,
         });
+      }
+
+      // ── Metric → inch conversion ──────────────────────────────────────────
+      if (extracted.units === "mm") {
+        const MM_FIELDS = ["tool_dia", "loc", "lbs", "corner_radius", "shank_dia",
+                           "keyseat_arbor_dia", "chamfer_tip_dia"];
+        for (const f of MM_FIELDS) {
+          if (typeof extracted[f] === "number" && (extracted[f] as number) > 0) {
+            extracted[f] = Math.round(((extracted[f] as number) / 25.4) * 100000) / 100000;
+          }
+        }
+        if (Array.isArray(extracted.drill_step_diameters)) {
+          extracted.drill_step_diameters = (extracted.drill_step_diameters as number[]).map(
+            (d: number) => Math.round((d / 25.4) * 100000) / 100000
+          );
+        }
+        extracted._converted_from_mm = true;
       }
 
       return res.json({ ok: true, extracted });
