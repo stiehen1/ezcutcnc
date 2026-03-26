@@ -461,6 +461,31 @@ function FeedbackButton() {
   const [sent, setSent] = React.useState(false);
   const [sending, setSending] = React.useState(false);
   const [sizeError, setSizeError] = React.useState("");
+  const [listening, setListening] = React.useState(false);
+  const recognitionRef = React.useRef<any>(null);
+
+  const toggleMic = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert("Speech recognition is not supported in this browser. Try Chrome or Edge."); return; }
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = "en-US";
+    rec.onresult = (e: any) => {
+      const transcript = Array.from(e.results).slice(e.resultIndex).map((r: any) => r[0].transcript).join(" ");
+      setMessage(prev => (prev ? prev + " " + transcript : transcript).trim());
+    };
+    rec.onerror = () => { setListening(false); };
+    rec.onend = () => { setListening(false); };
+    rec.start();
+    recognitionRef.current = rec;
+    setListening(true);
+  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -535,7 +560,13 @@ function FeedbackButton() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] text-zinc-400 mb-1 block">Message <span className="text-red-400">*</span></label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-zinc-400">Message <span className="text-red-400">*</span></label>
+                    <button type="button" onClick={toggleMic} title={listening ? "Stop recording" : "Speak your message"}
+                      className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors ${listening ? "bg-red-500/20 text-red-400 animate-pulse" : "text-zinc-500 hover:text-zinc-300"}`}>
+                      {listening ? "⏹ stop" : "🎤 speak"}
+                    </button>
+                  </div>
                   <textarea
                     value={message}
                     onChange={e => setMessage(e.target.value)}
