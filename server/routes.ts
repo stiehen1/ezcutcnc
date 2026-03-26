@@ -1442,6 +1442,10 @@ export async function registerRoutes(
         console.warn("[Results Email] DB insert failed:", dbErr?.message);
       }
 
+      // Skip sales notification for internal staff — they're testing, not leads
+      const isStaff = typeof email === "string" && (email.endsWith("@corecutterusa.com") || email.endsWith("@corecutter.com"));
+      if (isStaff) return res.json({ ok: true });
+
       const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
       const smtpUser = process.env.SMTP_USER || "";
       const smtpPass = process.env.SMTP_PASS || "";
