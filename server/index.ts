@@ -98,8 +98,19 @@ app.use((req, res, next) => {
       port,
       host: "0.0.0.0",
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      // ── DB size check on startup ──────────────────────────────────────────
+      try {
+        const { pool } = await import("./db");
+        const r = await pool.query(`SELECT pg_size_pretty(pg_database_size(current_database())) AS size, pg_database_size(current_database()) AS bytes`);
+        const { size, bytes } = r.rows[0];
+        const pct = ((parseInt(bytes) / (500 * 1024 * 1024)) * 100).toFixed(1);
+        const warn = parseInt(bytes) > 400 * 1024 * 1024 ? " ⚠️  APPROACHING FREE TIER LIMIT — consider upgrading Neon plan" : "";
+        log(`DB size: ${size} (${pct}% of 500 MB free tier)${warn}`);
+      } catch (e: any) {
+        log(`DB size check failed: ${e?.message}`);
+      }
     }
   );
 })();
