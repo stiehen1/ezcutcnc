@@ -4532,6 +4532,13 @@ ${stabSection}
                       const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
                       // Start from material+mode+flute-aware target (wp.med already encodes ISO category)
                       let optPct = wp.med;
+                      // HEM: scale WOC inversely with DOC — deeper cut requires lower radial engagement
+                      if ((form.mode === "hem" || form.mode === "trochoidal") && form.doc_xd > 0) {
+                        const dp = DOC_PRESETS[form.mode];
+                        const docRef = dp?.med ?? 1.0;
+                        const scale = Math.min(1.5, Math.max(0.5, docRef / form.doc_xd));
+                        optPct = Math.round(wp.med * scale * 2) / 2; // round to 0.5%
+                      }
                       // Chip-thinning floor: ensure sin(acos(1-2*woc/100)) >= 0.25 (no rubbing)
                       const chipThinAtTarget = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * optPct / 100))));
                       if (chipThinAtTarget < 0.25) {
