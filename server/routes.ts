@@ -1577,7 +1577,7 @@ export async function registerRoutes(
   // ── Beta Feedback Form ───────────────────────────────────────────────────
   app.post("/api/feedback", async (req, res) => {
     try {
-      const { type, message, email } = (req.body ?? {}) as { type?: string; message?: string; email?: string };
+      const { type, message, email, screenshot, screenshotName } = (req.body ?? {}) as { type?: string; message?: string; email?: string; screenshot?: string; screenshotName?: string };
       if (!message?.trim()) return res.status(400).json({ error: "Message required." });
 
       const smtpUser = process.env.SMTP_USER || "";
@@ -1603,11 +1603,14 @@ export async function registerRoutes(
           host: smtpHost, port: smtpPort, secure: smtpPort === 465,
           auth: { user: smtpUser, pass: smtpPass },
         });
+        const screenshotHtml = screenshot
+          ? `<br><br><strong>Screenshot:</strong><br><img src="${screenshot}" style="max-width:600px;border:1px solid #444;border-radius:4px;" alt="${screenshotName || 'screenshot'}"/>`
+          : "";
         await transporter.sendMail({
           from: `"CoreCutCNC Feedback" <${smtpUser}>`,
           to: "scott@corecutterusa.com",
-          subject: `[${type || "Feedback"}] CoreCutCNC beta`,
-          text: `Type: ${type || "—"}\nFrom: ${email || "anonymous"}\n\n${message}`,
+          subject: `[${type || "Feedback"}] CoreCutCNC — ${email || "anonymous"}`,
+          html: `<p><strong>Type:</strong> ${type || "—"}</p><p><strong>From:</strong> ${email || "anonymous"}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${message.trim()}</p>${screenshotHtml}`,
         });
       }
 

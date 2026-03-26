@@ -455,9 +455,25 @@ function FeedbackButton() {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState("Bug");
   const [message, setMessage] = React.useState("");
-  const [email, setEmail] = React.useState("");
+  const [email, setEmail] = React.useState(() => localStorage.getItem("er_email") || "");
+  const [screenshot, setScreenshot] = React.useState<string | null>(null);
+  const [screenshotName, setScreenshotName] = React.useState("");
   const [sent, setSent] = React.useState(false);
   const [sending, setSending] = React.useState(false);
+  const [sizeError, setSizeError] = React.useState("");
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { setSizeError("Image must be under 3 MB"); return; }
+    setSizeError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScreenshot(reader.result as string);
+      setScreenshotName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -467,10 +483,10 @@ function FeedbackButton() {
       await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, message, email }),
+        body: JSON.stringify({ type, message, email, screenshot, screenshotName }),
       });
       setSent(true);
-      setTimeout(() => { setOpen(false); setSent(false); setMessage(""); setEmail(""); setType("Bug"); }, 2500);
+      setTimeout(() => { setOpen(false); setSent(false); setMessage(""); setEmail(""); setType("Bug"); setScreenshot(null); setScreenshotName(""); }, 2500);
     } catch { setOpen(false); }
     setSending(false);
   };
@@ -510,6 +526,9 @@ function FeedbackButton() {
                     className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-orange-500"
                   >
                     <option>Bug</option>
+                    <option>Wrong Speeds/Feeds</option>
+                    <option>Missing Material</option>
+                    <option>Missing Tool Type</option>
                     <option>Suggestion</option>
                     <option>Compliment</option>
                     <option>Other</option>
@@ -520,11 +539,28 @@ function FeedbackButton() {
                   <textarea
                     value={message}
                     onChange={e => setMessage(e.target.value)}
-                    rows={5}
+                    rows={4}
                     placeholder="Tell us what's on your mind..."
                     className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-orange-500 resize-none"
                     required
                   />
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 mb-1 block">Screenshot <span className="text-zinc-600">(optional)</span></label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="bg-zinc-800 border border-zinc-700 hover:border-zinc-500 rounded px-2 py-1.5 text-xs text-zinc-300 whitespace-nowrap">
+                      {screenshotName ? "Change image" : "Attach image"}
+                    </span>
+                    {screenshotName && <span className="text-[10px] text-zinc-400 truncate">{screenshotName}</span>}
+                    <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
+                  </label>
+                  {sizeError && <p className="text-[10px] text-red-400 mt-1">{sizeError}</p>}
+                  {screenshot && (
+                    <div className="mt-1.5 relative">
+                      <img src={screenshot} alt="preview" className="w-full rounded border border-zinc-700 max-h-24 object-cover"/>
+                      <button type="button" onClick={() => { setScreenshot(null); setScreenshotName(""); }} className="absolute top-1 right-1 bg-zinc-900/80 text-zinc-400 hover:text-white rounded text-[10px] px-1">✕</button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-[11px] text-zinc-400 mb-1 block">Your email <span className="text-zinc-600">(optional)</span></label>
