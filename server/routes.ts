@@ -1112,7 +1112,7 @@ export async function registerRoutes(
         recommended_result: recRaw,
       });
     } catch (_e: any) {
-      return res.json({ found: false });
+      return res.json({ found: false, _debug: "exception", error: String(_e?.message ?? _e) });
     }
   });
 
