@@ -560,7 +560,7 @@ export default function Mentor() {
     <strong>Run Parameters:</strong> ${form.material} · ${operation} · ${fmt(form.tool_dia)}" dia
     ${ccFeed ? `· ${fmtD(ccFeed)} IPM` : ""}
     ${edpText ? `· CC EDP: ${edpText}` : ""}
-    ${roiCompEdp ? `· Incumbent: ${roiCompEdp}` : ""}
+    ${roiCompEdp ? `· Incumbent Tool: ${roiCompEdp}` : ""}
   </div>
   <div style="margin-bottom:24px">
     <div class="bigbox"><div class="big">$${fmtD(roiResult.savingsPerPart)}</div><div style="font-size:12px;color:#666">Savings per part</div></div>
@@ -568,7 +568,7 @@ export default function Mentor() {
     <div class="bigbox"><div class="big">$${fmtD(roiResult.annualSavings)}</div><div style="font-size:12px;color:#666">Annual savings</div></div>
   </div>
   <table>
-    <tr><th></th><th class="cc">Core Cutter</th><th>Incumbent</th></tr>
+    <tr><th></th><th class="cc">Core Cutter</th><th>Incumbent Tool</th></tr>
     <tr><td>Tool Price</td><td>$${fmtD(parseFloat(roiCcPrice))}</td><td>$${fmtD(parseFloat(roiCompPrice))}</td></tr>
     <tr><td>Parts per Tool</td><td>${roiCcParts}</td><td>${roiCompParts}</td></tr>
     <tr><td>Time in Cut (min/part)</td><td>${roiCcTime}</td><td>${roiCompTime}</td></tr>
@@ -9774,7 +9774,7 @@ ${stabSection}
 
                 {/* Right: Incumbent */}
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Incumbent</div>
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Incumbent Tool</div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-zinc-400">EDP / Part # (optional)</Label>
                     <Input
@@ -9887,7 +9887,7 @@ ${stabSection}
                         <tr>
                           <th className="text-left px-3 py-2 bg-zinc-800 text-zinc-400 font-medium"></th>
                           <th className="text-right px-3 py-2 bg-orange-900/40 text-orange-300 font-semibold">Core Cutter</th>
-                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Incumbent</th>
+                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Incumbent Tool</th>
                         </tr>
                       </thead>
                       <tbody>
