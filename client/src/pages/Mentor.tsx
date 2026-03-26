@@ -1191,27 +1191,29 @@ export default function Mentor() {
   }
 
   function getTradMed(iso: string, flutes: number): { wocMed: number; docMed: number } {
-    // Aluminum — 2 & 3 flute only
+    // ISO N — Aluminum: push DOC, control WOC for chip evac
     if (iso === "N") {
-      return { wocMed: flutes <= 2 ? 45 : 40, docMed: 0.75 };
+      return { wocMed: flutes <= 4 ? 40 : flutes <= 5 ? 38 : 35, docMed: 1.5 };
     }
     const f = flutes <= 4 ? 4 : flutes <= 5 ? 5 : 6;
-    // Traditional roughing: ~15–20% WOC, ~1×D DOC
+    // Shop-validated traditional HP endmill standards (variable-pitch, eccentric-relieved, coated).
+    // WOC: preferred 25–40%, max 50%. DOC: 0.75–1.25×D. Adjust by ISO group.
+    // "Control radial engagement first. Build productivity with axial depth."
     const wocTable: Record<string, Record<number, number>> = {
-      P: { 4: 20, 5: 18, 6: 15 },
-      M: { 4: 18, 5: 15, 6: 12 },
-      K: { 4: 20, 5: 18, 6: 15 },
-      S: { 4: 15, 5: 12, 6: 10 },
-      H: { 4:  7, 5:  6, 6:  5 },
+      P: { 4: 35, 5: 30, 6: 25 },  // steel: 25–45% — sweet spot 30–40%
+      M: { 4: 28, 5: 25, 6: 22 },  // stainless: 20–35% — heat/work-hardening control
+      K: { 4: 40, 5: 35, 6: 30 },  // cast iron: 30–50% — stable, low adhesion, can push
+      S: { 4: 22, 5: 18, 6: 15 },  // Ti/HRSA: 15–30% — radial-sensitive, heat-critical
+      H: { 4:  7, 5:  6, 6:  5 },  // hardened: very conservative
     };
     const docTable: Record<string, Record<number, number>> = {
-      P: { 4: 1.0,  5: 1.0,  6: 1.0  },
-      M: { 4: 0.75, 5: 0.75, 6: 0.75 },
-      K: { 4: 1.0,  5: 1.0,  6: 1.0  },
-      S: { 4: 0.5,  5: 0.5,  6: 0.5  },
-      H: { 4: 0.25, 5: 0.25, 6: 0.25 },
+      P: { 4: 1.0,  5: 1.0,  6: 1.0  },  // steel: 0.75–1.25×D
+      M: { 4: 0.75, 5: 0.75, 6: 0.75 },  // stainless: 0.5–1.0×D
+      K: { 4: 1.0,  5: 1.0,  6: 1.0  },  // cast iron: 0.75–1.5×D
+      S: { 4: 0.75, 5: 0.75, 6: 0.75 },  // Ti/HRSA: 0.5–1.0×D
+      H: { 4: 0.25, 5: 0.25, 6: 0.25 },  // hardened
     };
-    const wocMed = wocTable[iso]?.[f] ?? 18;
+    const wocMed = wocTable[iso]?.[f] ?? 30;
     const docMed = docTable[iso]?.[f] ?? 1.0;
     return { wocMed, docMed };
   }
@@ -1240,8 +1242,8 @@ export default function Mentor() {
     }
     if (mode === "traditional") {
       const { wocMed, docMed } = getTradMed(iso, flutes);
-      const wocLow  = Math.max(10, Math.round(wocMed * 0.55));
-      const wocHigh = Math.min(60, Math.round(wocMed * 1.50));
+      const wocLow  = Math.max(10, Math.round(wocMed * 0.60));
+      const wocHigh = Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
       return {
