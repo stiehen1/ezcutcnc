@@ -1554,6 +1554,9 @@ export default function Mentor() {
     setTmNeckText("");
     setTmGcodeExpanded(false);
     clearSku();
+    setMatSearchInput("");
+    setMatMatchResult(null);
+    setMatMatchError(null);
     setActiveMachineId(null);
     setActiveMachineName("");
     setMachineQuery("");
