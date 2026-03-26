@@ -423,10 +423,25 @@ export default function Mentor() {
   const [welcomeLastName, setWelcomeLastName] = React.useState("");
   const [welcomeEmail, setWelcomeEmail] = React.useState("");
   const [welcomeError, setWelcomeError] = React.useState("");
+  const [welcomeValidating, setWelcomeValidating] = React.useState(false);
 
-  function submitWelcome() {
+  async function submitWelcome() {
     if (!welcomeFirstName.trim() || !welcomeLastName.trim()) { setWelcomeError("Please enter your first and last name."); return; }
     if (!welcomeEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(welcomeEmail.trim())) { setWelcomeError("Please enter a valid email address."); return; }
+    setWelcomeValidating(true);
+    setWelcomeError("");
+    try {
+      const r = await fetch("/api/validate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: welcomeEmail.trim().toLowerCase() }),
+      });
+      const d = await r.json();
+      if (!d.valid) { setWelcomeError(d.error || "Please enter a valid email address."); setWelcomeValidating(false); return; }
+    } catch {
+      // If validation fails due to network, allow through
+    }
+    setWelcomeValidating(false);
     const fullName = `${welcomeFirstName.trim()} ${welcomeLastName.trim()}`;
     localStorage.setItem("cc_user_name", fullName);
     localStorage.setItem("cc_first_name", welcomeFirstName.trim());
@@ -436,7 +451,6 @@ export default function Mentor() {
     setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
     setShowWelcomeModal(false);
-    // Fire to contact endpoint so name+email is captured even before first calc
     fetch("/api/contact/tool-request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -9506,8 +9520,9 @@ ${stabSection}
           <button
             type="button"
             onClick={submitWelcome}
-            className="w-full mt-5 rounded-lg bg-orange-600 hover:bg-orange-500 py-2.5 text-sm font-semibold text-white"
-          >Get Started</button>
+            disabled={welcomeValidating}
+            className="w-full mt-5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-50 py-2.5 text-sm font-semibold text-white"
+          >{welcomeValidating ? "Verifying…" : "Get Started"}</button>
           <p className="text-[10px] text-zinc-600 text-center mt-3">Your info is used to personalize your experience and may be used by Core Cutter LLC to follow up on your machining needs.</p>
         </div>
       </div>

@@ -1455,6 +1455,32 @@ export async function registerRoutes(
     }
   });
 
+  // ── Email MX validation helper ────────────────────────────────────────────
+  async function hasMxRecord(email: string): Promise<boolean> {
+    try {
+      const domain = email.split("@")[1];
+      if (!domain) return false;
+      const { resolveMx } = await import("dns/promises");
+      const records = await resolveMx(domain);
+      return records.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  // ── Email MX validation endpoint ──────────────────────────────────────────
+  app.post("/api/validate-email", async (req, res) => {
+    const { email } = req.body ?? {};
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ valid: false, error: "Invalid email format." });
+    }
+    const valid = await hasMxRecord(email);
+    if (!valid) {
+      return res.json({ valid: false, error: "That email domain doesn't appear to be valid — please use your real work or personal email." });
+    }
+    return res.json({ valid: true });
+  });
+
   // ── Tool Request Contact ──────────────────────────────────────────────────
   app.post("/api/contact/tool-request", async (req, res) => {
     try {
