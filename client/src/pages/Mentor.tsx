@@ -1227,8 +1227,11 @@ export default function Mentor() {
         ? Math.round(wocMed * 1.50)           // aluminum: no 15% cap
         : Math.min(15, Math.round(wocMed * 1.50)); // others: cap at 15%
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
-      // HEM high = full LOC (not capped at 1.5×med) — using full flute length is normal in HEM
-      const docHigh = loc > 0 && dia > 0 ? loc / dia : docMed * 2.0;
+      // HEM high = full LOC up to material cap, then cap — deep LOC tools shouldn't exceed optimal HEM depth.
+      // Cap by ISO: N (aluminum) 3.0×D, S (superalloys) 2.0×D, everything else 2.5×D.
+      const hemDocCap: Record<string, number> = { N: 3.0, S: 2.0, H: 1.5 };
+      const hemCap = hemDocCap[iso] ?? 2.5;
+      const docHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
       return {
         woc: { low: wocLow, med: wocMed, high: wocHigh },
         doc: { low: docLow, med: loc > 0 && dia > 0 ? Math.min(docMed, loc / dia) : docMed, high: Math.round(docHigh * 4) / 4 },

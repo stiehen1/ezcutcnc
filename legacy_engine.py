@@ -3527,7 +3527,22 @@ def run(payload=None):
     # DOC FEASIBILITY SOLVER
     # ===============================
 
-    deflection_limit = data.get("deflection_limit", 0.001)
+    # Effective deflection limit — apply the same bonuses as calc_state's _dlim
+    # so the solver doesn't suggest DOC reductions that the stability display wouldn't flag.
+    _base_dlim = float(data.get("deflection_limit", 0.001))
+    _vp = bool(data.get("variable_pitch", False))
+    _vh = bool(data.get("variable_helix", False))
+    if _vp and _vh:
+        _base_dlim *= 1.75
+    elif _vp:
+        _base_dlim *= 1.50
+    elif _vh:
+        _base_dlim *= 1.25
+    _mode_eff = str(data.get("mode", "") or "").lower()
+    _woc_eff = float(data.get("woc_pct", 50) or 50)
+    if _mode_eff in ("hem", "trochoidal") and _woc_eff < 15.0:
+        _base_dlim *= 2.0
+    deflection_limit = _base_dlim
     current_doc = doc  # current axial depth of cut
 
     if original_deflection > deflection_limit and current_doc > 0:
@@ -3775,7 +3790,7 @@ def run(payload=None):
                 # compute best
 
                 D = data["diameter"]
-                defl_limit = data.get("deflection_limit", 0.001)
+                defl_limit = deflection_limit  # already has HEM + var-pitch/helix bonuses applied
                 force_limit = float(data.get("force_limit", 1e9) or 1e9)  # default: no force cap
   
                 # Axial cap (respect tool LOC if provided)
