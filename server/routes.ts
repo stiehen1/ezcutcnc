@@ -1464,7 +1464,9 @@ export async function registerRoutes(
       const records = await resolveMx(domain);
       return records.length > 0;
     } catch {
-      return false;
+      // DNS lookup failed (timeout, NXDOMAIN, no MX records) — fail open
+      // so legitimate domains without MX records aren't blocked
+      return true;
     }
   }
 
