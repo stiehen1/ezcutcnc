@@ -4886,6 +4886,16 @@ def run(payload=None):
     elif _var_helix:
         _dlim *= 1.25
 
+    # HEM / Trochoidal stability bonus:
+    # At low radial engagement (<15% WOC) the tool is in air >85% of each revolution.
+    # This interrupted nature suppresses the regenerative chatter feedback loop —
+    # vibration damps out between tooth engagements rather than building up.
+    # Shop-validated: setups that would be flagged as high chatter risk in conventional
+    # milling run smoothly in HEM at the same DOC (e.g. 0.5" 5-fl VST5 in 17-4 at
+    # 2.5×D DOC / 10% WOC). Apply 2× multiplier to reflect this known phenomenon.
+    if _mode_str in ("hem", "trochoidal") and _woc_for_dlim < 15.0:
+        _dlim *= 2.0
+
     _defl_pct = round(_defl / _dlim * 100, 1) if _dlim > 0 else 0.0
 
     _stab_suggestions = []
