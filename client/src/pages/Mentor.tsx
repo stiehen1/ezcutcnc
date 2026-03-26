@@ -1516,7 +1516,9 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
-      doc_xd: 0,
+      // Preserve doc_xd if diameter hasn't changed — prevents wiping a DOC the user already set.
+      // Reset to 0 only when switching to a different tool size (xD ratio would be wrong).
+      doc_xd: Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,

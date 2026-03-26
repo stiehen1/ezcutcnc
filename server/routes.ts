@@ -1079,15 +1079,19 @@ export async function registerRoutes(
       // right coating, var pitch etc). Results filter is a safety net only:
       // suppress the recommendation if the engine says the swap is actually worse
       // (e.g. a longer LOC peer that deflects more at the same setup).
-      const recMrr     = Number(recRaw?.customer?.mrr_in3_min ?? 0);
-      const recStabPct = Number(recRaw?.stability?.deflection_pct ?? 0);
-      const curMrrNum  = Number(current_mrr  ?? 0);
-      const curStabNum = Number(current_stability_pct ?? 0);
+      // If engine failed to run for the recommended tool, skip the filter entirely
+      // — recRaw=null would set recMrr=0, falsely triggering mrrWorse.
+      if (recRaw !== null) {
+        const recMrr     = Number(recRaw?.customer?.mrr_in3_min ?? 0);
+        const recStabPct = Number(recRaw?.stability?.deflection_pct ?? 0);
+        const curMrrNum  = Number(current_mrr  ?? 0);
+        const curStabNum = Number(current_stability_pct ?? 0);
 
-      // Suppress only if recommended tool is materially worse (>5% MRR drop OR stability gets worse)
-      const mrrWorse  = curMrrNum > 0 && recMrr < curMrrNum * 0.95;
-      const stabWorse = curStabNum > 0 && recStabPct > curStabNum * 1.10;
-      if (mrrWorse || stabWorse) return res.json({ found: false });
+        // Suppress only if recommended tool is materially worse (>10% MRR drop OR stability gets worse)
+        const mrrWorse  = curMrrNum > 0 && recMrr > 0 && recMrr < curMrrNum * 0.90;
+        const stabWorse = curStabNum > 0 && recStabPct > 0 && recStabPct > curStabNum * 1.10;
+        if (mrrWorse || stabWorse) return res.json({ found: false });
+      }
 
       return res.json({
         found: true,
