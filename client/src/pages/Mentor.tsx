@@ -3432,34 +3432,52 @@ ${stabSection}
                     <div className="space-y-2">
                       <p>Chamfer length — the length of the angled chamfer face as dimensioned on the print (the "L" edge in the diagram). Enter this directly from the print; the app calculates the Z axial depth for CAM programming automatically and compares it against the tool's cutting edge length.</p>
                       {/* Chamfer geometry diagram */}
-                      <svg viewBox="0 0 160 100" width="160" height="100" className="block mx-auto">
-                        {/* Tool body outline */}
-                        <line x1="20" y1="10" x2="20" y2="50" stroke="#888" strokeWidth="1.5"/>
-                        <line x1="20" y1="10" x2="100" y2="10" stroke="#888" strokeWidth="1.5"/>
-                        {/* Chamfer cutting edge */}
-                        <line x1="100" y1="10" x2={form.chamfer_tip_dia > 0 ? "130" : "140"} y2="50" stroke="#f97316" strokeWidth="2"/>
-                        {/* Tip flat (CMH) or point (CMS) */}
-                        {form.chamfer_tip_dia > 0
-                          ? <line x1="130" y1="50" x2="130" y2="70" stroke="#f97316" strokeWidth="2"/>
-                          : null}
-                        {/* Bottom of tool / axis */}
-                        <line x1="20" y1="50" x2={form.chamfer_tip_dia > 0 ? "130" : "140"} y2="50" stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
-                        {/* Depth arrow */}
-                        <line x1="145" y1="10" x2="145" y2="50" stroke="#60a5fa" strokeWidth="1"/>
-                        <polygon points="145,10 142,17 148,17" fill="#60a5fa"/>
-                        <polygon points="145,50 142,43 148,43" fill="#60a5fa"/>
-                        <text x="150" y="33" fontSize="9" fill="#60a5fa">d</text>
-                        {/* Edge length label along cutting edge */}
-                        <text x="108" y="26" fontSize="9" fill="#f97316" transform="rotate(35,108,26)">L</text>
-                        {/* OD label */}
-                        <text x="55" y="8" fontSize="8" fill="#aaa" textAnchor="middle">OD</text>
-                        {/* Tip label */}
-                        {form.chamfer_tip_dia > 0
-                          ? <text x="135" y="65" fontSize="8" fill="#aaa">tip</text>
-                          : <text x="133" y="48" fontSize="8" fill="#aaa">▲</text>}
-                        {/* Series label */}
-                        <text x="5" y="90" fontSize="8" fill="#aaa">{form.chamfer_tip_dia > 0 ? "CMH — flat tip" : "CMS — center cutting"}</text>
-                      </svg>
+                      {(() => {
+                        const isCmh = form.chamfer_tip_dia > 0;
+                        const x1 = 100, y1 = 10;
+                        const x2 = isCmh ? 128 : 138, y2 = 50;
+                        const dx = x2 - x1, dy = y2 - y1;
+                        const len = Math.sqrt(dx*dx + dy*dy);
+                        const ux = dx/len, uy = dy/len;
+                        const px = -uy, py = ux; // left perpendicular
+                        const off = 9;
+                        const lx1 = x1 + px*off, ly1 = y1 + py*off;
+                        const lx2 = x2 + px*off, ly2 = y2 + py*off;
+                        const midX = (lx1+lx2)/2, midY = (ly1+ly2)/2;
+                        const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+                        const a = 5; // arrowhead size
+                        return (
+                          <svg viewBox="0 0 165 105" width="165" height="105" className="block mx-auto">
+                            {/* Tool body */}
+                            <line x1="20" y1="10" x2="20" y2="50" stroke="#888" strokeWidth="1.5"/>
+                            <line x1="20" y1="10" x2={x1} y2={y1} stroke="#888" strokeWidth="1.5"/>
+                            {/* Chamfer cutting edge */}
+                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f97316" strokeWidth="2"/>
+                            {/* Tip flat or point */}
+                            {isCmh
+                              ? <line x1={x2} y1={y2} x2={x2} y2="68" stroke="#f97316" strokeWidth="2"/>
+                              : null}
+                            {/* Axis dashed */}
+                            <line x1="20" y1="50" x2={x2} y2="50" stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
+                            {/* L dimension line along hypotenuse (offset) */}
+                            <line x1={lx1} y1={ly1} x2={lx2} y2={ly2} stroke="#f97316" strokeWidth="1.2"/>
+                            {/* Tick marks at ends */}
+                            <line x1={lx1+px*3} y1={ly1+py*3} x2={lx1-px*3} y2={ly1-py*3} stroke="#f97316" strokeWidth="1"/>
+                            <line x1={lx2+px*3} y1={ly2+py*3} x2={lx2-px*3} y2={ly2-py*3} stroke="#f97316" strokeWidth="1"/>
+                            {/* L label at midpoint */}
+                            <text x={midX + px*7} y={midY + py*7} fontSize="9" fill="#f97316" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" transform={`rotate(${ang},${midX + px*7},${midY + py*7})`}>L</text>
+                            {/* Z axial arrow (secondary — output) */}
+                            <line x1={x2+8} y1="10" x2={x2+8} y2="50" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2,2"/>
+                            <polygon points={`${x2+8},10 ${x2+5},17 ${x2+11},17`} fill="#60a5fa"/>
+                            <polygon points={`${x2+8},50 ${x2+5},43 ${x2+11},43`} fill="#60a5fa"/>
+                            <text x={x2+13} y="33" fontSize="8" fill="#60a5fa" dominantBaseline="middle">Z</text>
+                            {/* OD label */}
+                            <text x="58" y="8" fontSize="8" fill="#aaa" textAnchor="middle">OD</text>
+                            {/* Series label */}
+                            <text x="5" y="98" fontSize="8" fill="#6b7280">{isCmh ? "CMH — flat tip" : "CMS — center cutting"}</text>
+                          </svg>
+                        );
+                      })()}
                     </div>
                   }>Chamfer Length (in)</FieldLabel>
                   <Input
