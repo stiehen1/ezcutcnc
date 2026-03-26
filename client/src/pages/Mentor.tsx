@@ -417,6 +417,33 @@ export default function Mentor() {
   const [erStatus, setErStatus] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
   const [erError, setErError] = React.useState("");
 
+  // ── Welcome modal (first-visit name + email capture) ──────────────────────
+  const [showWelcomeModal, setShowWelcomeModal] = React.useState(() => !localStorage.getItem("cc_user_name"));
+  const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
+  const [welcomeLastName, setWelcomeLastName] = React.useState("");
+  const [welcomeEmail, setWelcomeEmail] = React.useState("");
+  const [welcomeError, setWelcomeError] = React.useState("");
+
+  function submitWelcome() {
+    if (!welcomeFirstName.trim() || !welcomeLastName.trim()) { setWelcomeError("Please enter your first and last name."); return; }
+    if (!welcomeEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(welcomeEmail.trim())) { setWelcomeError("Please enter a valid email address."); return; }
+    const fullName = `${welcomeFirstName.trim()} ${welcomeLastName.trim()}`;
+    localStorage.setItem("cc_user_name", fullName);
+    localStorage.setItem("cc_first_name", welcomeFirstName.trim());
+    localStorage.setItem("cc_last_name", welcomeLastName.trim());
+    localStorage.setItem("er_email", welcomeEmail.trim().toLowerCase());
+    setErEmail(welcomeEmail.trim().toLowerCase());
+    setErGateInput(welcomeEmail.trim().toLowerCase());
+    setContactEmail(welcomeEmail.trim().toLowerCase());
+    setShowWelcomeModal(false);
+    // Fire to contact endpoint so name+email is captured even before first calc
+    fetch("/api/contact/tool-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase(), message: "Welcome modal registration" }),
+    }).catch(() => {});
+  }
+
   // ── Email gate (lock all outputs behind email) ─────────────────────────
   const [erGateOpen, setErGateOpen] = React.useState(false);
   const [erGatePending, setErGatePending] = React.useState<"copy" | "print" | "pdf" | "stp" | null>(null);
@@ -9427,6 +9454,61 @@ ${stabSection}
           <div>Powered by Core Cutter LLC</div>
         </div>
       </div>
+
+    {/* Welcome Modal — first-visit name + email capture */}
+    {showWelcomeModal && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-96 shadow-2xl">
+          <div className="flex justify-center mb-4">
+            <img src="/COREcutCNC_long_dark_logo.png" alt="CoreCutCNC" className="h-16 w-auto" style={{ mixBlendMode: "screen" }} />
+          </div>
+          <h2 className="text-base font-semibold text-white mb-1 text-center">Welcome to CoreCutCNC</h2>
+          <p className="text-xs text-zinc-400 mb-5 text-center">Speeds • Feeds • Intelligence — Powered by Core Cutter LLC.<br/>Enter your info to get started.</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">First Name <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  placeholder="First"
+                  value={welcomeFirstName}
+                  onChange={e => setWelcomeFirstName(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Last Name <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  placeholder="Last"
+                  value={welcomeLastName}
+                  onChange={e => setWelcomeLastName(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Email Address <span className="text-red-400">*</span></label>
+              <input
+                type="email"
+                placeholder="you@company.com"
+                value={welcomeEmail}
+                onChange={e => setWelcomeEmail(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submitWelcome()}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            {welcomeError && <p className="text-xs text-red-400">{welcomeError}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={submitWelcome}
+            className="w-full mt-5 rounded-lg bg-orange-600 hover:bg-orange-500 py-2.5 text-sm font-semibold text-white"
+          >Get Started</button>
+          <p className="text-[10px] text-zinc-600 text-center mt-3">Your info is used to personalize your experience and may be used by Core Cutter LLC to follow up on your machining needs.</p>
+        </div>
+      </div>
+    )}
 
     {/* Email Gate Modal */}
     {erGateOpen && (
