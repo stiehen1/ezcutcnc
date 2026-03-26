@@ -920,7 +920,7 @@ export async function registerRoutes(
          ORDER BY s.edp`,
         [dia, current_edp]
       );
-      if (peers.rows.length === 0) return res.json({ found: false, _debug: "no_peers", dia, curLoc, curFlutes });
+      if (peers.rows.length === 0) return res.json({ found: false });
 
       // ISO category from material key (simple map — N/P/M/K/S/H)
       const ISO_MAP: Record<string, string> = {
@@ -1019,7 +1019,7 @@ export async function registerRoutes(
       }
 
       // No recommendation found
-      if (!bestSku) return res.json({ found: false, _debug: "no_best_sku", curScore, curLoc, curFlutes, peerCount: peers.rows.length, sameLocSameFluteCount: peers.rows.filter((r: any) => Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes).length });
+      if (!bestSku) return res.json({ found: false });
 
       // ── VXR rigidity gate ─────────────────────────────────────────────────
       // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces.
@@ -1043,7 +1043,7 @@ export async function registerRoutes(
             const sc = scoreSku(row);
             if (sc > bestScore) { bestScore = sc; bestSku = row; }
           }
-          if (!bestSku || bestScore <= curScore) return res.json({ found: false, _debug: "vxr_blocked_no_fallback" });
+          if (!bestSku || bestScore <= curScore) return res.json({ found: false });
         } else {
           // Borderline setup — show card with a note
           const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
@@ -1090,12 +1090,11 @@ export async function registerRoutes(
         // Suppress only if recommended tool is materially worse (>10% MRR drop OR stability gets worse)
         const mrrWorse  = curMrrNum > 0 && recMrr > 0 && recMrr < curMrrNum * 0.90;
         const stabWorse = curStabNum > 0 && recStabPct > 0 && recStabPct > curStabNum * 1.10;
-        if (mrrWorse || stabWorse) return res.json({ found: false, _debug: "safety_filter", mrrWorse, stabWorse, recMrr, recStabPct, curMrrNum, curStabNum });
+        if (mrrWorse || stabWorse) return res.json({ found: false });
       }
 
       return res.json({
         found: true,
-        _debug: { curScore, bestScore, cbOk, vrxOk, docXd, wocPct, mode, isoCategory },
         recommended_edp: bestSku.edp,
         rigidity_note: vxrRigidityNote ?? undefined,
         recommended_sku: {
@@ -1122,7 +1121,7 @@ export async function registerRoutes(
         recommended_result: recRaw,
       });
     } catch (_e: any) {
-      return res.json({ found: false, _debug: "exception", error: String(_e?.message ?? _e) });
+      return res.json({ found: false });
     }
   });
 
