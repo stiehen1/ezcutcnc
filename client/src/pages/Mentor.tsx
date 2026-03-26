@@ -482,6 +482,15 @@ export default function Mentor() {
     const savingsPct = compTotalCost > 0 ? (savingsPerPart / compTotalCost) * 100 : 0;
     const timeSavingsPct = cT > 0 ? ((cT - ccT) / cT) * 100 : 0;
     setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct });
+    // Auto-save draft to localStorage (no DB — only completed ROIs go to DB)
+    localStorage.setItem("roi_draft", JSON.stringify({
+      ccPrice: roiCcPrice, ccParts: roiCcParts, ccTime: roiCcTime,
+      compEdp: roiCompEdp, compPrice: roiCompPrice, compParts: roiCompParts, compTime: roiCompTime,
+      shopRate: roiShopRate, monthlyVol: roiMonthlyVol,
+      result: { ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost,
+        savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct },
+    }));
+    setRoiDraftLoaded(true);
   }
 
   async function submitRoi() {
@@ -515,6 +524,8 @@ export default function Mentor() {
         }),
       });
       setRoiEmailSent(true);
+      localStorage.removeItem("roi_draft");
+      setRoiDraftLoaded(false);
     } catch { /* silently fail */ }
     setRoiSaving(false);
   }
@@ -1155,6 +1166,31 @@ export default function Mentor() {
     }
   }, []);
 
+  // Load ROI draft from localStorage on mount
+  React.useEffect(() => {
+    const draft = localStorage.getItem("roi_draft");
+    if (!draft) return;
+    try {
+      const d = JSON.parse(draft);
+      if (d.ccPrice) setRoiCcPrice(d.ccPrice);
+      if (d.ccParts) setRoiCcParts(d.ccParts);
+      if (d.ccTime) setRoiCcTime(d.ccTime);
+      if (d.compEdp) setRoiCompEdp(d.compEdp);
+      if (d.compPrice) setRoiCompPrice(d.compPrice);
+      if (d.compParts) setRoiCompParts(d.compParts);
+      if (d.compTime) setRoiCompTime(d.compTime);
+      if (d.shopRate) setRoiShopRate(d.shopRate);
+      if (d.monthlyVol) setRoiMonthlyVol(d.monthlyVol);
+      if (d.result) setRoiResult(d.result);
+      setRoiDraftLoaded(true);
+      // If navigated back via resume, open the panel
+      if (localStorage.getItem("roi_resume")) {
+        setShowRoi(true);
+        localStorage.removeItem("roi_resume");
+      }
+    } catch { localStorage.removeItem("roi_draft"); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Flute+Material aware WOC/DOC med lookup ─────────────────────────────
   // Returns { wocMed (%), docMed (xD) } for HEM and Traditional.
   // DOC is always capped at LOC (caller must apply cap).
@@ -1342,6 +1378,7 @@ export default function Mentor() {
   const [roiSaving, setRoiSaving] = React.useState(false);
   const [roiEmailSent, setRoiEmailSent] = React.useState(false);
   const [roiPrinting, setRoiPrinting] = React.useState(false);
+  const [roiDraftLoaded, setRoiDraftLoaded] = React.useState(false);
 
   const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
   const [tmTpiText, setTmTpiText] = React.useState("");
@@ -1551,6 +1588,8 @@ export default function Mentor() {
     setShowRoi(false);
     setRoiResult(null);
     setRoiEmailSent(false);
+    setRoiDraftLoaded(false);
+    localStorage.removeItem("roi_draft");
     mentor.reset();
   }
 
@@ -9598,7 +9637,7 @@ ${stabSection}
       </div>} {/* end grid */}
 
       {/* ROI vs Competitor */}
-      {mentor.data && (
+      {erEmail && (mentor.data || roiDraftLoaded) && (
         <div className="mt-5 rounded-xl border border-green-700/50 bg-green-950/20">
           {/* Header toggle */}
           <button
@@ -9612,6 +9651,11 @@ ${stabSection}
 
           {showRoi && (
             <div className="px-4 pb-4 space-y-4">
+              {roiDraftLoaded && !mentor.data && (
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
+                  📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
+                </div>
+              )}
               {/* 2-column form */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Left: Core Cutter */}

@@ -1918,6 +1918,22 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/roi", async (req, res) => {
+    try {
+      const { email } = req.query as { email?: string };
+      if (!email) return res.json([]);
+      const { pool } = await import("./db");
+      const result = await pool.query(
+        `SELECT * FROM roi_comparisons WHERE LOWER(user_email) = LOWER($1) ORDER BY created_at DESC`,
+        [email]
+      );
+      return res.json(result.rows);
+    } catch (e: any) {
+      console.error("[ROI GET] Error:", e?.message);
+      return res.status(500).json({ error: "Failed to load ROI history." });
+    }
+  });
+
 
   // Seed data — wrapped in try/catch so a Neon cold-start ECONNRESET doesn't crash the server
   let snippets: Awaited<ReturnType<typeof storage.getSnippets>> = [];

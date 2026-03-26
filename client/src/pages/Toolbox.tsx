@@ -22,6 +22,9 @@ export default function Toolbox() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [expanded, setExpanded] = React.useState<number | null>(null);
+  const [roiItems, setRoiItems] = React.useState<any[]>([]);
+  const [roiDraft, setRoiDraft] = React.useState<any>(null);
+  const [roiExpanded, setRoiExpanded] = React.useState<number | null>(null);
 
   // Load items on mount if already authed
   React.useEffect(() => {
@@ -74,6 +77,17 @@ export default function Toolbox() {
       if (r.status === 401) { signOut(); return; }
       const d = await r.json();
       setItems(d);
+      // Load completed ROIs from DB
+      const userEmail = localStorage.getItem("er_email") || e;
+      try {
+        const rr = await fetch(`/api/roi?email=${encodeURIComponent(userEmail)}`);
+        if (rr.ok) setRoiItems(await rr.json());
+      } catch { /* silently skip */ }
+      // Load draft from localStorage
+      const draft = localStorage.getItem("roi_draft");
+      if (draft) {
+        try { setRoiDraft(JSON.parse(draft)); } catch { /* skip */ }
+      }
     } catch { setError("Failed to load toolbox"); }
     finally { setLoading(false); }
   }
@@ -265,6 +279,89 @@ export default function Toolbox() {
                 )}
               </div>
             ))}
+
+            {/* ROI Section */}
+            {(roiDraft || roiItems.length > 0) && (
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-green-300">📊 ROI Comparisons</span>
+                  <span className="text-xs text-zinc-500">{roiItems.length} completed{roiDraft ? " · 1 in progress" : ""}</span>
+                </div>
+
+                {/* In Progress Draft */}
+                {roiDraft && (
+                  <div className="border border-amber-600/40 rounded-xl overflow-hidden bg-amber-950/20">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">⏳</span>
+                        <div>
+                          <div className="text-sm font-semibold text-amber-300">In Progress</div>
+                          <div className="text-[11px] text-zinc-500">
+                            {roiDraft.compEdp ? `vs ${roiDraft.compEdp} · ` : ""}
+                            {roiDraft.result ? `$${Number(roiDraft.result.savingsPerPart).toFixed(2)}/part estimated` : "Not yet calculated"}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        className="text-xs bg-green-700/30 hover:bg-green-700/50 text-green-300 border border-green-700/40 rounded px-3 py-1.5 font-semibold"
+                        onClick={() => {
+                          localStorage.setItem("roi_resume", "1");
+                          window.location.href = "/";
+                        }}
+                      >
+                        Resume →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed ROIs */}
+                {roiItems.map((roi: any) => (
+                  <div key={roi.id} className="border border-green-700/30 rounded-xl overflow-hidden bg-green-950/10">
+                    <div
+                      className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-green-950/20"
+                      onClick={() => setRoiExpanded(roiExpanded === roi.id ? null : roi.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">✅</span>
+                        <div>
+                          <div className="text-sm font-semibold text-green-300">
+                            ${Number(roi.annual_savings).toFixed(0)}/yr saved
+                          </div>
+                          <div className="text-[11px] text-zinc-500">
+                            {roi.material} · {roi.cc_edp || "CC"}{roi.comp_edp ? ` vs ${roi.comp_edp}` : ""} · {formatDate(roi.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-muted-foreground text-sm">{roiExpanded === roi.id ? "▲" : "▼"}</span>
+                    </div>
+                    {roiExpanded === roi.id && (
+                      <div className="border-t border-green-700/20 px-4 py-3 bg-green-950/20">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {[
+                            ["Savings/Part", `$${Number(roi.savings_per_part).toFixed(2)}`],
+                            ["Monthly Savings", `$${Number(roi.monthly_savings).toFixed(2)}`],
+                            ["Annual Savings", `$${Number(roi.annual_savings).toFixed(2)}`],
+                            ["% Reduction", `${Number(roi.savings_pct).toFixed(1)}%`],
+                            ["CC Tool Price", `$${Number(roi.cc_tool_price).toFixed(2)}`],
+                            ["Comp Tool Price", `$${Number(roi.comp_price).toFixed(2)}`],
+                            ["CC Parts/Tool", roi.cc_parts_per_tool],
+                            ["Comp Parts/Tool", roi.comp_parts_per_tool],
+                            ["Shop Rate", `$${Number(roi.shop_rate).toFixed(0)}/hr`],
+                            ["Monthly Volume", `${roi.monthly_volume} parts`],
+                          ].map(([label, val]) => (
+                            <div key={label as string}>
+                              <div className="text-zinc-500">{label}</div>
+                              <div className="font-semibold text-white">{String(val)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
