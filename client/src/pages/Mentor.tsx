@@ -2967,8 +2967,9 @@ ${stabSection}
                     setWocText(((wp.med / 100) * dia).toFixed(4));
                     setWocPreset("med");
                   }
-                  setDocText((dp.med * dia).toFixed(3));
-                  setDocPreset("med");
+                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : "med";
+                  setDocText((dp[docLevel] * dia).toFixed(3));
+                  setDocPreset(docLevel);
                 }}
               >
                 <option value="" disabled>— Select Process —</option>
