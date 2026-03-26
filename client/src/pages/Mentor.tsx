@@ -1013,7 +1013,7 @@ export default function Mentor() {
     const params = new URLSearchParams({
       tool_type: "chamfer_mill",
       chamfer_angle: String(form.chamfer_angle),
-      series: form.chamfer_series,
+      series: `${form.chamfer_series}${form.chamfer_angle}`,
       required_chamfer_length: edgeLengthNeeded.toFixed(5),
     });
     fetch(`/api/tools/search?${params}`)
