@@ -447,10 +447,10 @@ export default function Mentor() {
     setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
     setShowWelcomeModal(false);
-    fetch("/api/contact/tool-request", {
+    fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase(), message: "Welcome modal registration" }),
+      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase() }),
     }).catch(() => {});
   }
 

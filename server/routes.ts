@@ -1529,6 +1529,28 @@ export async function registerRoutes(
     return res.json({ valid: true });
   });
 
+  // ── Welcome modal registration (geo capture, no email sent) ──────────────
+  app.post("/api/register", async (req, res) => {
+    try {
+      const { name, email } = (req.body ?? {}) as { name?: string; email?: string };
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Valid email required" });
+      }
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
+      const geo = await geoFromIp(clientIp);
+      const { pool } = await import("./db");
+      await pool.query(
+        `INSERT INTO leads (email, operation, name, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT DO NOTHING`,
+        [email.toLowerCase().trim(), "registration", name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.warn("[Register]", err?.message);
+      res.json({ ok: true }); // never block the user
+    }
+  });
+
   // ── Tool Request Contact ──────────────────────────────────────────────────
   app.post("/api/contact/tool-request", async (req, res) => {
     try {
