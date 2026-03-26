@@ -3091,7 +3091,6 @@ ${stabSection}
             {matMatchResult && (
               <div className={`mt-1.5 text-xs rounded px-2.5 py-1.5 border ${matMatchResult.confidence === "high" ? "border-green-500/40 bg-green-500/10 text-green-300" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-300"}`}>
                 {matMatchResult.confidence === "high" ? "✓" : "⚠"} Running as <strong>{matMatchResult.label}</strong>
-                {matMatchResult.source === "ai" && " (AI match)"}
                 {matMatchResult.confidence !== "high" && " — closest available. Verify with your tooling supplier."}
                 {matMatchResult.note && <span className="block opacity-75 mt-0.5">{matMatchResult.note}</span>}
               </div>
