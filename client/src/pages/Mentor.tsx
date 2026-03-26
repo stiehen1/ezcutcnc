@@ -2489,7 +2489,10 @@ ${stabSection}
       {/* App header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
         <img src="/CCLogo-long-blackback TRANSPARENT-01.png" alt="Core Cutter" className="h-10 w-auto" />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col items-end gap-0.5">
+          {localStorage.getItem("cc_first_name") && (
+            <span className="text-xs text-zinc-400">Hi, <span className="text-orange-400 font-semibold">{localStorage.getItem("cc_first_name")}</span></span>
+          )}
           <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
         </div>
       </div>
