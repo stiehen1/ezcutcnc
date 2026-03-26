@@ -3090,7 +3090,7 @@ ${stabSection}
             </div>
             {matSearchLoading && (
               <div className="mt-1.5 text-xs rounded px-2.5 py-1.5 border border-zinc-600/40 bg-zinc-800/40 text-zinc-400 animate-pulse">
-                Looking…
+                Looking for closest match…
               </div>
             )}
             {matMatchResult && (
