@@ -3405,6 +3405,18 @@ ${stabSection}
                             <line x1={bodyX1-6} y1={clY} x2={tipX+12} y2={clY} stroke="#4a4a5a" strokeWidth="1" strokeDasharray="12,3,3,3"/>
                             {/* Chamfer cutting edge (orange) */}
                             <line x1={chamferX} y1={topY} x2={tipX} y2={tipY} stroke="#f97316" strokeWidth="2.5"/>
+                            {/* Saddling zone — white overlay showing chamfer length engagement */}
+                            {form.chamfer_depth > 0 && (() => {
+                              const saddleFrac = Math.min(1, form.chamfer_depth / edgeLength);
+                              const sx = tipX + (chamferX - tipX) * saddleFrac;
+                              const sy = tipY + (topY - tipY) * saddleFrac;
+                              const isOver = form.chamfer_depth > edgeLength;
+                              return (
+                                <line x1={tipX} y1={tipY} x2={sx} y2={sy}
+                                  stroke={isOver ? "#ef4444" : "rgba(255,255,255,0.80)"}
+                                  strokeWidth="5" strokeLinecap="round"/>
+                              );
+                            })()}
                             {/* CMS: point on CL */}
                             {isCms && <polygon points={`${tipX},${clY} ${tipX-9},${clY-7} ${tipX-9},${clY}`} fill="#f97316" opacity="0.85"/>}
                             {/* CMH: gray flat face from tipY down to CL */}
