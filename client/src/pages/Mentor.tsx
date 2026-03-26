@@ -387,16 +387,6 @@ export default function Mentor() {
   const [operation, setOperation] = React.useState<"milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmill" | "feedmilling" | "toolfinder" | "toolbox">("milling");
   const [units, setUnits] = React.useState<"imperial" | "metric">("imperial");
 
-  // ── Engineering / Customer mode ──────────────────────────────────────────
-  const [engMode, setEngMode] = React.useState<boolean>(() =>
-    localStorage.getItem("cc_eng_mode") === "true"
-  );
-  const [showEngModal, setShowEngModal] = React.useState(false);
-  const [showEngPassword, setShowEngPassword] = React.useState(false);
-  const [engPasswordInput, setEngPasswordInput] = React.useState("");
-  const [engPasswordError, setEngPasswordError] = React.useState("");
-  const [engAuthLoading, setEngAuthLoading] = React.useState(false);
-
   // ── Toolbox state ──────────────────────────────────────────────────────────
   const [tbSaving, setTbSaving] = React.useState(false);
   const [tbSaved, setTbSaved] = React.useState(false);
@@ -734,46 +724,6 @@ export default function Mentor() {
       if (r2.ok) setSavedMachines(await r2.json());
     }
   }
-
-  const enterEngMode = async () => {
-    setEngAuthLoading(true);
-    setEngPasswordError("");
-    try {
-      const res = await fetch("/api/eng-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: engPasswordInput }),
-      });
-      if (res.ok) {
-        setEngMode(true);
-        localStorage.setItem("cc_eng_mode", "true");
-        setShowEngModal(false);
-        setEngPasswordInput("");
-        // Auto-connect Toolbox session for admin
-        const d = await res.json();
-        if (d.tb_email && d.tb_token) {
-          setTbEmail(d.tb_email);
-          setTbToken(d.tb_token);
-          setTbStep("saving");
-          localStorage.setItem("tb_email", d.tb_email);
-          localStorage.setItem("tb_token", d.tb_token);
-          // Load saved machines
-          const r2 = await fetch(`/api/user-machines?email=${encodeURIComponent(d.tb_email)}&token=${encodeURIComponent(d.tb_token)}`);
-          if (r2.ok) setSavedMachines(await r2.json());
-        }
-      } else {
-        setEngPasswordError("Incorrect password");
-      }
-    } catch {
-      setEngPasswordError("Connection error — try again");
-    }
-    setEngAuthLoading(false);
-  };
-
-  const exitEngMode = () => {
-    setEngMode(false);
-    localStorage.removeItem("cc_eng_mode");
-  };
 
   // ── Toolbox functions ──────────────────────────────────────────────────────
   async function saveToToolbox() {
@@ -1617,8 +1567,8 @@ export default function Mentor() {
   React.useEffect(() => { runRef.current = run; });
 
   const run = async () => {
-    // Customer mode lock — must have an EDP or CC print PDF
-    if (!engMode && !skuLocked && !pdfExtracted) {
+    // Must have an EDP or CC print PDF
+    if (!skuLocked && !pdfExtracted) {
       setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);
       return;
     }
@@ -2691,7 +2641,7 @@ ${stabSection}
 
   function requireEmail(action: "copy" | "print" | "pdf" | "stp", stpHref?: string) {
     const email = erEmail || localStorage.getItem("er_email") || "";
-    if (email || engMode) {
+    if (email) {
       runGatedAction(action, stpHref);
     } else {
       setErGatePending(action);
@@ -2755,15 +2705,6 @@ ${stabSection}
             {OP_LABELS[op]}
           </button>
         ))}
-        {/* Eng mode indicator */}
-        {engMode ? (
-          <div className="flex items-center gap-1 ml-auto">
-            <span className="text-[10px] font-bold px-2 py-1 rounded border" style={{ backgroundColor: "#f59e0b22", borderColor: "#f59e0b", color: "#f59e0b" }}>ENG MODE ✓</span>
-            <button type="button" onClick={exitEngMode} className="text-[10px] text-zinc-500 hover:text-white">×</button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="ml-auto text-zinc-700 hover:text-zinc-500 text-sm" title="Engineering mode">🔒</button>
-        )}
       </div>
     );
   }
@@ -2828,14 +2769,6 @@ ${stabSection}
                   </button>
                 ))}
               </div>
-              {engMode ? (
-                <div className="flex items-center gap-0.5">
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border" style={{ backgroundColor: "#f59e0b22", borderColor: "#f59e0b", color: "#f59e0b" }}>ENG ✓</span>
-                  <button type="button" onClick={exitEngMode} className="text-[10px] text-zinc-500 hover:text-white leading-none">×</button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => { setShowEngModal(true); setEngPasswordError(""); setEngPasswordInput(""); }} className="text-zinc-700 hover:text-zinc-500 text-xs" title="Engineering mode">🔒</button>
-              )}
             </div>
           </div>
         </CardHeader>
@@ -3407,7 +3340,7 @@ ${stabSection}
                 </div>
               ) : (
                 <label className="flex flex-col items-center gap-1 cursor-pointer">
-                  <span className="text-xs text-gray-400">{engMode ? "Or upload CC print to auto-fill" : "Upload CC-XXXXX print to auto-fill dimensions"}</span>
+                  <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
                   <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
                     {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
                   </span>
@@ -3991,217 +3924,10 @@ ${stabSection}
               <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
-          {/* Eng mode: mode toggle */}
-          {engMode && (
-            <div className="flex gap-2 mt-3 mb-1">
-              {(["print", "manual"] as const).map((m) => (
-                <button key={m} type="button"
-                  onClick={() => setDrillMode(m)}
-                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: drillMode === m ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1", color: drillMode === m ? "#fff" : "#6366f1",
-                  }}>
-                  {m === "print" ? "📐 From CC Print" : "🔧 Manual Entry"}
-                </button>
-              ))}
-            </div>
-          )}
 
-          {/* Drilling tool fields — eng manual mode only */}
-          {engMode && drillMode === "manual" && <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <FieldLabel hint="Entry diameter — the smallest (tip) diameter. SFM is set by the largest step diameter; feed (IPR) is set by this entry diameter.">{form.drill_steps > 0 ? "Entry Dia (in)" : "Drill Dia (in)"}</FieldLabel>
-              <Input
-                type="text" inputMode="decimal" className="no-spinners"
-                value={toolDiaText}
-                onChange={(e) => setToolDiaText(e.target.value)}
-                onFocus={() => { if (form.tool_dia) setToolDiaText(form.tool_dia.toFixed(4)); }}
-                onBlur={() => {
-                  const n = parseDim(toolDiaText);
-                  if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, tool_dia: n })); setToolDiaText(n.toFixed(4)); }
-                  else setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : "");
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <FieldLabel hint="Flute length — the fluted portion of the drill from tip to where the shank begins. Sets the maximum usable hole depth; the engine warns if hole depth exceeds flute length minus point clearance.">Flute Length (in)</FieldLabel>
-              <Input
-                type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 1.5"
-                value={drillFluteLenText}
-                onChange={(e) => setDrillFluteLenText(e.target.value)}
-                onBlur={() => {
-                  const n = parseDim(drillFluteLenText);
-                  if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, drill_flute_length: n })); setDrillFluteLenText(n.toFixed(3)); }
-                  else setDrillFluteLenText(form.drill_flute_length > 0 ? form.drill_flute_length.toFixed(3) : "");
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <FieldLabel hint="Number of flutes on the drill. Standard jobber drills are 2-flute. Some specialty drills use 3 or 4 flutes for improved chip evacuation in non-ferrous materials.">Flutes</FieldLabel>
-              <Input
-                type="number"
-                step="1"
-                className="no-spinners"
-                value={form.flutes > 0 ? form.flutes : 2}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value);
-                  setForm((p) => ({ ...p, flutes: Number.isFinite(n) && n > 0 ? n : 2 }));
-                }}
-              />
-            </div>
-          </div>}
 
-          {/* Steps + Coolant + Geometry — eng manual mode only */}
-          {engMode && drillMode === "manual" && (<>
-          {/* Steps selector */}
-          <div className="space-y-1.5 mt-3">
-            <FieldLabel hint="Standard = single diameter drill. Step Drill = enter the largest diameter; SFM is set by the largest diameter, feed (IPR) by the entry (smallest) diameter.">Drill Type</FieldLabel>
-            <div className="flex gap-2">
-              {([0, 1] as const).map((n) => (
-                <button key={n} type="button"
-                  onClick={() => {
-                    setStepDiaTexts(n === 0 ? [] : [""]);
-                    setStepLenTexts([]);
-                    setForm((p) => ({ ...p, drill_steps: n, drill_step_diameters: [], drill_step_lengths: [] }));
-                  }}
-                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: form.drill_steps === n ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1", color: form.drill_steps === n ? "#fff" : "#6366f1",
-                  }}
-                >{n === 0 ? "Standard" : "Step Drill"}</button>
-              ))}
-            </div>
-          </div>
-          {form.drill_steps > 0 && (
-            <div className="mt-3 space-y-1">
-              <FieldLabel hint="Largest diameter on the step drill. SFM and RPM are calculated on this diameter.">Largest Dia (in)</FieldLabel>
-              <Input
-                type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 0.500"
-                value={stepDiaTexts[0] ?? ""}
-                onChange={(e) => setStepDiaTexts([e.target.value])}
-                onBlur={() => {
-                  const n = parseDim(stepDiaTexts[0] ?? "");
-                  if (Number.isFinite(n) && n > 0) {
-                    setForm((p) => ({ ...p, drill_step_diameters: [n] }));
-                    setStepDiaTexts([n.toFixed(4)]);
-                  }
-                }}
-              />
-            </div>
-          )}
-          {/* Coolant Fed */}
-          <div className="space-y-1.5 mt-3">
-            <FieldLabel hint="Coolant-fed drills have internal through-holes that deliver coolant directly to the cutting edge.">Coolant Delivery</FieldLabel>
-            <div className="flex gap-2">
-              {([{ val: false, label: "Non-Coolant Fed" }, { val: true, label: "Coolant Fed (Through)" }] as const).map(({ val, label }) => (
-                <button key={String(val)} type="button"
-                  onClick={() => setForm((p) => ({ ...p, drill_coolant_fed: val }))}
-                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: form.drill_coolant_fed === val ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1", color: form.drill_coolant_fed === val ? "#fff" : "#6366f1",
-                  }}
-                >{label}</button>
-              ))}
-            </div>
-          </div>
-          {/* Flute Geometry — full selector for eng */}
+          {/* Auto-apply flute geo silently, show read-only point angle */}
           {(() => {
-            const iso = isoCategory;
-            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
-            const isDeep = depthD > 5;
-            const isVeryDeep = depthD > 7;
-            const hasCoolant = form.drill_coolant_fed;
-            let recGeo: string[] = ["standard"];
-            if (iso === "M") recGeo = [isDeep ? "high_helix" : "med_helix"];
-            else if (iso === "S") recGeo = ["high_helix"];
-            else if (iso === "P") recGeo = [isDeep ? "med_helix" : "standard"];
-            if (hasCoolant && recGeo.includes("high_helix") && !isVeryDeep) recGeo = ["med_helix"];
-            else if (hasCoolant && recGeo.includes("med_helix") && !isDeep) recGeo = ["standard"];
-            if (!hasCoolant && isDeep && recGeo.includes("standard")) recGeo = ["med_helix"];
-            if (!hasCoolant && isVeryDeep && recGeo.includes("med_helix")) recGeo = ["high_helix"];
-            return (
-              <div className="space-y-1.5 mt-3">
-                <div className="flex items-center justify-between">
-                  <FieldLabel hint="Flute geometry determines chip storage and evacuation speed. Standard: up to 5×D. Med Helix: 5–7×D. High Helix: 7–9×D.">Flute Geometry</FieldLabel>
-                  {recGeo.length > 0 && <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>}
-                </div>
-                <div className="flex gap-2">
-                  {([
-                    { val: "standard",   label: "Standard",   depth: "up to 5×D" },
-                    { val: "med_helix",  label: "Med Helix",  depth: "5–7×D" },
-                    { val: "high_helix", label: "High Helix", depth: "7–9×D" },
-                  ] as const).map(({ val, label, depth }) => {
-                    const active = form.drill_geometry === val;
-                    const isRec = recGeo.includes(val);
-                    return (
-                      <button key={val} type="button"
-                        onClick={() => setForm((p) => ({ ...p, drill_geometry: val }))}
-                        className="flex-1 rounded border transition-all px-2 py-2 text-left"
-                        style={{
-                          backgroundColor: active ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
-                          borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
-                        }}>
-                        <div className={`text-xs font-semibold ${active ? "text-white" : isRec ? "text-amber-400" : "text-indigo-400"}`}>{label}{isRec && !active ? " ★" : ""}</div>
-                        <div className={`text-[10px] font-bold mt-0.5 ${active ? "text-indigo-200" : isRec ? "text-amber-500" : "text-indigo-500"}`}>{depth}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-          {/* Point Angle — full selector with recommendations for eng */}
-          {(() => {
-            const iso = isoCategory;
-            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
-            const isDeep = depthD > 5;
-            const isBlind = form.drill_blind;
-            let recommended: number[] = [];
-            if (iso === "N") recommended = [118];
-            else if (iso === "P") recommended = isDeep ? [135, 140] : [130, 135];
-            else if (iso === "K") recommended = [118, 130];
-            else if (iso === "M") recommended = isDeep ? [140, 145] : [135, 140];
-            else if (iso === "S") recommended = [140, 145];
-            else if (iso === "H") recommended = [135, 140];
-            if (isBlind && recommended.length > 0) {
-              const max = Math.max(...recommended);
-              recommended = [max < 145 ? max + 5 : max];
-            }
-            return (
-              <div className="space-y-1.5 mt-3">
-                <div className="flex items-center justify-between">
-                  <FieldLabel hint="118°=aluminum/soft. 130°=general carbide. 135°=stainless/alloy. 140°=deep holes. 145°=superalloys.">Point Angle</FieldLabel>
-                  {recommended.length > 0 && <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>}
-                </div>
-                <div className="flex gap-2">
-                  {([118, 130, 135, 140, 145] as const).map((pa) => {
-                    const isSelected = form.drill_point_angle === pa;
-                    const isRec = recommended.includes(pa);
-                    return (
-                      <button key={pa} type="button"
-                        onClick={() => setForm((p) => ({ ...p, drill_point_angle: pa }))}
-                        className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                        style={{
-                          backgroundColor: isSelected ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
-                          borderColor: isSelected ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
-                          color: isSelected ? "#fff" : isRec ? "#f59e0b" : "#6366f1",
-                        }}
-                      >{pa}°{isRec && !isSelected ? " ★" : ""}</button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-          </>)}
-
-          {/* Customer mode: auto-apply flute geo silently, show read-only point angle */}
-          {!engMode && (() => {
             const iso = isoCategory;
             const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
             const isDeep = depthD > 5;
@@ -4318,40 +4044,8 @@ ${stabSection}
               </label>
             )}
           </div>
-          {/* Mode toggle — engineering only */}
-          {engMode && (
-            <div className="flex gap-2 mt-3">
-              {(["print", "known"] as const).map((m) => (
-                <button key={m} type="button"
-                  onClick={() => setReamMode(m)}
-                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: reamMode === m ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1", color: reamMode === m ? "#fff" : "#6366f1",
-                  }}>
-                  {m === "print" ? "📐 From Print Dimension" : "🔧 I Know My Reamer Size"}
-                </button>
-              ))}
-            </div>
-          )}
 
-          {(reamMode === "print" || !engMode) ? (<>
-            {/* Tolerance class — engineering only */}
-            {engMode && <div className="mt-3 space-y-1.5">
-              <FieldLabel hint="ISO hole tolerance class. H7 is the standard for most reaming applications. H6 is tighter (precision bores); H8 is looser (general clearance fits).">Tolerance Class</FieldLabel>
-              <div className="flex gap-1">
-                {(["H6","H7","H8"] as const).map((cls) => (
-                  <button key={cls} type="button"
-                    onClick={() => setReamTolClass(cls)}
-                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                    style={{
-                      backgroundColor: reamTolClass === cls ? "#6366f1" : "transparent",
-                      borderColor: "#6366f1", color: reamTolClass === cls ? "#fff" : "#6366f1",
-                    }}>{cls}</button>
-                ))}
-              </div>
-            </div>}
-            {form.tool_dia > 0 && (
+          {form.tool_dia > 0 && (
               <div className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2.5 text-xs space-y-1.5">
                 <div className="flex justify-between">
                   <span className="text-zinc-400">Reamer OD</span>
@@ -4396,54 +4090,6 @@ ${stabSection}
                 })()}
               </div>
             )}
-          </>) : (<>
-            {/* Known-reamer workflow */}
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <div>
-                <FieldLabel hint="Reamer cutting diameter.">{UL("Reamer Dia (in.)", "Reamer Dia (mm)")}</FieldLabel>
-                <Input type="number" step={metric ? "0.01" : "0.0001"} className="no-spinners"
-                  value={form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(3) : form.tool_dia) : ""}
-                  onChange={onUnitNum("tool_dia", 25.4)} />
-              </div>
-              <div>
-                <FieldLabel hint="Pre-drilled hole diameter. Must be within the correct undersize range for the reamer.">{UL("Pre-Drill Dia (in.)", "Pre-Drill Dia (mm)")}</FieldLabel>
-                <Input type="text" inputMode="decimal" className="no-spinners"
-                  placeholder={(() => {
-                    const s = reamStockRange(form.tool_dia);
-                    if (!s) return metric ? "e.g. 12.34" : "e.g. 0.4865";
-                    const lo = form.tool_dia - s.max, hi = form.tool_dia - s.min;
-                    return metric ? `${(lo * 25.4).toFixed(2)} – ${(hi * 25.4).toFixed(2)}` : `${lo.toFixed(4)} – ${hi.toFixed(4)}`;
-                  })()}
-                  value={form.ream_pre_drill_dia ? (metric ? (form.ream_pre_drill_dia * 25.4).toFixed(3) : form.ream_pre_drill_dia) : ""}
-                  onChange={onUnitNum("ream_pre_drill_dia", 25.4)} />
-                {(() => {
-                  const stock = reamStockRange(form.tool_dia);
-                  if (!stock) return null;
-                  const ideal  = +(form.tool_dia - stock.ideal).toFixed(4);
-                  const lo     = +(form.tool_dia - stock.max).toFixed(4);
-                  const hi     = +(form.tool_dia - stock.min).toFixed(4);
-                  const drills = nearestDrills(ideal, lo, hi);
-                  const ranked = [...drills].sort((a, b) => Math.abs(a.dia - ideal) - Math.abs(b.dia - ideal));
-                  const rankStyle = [
-                    "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400",
-                    "border-amber-500/60  bg-amber-500/10  text-amber-300  hover:bg-amber-500/25  hover:border-amber-400",
-                  ];
-                  return (
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      {ranked.map((d, i) => (
-                        <button key={d.label} type="button"
-                          onClick={() => setForm((p) => ({ ...p, ream_pre_drill_dia: +d.dia.toFixed(4) }))}
-                          className={`flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold transition-all cursor-pointer ${rankStyle[i] ?? "border-zinc-600 bg-zinc-800 text-foreground"}`}>
-                          {d.label}
-                          <span className="font-normal text-[10px] opacity-60">{d.dia.toFixed(4)}"</span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </>)}
 
           {/* Reamer Type — Standard or Step */}
           <div className="space-y-1.5 mt-3">
@@ -5302,67 +4948,6 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Lead Chamfer — engineering only */}
-          {engMode && (() => {
-            const iso = isoCategory;
-            const isBlind = form.ream_blind;
-
-            let recChamfer: string;
-            if (iso === "N" || iso === "K") {
-              recChamfer = isBlind ? "standard" : "short_lead";
-            } else if (iso === "P") {
-              recChamfer = isBlind ? "long_lead" : "standard";
-            } else if (iso === "M" || iso === "S" || iso === "H") {
-              recChamfer = "long_lead";
-            } else {
-              recChamfer = "standard";
-            }
-
-            return (
-              <div className="space-y-1.5 mt-3">
-                <div className="flex items-center justify-between">
-                  <FieldLabel hint="The lead chamfer is the angled entry at the tip of the reamer that eases it into the hole. Standard (45°) is the Core Cutter default and works well for most applications. Long Lead (15–30°) spreads the cut over more edge — better surface finish and chatter reduction, preferred for blind holes, stainless, and tight tolerance work. Short Lead (60°+) is more aggressive — higher feed rates, good for production through-hole work in softer materials.">Lead Chamfer</FieldLabel>
-                  <span className="text-[10px] text-amber-400 font-medium">★ recommended for this setup</span>
-                </div>
-                <div className="flex gap-2">
-                  {([
-                    { val: "standard",   label: "Standard",   angle: "45°",    desc: "Default — balanced performance",
-                      hint: "✓ Balanced entry force\n✓ Works on most materials and hole types\n✓ Easy to regrind\n✗ Not optimized for finish or speed" },
-                    { val: "long_lead",  label: "Long Lead",  angle: "15–30°", desc: "Fine finish, blind & hard materials",
-                      hint: "✓ Gradual load — lower chatter, better finish\n✓ Spreads wear over more edge → longer tool life\n✓ Best for stainless, Inconel, blind holes\n✗ Higher thrust on entry\n✗ Slower feed rates\n✗ Needs more clearance at blind hole bottom" },
-                    { val: "short_lead", label: "Short Lead", angle: "60°+",   desc: "Production, high feed, through holes",
-                      hint: "✓ Fast stock removal, high production feed rates\n✓ Lower thrust force\n✓ Good chip clearance in through holes\n✗ Higher chatter risk on entry\n✗ Edge wears faster in hard or stringy materials\n✗ Poor finish in difficult materials" },
-                  ] as const).map(({ val, label, angle, desc, hint }) => {
-                    const active = form.ream_lead_chamfer === val;
-                    const isRec = recChamfer === val;
-                    return (
-                      <TooltipProvider key={val} delayDuration={200}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button"
-                              onClick={() => setForm((p) => ({ ...p, ream_lead_chamfer: val }))}
-                              className="flex-1 rounded border transition-all px-2 py-2 text-left"
-                              style={{
-                                backgroundColor: active ? "#6366f1" : isRec ? "rgba(245,158,11,0.12)" : "transparent",
-                                borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
-                              }}
-                            >
-                              <div className={`text-xs font-semibold leading-tight ${active ? "text-white" : isRec ? "text-amber-400" : "text-indigo-400"}`}>
-                                {label}{isRec && !active ? " ★" : ""}
-                              </div>
-                              <div className={`text-[10px] font-bold mt-0.5 ${active ? "text-indigo-200" : isRec ? "text-amber-500" : "text-indigo-500"}`}>{angle}</div>
-                              <div className={`text-[9px] leading-tight mt-0.5 ${active ? "text-indigo-100" : "text-muted-foreground"}`}>{desc}</div>
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-56 text-xs whitespace-pre-line">{hint}</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
           {/* Machining Tips accordion — reaming */}
           {operation === "reaming" && (
             <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
@@ -7075,7 +6660,7 @@ ${stabSection}
           </div>
 
           {/* Actions */}
-          {!engMode && !skuLocked && !pdfExtracted && (
+          {!skuLocked && !pdfExtracted && (
             <div className="mb-2">
               <p className="text-xs text-amber-400">
                 {operation === "milling"
@@ -7095,8 +6680,8 @@ ${stabSection}
             <Button
               className="w-full transition-all"
               onClick={run}
-              disabled={mentor.isPending || (!engMode && !skuLocked && !pdfExtracted)}
-              style={formDirty && (engMode || skuLocked || pdfExtracted) ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
+              disabled={mentor.isPending || (!skuLocked && !pdfExtracted)}
+              style={formDirty && (skuLocked || pdfExtracted) ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
             >
               {mentor.isPending ? "Running…" : formDirty ? "⟳ Inputs changed — Re-run CoreCutCNC" : "Run CoreCutCNC"}
             </Button>
@@ -7359,45 +6944,6 @@ ${stabSection}
                 )}
               </div>
 
-              {/* Core Cutter Recommends — thread mill quote card (Engineering Mode only) */}
-              {engMode && (() => {
-                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
-                const cr = getCoatingRec(isoCategory);
-                const tpiLabel = form.thread_tpi
-                  ? `× ${form.thread_tpi} TPI`
-                  : form.thread_pitch_mm
-                  ? `× ${form.thread_pitch_mm} mm pitch`
-                  : "";
-                return (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">Core Cutter Recommends</p>
-                        <p className="font-semibold text-foreground text-sm">Custom Thread Mill — Built to Order</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => { setTmQuoteSent(false); setShowTmQuote(true); }}
-                        className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
-                      >
-                        Request Quote
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
-                      <div><span className="text-zinc-500">Thread</span><span className="ml-2 font-medium text-foreground">{form.thread_standard.toUpperCase()} {form.thread_major_dia > 0 ? `ø${form.thread_major_dia.toFixed(4)}"` : "—"} {tpiLabel}</span></div>
-                      <div><span className="text-zinc-500">Class / Hand</span><span className="ml-2 font-medium text-foreground">{form.thread_class} · {form.thread_hand === "right" ? "RH" : "LH"}</span></div>
-                      <div><span className="text-zinc-500">Int / Ext</span><span className="ml-2 font-medium text-foreground">{form.thread_internal ? "Internal" : "External"}</span></div>
-                      <div><span className="text-zinc-500">Cutter Dia</span><span className="ml-2 font-medium text-foreground">{form.tool_dia > 0 ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
-                      <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes}</span></div>
-                      <div><span className="text-zinc-500">Thread Profiles</span><span className="ml-2 font-medium text-foreground">{form.thread_rows}</span></div>
-                      <div><span className="text-zinc-500">Reach / Neck</span><span className="ml-2 font-medium text-foreground">{form.thread_neck_length > 0 ? `${form.thread_neck_length.toFixed(3)}"` : "None"}</span></div>
-                      <div><span className="text-zinc-500">Material</span><span className="ml-2 font-medium text-foreground">{matLabel}</span></div>
-                      <div><span className="text-zinc-500">Recommended Coating</span><span className="ml-2 font-bold text-orange-400">{cr.code}</span></div>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Thread Mill quote modal */}
               {showTmQuote && (() => {
@@ -10295,45 +9841,6 @@ ${stabSection}
       </div>
     )}
 
-    {/* Engineering Mode Password Modal */}
-    {showEngModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowEngModal(false)}>
-        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
-          <h2 className="text-base font-semibold text-white mb-1">Engineering Mode</h2>
-          <p className="text-xs text-zinc-400 mb-4">Enter the engineering password to access all manual controls.</p>
-          <div className="relative">
-            <input
-              type={showEngPassword ? "text" : "password"}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 pr-9 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
-              placeholder="Password"
-              value={engPasswordInput}
-              onChange={e => setEngPasswordInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") enterEngMode(); }}
-              autoFocus
-            />
-            <button type="button" onClick={() => setShowEngPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white text-xs">
-              {showEngPassword ? "🙈" : "👁️"}
-            </button>
-          </div>
-          {engPasswordError && <p className="text-xs text-red-400 mt-1">{engPasswordError}</p>}
-          <div className="flex gap-2 mt-3">
-            <button
-              className="flex-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50"
-              onClick={enterEngMode}
-              disabled={engAuthLoading}
-            >
-              {engAuthLoading ? "Checking…" : "Unlock"}
-            </button>
-            <button
-              className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm"
-              onClick={() => { setShowEngModal(false); setEngPasswordInput(""); setEngPasswordError(""); }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
 
     </div>
   );
