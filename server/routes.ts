@@ -940,7 +940,7 @@ export async function registerRoutes(
 
       // Scoring helpers
       const cbOk  = docXd >= 1.0 && (mode === "hem" || wocPct >= 8);
-      const vrxOk = docXd >= 1.0 && wocPct >= 10;
+      const vrxOk = docXd >= 1.0 && wocPct >= 12;  // VXR needs heavier engagement — min 12% WOC in HEM
 
       const scoreGeometry = (g: string | null): number => {
         const geom = (g ?? "standard").toLowerCase();
@@ -1000,21 +1000,47 @@ export async function registerRoutes(
       if (bestSku && bestScore > curScore) {
         // Found a same-LOC same-flute geometry/coating upgrade — use it
       } else {
-        // ── Priority 2: Same LOC, next flute count up ─────────────────────────
-        // Only step up by 1 flute (e.g. 5→6), same LOC
-        const nextFlutes = curFlutes + 1;
-        const sameLocNextFlute = peers.rows.filter((r: any) =>
-          Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes
-        );
-        bestSku = null; bestScore = -1;
-        for (const row of sameLocNextFlute) {
-          const sc = scoreSku(row);
-          if (sc > bestScore) { bestScore = sc; bestSku = row; }
+        // ── Priority 1.5: Next diameter up, same series ───────────────────────
+        // Prefer stepping up in size within the same series (e.g. 505221→605221)
+        // before recommending a different series at the same diameter.
+        const curSeries = (curSku?.tool_series ?? "").toLowerCase();
+        const STD_DIAMETERS = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.5625, 0.625, 0.6875, 0.750, 0.875, 1.000, 1.25, 1.5];
+        const nextDia = STD_DIAMETERS.find(d => d > dia + 0.001) ?? null;
+        if (curSeries && nextDia) {
+          const nextDiaRows = await pool.query(
+            `SELECT s.* FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
+             WHERE u.is_current = TRUE
+               AND ABS(s.cutting_diameter_in - $1) < 0.005
+               AND LOWER(s.tool_series) = LOWER($2)
+               AND s.flutes = $3
+               AND s.edp NOT ILIKE '%-BLK'
+             ORDER BY s.edp`,
+            [nextDia, curSeries, curFlutes]
+          );
+          if (nextDiaRows.rows.length > 0) {
+            bestSku = null; bestScore = -1;
+            for (const row of nextDiaRows.rows) {
+              const sc = scoreSku(row);
+              if (sc > bestScore) { bestScore = sc; bestSku = row; }
+            }
+          }
         }
-        // Flute count upgrade: only surface if score ≥ curScore (same or better geometry)
-        // to avoid recommending a 6-flute with inferior coating
-        if (!bestSku || bestScore < curScore) {
+        if (!bestSku) {
+          // ── Priority 2: Same LOC, next flute count up ───────────────────────
+          // Only step up by 1 flute (e.g. 5→6), same LOC
+          const nextFlutes = curFlutes + 1;
+          const sameLocNextFlute = peers.rows.filter((r: any) =>
+            Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes
+          );
           bestSku = null; bestScore = -1;
+          for (const row of sameLocNextFlute) {
+            const sc = scoreSku(row);
+            if (sc > bestScore) { bestScore = sc; bestSku = row; }
+          }
+          // Flute count upgrade: only surface if score ≥ curScore (same or better geometry)
+          if (!bestSku || bestScore < curScore) {
+            bestSku = null; bestScore = -1;
+          }
         }
       }
 
