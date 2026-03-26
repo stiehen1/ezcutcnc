@@ -948,11 +948,12 @@ export async function registerRoutes(
 
       function scoreGeometry(g: string | null): number {
         const geom = (g ?? "standard").toLowerCase();
-        if (isRoughing && vrxOk && geom === "truncated_rougher") return 4;
-        if (isRoughing && cbOk && geom === "chipbreaker")        return 3;
-        if ((isFinishing || !isRoughing) && geom === "standard") return 2;
-        if (geom === "standard")                                 return 2;
-        if (geom === "chipbreaker" && !isRoughing)               return 1;
+        if (vrxOk && geom === "truncated_rougher") return 4;
+        // CB scores 3 whenever engagement conditions are met (≥8% WOC + ≥1×D DOC)
+        // regardless of mode — cbOk already captures the right conditions
+        if (cbOk && geom === "chipbreaker")        return 3;
+        if (geom === "standard")                   return 2;
+        if (geom === "chipbreaker")                return 1; // CB but conditions not met
         return 1;
       }
 
