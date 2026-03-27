@@ -1453,30 +1453,38 @@ export default function Mentor() {
   }
 
   // Derive dynamic presets for the current mode/material/flutes
-  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number): {
+  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number, tool_series = ""): {
     woc: { low: number; med: number; high: number };
     doc: { low: number; med: number; high: number };
   } {
     if (mode === "hem" || mode === "trochoidal") {
       // WOC three-point targets by ISO category (shop-validated HEM ranges)
       const { wocMed: alWocMed } = getHemMed(iso, flutes); // aluminum keeps per-flute table
+      const isVxr = tool_series === "VXR4" || tool_series === "VXR5";
       const hemWoc =
-        iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
+        isVxr                ? { low: 10, med: 15, high: 18 } // VXR truncated rougher — high MRR
+      : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
       : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
       : flutes >= 7  ? { low: 6, med: 8, high: 10 } // P / M / K — 7–8 flutes
       :               { low: 7, med: 9, high: 12 };  // P / M / K — 5–6 flutes
-      // HEM DOC: all materials 3×D cap, hardened 1.5×D. High = full LOC or cap (whichever less).
-      // Med = 75% of high. Low = 75% of med.
-      const hemCap = iso === "H" ? 1.5 : 3.0;
-      const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
-      const docHigh = Math.round(rawHigh * 4) / 4;
-      const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
-      const docLow  = Math.round(docMed  * 0.75 * 4) / 4;
+      // HEM DOC: VXR fixed tiers; all others 3×D cap (hardened 1.5×D), capped at LOC.
+      let hemDoc: { low: number; med: number; high: number };
+      if (isVxr) {
+        const vxrCap = (n: number) => loc > 0 && dia > 0 ? Math.min(loc / dia, n) : n;
+        hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
+      } else {
+        const hemCap = iso === "H" ? 1.5 : 3.0;
+        const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
+        const docHigh = Math.round(rawHigh * 4) / 4;
+        const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
+        const docLow  = Math.round(docMed  * 0.75 * 4) / 4;
+        hemDoc = { low: docLow, med: docMed, high: docHigh };
+      }
       return {
         woc: hemWoc,
-        doc: { low: docLow, med: docMed, high: docHigh },
+        doc: hemDoc,
       };
     }
     if (mode === "traditional") {
@@ -1513,8 +1521,8 @@ export default function Mentor() {
 
   // Convenience: get presets for current form state
   const dynPresets = React.useMemo(() =>
-    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc),
-    [form.mode, isoCategory, form.flutes, form.tool_dia, form.loc] // eslint-disable-line
+    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? ""),
+    [form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series] // eslint-disable-line
   );
 
   // Keep WOC_PRESETS / DOC_PRESETS as aliases pointing to dynamic values for
@@ -1678,7 +1686,7 @@ export default function Mentor() {
   React.useEffect(() => {
     const isHem = form.mode === "hem" || form.mode === "trochoidal";
     if (!isHem || (wocPreset === null && docPreset === null)) return;
-    const opt = computeOptimalCutParams(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.geometry);
+    const opt = computeOptimalCutParams(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.geometry, form.tool_series ?? "");
     setForm(p => ({ ...p, woc_pct: opt.wocPct, doc_xd: opt.docXd }));
     if (form.tool_dia > 0) {
       setWocText((opt.wocPct / 100 * form.tool_dia).toFixed(4));
@@ -1741,9 +1749,9 @@ export default function Mentor() {
 
   // Shared logic: compute the same values the Optimal buttons produce
   function computeOptimalCutParams(
-    mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string
+    mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string, tool_series = ""
   ): { wocPct: number; docXd: number; wocKey: "low"|"med"|"high"|"optimal"; docKey: "low"|"med"|"high"|"optimal" } {
-    const presets = getDynamicPresets(mode, iso, flutes, dia, loc);
+    const presets = getDynamicPresets(mode, iso, flutes, dia, loc, tool_series);
     const wp = presets.woc;
     const dp = presets.doc;
     // DOC optimal — HEM defaults to high (deep axial + light radial is the HEM philosophy);
@@ -3268,7 +3276,7 @@ ${stabSection}
                   const dia = form.tool_dia || 0.5;
                   const cr = form.corner_radius || 0;
                   // Compute fresh presets for the NEW mode (dynPresets still has old mode at this point)
-                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc);
+                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "");
                   const wp = freshPresets.woc;
                   const dp = freshPresets.doc;
 
