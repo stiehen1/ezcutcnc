@@ -5190,7 +5190,7 @@ ${stabSection}
               })()}
               </>)}
               {/* Tool Stickout — lives under DOC */}
-              <div className="mt-3 space-y-2">
+              <div className="mt-6 pt-4 border-t border-zinc-800 space-y-2">
                 <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
                 <Input
                   type="text" inputMode="decimal"
