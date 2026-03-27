@@ -51,10 +51,12 @@ function BrevoNudge() {
   const [sending, setSending] = React.useState(false);
 
   React.useEffect(() => {
-    if (localStorage.getItem("nudge_dismissed")) return;
-    const check = (e?: Event) => {
+    const MILESTONES = [10, 25, 50];
+    const check = () => {
       const count = parseInt(localStorage.getItem("calc_count") || "0");
-      if (count >= 3) setVisible(true);
+      const shown = parseInt(localStorage.getItem("nudge_shown_count") || "0");
+      if (shown >= MILESTONES.length) return;
+      if (count >= MILESTONES[shown]) setVisible(true);
     };
     check();
     window.addEventListener("calc_count_updated", check);
@@ -62,7 +64,8 @@ function BrevoNudge() {
   }, []);
 
   const dismiss = () => {
-    localStorage.setItem("nudge_dismissed", "1");
+    const shown = parseInt(localStorage.getItem("nudge_shown_count") || "0");
+    localStorage.setItem("nudge_shown_count", String(shown + 1));
     setVisible(false);
   };
 

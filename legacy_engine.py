@@ -3479,7 +3479,10 @@ def run(payload=None):
     _hrc = float(data.get("hardness_hrc", 0) or 0)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                         "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                        "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600")
+                        "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
+                        # PH/duplex stainless: SFM already calibrated for their hardness range — don't double-penalize
+                        "stainless_ph", "stainless_duplex", "stainless_superduplex",
+                        "stainless_440c", "stainless_420")
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)
@@ -4954,7 +4957,8 @@ def run(payload=None):
     # ── IMMEDIATE / NO-HARDWARE FIXES ─────────────────────────────────────────
 
     # A) Reduce feed rate — fastest fix; force scales linearly with chip load
-    if _defl > _dlim:
+    # Suppressed in HEM/trochoidal — backing off feed tanks MRR and defeats the purpose of the toolpath
+    if _defl > _dlim and not _is_hem:
         _feed_ratio  = _dlim / _defl
         _feed_pct    = round((1.0 - _feed_ratio) * 100)
         _feed_now    = float(state.get("feed", 0.0) or 0.0)
@@ -5107,9 +5111,46 @@ def run(payload=None):
                     "detail": f"{_passes} axial pass{'es' if _passes > 1 else ''} to full depth — est. flex drops to {_defl_neck_pct}% of limit",
                 })
 
-    # 4) Reduce WOC — lighter engagement, meaningful above ~15%
+    # 4) Reduce WOC — conventional: meaningful above ~15%; HEM: always relevant (trade WOC ↓ for DOC ↑)
     _woc_now = float(data.get("woc_pct", 0) or 0)
-    if _woc_now > 15 and _defl > _dlim:
+    _doc_xd_now = (_doc_now / _d) if _d > 0 else 0.0
+    if _is_hem and _defl > _dlim:
+        # In HEM the user is already at low WOC — dropping it further reduces radial force and flex.
+        # If they haven't hit the HEM DOC cap, suggest stepping DOC up to offset the MRR loss.
+        _hem_mat = get_material_group(str(data.get("material", "") or ""))
+        _hem_doc_cap = {"Aluminum": 3.0, "Non-Ferrous": 3.0,
+                        "Inconel": 2.0, "Titanium": 2.0, "Stainless": 2.5,
+                        "Hardened": 1.5}.get(_hem_mat, 2.5)
+        _hem_loc = float(data.get("loc", 0) or 0)
+        if _hem_loc > 0 and _d > 0:
+            _hem_doc_cap = min(_hem_doc_cap, _hem_loc / _d)
+        _woc_target_hem = max(1.0, round(_woc_now * 0.6, 1))
+        _woc_ratio_hem  = _woc_target_hem / _woc_now if _woc_now > 0 else 1.0
+        # DOC needed to keep MRR neutral (WOC × DOC = const)
+        _doc_mrr_neutral = _doc_xd_now / _woc_ratio_hem if _woc_ratio_hem > 0 else _doc_xd_now
+        _doc_step        = min(_hem_doc_cap, _doc_mrr_neutral)
+        _has_doc_room    = _doc_step > _doc_xd_now + 0.20  # at least 0.2×D of headroom available
+        if _has_doc_room:
+            _imm_suggestions.append({
+                "type": "woc",
+                "label": f"Drop WOC to {_woc_target_hem:.0f}% and step DOC up to {_doc_step:.2f}×D",
+                "detail": (
+                    f"Less radial engagement lowers cutting force and flex. "
+                    f"Stepping DOC from {_doc_xd_now:.2f}×D to {_doc_step:.2f}×D offsets the MRR loss — "
+                    f"same material removal rate with lower force and less deflection."
+                ),
+            })
+        else:
+            _imm_suggestions.append({
+                "type": "woc",
+                "label": f"Drop WOC to {_woc_target_hem:.0f}% Ø",
+                "detail": (
+                    f"Less radial engagement reduces cutting force and tool flex. "
+                    f"Already near the HEM DOC cap ({_hem_doc_cap:.1f}×D) so MRR will be slightly lower, "
+                    f"but flex and finish will improve."
+                ),
+            })
+    elif _woc_now > 15 and _defl > _dlim:
         if _woc_now >= 90.0:
             # Full slotting — can't reduce WOC without changing the operation.
             # HEM requires a SMALLER tool so it can trochoidal-path inside the slot.
