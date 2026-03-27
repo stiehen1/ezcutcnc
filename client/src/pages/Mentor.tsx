@@ -1199,7 +1199,7 @@ export default function Mentor() {
   const INITIAL_FORM = {
     operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmill",
     mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "surfacing" | "",
-    material: "steel_alloy",
+    material: "",
     tool_dia: 0,
     flutes: 0,
     loc: 0,
