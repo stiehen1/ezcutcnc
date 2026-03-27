@@ -245,6 +245,12 @@ export default function Toolbox() {
 
                 {expanded === item.id && item.data && (
                   <div className="border-t border-border px-4 py-3 bg-zinc-950/50">
+                    {(item.data.tool_number || item.data.inputs?.edp) && (
+                      <div className="mb-2 pb-2 border-b border-border">
+                        <span className="text-[11px] text-zinc-500">CC#  </span>
+                        <span className="text-sm font-bold text-orange-400">{item.data.tool_number || item.data.inputs?.edp}</span>
+                      </div>
+                    )}
                     {item.data.customer && (
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         {[
