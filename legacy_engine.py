@@ -3614,7 +3614,9 @@ def run(payload=None):
         loc = float(data.get("loc", 0) or 0)
         flute_wash = float(data.get("flute_wash", 0) or 0)
         lbs = float(data.get("lbs", 0) or 0)
-        _min_L = max(lbs, loc + flute_wash + (diameter * 0.15))
+        # When flute_wash unknown (no SKU data), use 33%D clearance to stay clear of holder
+        _clearance = diameter * (0.15 if flute_wash > 0 else 0.33)
+        _min_L = max(lbs, loc + flute_wash + _clearance)
         targets = []
         for frac in (0.90, 0.80, 0.70):
             L_new = max(L_old * frac, _min_L)
@@ -4939,10 +4941,12 @@ def run(payload=None):
 
     _lbs = float(data.get("lbs", 0) or 0)  # Length Below Shoulder (neck reach)
 
-    # Minimum stickout: LOC + flute_wash + 15% of diameter clearance buffer
+    # Minimum stickout: LOC + flute_wash + clearance buffer
+    # When flute_wash unknown (no SKU data), use 33%D to stay clear of holder
     _loc_for_min = float(data.get("loc", 0) or 0)
     _flute_wash_for_min = float(data.get("flute_wash", 0) or 0)
-    _min_so = max(_lbs, _loc_for_min + _flute_wash_for_min + (_d * 0.15))
+    _clearance_buf = _d * (0.15 if _flute_wash_for_min > 0 else 0.33)
+    _min_so = max(_lbs, _loc_for_min + _flute_wash_for_min + _clearance_buf)
     if _lbs > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
