@@ -1458,20 +1458,22 @@ export default function Mentor() {
     doc: { low: number; med: number; high: number };
   } {
     if (mode === "hem" || mode === "trochoidal") {
-      const { wocMed } = getHemMed(iso, flutes);
-      const wocLow  = Math.max(2, Math.round(wocMed * 0.40));
-      const wocHigh = iso === "N"
-        ? Math.round(wocMed * 1.50)
-        : Math.min(15, Math.round(wocMed * 1.50));
+      // WOC three-point targets by ISO category (shop-validated HEM ranges)
+      const { wocMed: alWocMed } = getHemMed(iso, flutes); // aluminum keeps per-flute table
+      const hemWoc =
+        iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
+      : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
+      : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
+      :               { low: 7, med: 9, high: 12 };  // P / M / K — steel, stainless, cast iron
       // HEM DOC: all materials 3×D cap, hardened 1.5×D. High = full LOC or cap (whichever less).
-      // Med = 75% of high. Low = 75% of med. All relative so they auto-adjust when LOC limits high.
+      // Med = 75% of high. Low = 75% of med.
       const hemCap = iso === "H" ? 1.5 : 3.0;
       const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
       const docHigh = Math.round(rawHigh * 4) / 4;
       const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
       const docLow  = Math.round(docMed  * 0.75 * 4) / 4;
       return {
-        woc: { low: wocLow, med: wocMed, high: wocHigh },
+        woc: hemWoc,
         doc: { low: docLow, med: docMed, high: docHigh },
       };
     }
@@ -6327,23 +6329,10 @@ ${stabSection}
                       if (!wp) return;
                       const dia = form.tool_dia || 0.5;
                       const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
-                      // Start from material+mode+flute-aware target (wp.med already encodes ISO category)
+                      // WOC Optimal = Med for HEM (shop-set targets already in wp.med per material)
+                      // For other modes apply chipbreaker/rougher geometry floor
                       let optPct = wp.med;
-                      // HEM: scale WOC inversely with DOC — deeper cut requires lower radial engagement
-                      if ((form.mode === "hem" || form.mode === "trochoidal") && form.doc_xd > 0) {
-                        const dp = DOC_PRESETS[form.mode];
-                        const docRef = dp?.med ?? 1.0;
-                        const scale = Math.min(1.5, Math.max(0.5, docRef / form.doc_xd));
-                        optPct = Math.round(wp.med * scale * 2) / 2; // round to 0.5%
-                      }
-                      // Chip-thinning floor: ensure sin(acos(1-2*woc/100)) >= 0.25 (no rubbing)
-                      const chipThinAtTarget = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * optPct / 100))));
-                      if (chipThinAtTarget < 0.25) {
-                        // Solve: sin(acos(1-2*woc/100)) = 0.25 → woc = (1-cos(asin(0.25)))*50
-                        optPct = Math.max(optPct, (1 - Math.cos(Math.asin(0.25))) * 50);
-                      }
-                      // Apply floors
-                      optPct = Math.min(100, Math.max(geoFloor, Math.max(wp.low, optPct)));
+                      optPct = Math.min(100, Math.max(geoFloor, optPct));
                       setForm((p) => ({ ...p, woc_pct: optPct }));
                       setWocText(((optPct / 100) * dia).toFixed(4));
                       const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
