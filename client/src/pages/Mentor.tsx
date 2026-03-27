@@ -1847,10 +1847,11 @@ export default function Mentor() {
     setForm(INITIAL_FORM);
     setIsoCategory("P");
     setOperation("milling");
-    setWocPreset("med");
-    setDocPreset("med");
+    setWocPreset(null);
+    setDocPreset(null);
     setWocText("");
     setDocText("");
+    setStickoutText("");
     setCrText("");
     setToolDiaText("");
     setLocText("");
@@ -6558,6 +6559,7 @@ ${stabSection}
                   type="text"
                   inputMode="decimal"
                   className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  placeholder="set after setup"
                   value={docText}
                   onChange={(e) => setDocText(e.target.value)}
                   onBlur={() => {
