@@ -1616,7 +1616,7 @@ export async function registerRoutes(
         console.warn("[Tool Request] DB insert failed:", dbErr?.message);
       }
 
-      const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
+      const to = process.env.TOOL_REQUEST_EMAIL || "scott@corecutterusa.com";
       const smtpUser = process.env.SMTP_USER || "";
       const smtpPass = process.env.SMTP_PASS || "";
       const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
