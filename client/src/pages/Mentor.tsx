@@ -4856,368 +4856,7 @@ ${stabSection}
             </div>
           )}
 
-          {/* ── Standard WOC/DOC (hidden for surfacing mode) ─────────────────── */}
-          {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
-            <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
-              <div className="flex items-center justify-between">
-                <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
-                {WOC_PRESETS[form.mode] && (
-                  <button
-                    type="button"
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
-                    style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
-                    onClick={() => {
-                      const wp = WOC_PRESETS[form.mode];
-                      if (!wp) return;
-                      const dia = form.tool_dia || 0.5;
-                      const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
-                      // Start from material+mode+flute-aware target (wp.med already encodes ISO category)
-                      let optPct = wp.med;
-                      // HEM: scale WOC inversely with DOC — deeper cut requires lower radial engagement
-                      if ((form.mode === "hem" || form.mode === "trochoidal") && form.doc_xd > 0) {
-                        const dp = DOC_PRESETS[form.mode];
-                        const docRef = dp?.med ?? 1.0;
-                        const scale = Math.min(1.5, Math.max(0.5, docRef / form.doc_xd));
-                        optPct = Math.round(wp.med * scale * 2) / 2; // round to 0.5%
-                      }
-                      // Chip-thinning floor: ensure sin(acos(1-2*woc/100)) >= 0.25 (no rubbing)
-                      const chipThinAtTarget = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * optPct / 100))));
-                      if (chipThinAtTarget < 0.25) {
-                        // Solve: sin(acos(1-2*woc/100)) = 0.25 → woc = (1-cos(asin(0.25)))*50
-                        optPct = Math.max(optPct, (1 - Math.cos(Math.asin(0.25))) * 50);
-                      }
-                      // Apply floors
-                      optPct = Math.min(100, Math.max(geoFloor, Math.max(wp.low, optPct)));
-                      setForm((p) => ({ ...p, woc_pct: optPct }));
-                      setWocText(((optPct / 100) * dia).toFixed(4));
-                      const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
-                      setWocPreset(wocMatch ?? "optimal");
-                    }}
-                  >Optimal</button>
-                )}
-              </div>
-              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="set after setup"
-                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                  value={wocText}
-                  onChange={(e) => setWocText(e.target.value)}
-                  onBlur={() => {
-                    const raw = wocText.trim();
-                    const hasPercent = raw.includes("%");
-                    const n = parseFloat(raw.replace(/[^\d.]/g, ""));
-                    const dia = form.tool_dia || 0.5;
-                    if (Number.isFinite(n) && n > 0) {
-                      // % or integer (≥1) → treat as percent; decimal (<1, no %) → treat as inches
-                      const pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
-                      setForm((p) => ({ ...p, woc_pct: pct }));
-                      setWocText(((pct / 100) * dia).toFixed(4));
-                      setWocPreset(null);
-                    } else {
-                      setWocText(((form.woc_pct / 100) * dia).toFixed(4));
-                    }
-                  }}
-                />
-                <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{form.woc_pct ? `${form.woc_pct.toFixed(1)}%` : ""}</span>
-              </div>
-              {/* WOC Low/Med/High buttons */}
-              {WOC_PRESETS[form.mode] && (() => {
-                const wp = WOC_PRESETS[form.mode];
-                const dia = form.tool_dia || 0.5;
-                const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
-                const btns = [
-                  { key: "low" as const,  label: "Low",  val: geoMinWoc > 0 ? Math.max(geoMinWoc, wp.low) : wp.low },
-                  { key: "med" as const,  label: "Med",  val: wp.med },
-                  { key: "high" as const, label: "High", val: wp.high },
-                ];
-                return (
-                  <div className="flex gap-1 mt-1">
-                    {btns.map(({ key, label, val }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setForm((p) => ({ ...p, woc_pct: val }));
-                          setWocText(((val / 100) * dia).toFixed(4));
-                          setWocPreset(key);
-                        }}
-                        className="flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight"
-                        style={{
-                          background: wocPreset === key ? "#eab308" : "transparent",
-                          borderColor: wocPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
-                          color: wocPreset === key ? "#000" : "rgba(255,255,255,0.6)",
-                        }}
-                      >
-                        {label} <span className="opacity-75">{val}%</span>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-              {/* WOC out-of-range note */}
-              {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (() => {
-                const wp = WOC_PRESETS[form.mode];
-                if (form.woc_pct < wp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — chip clearance may suffer</p>;
-                if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
-                return null;
-              })()}
-              {/* Engagement physics mini-chart — not shown for face or circ_interp (3-phase cards replace this) */}
-              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "circ_interp" && (() => {
-                const wocFrac = form.woc_pct / 100;
-                const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
-                // Engine uses 2×acos(...) — full included arc entry-to-exit
-                const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
-                const chipThin = Math.sin(Math.acos(arg));
-                const teethInCut = (engAngleDeg / 360) * form.flutes;
-                const chipThinPct = Math.round(chipThin * 100);
-                const chipColor = chipThin < 0.30 ? "#f87171" : chipThin < 0.55 ? "#facc15" : "#4ade80";
-                const chipLabel = chipThin < 0.30 ? "Low" : chipThin < 0.55 ? "Mod" : "Good";
-                const engPct = engAngleDeg / 180; // 0–1 for arc bar (180° = slot)
-                // SVG arc for engagement angle
-                const r = 14; const cx = 18; const cy = 18;
-                const startAngle = -90; // top
-                const endAngle = startAngle + engAngleDeg;
-                const toRad = (d: number) => d * Math.PI / 180;
-                const x1 = cx + r * Math.cos(toRad(startAngle));
-                const y1 = cy + r * Math.sin(toRad(startAngle));
-                const x2 = cx + r * Math.cos(toRad(endAngle));
-                const y2 = cy + r * Math.sin(toRad(endAngle));
-                const largeArc = engAngleDeg > 180 ? 1 : 0;
-                const arcColor = engAngleDeg > 270 ? "#f87171" : engAngleDeg > 180 ? "#facc15" : "#4ade80";
-                const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
-                const labelStyle = { color: "#64748b" };
-                return (
-                  <div className="mt-2 flex gap-1.5">
-                    {/* Engagement Angle */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
-                      title={`Arc of tool in contact with material. At ${form.woc_pct.toFixed(1)}% WOC the tool engages ${engAngleDeg.toFixed(1)}° of its 360° rotation. Higher angle = more heat and cutting force per revolution.`}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Eng. Angle</div>
-                      <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
-                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: arcColor }} />
-                      </div>
-                    </div>
-                    {/* Chip Thinning */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
-                      title={`Chip thinning factor — at low WOC the chip formed is thinner than your programmed FPT. ${chipThinPct}% means the actual chip is only ${chipThinPct}% as thick as programmed. The engine compensates automatically by boosting feed. Below 30% risks rubbing instead of cutting.`}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Chip Thin</div>
-                      <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
-                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
-                      </div>
-                    </div>
-                    {/* Teeth in Cut */}
-                    {(() => {
-                      const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
-                      return (
-                        <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
-                          title={`Average number of flutes simultaneously cutting. Sweet spot is 1.5–2.5 teeth — enough for smooth cutting without heat buildup. Too low = interrupted, chattery cut. Too high = heat and tool wear.`}>
-                          <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Teeth in Cut</div>
-                          <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
-                          <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })()}
-              {/* circ_interp 3-phase advisory moved to results panel */}
-            </div>
-            <div className="flex-1 min-w-0 space-y-2">
-              {form.mode === "circ_interp" ? (
-                <div className="space-y-1">
-                  <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
-                  <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                      value={docText}
-                      placeholder="set after setup"
-                      onChange={(e) => setDocText(e.target.value)}
-                      onBlur={() => {
-                        const n = parseFloat(docText);
-                        const dia = form.tool_dia || 0.5;
-                        // Cap = LBS if set (reduced-neck reach), else LOC
-                        const reach = form.lbs > 0 ? form.lbs : form.loc;
-                        if (Number.isFinite(n) && n > 0) {
-                          const clamped = reach > 0 ? Math.min(n, reach) : n;
-                          const xd = clamped / dia;
-                          setForm((p) => ({ ...p, doc_xd: xd }));
-                          setDocText(clamped.toFixed(3));
-                          setDocPreset(null);
-                        } else {
-                          setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
-                        }
-                      }}
-                    />
-                    <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                      {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
-                    </span>
-                  </div>
-                  {/* Bore depth vs reach warnings */}
-                  {form.doc_xd > 0 && form.tool_dia > 0 && (() => {
-                    const boreIn = form.doc_xd * form.tool_dia;
-                    const reach = form.lbs > 0 ? form.lbs : form.loc;
-                    if (reach <= 0) return null;
-                    const ratio = boreIn / reach;
-                    if (ratio <= 1.0) return null;
-                    const reachLabel = form.lbs > 0 ? "LBS" : "LOC";
-                    return (
-                      <p className="text-[10px] text-red-400">
-                        ⛔ Bore depth ({boreIn.toFixed(3)}") exceeds tool {reachLabel} ({reach.toFixed(3)}") — clamped to max reach.
-                      </p>
-                    );
-                  })()}
-                  {form.loc > 0 && form.doc_xd === 0 && (
-                    <p className="text-[10px] text-zinc-500">Max depth: {form.lbs > 0 ? `${form.lbs.toFixed(3)}" LBS` : `${form.loc.toFixed(3)}" LOC`}</p>
-                  )}
-                </div>
-              ) : (<>
-              <div className="flex items-center justify-between">
-                <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC <span className="font-normal text-zinc-500">(Axial)</span></FieldLabel>
-                {DOC_PRESETS[form.mode] && (
-                  <button
-                    type="button"
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
-                    style={docPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
-                    onClick={() => {
-                      const dp = DOC_PRESETS[form.mode];
-                      if (!dp) return;
-                      const dia = form.tool_dia || 0.5;
-                      // Use material+mode+flute-aware target directly — no MRR-balance scaling
-                      const locCap = form.loc > 0 ? form.loc / dia : 99;
-                      const optXd = Math.min(locCap, Math.max(dp.low, dp.med));
-                      const optIn = optXd * dia;
-                      setForm((p) => ({ ...p, doc_xd: optXd }));
-                      setDocText(optIn.toFixed(3));
-                      const docMatch = (["low","med","high"] as const).find(k => Math.abs(dp[k] - optXd) < 0.05);
-                      setDocPreset(docMatch ?? "optimal");
-                    }}
-                  >Optimal</button>
-                )}
-              </div>
-              <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                  value={docText}
-                  onChange={(e) => setDocText(e.target.value)}
-                  onBlur={() => {
-                    const n = parseFloat(docText);
-                    const dia = form.tool_dia || 0.5;
-                    if (Number.isFinite(n) && n > 0) {
-                      const clamped = Math.min(n, form.loc);
-                      const xd = clamped / dia;
-                      setForm((p) => ({ ...p, doc_xd: xd }));
-                      setDocText(clamped.toFixed(3));
-                      setDocPreset(null);
-                    } else {
-                      setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
-                    }
-                  }}
-                />
-                <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(3))}xD` : ""}
-                </span>
-              </div>
-              {/* DOC Low/Med/High buttons */}
-              {DOC_PRESETS[form.mode] && (() => {
-                const dp = DOC_PRESETS[form.mode];
-                const dia = form.tool_dia || 0.5;
-                const btns = [
-                  { key: "low" as const,  label: "Low",  val: dp.low },
-                  { key: "med" as const,  label: "Med",  val: dp.med },
-                  { key: "high" as const, label: "High", val: dp.high },
-                ];
-                return (
-                  <div className="flex gap-1 mt-1">
-                    {btns.map(({ key, label, val }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          const rawInches = val * dia;
-                          const clampedInches = form.loc > 0 ? Math.min(rawInches, form.loc) : rawInches;
-                          const clampedXd = clampedInches / dia;
-                          setForm((p) => ({ ...p, doc_xd: clampedXd }));
-                          setDocText(clampedInches.toFixed(3));
-                          setDocPreset(clampedXd < val - 0.001 ? null : key);
-                        }}
-                        className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
-                        style={{
-                          background: docPreset === key ? "#eab308" : "transparent",
-                          borderColor: docPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
-                          color: docPreset === key ? "#000" : "rgba(255,255,255,0.6)",
-                        }}
-                      >
-                        {label} <span className="opacity-75">{val}xD</span>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-              {/* DOC out-of-range note — suppressed for circ_interp (DOC = full bore depth, not axial pitch) */}
-              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && form.mode !== "circ_interp" && (() => {
-                const dp = DOC_PRESETS[form.mode];
-                const isHem = form.mode === "hem" || form.mode === "trochoidal";
-                const locXd = form.loc > 0 && form.tool_dia > 0 ? form.loc / form.tool_dia : null;
-                if (form.doc_xd < dp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below typical range ({dp.low}–{dp.high}×D) — axial engagement may be too light</p>;
-                if (form.doc_xd > dp.high) {
-                  // HEM: only warn if exceeding full flute length, not just the "High" preset
-                  if (isHem && locXd != null && form.doc_xd <= locXd) return null;
-                  return <p className="text-[10px] text-amber-400 mt-1">⚠ Above typical range ({dp.low}–{dp.high}×D) — deflection and force increase significantly</p>;
-                }
-                return null;
-              })()}
-              {/* DOC > LOC warning */}
-              {form.doc_xd > 0 && form.loc > 0 && form.tool_dia > 0 && (() => {
-                const docIn = form.doc_xd * form.tool_dia;
-                const ratio = docIn / form.loc;
-                if (ratio <= 1.05) return null;
-                const isRed = ratio > 1.30;
-                return (
-                  <p className={`text-xs mt-1 ${isRed ? "text-red-400" : "text-amber-400"}`}>
-                    {isRed
-                      ? `⛔ DOC (${docIn.toFixed(3)}") exceeds LOC (${form.loc.toFixed(3)}") — tool cannot reach at this depth. Select a longer reach or reduced-neck (RN) tool.`
-                      : `⚠ DOC (${docIn.toFixed(3)}") is approaching LOC (${form.loc.toFixed(3)}") — consider a longer reach or reduced-neck (RN) tool.`}
-                    {" "}A reduced-neck version may be available — check EDP suffix -RN.
-                  </p>
-                );
-              })()}
-              </>)}
-              {/* Tool Stickout — lives under DOC */}
-              <div className="mt-10 pt-5 border-t border-zinc-800 space-y-2">
-                <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
-                <Input
-                  type="text" inputMode="decimal"
-                  className="no-spinners"
-                  placeholder="e.g. 1.500"
-                  value={stickoutText}
-                  onChange={(e) => { setStickoutText(e.target.value); setStickoutViolation(null); }}
-                  onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
-                  onBlur={() => {
-                    const n = parseDim(stickoutText);
-                    let val = metric ? n / 25.4 : n;
-                    if (Number.isFinite(val) && val > 0) {
-                      const _fw = (form as any).flute_wash ?? 0;
-                      const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
-                      if (_minSo > 0 && val < _minSo) {
-                        val = _minSo;
-                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
-                      } else { setStickoutViolation(null); }
-                      setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
-                    } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
-                  }}
-                />
-                {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-              </div>
-            </div>
-          </div>}
+
           {form.mode === "face" && (
             <div className="mt-3 w-52 space-y-2">
               <FieldLabel hint="Target surface roughness in micro-inches (µin). Common finish specs: 63 µin = machined, 32 µin = smooth machined, 16 µin = fine, 8 µin = very fine. The advisor will show the theoretical Ra with your current parameters and the max feed needed to hit this target.">Target Ra (µin) <span className="text-xs font-normal text-muted-foreground">(optional)</span></FieldLabel>
@@ -7054,6 +6693,370 @@ ${stabSection}
               </div>
             </div>
           </div>
+
+
+          {/* ── Standard WOC/DOC (hidden for surfacing mode) ─────────────────── */}
+          {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
+            <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
+              <div className="flex items-center justify-between">
+                <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
+                {WOC_PRESETS[form.mode] && (
+                  <button
+                    type="button"
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                    style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                    onClick={() => {
+                      const wp = WOC_PRESETS[form.mode];
+                      if (!wp) return;
+                      const dia = form.tool_dia || 0.5;
+                      const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                      // Start from material+mode+flute-aware target (wp.med already encodes ISO category)
+                      let optPct = wp.med;
+                      // HEM: scale WOC inversely with DOC — deeper cut requires lower radial engagement
+                      if ((form.mode === "hem" || form.mode === "trochoidal") && form.doc_xd > 0) {
+                        const dp = DOC_PRESETS[form.mode];
+                        const docRef = dp?.med ?? 1.0;
+                        const scale = Math.min(1.5, Math.max(0.5, docRef / form.doc_xd));
+                        optPct = Math.round(wp.med * scale * 2) / 2; // round to 0.5%
+                      }
+                      // Chip-thinning floor: ensure sin(acos(1-2*woc/100)) >= 0.25 (no rubbing)
+                      const chipThinAtTarget = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * optPct / 100))));
+                      if (chipThinAtTarget < 0.25) {
+                        // Solve: sin(acos(1-2*woc/100)) = 0.25 → woc = (1-cos(asin(0.25)))*50
+                        optPct = Math.max(optPct, (1 - Math.cos(Math.asin(0.25))) * 50);
+                      }
+                      // Apply floors
+                      optPct = Math.min(100, Math.max(geoFloor, Math.max(wp.low, optPct)));
+                      setForm((p) => ({ ...p, woc_pct: optPct }));
+                      setWocText(((optPct / 100) * dia).toFixed(4));
+                      const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
+                      setWocPreset(wocMatch ?? "optimal");
+                    }}
+                  >Optimal</button>
+                )}
+              </div>
+              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="set after setup"
+                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  value={wocText}
+                  onChange={(e) => setWocText(e.target.value)}
+                  onBlur={() => {
+                    const raw = wocText.trim();
+                    const hasPercent = raw.includes("%");
+                    const n = parseFloat(raw.replace(/[^\d.]/g, ""));
+                    const dia = form.tool_dia || 0.5;
+                    if (Number.isFinite(n) && n > 0) {
+                      // % or integer (≥1) → treat as percent; decimal (<1, no %) → treat as inches
+                      const pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
+                      setForm((p) => ({ ...p, woc_pct: pct }));
+                      setWocText(((pct / 100) * dia).toFixed(4));
+                      setWocPreset(null);
+                    } else {
+                      setWocText(((form.woc_pct / 100) * dia).toFixed(4));
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{form.woc_pct ? `${form.woc_pct.toFixed(1)}%` : ""}</span>
+              </div>
+              {/* WOC Low/Med/High buttons */}
+              {WOC_PRESETS[form.mode] && (() => {
+                const wp = WOC_PRESETS[form.mode];
+                const dia = form.tool_dia || 0.5;
+                const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                const btns = [
+                  { key: "low" as const,  label: "Low",  val: geoMinWoc > 0 ? Math.max(geoMinWoc, wp.low) : wp.low },
+                  { key: "med" as const,  label: "Med",  val: wp.med },
+                  { key: "high" as const, label: "High", val: wp.high },
+                ];
+                return (
+                  <div className="flex gap-1 mt-1">
+                    {btns.map(({ key, label, val }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setForm((p) => ({ ...p, woc_pct: val }));
+                          setWocText(((val / 100) * dia).toFixed(4));
+                          setWocPreset(key);
+                        }}
+                        className="flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight"
+                        style={{
+                          background: wocPreset === key ? "#eab308" : "transparent",
+                          borderColor: wocPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
+                          color: wocPreset === key ? "#000" : "rgba(255,255,255,0.6)",
+                        }}
+                      >
+                        {label} <span className="opacity-75">{val}%</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* WOC out-of-range note */}
+              {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (() => {
+                const wp = WOC_PRESETS[form.mode];
+                if (form.woc_pct < wp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — chip clearance may suffer</p>;
+                if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
+                return null;
+              })()}
+              {/* Engagement physics mini-chart — not shown for face or circ_interp (3-phase cards replace this) */}
+              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "circ_interp" && (() => {
+                const wocFrac = form.woc_pct / 100;
+                const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
+                // Engine uses 2×acos(...) — full included arc entry-to-exit
+                const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
+                const chipThin = Math.sin(Math.acos(arg));
+                const teethInCut = (engAngleDeg / 360) * form.flutes;
+                const chipThinPct = Math.round(chipThin * 100);
+                const chipColor = chipThin < 0.30 ? "#f87171" : chipThin < 0.55 ? "#facc15" : "#4ade80";
+                const chipLabel = chipThin < 0.30 ? "Low" : chipThin < 0.55 ? "Mod" : "Good";
+                const engPct = engAngleDeg / 180; // 0–1 for arc bar (180° = slot)
+                // SVG arc for engagement angle
+                const r = 14; const cx = 18; const cy = 18;
+                const startAngle = -90; // top
+                const endAngle = startAngle + engAngleDeg;
+                const toRad = (d: number) => d * Math.PI / 180;
+                const x1 = cx + r * Math.cos(toRad(startAngle));
+                const y1 = cy + r * Math.sin(toRad(startAngle));
+                const x2 = cx + r * Math.cos(toRad(endAngle));
+                const y2 = cy + r * Math.sin(toRad(endAngle));
+                const largeArc = engAngleDeg > 180 ? 1 : 0;
+                const arcColor = engAngleDeg > 270 ? "#f87171" : engAngleDeg > 180 ? "#facc15" : "#4ade80";
+                const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
+                const labelStyle = { color: "#64748b" };
+                return (
+                  <div className="mt-2 flex gap-1.5">
+                    {/* Engagement Angle */}
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
+                      title={`Arc of tool in contact with material. At ${form.woc_pct.toFixed(1)}% WOC the tool engages ${engAngleDeg.toFixed(1)}° of its 360° rotation. Higher angle = more heat and cutting force per revolution.`}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Eng. Angle</div>
+                      <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
+                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: arcColor }} />
+                      </div>
+                    </div>
+                    {/* Chip Thinning */}
+                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
+                      title={`Chip thinning factor — at low WOC the chip formed is thinner than your programmed FPT. ${chipThinPct}% means the actual chip is only ${chipThinPct}% as thick as programmed. The engine compensates automatically by boosting feed. Below 30% risks rubbing instead of cutting.`}>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Chip Thin</div>
+                      <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
+                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                        <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
+                      </div>
+                    </div>
+                    {/* Teeth in Cut */}
+                    {(() => {
+                      const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
+                      return (
+                        <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
+                          title={`Average number of flutes simultaneously cutting. Sweet spot is 1.5–2.5 teeth — enough for smooth cutting without heat buildup. Too low = interrupted, chattery cut. Too high = heat and tool wear.`}>
+                          <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Teeth in Cut</div>
+                          <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
+                          <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
+              {/* circ_interp 3-phase advisory moved to results panel */}
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              {form.mode === "circ_interp" ? (
+                <div className="space-y-1">
+                  <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
+                  <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                      value={docText}
+                      placeholder="set after setup"
+                      onChange={(e) => setDocText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(docText);
+                        const dia = form.tool_dia || 0.5;
+                        // Cap = LBS if set (reduced-neck reach), else LOC
+                        const reach = form.lbs > 0 ? form.lbs : form.loc;
+                        if (Number.isFinite(n) && n > 0) {
+                          const clamped = reach > 0 ? Math.min(n, reach) : n;
+                          const xd = clamped / dia;
+                          setForm((p) => ({ ...p, doc_xd: xd }));
+                          setDocText(clamped.toFixed(3));
+                          setDocPreset(null);
+                        } else {
+                          setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                      {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
+                    </span>
+                  </div>
+                  {/* Bore depth vs reach warnings */}
+                  {form.doc_xd > 0 && form.tool_dia > 0 && (() => {
+                    const boreIn = form.doc_xd * form.tool_dia;
+                    const reach = form.lbs > 0 ? form.lbs : form.loc;
+                    if (reach <= 0) return null;
+                    const ratio = boreIn / reach;
+                    if (ratio <= 1.0) return null;
+                    const reachLabel = form.lbs > 0 ? "LBS" : "LOC";
+                    return (
+                      <p className="text-[10px] text-red-400">
+                        ⛔ Bore depth ({boreIn.toFixed(3)}") exceeds tool {reachLabel} ({reach.toFixed(3)}") — clamped to max reach.
+                      </p>
+                    );
+                  })()}
+                  {form.loc > 0 && form.doc_xd === 0 && (
+                    <p className="text-[10px] text-zinc-500">Max depth: {form.lbs > 0 ? `${form.lbs.toFixed(3)}" LBS` : `${form.loc.toFixed(3)}" LOC`}</p>
+                  )}
+                </div>
+              ) : (<>
+              <div className="flex items-center justify-between">
+                <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC <span className="font-normal text-zinc-500">(Axial)</span></FieldLabel>
+                {DOC_PRESETS[form.mode] && (
+                  <button
+                    type="button"
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                    style={docPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                    onClick={() => {
+                      const dp = DOC_PRESETS[form.mode];
+                      if (!dp) return;
+                      const dia = form.tool_dia || 0.5;
+                      // Use material+mode+flute-aware target directly — no MRR-balance scaling
+                      const locCap = form.loc > 0 ? form.loc / dia : 99;
+                      const optXd = Math.min(locCap, Math.max(dp.low, dp.med));
+                      const optIn = optXd * dia;
+                      setForm((p) => ({ ...p, doc_xd: optXd }));
+                      setDocText(optIn.toFixed(3));
+                      const docMatch = (["low","med","high"] as const).find(k => Math.abs(dp[k] - optXd) < 0.05);
+                      setDocPreset(docMatch ?? "optimal");
+                    }}
+                  >Optimal</button>
+                )}
+              </div>
+              <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  value={docText}
+                  onChange={(e) => setDocText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(docText);
+                    const dia = form.tool_dia || 0.5;
+                    if (Number.isFinite(n) && n > 0) {
+                      const clamped = Math.min(n, form.loc);
+                      const xd = clamped / dia;
+                      setForm((p) => ({ ...p, doc_xd: xd }));
+                      setDocText(clamped.toFixed(3));
+                      setDocPreset(null);
+                    } else {
+                      setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(3))}xD` : ""}
+                </span>
+              </div>
+              {/* DOC Low/Med/High buttons */}
+              {DOC_PRESETS[form.mode] && (() => {
+                const dp = DOC_PRESETS[form.mode];
+                const dia = form.tool_dia || 0.5;
+                const btns = [
+                  { key: "low" as const,  label: "Low",  val: dp.low },
+                  { key: "med" as const,  label: "Med",  val: dp.med },
+                  { key: "high" as const, label: "High", val: dp.high },
+                ];
+                return (
+                  <div className="flex gap-1 mt-1">
+                    {btns.map(({ key, label, val }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          const rawInches = val * dia;
+                          const clampedInches = form.loc > 0 ? Math.min(rawInches, form.loc) : rawInches;
+                          const clampedXd = clampedInches / dia;
+                          setForm((p) => ({ ...p, doc_xd: clampedXd }));
+                          setDocText(clampedInches.toFixed(3));
+                          setDocPreset(clampedXd < val - 0.001 ? null : key);
+                        }}
+                        className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
+                        style={{
+                          background: docPreset === key ? "#eab308" : "transparent",
+                          borderColor: docPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
+                          color: docPreset === key ? "#000" : "rgba(255,255,255,0.6)",
+                        }}
+                      >
+                        {label} <span className="opacity-75">{val}xD</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* DOC out-of-range note — suppressed for circ_interp (DOC = full bore depth, not axial pitch) */}
+              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && form.mode !== "circ_interp" && (() => {
+                const dp = DOC_PRESETS[form.mode];
+                const isHem = form.mode === "hem" || form.mode === "trochoidal";
+                const locXd = form.loc > 0 && form.tool_dia > 0 ? form.loc / form.tool_dia : null;
+                if (form.doc_xd < dp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below typical range ({dp.low}–{dp.high}×D) — axial engagement may be too light</p>;
+                if (form.doc_xd > dp.high) {
+                  // HEM: only warn if exceeding full flute length, not just the "High" preset
+                  if (isHem && locXd != null && form.doc_xd <= locXd) return null;
+                  return <p className="text-[10px] text-amber-400 mt-1">⚠ Above typical range ({dp.low}–{dp.high}×D) — deflection and force increase significantly</p>;
+                }
+                return null;
+              })()}
+              {/* DOC > LOC warning */}
+              {form.doc_xd > 0 && form.loc > 0 && form.tool_dia > 0 && (() => {
+                const docIn = form.doc_xd * form.tool_dia;
+                const ratio = docIn / form.loc;
+                if (ratio <= 1.05) return null;
+                const isRed = ratio > 1.30;
+                return (
+                  <p className={`text-xs mt-1 ${isRed ? "text-red-400" : "text-amber-400"}`}>
+                    {isRed
+                      ? `⛔ DOC (${docIn.toFixed(3)}") exceeds LOC (${form.loc.toFixed(3)}") — tool cannot reach at this depth. Select a longer reach or reduced-neck (RN) tool.`
+                      : `⚠ DOC (${docIn.toFixed(3)}") is approaching LOC (${form.loc.toFixed(3)}") — consider a longer reach or reduced-neck (RN) tool.`}
+                    {" "}A reduced-neck version may be available — check EDP suffix -RN.
+                  </p>
+                );
+              })()}
+              </>)}
+              {/* Tool Stickout — lives under DOC */}
+              <div className="mt-10 pt-5 border-t border-zinc-800 space-y-2">
+                <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
+                <Input
+                  type="text" inputMode="decimal"
+                  className="no-spinners"
+                  placeholder="e.g. 1.500"
+                  value={stickoutText}
+                  onChange={(e) => { setStickoutText(e.target.value); setStickoutViolation(null); }}
+                  onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
+                  onBlur={() => {
+                    const n = parseDim(stickoutText);
+                    let val = metric ? n / 25.4 : n;
+                    if (Number.isFinite(val) && val > 0) {
+                      const _fw = (form as any).flute_wash ?? 0;
+                      const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                      if (_minSo > 0 && val < _minSo) {
+                        val = _minSo;
+                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
+                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                      } else { setStickoutViolation(null); }
+                      setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                    } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+                  }}
+                />
+                {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
+              </div>
+            </div>
+          </div>}
 
           {/* Actions */}
           {!skuLocked && !pdfExtracted && (
