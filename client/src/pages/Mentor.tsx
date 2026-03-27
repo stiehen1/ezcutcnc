@@ -6710,7 +6710,7 @@ ${stabSection}
                 <div className="flex-1 min-w-0 space-y-2">
                   {form.surfacing_input_mode === "scallop" ? (
                     <>
-                      <FieldLabel hint="Target surface scallop height in inches. Smaller = better surface finish but more passes. Typical range 0.0005–0.005\". The engine converts this to stepover: ae = 2 × √(R×sc − sc²) where R = tool radius.">
+                      <FieldLabel hint="Target surface scallop height in inches. Smaller = better surface finish but more passes. Typical range 0.0005–0.005 in. The engine converts this to stepover: ae = 2 x sqrt(R x sc - sc^2) where R = tool radius.">
                         Scallop Height <span className="font-normal text-zinc-500">(in)</span>
                       </FieldLabel>
                       <input
