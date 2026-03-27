@@ -6713,6 +6713,8 @@ ${stabSection}
             </>
           )}
 
+          <div className="border-t border-zinc-700 mt-8 pt-6" />
+
           {/* Actions */}
           {!skuLocked && !pdfExtracted && (
             <div className="mb-2">
