@@ -2507,49 +2507,28 @@ ${stabSection}
   const downloadPDF = async () => {
     if (!result) return;
     trackPdfExport(form.mode);
-    // Re-use same HTML but strip the auto-print script
-    const printBtn = document.querySelector("[data-print-trigger]") as HTMLButtonElement | null;
-    // Generate the HTML by temporarily patching window.open to capture it
+    // Capture the HTML by temporarily patching window.open
     let capturedHtml = "";
     const origOpen = window.open.bind(window);
     (window as any).open = (url: string) => {
-      // fetch the blob content
       fetch(url).then(r => r.text()).then(t => { capturedHtml = t; });
       return { focus: () => {} };
     };
     printSummary();
     (window as any).open = origOpen;
-    // Wait a tick for fetch
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 500));
     if (!capturedHtml) return;
-    const bodyMatch = capturedHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    const styleMatch = capturedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-    if (!bodyMatch) return;
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;background:#fff;font-family:Arial,sans-serif;font-size:11px;color:#111;";
-    if (styleMatch) {
-      const styleEl = document.createElement("style");
-      styleEl.textContent = styleMatch[1];
-      wrapper.appendChild(styleEl);
-    }
-    const content = document.createElement("div");
-    content.innerHTML = bodyMatch[1].replace(/<script[\s\S]*?<\/script>/gi, "");
-    wrapper.appendChild(content);
-    document.body.appendChild(wrapper);
-    try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
-      const date = new Date().toISOString().slice(0, 10);
-      await html2pdf().set({
-        margin: [8, 8, 8, 8],
-        filename: `CoreCutter_${edp}_${date}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-      }).from(wrapper).save();
-    } finally {
-      document.body.removeChild(wrapper);
-    }
+    const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
+    const html2pdf = (await import("html2pdf.js")).default;
+    const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
+    const date = new Date().toISOString().slice(0, 10);
+    await html2pdf().set({
+      margin: [8, 8, 8, 8],
+      filename: `CoreCutter_${edp}_${date}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
@@ -9946,23 +9925,32 @@ ${stabSection}
       {/* Toolbox */}
       {mentor.data && (
         <div className="mt-5 rounded-xl border border-indigo-700/50 bg-indigo-950/30 px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-indigo-200 leading-snug">🧰 Save to Toolbox</p>
-              <p className="text-xs text-zinc-500 leading-snug mt-0.5">
-                Saves this setup to your account so you can pull it up again in any future session — no re-entering parameters.
-              </p>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-indigo-200 leading-snug">🧰 Save to Toolbox</p>
+                <p className="text-xs text-zinc-500 leading-snug mt-0.5">
+                  Saves this setup to your account so you can pull it up again in any future session — no re-entering parameters.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={saveToToolbox}
+                  disabled={tbSaving}
+                  className="rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold px-4 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {tbSaved ? "✓ Saved" : tbSaving ? "Saving…" : "Save Setup"}
+                </button>
+                <button type="button" onClick={() => setOperation("toolbox")} className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</button>
+              </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={saveToToolbox}
-                disabled={tbSaving}
-                className="rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold px-4 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
-              >
-                {tbSaved ? "✓ Saved" : tbSaving ? "Saving…" : "Save Setup"}
-              </button>
-              <button type="button" onClick={() => setOperation("toolbox")} className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</button>
-            </div>
+            <input
+              type="text"
+              placeholder={`Title (optional) — e.g. "Job 1042 Op-10 finish pass"`}
+              value={tbTitle}
+              onChange={e => setTbTitle(e.target.value)}
+              className="w-full rounded-lg border border-indigo-700/50 bg-zinc-800/60 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+            />
           </div>
         </div>
       )}
