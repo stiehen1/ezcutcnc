@@ -1246,7 +1246,7 @@ export default function Mentor() {
     rpm_util_pct: 0.95,
     drill_feed_util_pct: 0.90,
 
-    woc_pct: 10, // default = HEM med (10%)
+    woc_pct: 0,
     doc_xd: 0,
 
     machine_hp: 0,
@@ -1532,7 +1532,7 @@ export default function Mentor() {
     slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
     circ_interp: { low: 0.05, med: 0.10, high: 0.25 },
   };
-  const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
+  const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>(null);
   const [docPreset, setDocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
 
   // Local text state for WOC/DOC — WOC shows actual inches (woc_pct/100 × tool_dia)
@@ -1805,9 +1805,9 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
-      // Preserve doc_xd if same dia, reset if dia changed; WOC/DOC left blank for user to set via Optimal button.
-      doc_xd: Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
-      woc_pct: p.woc_pct,
+      // WOC/DOC left blank — user sets via Optimal button after completing setup.
+      woc_pct: 0,
+      doc_xd: 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
