@@ -4518,7 +4518,19 @@ ${stabSection}
 
               {/* Stickout for surfacing */}
               <div className="space-y-1.5">
-                <FieldLabel hint="Distance from toolholder face to tool tip.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
+                <FieldLabel hint={(() => {
+                  const _so_dia = form.tool_dia;
+                  const _so_loc = form.loc;
+                  const _so_fw  = form.flute_wash ?? 0;
+                  if (_so_dia > 0 && _so_loc > 0) {
+                    const _clearance = 0.33 * _so_dia;
+                    const parts = [`LOC (${_so_loc.toFixed(3)}")`];
+                    if (_so_fw > 0) parts.push(`flute wash (${_so_fw.toFixed(3)}")`);
+                    parts.push(`holder clearance (0.33×D = ${_clearance.toFixed(3)}")`);
+                    return `Distance from toolholder face to tool tip. Default = ${parts.join(" + ")} — keeps flutes clear of the holder. Adjust shorter if your setup allows.`;
+                  }
+                  return "Distance from toolholder face to tool tip. Default fills once LOC and diameter are known.";
+                })()}>{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
                 <Input type="text" inputMode="decimal" className="no-spinners" placeholder="e.g. 2.000"
                   value={stickoutText}
                   onChange={e => setStickoutText(e.target.value)}
