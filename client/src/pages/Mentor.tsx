@@ -9224,8 +9224,9 @@ ${stabSection}
                                 const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_xd < 1.0);
                                 if (!edps.length || cbInactive) return null;
                                 const shortLoc = s.suggested_edp_loc;
+                                const shortOal = s.suggested_edp_oal;
                                 const tryLabel = shortLoc
-                                  ? `Can you use (${shortLoc.toFixed(3)}" LOC)?`
+                                  ? `Can you use (LOC ${shortLoc.toFixed(3)}"${shortOal ? ` / OAL ${shortOal.toFixed(3)}"` : ""})?`
                                   : "Try:";
                                 return (
                                   <span className="ml-2 inline-flex items-center gap-1.5 flex-wrap">

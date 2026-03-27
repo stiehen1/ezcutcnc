@@ -926,14 +926,16 @@ export async function registerRoutes(
             if (!s.suggested_edp || !s.lookup_loc) continue;
             try {
               const locResult = await pool.query(
-                `SELECT s2.loc_in FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                `SELECT s2.loc_in, s2.oal_in FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                  WHERE u2.is_current = TRUE AND s2.edp = $1 LIMIT 1`,
                 [s.suggested_edp]
               );
               if (locResult.rows.length) {
                 const sugLoc = Number(locResult.rows[0].loc_in);
+                const sugOal = Number(locResult.rows[0].oal_in);
                 if (sugLoc > 0 && sugLoc < Number(s.lookup_loc) - 0.001) {
-                  s.suggested_edp_loc = sugLoc; // UI renders short-LOC question phrasing
+                  s.suggested_edp_loc = sugLoc;
+                  if (sugOal > 0) s.suggested_edp_oal = sugOal;
                 }
               }
             } catch (_) { /* skip */ }
