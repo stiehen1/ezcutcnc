@@ -1039,11 +1039,14 @@ export async function registerRoutes(
       const isoCategory = ISO_MAP[matKey] ?? "P";
 
       // Scoring helpers
-      const cbOk  = docXd >= 1.0 && (mode === "hem" || wocPct >= 8);
-      const vrxOk = docXd >= 1.0 && wocPct >= 12;  // VXR needs heavier engagement — min 12% WOC in HEM
+      // Slotting is always 100% WOC — CB/VRX are always valid regardless of DOC (chip breaking helps evacuation)
+      const isSlot       = mode === "slot";
+      const isCircInterp = mode === "circ_interp";
+      const cbOk  = (docXd >= 1.0 && (mode === "hem" || wocPct >= 8)) || (isSlot);
+      const vrxOk = (docXd >= 1.0 && wocPct >= 12) || (isSlot && docXd >= 0.5);
 
       const scoreGeometry = (g: string | null): number => {
-        if (isSurfacing) return 2; // geometry irrelevant for ball-nose surfacing — coating/pitch/helix decide
+        if (isSurfacing || isCircInterp) return 2; // geometry irrelevant — coating/pitch/helix decide
         const geom = (g ?? "standard").toLowerCase();
         if (vrxOk && geom === "truncated_rougher") return 4;
         if (cbOk && geom === "chipbreaker")        return 3;
@@ -1092,7 +1095,6 @@ export async function registerRoutes(
       // to flute-count upgrades so they can beat a coating-only variant.
       // For circ_interp: always include next flute up — more flutes = smoother bore wall.
       const stabOver = Number(current_stability_pct ?? 0) >= 100;
-      const isCircInterp = mode === "circ_interp";
       const STAB_FLUTE_BONUS = 2; // enough to beat a coating-only upgrade (max coat score = 3)
       const CIRC_FLUTE_BONUS = 2; // same bonus for circ_interp — more flutes always better for bore finish
 
