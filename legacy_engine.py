@@ -5398,7 +5398,7 @@ def run(payload=None):
         _tic_doc   = float(state.get("doc", 0) or doc or 0)
 
         _tic_ae  = max(-1.0, min(1.0, 1.0 - 2.0 * _tic_woc / _tic_d)) if _tic_d > 0 else 1.0
-        _tic_ang = 2.0 * math.acos(_tic_ae)            # radial engagement arc (rad)
+        _tic_ang = math.acos(_tic_ae)                   # radial engagement arc entry→exit (rad)
 
         # Helix wrap angle over DOC
         _helix_wrap_rad = (2.0 * _tic_doc * math.tan(math.radians(_tic_helix)) / _tic_d) if _tic_d > 0 else 0.0

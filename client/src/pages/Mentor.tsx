@@ -1942,10 +1942,14 @@ export default function Mentor() {
       if (!(form.flutes > 0)) missing.push("Flute Count");
       if (form.mode === "circ_interp") {
         if (!(form.doc_xd > 0)) missing.push("Bore Depth");
+      } else if (form.mode === "surfacing") {
+        if (!(form.surfacing_ap_in > 0)) missing.push("Axial Pass Depth (ap)");
+        if (form.surfacing_input_mode === "scallop" && !(form.surfacing_scallop_in > 0)) missing.push("Scallop Height");
+        if (form.surfacing_input_mode === "stepover" && !(form.surfacing_stepover_in > 0)) missing.push("Stepover");
       } else {
         if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
+        if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
       }
-      if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
     }
     if (operation === "feedmill" && !(form.flutes > 0)) missing.push("Flute Count");
     if (operation === "drilling" && !(form.drill_hole_depth > 0)) missing.push("Hole Depth");
@@ -2189,7 +2193,7 @@ export default function Mentor() {
       `Reduce WOC% or use fewer flutes.`;
     const maxDisplay = 4.0;
     const pctBar = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
-    const ticGauge = tic != null && form.mode !== "face" && form.mode !== "circ_interp" && form.mode !== "slot" ? `
+    const ticGauge = tic != null && form.mode !== "face" && form.mode !== "slot" ? `
       <div style="margin:8px 0 4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
@@ -2212,7 +2216,7 @@ export default function Mentor() {
 
     const printWocFrac = (form.woc_pct ?? 0) / 100;
     const printEngAngleDeg = printWocFrac > 0
-      ? 2 * Math.acos(Math.max(-1, Math.min(1, 1 - 2 * printWocFrac))) * (180 / Math.PI)
+      ? Math.acos(Math.max(-1, Math.min(1, 1 - 2 * printWocFrac))) * (180 / Math.PI)
       : null;
     const printEngZone = printEngAngleDeg == null ? null
       : printEngAngleDeg < 90 ? "light" : printEngAngleDeg < 180 ? "moderate" : printEngAngleDeg < 270 ? "heavy" : "extreme";
@@ -2224,7 +2228,7 @@ export default function Mentor() {
       : printEngZone === "extreme" ? "Near-full slot — reduce WOC% to extend tool life."
       : "";
     const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
-    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" && form.mode !== "circ_interp" ? `
+    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? `
       <div style="margin:8px 0 4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Engagement Angle</span>
@@ -2252,8 +2256,8 @@ export default function Mentor() {
         ${kpiBox("Torque (in-lbf)", eng.torque_in_lbf != null ? eng.torque_in_lbf.toFixed(1) : null)}
         ${kpiBox("Deflection (in)", eng.deflection_in != null ? eng.deflection_in.toFixed(6) : null)}
         ${kpiBox("Chip Thick (in)", eng.chip_thickness_in != null ? eng.chip_thickness_in.toFixed(6) : null)}
-        ${form.mode !== "face" && form.mode !== "circ_interp" ? kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null) : ""}
-        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" && form.mode !== "circ_interp" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
+        ${form.mode !== "face" ? kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null) : ""}
+        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
       </div>
       ${ticGauge}
       ${engAngleGauge}
@@ -6676,6 +6680,146 @@ ${stabSection}
             </div>
           </div>}
 
+          {/* ── Surfacing Cut Engagement (3D Surface Contouring) ─────────────── */}
+          {form.mode === "surfacing" && (
+            <div className="space-y-4">
+              {/* Scallop / Stepover toggle */}
+              <div className="space-y-2">
+                <FieldLabel hint="Choose how to define the radial engagement. Scallop Height is the peak-to-valley cusp height left on the surface — the engine converts this to stepover based on ball radius. Stepover is a direct radial width of cut.">
+                  Radial Input Mode
+                </FieldLabel>
+                <div className="flex gap-2">
+                  {(["scallop", "stepover"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, surfacing_input_mode: mode }))}
+                      className="flex-1 py-1.5 rounded border text-xs font-semibold transition-colors"
+                      style={form.surfacing_input_mode === mode
+                        ? { background: "#f97316", borderColor: "#f97316", color: "#000" }
+                        : { background: "transparent", borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.6)" }}
+                    >
+                      {mode === "scallop" ? "Scallop Height" : "Stepover (in)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 items-start">
+                {/* Scallop or Stepover input */}
+                <div className="flex-1 min-w-0 space-y-2">
+                  {form.surfacing_input_mode === "scallop" ? (
+                    <>
+                      <FieldLabel hint="Target surface scallop height in inches. Smaller = better surface finish but more passes. Typical range 0.0005–0.005\". The engine converts this to stepover: ae = 2 × √(R×sc − sc²) where R = tool radius.">
+                        Scallop Height <span className="font-normal text-zinc-500">(in)</span>
+                      </FieldLabel>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="e.g. 0.001"
+                        className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
+                        value={surfScallopText}
+                        onChange={(e) => setSurfScallopText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(surfScallopText);
+                          if (Number.isFinite(n) && n > 0) {
+                            setForm((p) => ({ ...p, surfacing_scallop_in: n }));
+                            setSurfScallopText(n.toFixed(4));
+                          } else {
+                            setSurfScallopText(form.surfacing_scallop_in > 0 ? form.surfacing_scallop_in.toFixed(4) : "");
+                          }
+                        }}
+                      />
+                      {/* Show derived stepover if tool dia is known */}
+                      {form.surfacing_scallop_in > 0 && form.tool_dia > 0 && (() => {
+                        const R = form.tool_dia / 2;
+                        const sc = form.surfacing_scallop_in;
+                        const ae = sc < R ? 2 * Math.sqrt(R * sc - sc * sc) : form.tool_dia;
+                        return <p className="text-[10px] text-zinc-400">→ Stepover: {ae.toFixed(4)}" ({((ae / form.tool_dia) * 100).toFixed(1)}%×D)</p>;
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      <FieldLabel hint="Direct radial stepover (width of cut) for surface contouring passes. Enter in decimal inches. Typical 5–15% of tool diameter for finishing.">
+                        Stepover <span className="font-normal text-zinc-500">(in)</span>
+                      </FieldLabel>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="e.g. 0.025"
+                        className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
+                        value={surfStepoverText}
+                        onChange={(e) => setSurfStepoverText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(surfStepoverText);
+                          if (Number.isFinite(n) && n > 0) {
+                            setForm((p) => ({ ...p, surfacing_stepover_in: n }));
+                            setSurfStepoverText(n.toFixed(4));
+                          } else {
+                            setSurfStepoverText(form.surfacing_stepover_in > 0 ? form.surfacing_stepover_in.toFixed(4) : "");
+                          }
+                        }}
+                      />
+                      {form.surfacing_stepover_in > 0 && form.tool_dia > 0 && (
+                        <p className="text-[10px] text-zinc-400">{((form.surfacing_stepover_in / form.tool_dia) * 100).toFixed(1)}% of tool diameter</p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Axial pass depth */}
+                <div className="flex-1 min-w-0 space-y-2">
+                  <FieldLabel hint="Axial depth per contouring pass (ap). For ball-nose finishing this is typically 0.02–0.10\". Used to compute MRR and cutting forces.">
+                    Axial Pass Depth <span className="font-normal text-zinc-500">(ap, in)</span>
+                  </FieldLabel>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 0.050"
+                    className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
+                    value={surfApText}
+                    onChange={(e) => setSurfApText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(surfApText);
+                      const dia = form.tool_dia || 0.5;
+                      if (Number.isFinite(n) && n > 0) {
+                        setForm((p) => ({ ...p, surfacing_ap_in: n }));
+                        setSurfApText(n.toFixed(4));
+                      } else {
+                        setSurfApText(form.surfacing_ap_in > 0 ? form.surfacing_ap_in.toFixed(4) : "");
+                      }
+                    }}
+                  />
+                  {form.surfacing_ap_in > 0 && form.tool_dia > 0 && (
+                    <p className="text-[10px] text-zinc-400">{(form.surfacing_ap_in / form.tool_dia).toFixed(2)}×D axial</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Optional tilt angle */}
+              <div className="space-y-2">
+                <FieldLabel hint="Tool tilt angle for lead/lag in surface contouring (0–30°). A small lead tilt (3–5°) avoids the zero-SFM center point on ball-nose tools and improves surface finish. Leave 0 for vertical.">
+                  Tool Tilt <span className="font-normal text-zinc-500">(°, optional)</span>
+                </FieldLabel>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={30}
+                    step={1}
+                    className="flex-1"
+                    value={form.surfacing_tilt_deg}
+                    onChange={(e) => setForm((p) => ({ ...p, surfacing_tilt_deg: Number(e.target.value) }))}
+                  />
+                  <span className="text-sm font-semibold w-10 text-right">{form.surfacing_tilt_deg}°</span>
+                </div>
+                {form.surfacing_tilt_deg === 0 && (
+                  <p className="text-[10px] text-amber-400">⚠ 0° tilt — ball center has zero SFM. A 3–5° lead tilt improves surface finish.</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Tool Entry */}
           {operation === "milling" && (
             <>
@@ -8709,8 +8853,8 @@ ${stabSection}
                 );
               })()}
 
-              {/* Tooth Engagement Advisory — hidden for slotting, circ_interp, and face (wiper geometry drives facing, not arc engagement) */}
-              {engineering?.teeth_in_cut != null && form.mode !== "slot" && form.mode !== "circ_interp" && form.mode !== "face" && (() => {
+              {/* Tooth Engagement Advisory — hidden for slotting and face only */}
+              {engineering?.teeth_in_cut != null && form.mode !== "slot" && form.mode !== "face" && (() => {
                 const tic = engineering.teeth_in_cut;
                 const low = 1.0, sweetLo = 1.5, sweetHi = 2.5, high = 3.0;
                 const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
@@ -8720,6 +8864,7 @@ ${stabSection}
                   hem:       { low: `Increase WOC% (try 6–10%)${form.flutes < 5 ? " or add flutes (5–7 fl recommended for HEM)" : form.flutes < 7 ? ` or try ${form.flutes + 1}–7 flutes` : ""}`, ok: `Try pushing WOC% up slightly${form.flutes < 7 ? ` or adding a flute (try ${form.flutes + 1} fl)` : ""} to reach 1.5–2.5 teeth engaged`, high: `Reduce WOC%${form.flutes > 4 ? ` or drop to ${form.flutes - 1} flutes` : ""}` },
                   slot:      { low: "Slotting uses 2 teeth naturally at 4fl — check flute count", ok: "Increase flute count to reach the sweet spot", high: "Reduce flutes for slotting — 4fl is standard" },
                   finish:    { low: "Light WOC is normal for finishing — this is expected", ok: "Finishing WOC is fine — consider a light WOC increase if surface finish allows", high: "Reduce WOC% for finishing passes" },
+                  circ_interp: { low: "Light wall stock is normal for bore finishing — use a heavier roughing pass first", ok: "Good engagement for bore work — consistent wall removal", high: "Reduce WOC% (wall stock) to avoid deflection and size error in the bore" },
                   default:   { low: "Increase WOC% or add a flute to get more teeth engaged", ok: `Bump WOC% slightly${form.flutes < 7 ? ` or try ${form.flutes + 1} flutes` : ""} to enter the Sweet Spot (1.5–2.5 teeth)`, high: "Reduce WOC% or use fewer flutes" },
                 };
                 const tips = tipsByOp[form.mode ?? ""] ?? tipsByOp.default;
