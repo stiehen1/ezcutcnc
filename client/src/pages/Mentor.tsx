@@ -6685,7 +6685,7 @@ ${stabSection}
               <div className="flex-1 border-t-2 border-orange-500" />
             </div>
             <div className="space-y-2">
-              <FieldLabel hint="Select which entry strategies to show in results. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
+              <FieldLabel hint="Select one or more entry strategies — selecting multiple shows all methods side by side for comparison. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
                 Entry Type Preferences
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
