@@ -456,29 +456,94 @@ export default function Mentor() {
 
   // ── ROI Calculator functions ───────────────────────────────────────────────
   function calcRoi() {
-    const ccP = parseFloat(roiCcPrice), ccN = parseFloat(roiCcParts), ccT = parseFloat(roiCcTime);
-    const cP = parseFloat(roiCompPrice), cN = parseFloat(roiCompParts), cT = parseFloat(roiCompTime);
-    const rate = parseFloat(roiShopRate), vol = parseFloat(roiMonthlyVol);
-    if ([ccP,ccN,ccT,cP,cN,cT,rate,vol].some(v => !Number.isFinite(v) || v <= 0)) return;
-    const ccToolCost = ccP / ccN;
-    const ccMachineCost = (ccT / 60) * rate;
-    const ccTotalCost = ccToolCost + ccMachineCost;
+    const ccP = parseFloat(roiCcPrice), cP = parseFloat(roiCompPrice);
+    const rate = parseFloat(roiShopRate) || 0;
+    const annualVol = parseFloat(roiAnnualVol);
+    const ccMrr = parseFloat(roiCcMrr), compMrr = parseFloat(roiCompMrr);
+    const missing: string[] = [];
+    // ccN / cN = tool life in the mode's native unit (parts, minutes, or linear inches)
+    let ccN = 0, cN = 0;
+    if (roiLifeMode === "parts") {
+      ccN = parseFloat(roiCcParts); cN = parseFloat(roiCompParts);
+      if (!Number.isFinite(ccN) || ccN <= 0) missing.push("CC Parts per Tool");
+      if (!Number.isFinite(cN) || cN <= 0) missing.push("Incumbent Parts per Tool");
+    } else if (roiLifeMode === "cut_time") {
+      ccN = parseFloat(roiCcCutTime); cN = parseFloat(roiCompCutTime);
+      if (!Number.isFinite(ccN) || ccN <= 0) missing.push("CC Cut Time per Tool");
+      if (!Number.isFinite(cN) || cN <= 0) missing.push("Incumbent Cut Time per Tool");
+    } else {
+      ccN = parseFloat(roiCcLinIn); cN = parseFloat(roiCompLinIn);
+      if (!Number.isFinite(ccN) || ccN <= 0) missing.push("CC Linear Inches per Tool");
+      if (!Number.isFinite(cN) || cN <= 0) missing.push("Incumbent Linear Inches per Tool");
+    }
+    if (!Number.isFinite(ccP) || ccP <= 0) missing.push("CC Tool Price");
+    if (!Number.isFinite(cP) || cP <= 0) missing.push("Incumbent Tool Price");
+    if (!Number.isFinite(annualVol) || annualVol <= 0) missing.push(roiLifeMode === "cut_time" ? "Annual Cutting Hours" : roiLifeMode === "linear_in" ? "Annual Linear Inches" : "Annual Volume");
+    setRoiMissingFields(missing);
+    if (missing.length > 0) return;
+    // Reconditioning: lifecycle units compound same as parts (substitute minutes or inches)
+    const grinds = roiReconEnabled ? Math.max(0, Math.min(5, parseInt(roiReconGrinds) || 0)) : 0;
+    const retention = roiReconEnabled ? Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100 : 1;
+    const reconLifecycleCost = ccP * (1 + grinds * 0.5);
+    let reconLifecycleUnits = ccN;
+    for (let i = 1; i <= grinds; i++) reconLifecycleUnits += ccN * Math.pow(retention, i);
+    // Cost per native unit ($/part | $/min | $/inch)
+    const ccToolCost = reconLifecycleCost / reconLifecycleUnits;
+    const ccToolCostNoRecon = ccP / ccN;
+    const reconSavingsPerPart = ccToolCostNoRecon - ccToolCost;
     const compToolCost = cP / cN;
-    const compMachineCost = (cT / 60) * rate;
-    const compTotalCost = compToolCost + compMachineCost;
-    const savingsPerPart = compTotalCost - ccTotalCost;
-    const monthlySavings = savingsPerPart * vol;
-    const annualSavings = monthlySavings * 12;
+    // Tool change cost per unit = (1/N) × change_time_min × rate/60
+    const changeTime = parseFloat(roiChangeTime) || 0;
+    const ccChangeCost = rate > 0 && changeTime > 0 ? (1 / reconLifecycleUnits) * changeTime * (rate / 60) : 0;
+    const compChangeCost = rate > 0 && changeTime > 0 ? (1 / cN) * changeTime * (rate / 60) : 0;
+    const ccMachineCost = ccChangeCost;
+    const compMachineCost = compChangeCost;
+    const ccTotalCost = ccToolCost + ccChangeCost;
+    const compTotalCost = compToolCost + compChangeCost;
+    const savingsPerPart = compTotalCost - ccTotalCost; // $/unit
+    // Annual: cut_time mode annualVol is hours → ×60 to get minutes
+    const annualUnits = roiLifeMode === "cut_time" ? annualVol * 60 : annualVol;
+    // Extra itemized savings
+    const extraRecurringAnnual = roiExtraSavings.filter(i => i.recurring !== false).reduce((sum, item) => sum + (parseFloat(item.annualAmt) || 0), 0);
+    const oneTimeSavings = roiExtraSavings.filter(i => i.recurring === false).reduce((sum, item) => sum + (parseFloat(item.annualAmt) || 0), 0);
+    const extraPerUnit = annualUnits > 0 ? extraRecurringAnnual / annualUnits : 0;
+    const totalSavingsPerUnit = savingsPerPart + extraPerUnit;
+    const annualSavings = totalSavingsPerUnit * annualUnits;
+    const monthlySavings = annualSavings / 12;
     const savingsPct = compTotalCost > 0 ? (savingsPerPart / compTotalCost) * 100 : 0;
-    const timeSavingsPct = cT > 0 ? ((cT - ccT) / cT) * 100 : 0;
-    setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct });
-    // Auto-save draft to localStorage (no DB — only completed ROIs go to DB)
+    const timeSavingsPct = 0;
+    const mrrGainPct = (compMrr > 0 && ccMrr > 0) ? ((ccMrr - compMrr) / compMrr) * 100 : 0;
+    setRoiMissingFields([]);
+    setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct, mrrGainPct, reconSavingsPerPart, reconGrinds: grinds, oneTimeSavings });
+    // Save to DB on every calculate (upsert — won't bloat the table)
+    if (erEmail) {
+      fetch("/api/roi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "calculate",
+          userEmail: erEmail, userName: localStorage.getItem("cc_user_name") || "",
+          material: form.material, operation, toolDia: form.tool_dia,
+          feedIpm: (mentor.data as any)?.customer?.feed_ipm ?? 0,
+          ccEdp: edpText || "", ccToolPrice: ccP, ccPartsPer: ccN, ccMrr: parseFloat(roiCcMrr) || 0,
+          compEdp: roiCompEdp, compBrand: roiCompBrand, compPrice: cP, compPartsPer: cN, compMrr: parseFloat(roiCompMrr) || 0,
+          lifeMode: roiLifeMode, annualVolume: annualVol,
+          savingsPerPart, monthlySavings, annualSavings, savingsPct, mrrGainPct,
+          reconGrinds: grinds, reconSavingsPerPart, oneTimeSavings, roiName,
+        }),
+      }).catch(() => {}); // fire-and-forget
+    }
+    // Auto-save draft to localStorage
     localStorage.setItem("roi_draft", JSON.stringify({
-      ccPrice: roiCcPrice, ccParts: roiCcParts, ccTime: roiCcTime,
-      compEdp: roiCompEdp, compPrice: roiCompPrice, compParts: roiCompParts, compTime: roiCompTime,
-      shopRate: roiShopRate, monthlyVol: roiMonthlyVol,
+      lifeMode: roiLifeMode, roiName,
+      ccPrice: roiCcPrice, ccParts: roiCcParts, ccTime: roiCcTime, ccMrr: roiCcMrr,
+      ccCutTime: roiCcCutTime, ccLinIn: roiCcLinIn,
+      reconEnabled: roiReconEnabled, reconGrinds: roiReconGrinds, reconRetention: roiReconRetention,
+      compBrand: roiCompBrand, compEdp: roiCompEdp, compPrice: roiCompPrice, compParts: roiCompParts, compTime: roiCompTime, compMrr: roiCompMrr,
+      compCutTime: roiCompCutTime, compLinIn: roiCompLinIn, linInPerPart: roiLinInPerPart,
+      shopRate: roiShopRate, annualVol: roiAnnualVol, extraSavings: roiExtraSavings,
       result: { ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost,
-        savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct },
+        savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct, mrrGainPct, reconSavingsPerPart, reconGrinds: grinds },
     }));
     setRoiDraftLoaded(true);
   }
@@ -491,6 +556,7 @@ export default function Mentor() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "email",
           userEmail: erEmail,
           userName: localStorage.getItem("cc_user_name") || "",
           material: form.material,
@@ -501,16 +567,24 @@ export default function Mentor() {
           ccToolPrice: parseFloat(roiCcPrice),
           ccPartsPer: parseFloat(roiCcParts),
           ccTimeInCut: parseFloat(roiCcTime),
+          ccMrr: parseFloat(roiCcMrr) || 0,
           compEdp: roiCompEdp,
+          compBrand: roiCompBrand,
           compPrice: parseFloat(roiCompPrice),
           compPartsPer: parseFloat(roiCompParts),
           compTimeInCut: parseFloat(roiCompTime),
+          compMrr: parseFloat(roiCompMrr) || 0,
           shopRate: parseFloat(roiShopRate),
-          monthlyVolume: parseFloat(roiMonthlyVol),
+          annualVolume: parseFloat(roiAnnualVol),
           savingsPerPart: roiResult.savingsPerPart,
           monthlySavings: roiResult.monthlySavings,
           annualSavings: roiResult.annualSavings,
           savingsPct: roiResult.savingsPct,
+          mrrGainPct: roiResult.mrrGainPct,
+          reconGrinds: roiResult.reconGrinds,
+          reconSavingsPerPart: roiResult.reconSavingsPerPart,
+          oneTimeSavings: roiResult.oneTimeSavings,
+          roiName,
         }),
       });
       setRoiEmailSent(true);
@@ -520,56 +594,201 @@ export default function Mentor() {
     setRoiSaving(false);
   }
 
-  function printRoi() {
+  async function printRoi() {
     if (!roiResult) return;
-    const ccFeed = result?.customer?.feed_ipm;
-    const w = window.open("", "_blank", "width=700,height=900");
+    // Fetch logo as base64 so it reliably embeds in the print window
+    let logoDataUrl = "";
+    try {
+      const resp = await fetch("/CCLogo-long-whiteback%20TRANSPARENT.png");
+      const blob = await resp.blob();
+      logoDataUrl = await new Promise<string>(res => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch { /* logo missing — proceed without it */ }
+    const w = window.open("", "_blank", "width=820,height=1060");
     if (!w) return;
-    const fmt = (n: number) => n.toFixed(4);
-    const fmtD = (n: number) => n.toFixed(2);
-    w.document.write(`<!DOCTYPE html><html><head><title>ROI Summary — CoreCutCNC</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a1a; }
-    h1 { color: #f97316; font-size: 22px; margin-bottom: 4px; }
-    .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th { background: #1c1c1c; color: #fff; padding: 8px 12px; text-align: left; font-size: 13px; }
-    th.cc { background: #ea580c; }
-    td { padding: 7px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
-    .savings { background: #f0fdf4; }
-    .savings td { font-weight: bold; color: #16a34a; }
-    .total td { font-weight: bold; background: #f9fafb; }
-    .big { font-size: 28px; font-weight: bold; color: #16a34a; margin: 0; }
-    .bigbox { border: 2px solid #16a34a; border-radius: 8px; padding: 16px 24px; display: inline-block; margin-right: 16px; }
-    .params { font-size: 12px; color: #666; margin-bottom: 20px; }
-    @media print { body { margin: 20px; } }
-  </style></head><body>
-  <h1>CoreCutCNC ROI Summary</h1>
-  <div class="sub">Generated ${new Date().toLocaleDateString()} · ${localStorage.getItem("cc_user_name") || erEmail}</div>
-  <div class="params">
-    <strong>Run Parameters:</strong> ${form.material} · ${operation} · ${fmt(form.tool_dia)}" dia
-    ${ccFeed ? `· ${fmtD(ccFeed)} IPM` : ""}
-    ${edpText ? `· CC EDP: ${edpText}` : ""}
-    ${roiCompEdp ? `· Incumbent Tool: ${roiCompEdp}` : ""}
+    const fmtD = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtI = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const fmtC = (n: number) => n.toFixed(4);
+    const rep = localStorage.getItem("cc_user_name") || erEmail || "Core Cutter LLC";
+    const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const year = new Date().getFullYear();
+    const extraRecurring = roiExtraSavings.filter(i => i.recurring !== false && parseFloat(i.annualAmt) > 0);
+    const extraOneTime = roiExtraSavings.filter(i => i.recurring === false && parseFloat(i.annualAmt) > 0);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Core Cutter ROI Analysis</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; background: #fff; }
+  .page { width: 780px; margin: 0 auto; padding: 36px 40px; }
+
+  /* Header */
+  .header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 3px solid #ea580c; padding-bottom: 16px; margin-bottom: 24px; }
+  .brand { font-size: 22px; font-weight: 800; color: #ea580c; letter-spacing: -0.5px; }
+  .brand span { color: #1a1a1a; }
+  .header-right { text-align: right; font-size: 11px; color: #666; line-height: 1.6; }
+  .doc-title { font-size: 13px; font-weight: 700; color: #1a1a1a; margin-bottom: 2px; }
+
+  /* Hero row */
+  .hero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .hero-box { border-radius: 10px; padding: 16px; text-align: center; }
+  .hero-box.primary { background: #fff7ed; border: 2px solid #ea580c; }
+  .hero-box.secondary { background: #f0fdf4; border: 1.5px solid #16a34a; }
+  .hero-box.tertiary { background: #eff6ff; border: 1.5px solid #2563eb; }
+  .hero-num { font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+  .hero-box.primary .hero-num { color: #ea580c; }
+  .hero-box.secondary .hero-num { color: #16a34a; }
+  .hero-box.tertiary .hero-num { color: #2563eb; }
+  .hero-label { font-size: 11px; color: #666; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  /* Badges */
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+  .badge { border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; }
+  .badge.green { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .badge.blue { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+  .badge.amber { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+  /* Section label */
+  .section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #ea580c; margin-bottom: 8px; margin-top: 20px; }
+
+  /* Comparison table */
+  .cmp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 4px; }
+  .cmp-table th { padding: 8px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+  .cmp-table th:first-child { text-align: left; background: #f9fafb; color: #666; width: 44%; }
+  .cmp-table th.cc-col { background: #fff7ed; color: #ea580c; text-align: right; width: 28%; }
+  .cmp-table th.comp-col { background: #f9fafb; color: #555; text-align: right; width: 28%; }
+  .cmp-table td { padding: 7px 12px; border-top: 1px solid #f0f0f0; }
+  .cmp-table td:first-child { color: #444; }
+  .cmp-table td.cc-val { text-align: right; color: #ea580c; font-weight: 600; }
+  .cmp-table td.comp-val { text-align: right; color: #555; }
+  .cmp-table tr.total-row td { background: #f9fafb; font-weight: 700; border-top: 2px solid #e5e7eb; }
+  .cmp-table tr.total-row td.cc-val { color: #ea580c; }
+  .cmp-table tr.savings-row td { background: #f0fdf4; color: #16a34a; font-weight: 700; border-top: 2px solid #86efac; }
+  .cmp-table tr.mrr-row td { background: #eff6ff; }
+  .cmp-table tr.mrr-row td.cc-val { color: #2563eb; }
+
+  /* Additional savings */
+  .add-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .add-table td { padding: 5px 12px; border-top: 1px solid #f0f0f0; }
+  .add-table td:last-child { text-align: right; font-weight: 600; color: #16a34a; }
+  .add-table tr.onetime td:last-child { color: #92400e; }
+
+  /* Recon box */
+  .recon-box { background: #fff7ed; border: 1.5px solid #fed7aa; border-radius: 8px; padding: 10px 14px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .recon-box .val { font-size: 15px; font-weight: 800; color: #ea580c; }
+
+  /* Footer */
+  .footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10px; color: #999; }
+  .footer .disclaimer { max-width: 480px; line-height: 1.5; }
+  .footer .generated { text-align: right; line-height: 1.6; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { padding: 24px 28px; }
+  }
+</style>
+</head><body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Core Cutter" style="height:48px;display:block;margin-bottom:4px;">` : `<div class="brand">CORE<span>CUTTER</span></div>`}
+      <div style="font-size:11px;color:#666;margin-top:2px;">Precision Cutting Tools · corecutcnc.com</div>
+    </div>
+    <div class="header-right">
+      <div class="doc-title">Cost Analysis &amp; ROI Summary</div>
+      <div>${date}</div>
+      <div>Prepared by: ${rep}</div>
+      ${form.material ? `<div>Material: ${form.material}${form.tool_dia ? ` · Ø${form.tool_dia}"` : ""}</div>` : ""}
+    </div>
   </div>
-  <div style="margin-bottom:24px">
-    <div class="bigbox"><div class="big">$${fmtD(roiResult.savingsPerPart)}</div><div style="font-size:12px;color:#666">Savings per part</div></div>
-    <div class="bigbox"><div class="big">$${fmtD(roiResult.monthlySavings)}</div><div style="font-size:12px;color:#666">Monthly savings</div></div>
-    <div class="bigbox"><div class="big">$${fmtD(roiResult.annualSavings)}</div><div style="font-size:12px;color:#666">Annual savings</div></div>
+
+  <!-- Hero numbers -->
+  <div class="hero">
+    <div class="hero-box primary">
+      <div class="hero-num">$${fmtI(roiResult.annualSavings)}</div>
+      <div class="hero-label">Annual Savings</div>
+    </div>
+    <div class="hero-box secondary">
+      <div class="hero-num">$${fmtI(roiResult.monthlySavings)}</div>
+      <div class="hero-label">Monthly Savings</div>
+    </div>
+    <div class="hero-box secondary">
+      <div class="hero-num">${roiResult.savingsPct.toFixed(1)}%</div>
+      <div class="hero-label">Cost Reduction</div>
+    </div>
   </div>
-  <table>
-    <tr><th></th><th class="cc">Core Cutter</th><th>Incumbent Tool</th></tr>
-    <tr><td>Tool Price</td><td>$${fmtD(parseFloat(roiCcPrice))}</td><td>$${fmtD(parseFloat(roiCompPrice))}</td></tr>
-    <tr><td>Parts per Tool</td><td>${roiCcParts}</td><td>${roiCompParts}</td></tr>
-    <tr><td>Time in Cut (min/part)</td><td>${roiCcTime}</td><td>${roiCompTime}</td></tr>
-    <tr><td>Tool Cost per Part</td><td>$${fmtD(roiResult.ccToolCost)}</td><td>$${fmtD(roiResult.compToolCost)}</td></tr>
-    <tr><td>Machine Time Cost per Part</td><td>$${fmtD(roiResult.ccMachineCost)}</td><td>$${fmtD(roiResult.compMachineCost)}</td></tr>
-    <tr class="total"><td>Total Cost per Part</td><td>$${fmtD(roiResult.ccTotalCost)}</td><td>$${fmtD(roiResult.compTotalCost)}</td></tr>
-    <tr class="savings"><td colspan="3">Savings: $${fmtD(roiResult.savingsPerPart)}/part · ${fmtD(roiResult.savingsPct)}% reduction · $${fmtD(roiResult.monthlySavings)}/mo · $${fmtD(roiResult.annualSavings)}/yr</td></tr>
+
+  <!-- Badges -->
+  <div class="badges">
+    <span class="badge green">$${fmtD(roiResult.savingsPerPart)} savings per part</span>
+    ${roiResult.timeSavingsPct > 0 ? `<span class="badge green">${roiResult.timeSavingsPct.toFixed(1)}% faster cycle time</span>` : ""}
+    ${roiResult.mrrGainPct > 0 ? `<span class="badge blue">${roiResult.mrrGainPct.toFixed(1)}% more throughput (MRR)</span>` : ""}
+    ${roiResult.reconGrinds > 0 ? `<span class="badge amber">Reconditioning program included (${roiResult.reconGrinds} regrinds)</span>` : ""}
+    <span class="badge green">${fmtI(parseFloat(roiAnnualVol))} parts/year · $${roiShopRate}/hr shop rate</span>
+  </div>
+
+  <!-- Cost comparison -->
+  <div class="section-label">Cost Breakdown Per Part</div>
+  <table class="cmp-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th class="cc-col">Core Cutter${edpText ? `<br><span style="font-weight:400;font-size:10px">${edpText}</span>` : ""}</th>
+        <th class="comp-col">Current Tool${roiCompEdp ? `<br><span style="font-weight:400;font-size:10px">${roiCompEdp}</span>` : ""}</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(parseFloat(roiCcMrr) > 0 || parseFloat(roiCompMrr) > 0) ? `<tr class="mrr-row"><td>Material Removal Rate</td><td class="cc-val">${parseFloat(roiCcMrr) > 0 ? parseFloat(roiCcMrr).toFixed(3) + " in³/min" : "—"}</td><td class="comp-val">${parseFloat(roiCompMrr) > 0 ? parseFloat(roiCompMrr).toFixed(3) + " in³/min" : "—"}</td></tr>` : ""}
+      <tr><td>Tool Price</td><td class="cc-val">$${fmtD(parseFloat(roiCcPrice))}${roiReconEnabled ? `<br><span style="font-size:10px;font-weight:400">${roiReconGrinds} regrinds @ $${fmtD(parseFloat(roiCcPrice)*0.5)}</span>` : ""}</td><td class="comp-val">$${fmtD(parseFloat(roiCompPrice))}</td></tr>
+      <tr><td>${roiLifeMode === "cut_time" ? "Cut Time per Tool (min)" : roiLifeMode === "linear_in" ? "Linear Inches per Tool" : `Parts per Tool${roiReconEnabled ? " (lifecycle)" : ""}`}</td><td class="cc-val">${roiLifeMode === "cut_time" ? roiCcCutTime : roiLifeMode === "linear_in" ? roiCcLinIn : roiReconEnabled ? Math.round((() => { const g = parseInt(roiReconGrinds)||0; const r = (parseFloat(roiReconRetention)||90)/100; let t = parseFloat(roiCcParts); for(let i=1;i<=g;i++) t+=parseFloat(roiCcParts)*Math.pow(r,i); return t; })()) : roiCcParts}</td><td class="comp-val">${roiLifeMode === "cut_time" ? roiCompCutTime : roiLifeMode === "linear_in" ? roiCompLinIn : roiCompParts}</td></tr>
+      <tr><td>${roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccToolCost)}</td><td class="comp-val">$${fmtC(roiResult.compToolCost)}</td></tr>
+      <tr class="total-row"><td>${roiLifeMode === "cut_time" ? "Total Cost / Min" : roiLifeMode === "linear_in" ? "Total Cost / Inch" : "Total Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccTotalCost)}</td><td class="comp-val">$${fmtC(roiResult.compTotalCost)}</td></tr>
+      <tr class="savings-row"><td colspan="3" style="text-align:center">$${fmtD(roiResult.savingsPerPart)} saved per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"} &nbsp;·&nbsp; ${roiResult.savingsPct.toFixed(1)}% cost reduction</td></tr>
+    </tbody>
   </table>
-  <div style="font-size:11px;color:#999;margin-top:32px">Shop rate: $${roiShopRate}/hr · Monthly volume: ${roiMonthlyVol} parts · Generated by CoreCutCNC — corecutcnc.com</div>
-  <script>window.onload=()=>window.print();</script>
-  </body></html>`);
+
+  ${roiResult.reconGrinds > 0 && roiResult.reconSavingsPerPart > 0 ? `
+  <div class="section-label">Reconditioning Program</div>
+  <div class="recon-box">
+    <div>
+      <strong>Up to ${roiResult.reconGrinds} regrinds</strong> at 50% of new tool price
+      <div style="font-size:11px;color:#92400e;margin-top:2px">Extends tool lifecycle · slight LOC/diameter reduction per regrind</div>
+    </div>
+    <div class="val">+$${fmtI(roiResult.reconSavingsPerPart * parseFloat(roiAnnualVol))}/yr</div>
+  </div>` : ""}
+
+  ${extraRecurring.length > 0 || extraOneTime.length > 0 ? `
+  <div class="section-label">Additional Value</div>
+  <table class="add-table">
+    ${extraRecurring.map(i => `<tr><td>${i.label || "—"}</td><td>+$${fmtI(parseFloat(i.annualAmt))}/yr</td></tr>`).join("")}
+    ${extraOneTime.map(i => `<tr class="onetime"><td>${i.label || "—"}</td><td>+$${fmtI(parseFloat(i.annualAmt))} one-time</td></tr>`).join("")}
+  </table>` : ""}
+
+  ${roiResult.oneTimeSavings > 0 ? `
+  <div style="margin-top:8px;padding:8px 12px;background:#fef3c7;border-radius:6px;font-size:12px;display:flex;justify-content:space-between;">
+    <span style="color:#92400e;font-weight:600;">One-time savings (not included in annual total)</span>
+    <span style="font-weight:800;color:#92400e;">+$${fmtI(roiResult.oneTimeSavings)}</span>
+  </div>` : ""}
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="disclaimer">
+      <strong>Estimates only — not a guarantee of performance or savings.</strong> This analysis is based on customer-provided data, estimated tool life, and calculated cutting parameters. Actual results may vary based on application, workpiece condition, machine capability, and operator technique. Reconditioning eligibility subject to tool condition review by Core Cutter LLC.
+      <div style="margin-top:5px;">© ${year} Core Cutter LLC. All rights reserved. Confidential — prepared for recipient only.</div>
+    </div>
+    <div class="generated">
+      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Core Cutter" style="height:30px;display:block;margin-left:auto;margin-bottom:4px;">` : `<div style="font-weight:700;color:#ea580c;">Core Cutter LLC</div>`}
+      <div>corecutcnc.com</div>
+      <div>${date}</div>
+    </div>
+  </div>
+
+</div>
+<script>window.onload = () => window.print();</script>
+</body></html>`);
     w.document.close();
   }
 
@@ -602,6 +821,7 @@ export default function Mentor() {
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
   const [showManageMachines, setShowManageMachines] = React.useState(false);
+  const [savedMachinesOpen, setSavedMachinesOpen] = React.useState(false);
   const [editingMachineId, setEditingMachineId] = React.useState<number | null>(null);
   const [jobTagInput, setJobTagInput] = React.useState("");
   const [jobTagType, setJobTagType] = React.useState<"assigned" | "excluded">("assigned");
@@ -1146,12 +1366,26 @@ export default function Mentor() {
       if (d.ccPrice) setRoiCcPrice(d.ccPrice);
       if (d.ccParts) setRoiCcParts(d.ccParts);
       if (d.ccTime) setRoiCcTime(d.ccTime);
+      if (d.ccMrr) setRoiCcMrr(d.ccMrr);
+      if (d.lifeMode) setRoiLifeMode(d.lifeMode);
+      if (d.roiName) setRoiName(d.roiName);
+      if (d.reconEnabled != null) setRoiReconEnabled(d.reconEnabled);
+      if (d.reconGrinds) setRoiReconGrinds(d.reconGrinds);
+      if (d.reconRetention) setRoiReconRetention(d.reconRetention);
+      if (d.ccCutTime) setRoiCcCutTime(d.ccCutTime);
+      if (d.ccLinIn) setRoiCcLinIn(d.ccLinIn);
+      if (d.compBrand) setRoiCompBrand(d.compBrand);
       if (d.compEdp) setRoiCompEdp(d.compEdp);
       if (d.compPrice) setRoiCompPrice(d.compPrice);
       if (d.compParts) setRoiCompParts(d.compParts);
       if (d.compTime) setRoiCompTime(d.compTime);
+      if (d.compMrr) setRoiCompMrr(d.compMrr);
+      if (d.compCutTime) setRoiCompCutTime(d.compCutTime);
+      if (d.compLinIn) setRoiCompLinIn(d.compLinIn);
+      if (d.linInPerPart) setRoiLinInPerPart(d.linInPerPart);
       if (d.shopRate) setRoiShopRate(d.shopRate);
-      if (d.monthlyVol) setRoiMonthlyVol(d.monthlyVol);
+      if (d.annualVol) setRoiAnnualVol(d.annualVol);
+      if (d.extraSavings) setRoiExtraSavings(d.extraSavings);
       if (d.result) setRoiResult(d.result);
       setRoiDraftLoaded(true);
       // If navigated back via resume, open the panel
@@ -1232,7 +1466,7 @@ export default function Mentor() {
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       // HEM high = full LOC up to material cap, then cap — deep LOC tools shouldn't exceed optimal HEM depth.
       // Cap by ISO: N (aluminum) 3.0×D, S (superalloys) 2.0×D, everything else 2.5×D.
-      const hemDocCap: Record<string, number> = { N: 3.0, S: 2.0, H: 1.5 };
+      const hemDocCap: Record<string, number> = { N: 3.0, S: 3.0, H: 1.5 };
       const hemCap = hemDocCap[iso] ?? 2.5;
       const docHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
       return {
@@ -1340,22 +1574,49 @@ export default function Mentor() {
   const [roiCcPrice, setRoiCcPrice] = React.useState("");
   const [roiCcParts, setRoiCcParts] = React.useState("");
   const [roiCcTime, setRoiCcTime] = React.useState("");
+  const [roiCcMrr, setRoiCcMrr] = React.useState("");   // auto-filled from calc
+  const [roiReconEnabled, setRoiReconEnabled] = React.useState(false);
+  const [roiReconGrinds, setRoiReconGrinds] = React.useState("3");
+  const [roiReconRetention, setRoiReconRetention] = React.useState("90"); // % tool life retained per regrind
+  const [roiMissingFields, setRoiMissingFields] = React.useState<string[]>([]);
+  const [roiName, setRoiName] = React.useState("");
+  const [roiCompBrand, setRoiCompBrand] = React.useState("");
   const [roiCompEdp, setRoiCompEdp] = React.useState("");
   const [roiCompPrice, setRoiCompPrice] = React.useState("");
   const [roiCompParts, setRoiCompParts] = React.useState("");
   const [roiCompTime, setRoiCompTime] = React.useState("");
+  const [roiCompMrr, setRoiCompMrr] = React.useState("");  // manual — incumbent
   const [roiShopRate, setRoiShopRate] = React.useState("");
-  const [roiMonthlyVol, setRoiMonthlyVol] = React.useState("");
+  const [roiChangeTime, setRoiChangeTime] = React.useState("5"); // minutes to change a tool
+  const [roiAnnualVol, setRoiAnnualVol] = React.useState("");
+  const [roiExtraSavings, setRoiExtraSavings] = React.useState<Array<{ id: string; label: string; annualAmt: string; recurring: boolean }>>([]);
+  const [roiExtraOpen, setRoiExtraOpen] = React.useState(false);
   const [roiResult, setRoiResult] = React.useState<{
     ccToolCost: number; ccMachineCost: number; ccTotalCost: number;
     compToolCost: number; compMachineCost: number; compTotalCost: number;
     savingsPerPart: number; monthlySavings: number; annualSavings: number;
-    savingsPct: number; timeSavingsPct: number;
+    savingsPct: number; timeSavingsPct: number; mrrGainPct: number;
+    reconSavingsPerPart: number; reconGrinds: number; oneTimeSavings: number;
   } | null>(null);
   const [roiSaving, setRoiSaving] = React.useState(false);
   const [roiEmailSent, setRoiEmailSent] = React.useState(false);
   const [roiPrinting, setRoiPrinting] = React.useState(false);
   const [roiDraftLoaded, setRoiDraftLoaded] = React.useState(false);
+  const [roiLifeMode, setRoiLifeMode] = React.useState<"parts" | "cut_time" | "linear_in">("parts");
+  // Cut Time mode — total cutting minutes per tool (not per part)
+  const [roiCcCutTime, setRoiCcCutTime] = React.useState("");
+  const [roiCompCutTime, setRoiCompCutTime] = React.useState("");
+  // Linear Inches mode — total linear inches per tool
+  const [roiCcLinIn, setRoiCcLinIn] = React.useState("");
+  const [roiCompLinIn, setRoiCompLinIn] = React.useState("");
+  const [roiLinInPerPart, setRoiLinInPerPart] = React.useState("");
+
+  // Auto-populate CC MRR from current calc result
+  React.useEffect(() => {
+    if (!mentor.data?.customer) return;
+    const mrr = (mentor.data.customer as any).mrr_in3_min ?? 0;
+    if (mrr > 0) setRoiCcMrr(mrr.toFixed(3));
+  }, [mentor.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
   const [tmTpiText, setTmTpiText] = React.useState("");
@@ -1406,6 +1667,21 @@ export default function Mentor() {
     if (form.woc_pct) setWocText(((form.woc_pct / 100) * form.tool_dia).toFixed(4));
     if (form.doc_xd) setDocText((form.doc_xd * form.tool_dia).toFixed(3));
   }, [form.tool_dia]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When material (isoCategory) changes in HEM, reset WOC+DOC to optimal for new material
+  // so stale values from a prior material don't carry over — but only if user was using a preset
+  React.useEffect(() => {
+    const isHem = form.mode === "hem" || form.mode === "trochoidal";
+    if (!isHem || (wocPreset === null && docPreset === null)) return;
+    const opt = computeOptimalCutParams(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.geometry);
+    setForm(p => ({ ...p, woc_pct: opt.wocPct, doc_xd: opt.docXd }));
+    if (form.tool_dia > 0) {
+      setWocText((opt.wocPct / 100 * form.tool_dia).toFixed(4));
+      setDocText((opt.docXd * form.tool_dia).toFixed(3));
+    }
+    setWocPreset(opt.wocKey);
+    setDocPreset(opt.docKey);
+  }, [isoCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onNum =
     (key: keyof typeof form) =>
@@ -1458,6 +1734,35 @@ export default function Mentor() {
     return () => clearTimeout(t);
   }, [edpText, skuLocked]);
 
+  // Shared logic: compute the same values the Optimal buttons produce
+  function computeOptimalCutParams(
+    mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string
+  ): { wocPct: number; docXd: number; wocKey: "low"|"med"|"high"|"optimal"; docKey: "low"|"med"|"high"|"optimal" } {
+    const presets = getDynamicPresets(mode, iso, flutes, dia, loc);
+    const wp = presets.woc;
+    const dp = presets.doc;
+    // DOC optimal — HEM defaults to high (deep axial + light radial is the HEM philosophy);
+    // other modes use med as the balanced target
+    const locCap = loc > 0 && dia > 0 ? loc / dia : 99;
+    const isHemMode = mode === "hem" || mode === "trochoidal";
+    const optDocXd = isHemMode
+      ? Math.min(locCap, dp.high)
+      : Math.min(locCap, Math.max(dp.low, dp.med));
+    const docKey = (["low","med","high"] as const).find(k => Math.abs(dp[k] - optDocXd) < 0.05) ?? "optimal";
+    // WOC optimal — same as WOC Optimal button
+    const geoFloor = geometry === "chipbreaker" ? 8 : geometry === "truncated_rougher" ? 10 : 0;
+    let optWocPct = wp.med;
+    if (mode === "hem" || mode === "trochoidal") {
+      const scale = Math.min(1.5, Math.max(0.5, (dp.med ?? 1.0) / optDocXd));
+      optWocPct = Math.round(wp.med * scale * 2) / 2;
+    }
+    const chipThin = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * optWocPct / 100))));
+    if (chipThin < 0.25) optWocPct = Math.max(optWocPct, (1 - Math.cos(Math.asin(0.25))) * 50);
+    optWocPct = Math.min(100, Math.max(geoFloor, Math.max(wp.low, optWocPct)));
+    const wocKey = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optWocPct) < 0.5) ?? "optimal";
+    return { wocPct: optWocPct, docXd: optDocXd, wocKey, docKey };
+  }
+
   function applySkuToForm(sku: SkuRecord) {
     // Parse corner_condition: "square" | "ball" | number (CR in inches)
     const skuToolType = (sku.tool_type ?? "endmill").toLowerCase();
@@ -1484,11 +1789,14 @@ export default function Mentor() {
     const _skuDia = Number(sku.cutting_diameter_in);
     const _skuLoc = Number(sku.loc_in);
     const _curMode = form.mode;
-    if (_curMode === "hem" || _curMode === "trochoidal") {
-      const _freshPresets = getDynamicPresets(_curMode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc);
-      const _docHigh = _freshPresets.doc.high;
-      setDocText((_docHigh * _skuDia).toFixed(3));
-      setDocPreset("high");
+    const _optParams = (_curMode === "hem" || _curMode === "trochoidal")
+      ? computeOptimalCutParams(_curMode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc, form.geometry)
+      : null;
+    if (_optParams) {
+      setDocText((_optParams.docXd * _skuDia).toFixed(3));
+      setDocPreset(_optParams.docKey);
+      setWocText((_optParams.wocPct / 100 * _skuDia).toFixed(4));
+      setWocPreset(_optParams.wocKey);
     } else {
       setDocText("");
       setDocPreset(null);
@@ -1507,9 +1815,9 @@ export default function Mentor() {
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
       // Re-fill doc_xd: for HEM always use high preset; otherwise preserve if same dia, reset if dia changed.
-      doc_xd: (p.mode === "hem" || p.mode === "trochoidal")
-        ? getDynamicPresets(p.mode, isoCategory, Number(sku.flutes), Number(sku.cutting_diameter_in), Number(sku.loc_in)).doc.high
+      doc_xd: _optParams ? _optParams.docXd
         : Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
+      woc_pct: _optParams ? _optParams.wocPct : p.woc_pct,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -2172,9 +2480,10 @@ ${engSection}
 ${stabSection}
 
 <div class="disclaimer">
-  <strong>Disclaimer:</strong> These recommendations are generated by the Core Cutter Engineering Department and are intended as a starting point only. Actual speeds, feeds, and depths of cut should be adjusted based on machine condition, fixturing rigidity, material lot variation, coolant delivery, tool condition, and operator experience. Core Cutter LLC assumes no liability for damages arising from use of these parameters. Always start conservatively and adjust based on observed results. This is not a guarantee of performance.
-  <span> · Developed by S. Tiehen</span>
-  <br><strong>© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.</strong> CoreCutCNC is a proprietary tool of Core Cutter LLC. Unauthorized reproduction or distribution is prohibited.
+  <strong>Starting parameters only — not a guarantee of performance.</strong> These recommendations are intended as a starting point and should be adjusted based on actual setup conditions including machine rigidity, fixturing, material lot variation, coolant delivery, tool condition, and operator experience. Always begin conservatively and verify results before running at full parameters. Core Cutter LLC assumes no liability for damages arising from use of these parameters.
+  <br style="margin-bottom:4px">
+  ════════════════════════════════════════<br>
+  <strong>© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.</strong> &nbsp;|&nbsp; CoreCutCNC &nbsp;|&nbsp; corecutcnc.com
 </div>
 <script>window.onload = function() { window.print(); };<\/script>
 </body>
@@ -5974,30 +6283,43 @@ ${stabSection}
 
             {/* My Machines (if toolbox session active) */}
             {savedMachines.length > 0 && (
-              <div className="space-y-1.5 mb-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-zinc-300 font-semibold">My Machines:</span>
-                  <button
-                    type="button"
-                    onClick={() => { setShowManageMachines(p => !p); setEditingMachineId(null); }}
-                    className="text-[10px] text-zinc-500 hover:text-orange-400 underline underline-offset-2"
-                  >
-                    {showManageMachines ? "Done" : "Manage"}
-                  </button>
-                </div>
-                {/* Job # filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-500 whitespace-nowrap">Job #:</span>
-                  <input
-                    type="text"
-                    placeholder="Filter by job number…"
-                    value={activeJobNo}
-                    onChange={e => setActiveJobNo(e.target.value)}
-                    className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
-                  />
-                  {activeJobNo && <button type="button" onClick={() => setActiveJobNo("")} className="text-[10px] text-zinc-500 hover:text-white">✕</button>}
-                </div>
-                <div className="space-y-1.5">
+              <div className="mb-1 rounded-lg border border-zinc-700/60 overflow-hidden">
+                {/* Accordion header */}
+                <button
+                  type="button"
+                  onClick={() => setSavedMachinesOpen(p => !p)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800/60 hover:bg-zinc-800 transition-colors"
+                >
+                  <span className="text-[11px] font-semibold text-zinc-300">
+                    Saved Machines <span className="text-zinc-500 font-normal">({savedMachines.length})</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setSavedMachinesOpen(true); setShowManageMachines(p => !p); setEditingMachineId(null); }}
+                      className="text-[10px] text-zinc-500 hover:text-orange-400 underline underline-offset-2"
+                    >
+                      {showManageMachines ? "Done" : "Manage"}
+                    </button>
+                    <span className="text-zinc-500 text-xs">{savedMachinesOpen ? "▲" : "▼"}</span>
+                  </div>
+                </button>
+
+                {savedMachinesOpen && (
+                  <div className="px-2 pt-2 pb-2 space-y-1.5">
+                    {/* Job # filter */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-zinc-500 whitespace-nowrap">Job #:</span>
+                      <input
+                        type="text"
+                        placeholder="Filter by job number…"
+                        value={activeJobNo}
+                        onChange={e => setActiveJobNo(e.target.value)}
+                        className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                      />
+                      {activeJobNo && <button type="button" onClick={() => setActiveJobNo("")} className="text-[10px] text-zinc-500 hover:text-white">✕</button>}
+                    </div>
+                    <div className="space-y-1.5">
                   {savedMachines.map(m => {
                     const tags: {job_no: string; type: "assigned"|"excluded"}[] = Array.isArray(m.job_tags) ? m.job_tags : [];
                     const status: string = m.machine_status || "operational";
@@ -6193,6 +6515,8 @@ ${stabSection}
                     );
                   })}
                 </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -9098,7 +9422,12 @@ ${stabSection}
 
       {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only */}
       {operation === "milling" && (stabilityIndex || stability) && (
-      <div className="rounded-2xl border border-zinc-700/50 overflow-hidden">
+      <div className="rounded-2xl border-2 border-zinc-600 overflow-hidden mt-5">
+
+        {/* Section header */}
+        <div className="bg-zinc-800/80 border-b-2 border-zinc-600 px-4 py-2.5 flex items-center gap-2">
+          <span className="text-sm font-bold text-zinc-200 tracking-wide">Configuration &amp; Stability Assessment</span>
+        </div>
 
       {/* SETUP READINESS — unified section */}
       {stabilityIndex && stability && (() => {
@@ -9147,7 +9476,7 @@ ${stabSection}
             {/* Score row */}
             <div className="flex items-end justify-between gap-3">
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold mb-1">Setup Readiness</div>
+                <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold mb-1">Setup Score</div>
                 <div className="flex items-baseline gap-2">
                   <span className={`text-4xl font-black leading-none ${siColor}`}>{si}</span>
                   <span className="text-zinc-600 text-base font-light">/100</span>
@@ -9311,11 +9640,39 @@ ${stabSection}
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
                 </div>
               )}
+              {/* Tool Life Metric selector */}
+              <div className="flex items-center gap-3">
+                <Label className="text-xs text-zinc-400 whitespace-nowrap shrink-0">ROI Measurements</Label>
+                <select
+                  value={roiLifeMode}
+                  onChange={e => setRoiLifeMode(e.target.value as "parts" | "cut_time" | "linear_in")}
+                  className="h-7 text-xs rounded bg-zinc-800 border border-zinc-600 text-zinc-200 px-2 flex-1"
+                >
+                  <option value="parts">Parts per Tool</option>
+                  <option value="cut_time">Cut Time per Tool (min)</option>
+                  <option value="linear_in">Linear Inches per Tool</option>
+                </select>
+              </div>
+
               {/* 2-column form */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Left: Core Cutter */}
                 <div className="space-y-2">
                   <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-1">Core Cutter</div>
+                  {/* EDP — auto-filled from calc */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">EDP #</Label>
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        className="h-7 text-xs pr-10"
+                        placeholder="auto from calc"
+                        value={edpText || ""}
+                        readOnly
+                      />
+                      {edpText && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>}
+                    </div>
+                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
                     <Input
@@ -9326,38 +9683,211 @@ ${stabSection}
                       onChange={e => setRoiCcPrice(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Parts per Tool</Label>
-                    <Input
-                      type="number"
-                      className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 120"
-                      value={roiCcParts}
-                      onChange={e => setRoiCcParts(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Time in Cut (min/part)</Label>
-                    <Input
-                      type="number"
-                      className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 2.4"
-                      value={roiCcTime}
-                      onChange={e => setRoiCcTime(e.target.value)}
-                    />
-                  </div>
-                  {result?.customer?.feed_ipm && (
-                    <p className="text-[10px] text-zinc-500 leading-snug">
-                      Current run: {result.customer.feed_ipm.toFixed(1)} IPM — use path length ÷ IPM × 60 to get minutes
-                    </p>
+
+                  {/* Parts per Tool mode */}
+                  {roiLifeMode === "parts" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 120" value={roiCcParts} onChange={e => setRoiCcParts(e.target.value)} />
+                    </div>
                   )}
+
+                  {/* Cut Time per Tool mode */}
+                  {roiLifeMode === "cut_time" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
+                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
+                    </div>
+                  )}
+
+                  {/* Linear Inches mode */}
+                  {roiLifeMode === "linear_in" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Linear Inches per Tool</Label>
+                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 250" value={roiCcLinIn} onChange={e => setRoiCcLinIn(e.target.value)} />
+                    </div>
+                  )}
+
+                  {/* MRR — auto-filled, lines up with incumbent MRR */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">MRR (in³/min)</Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        className="no-spinners h-7 text-xs pr-10"
+                        placeholder="auto from calc"
+                        value={roiCcMrr}
+                        onChange={e => setRoiCcMrr(e.target.value)}
+                      />
+                      {result?.customer?.mrr_in3_min > 0 && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Reconditioning program */}
+                  <div className="rounded-lg border border-zinc-700/40 px-2.5 py-2 space-y-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={roiReconEnabled}
+                        onChange={e => setRoiReconEnabled(e.target.checked)}
+                        className="accent-orange-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-xs text-zinc-300 font-semibold">Reconditioning Program Option</span>
+                    </label>
+                    {roiReconEnabled ? (
+                      <div className="space-y-1.5 pl-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap">Regrinds:</span>
+                          <select
+                            value={roiReconGrinds}
+                            onChange={e => setRoiReconGrinds(e.target.value)}
+                            className="h-6 text-xs rounded bg-zinc-800 border border-zinc-600 text-zinc-200 px-1"
+                          >
+                            {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                          {parseFloat(roiCcPrice) > 0 && (
+                            <span className="text-[10px] text-orange-400 whitespace-nowrap">× ${(parseFloat(roiCcPrice) * 0.5).toFixed(2)}/regrind</span>
+                          )}
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap ml-auto">Tool life/regrind:</span>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              className="no-spinners h-6 text-xs w-14"
+                              value={roiReconRetention}
+                              onChange={e => setRoiReconRetention(e.target.value)}
+                            />
+                            <span className="text-[10px] text-zinc-400">%</span>
+                          </div>
+                        </div>
+                        {parseFloat(roiCcPrice) > 0 && (() => {
+                          let previewN = 0;
+                          if (roiLifeMode === "parts") previewN = parseFloat(roiCcParts) || 0;
+                          else if (roiLifeMode === "cut_time") { const ct = parseFloat(roiCcCutTime), tp = parseFloat(roiCcTime); previewN = ct > 0 && tp > 0 ? ct / tp : 0; }
+                          else { const li = parseFloat(roiCcLinIn), lp = parseFloat(roiLinInPerPart); previewN = li > 0 && lp > 0 ? li / lp : 0; }
+                          if (previewN <= 0) return null;
+                          const g = parseInt(roiReconGrinds) || 0;
+                          const r = Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100;
+                          const baseN = previewN;
+                          let totalParts = baseN;
+                          const cycles: number[] = [Math.round(baseN)];
+                          for (let i = 1; i <= g; i++) {
+                            const cycleN = baseN * Math.pow(r, i);
+                            totalParts += cycleN;
+                            cycles.push(Math.round(cycleN));
+                          }
+                          const totalCost = parseFloat(roiCcPrice) * (1 + g * 0.5);
+                          const effCost = totalCost / totalParts;
+                          return (
+                            <div className="text-[10px] text-zinc-500 space-y-0.5">
+                              <div className="flex gap-1 flex-wrap">
+                                {cycles.map((n, i) => (
+                                  <span key={i} className={i === 0 ? "text-zinc-400" : "text-zinc-500"}>
+                                    {i === 0 ? "New" : `R${i}`}: {n}pts{i < cycles.length - 1 ? " →" : ""}
+                                  </span>
+                                ))}
+                              </div>
+                              <p>
+                                <span className="text-zinc-400">{Math.round(totalParts)} total parts, ${totalCost.toFixed(2)} total cost → </span>
+                                <span className="text-green-400 font-semibold">${effCost.toFixed(4)}/part effective</span>
+                              </p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-zinc-600 pl-1">Up to 5 regrinds at 50% of new price</p>
+                    )}
+                  </div>
+
+                  {/* Additional Savings — CC side (tools eliminated, scrap savings, etc.) */}
+                  <div className="rounded-lg border border-zinc-700/50">
+                    <button
+                      type="button"
+                      onClick={() => setRoiExtraOpen(v => !v)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-left"
+                    >
+                      <span className="text-xs font-semibold text-zinc-300">
+                        Additional Savings
+                        {roiExtraSavings.length > 0 && (() => {
+                          const rec = roiExtraSavings.filter(i => i.recurring !== false).reduce((s, i) => s + (parseFloat(i.annualAmt) || 0), 0);
+                          const ot = roiExtraSavings.filter(i => i.recurring === false).reduce((s, i) => s + (parseFloat(i.annualAmt) || 0), 0);
+                          return (
+                            <span className="ml-2 text-green-400">
+                              {rec > 0 && `+$${rec.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr`}
+                              {rec > 0 && ot > 0 && " · "}
+                              {ot > 0 && `+$${ot.toLocaleString(undefined, { maximumFractionDigits: 0 })} one-time`}
+                            </span>
+                          );
+                        })()}
+                      </span>
+                      <span className="text-[10px] text-zinc-500">{roiExtraOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {roiExtraOpen && (
+                      <div className="px-3 pb-3 space-y-2 border-t border-zinc-700/50">
+                        <p className="text-[10px] text-zinc-500 pt-2 leading-snug">
+                          Any additional annual savings vs. incumbent — eliminated tools, scrap reduction (fewer scrapped parts), downtime from tool breakage, inspection time, setup cost, etc.
+                        </p>
+                        {roiExtraSavings.map((item, idx) => (
+                          <div key={item.id} className="flex gap-2 items-center">
+                            <Input
+                              className="h-7 text-xs flex-1"
+                              placeholder="e.g. Spot drill eliminated / Scrap reduction / Downtime"
+                              value={item.label}
+                              onChange={e => setRoiExtraSavings(prev => prev.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))}
+                            />
+                            <div className="relative shrink-0 w-20">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400">$</span>
+                              <Input
+                                type="number"
+                                className="no-spinners h-7 text-xs pl-5"
+                                placeholder="amt"
+                                value={item.annualAmt}
+                                onChange={e => setRoiExtraSavings(prev => prev.map((x, i) => i === idx ? { ...x, annualAmt: e.target.value } : x))}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setRoiExtraSavings(prev => prev.map((x, i) => i === idx ? { ...x, recurring: x.recurring === false ? true : false } : x))}
+                              className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors ${item.recurring === false ? "border-amber-600/60 bg-amber-900/30 text-amber-400" : "border-green-700/50 bg-green-900/20 text-green-500"}`}
+                            >
+                              {item.recurring === false ? "1×" : "/yr"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRoiExtraSavings(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-zinc-500 hover:text-red-400 text-xs shrink-0"
+                            >✕</button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setRoiExtraSavings(prev => [...prev, { id: Date.now().toString(), label: "", annualAmt: "", recurring: true }])}
+                          className="text-xs text-green-500 hover:text-green-400 font-semibold"
+                        >
+                          + Add item
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Right: Incumbent */}
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Incumbent Tool</div>
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Their Current Tool</div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">EDP / Part # (optional)</Label>
+                    <Label className="text-xs text-zinc-400">Brand</Label>
+                    <Input
+                      type="text"
+                      className="h-7 text-xs"
+                      placeholder="e.g. Kennametal, OSG, Guhring"
+                      value={roiCompBrand}
+                      onChange={e => setRoiCompBrand(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Incumbent EDP / Part #</Label>
                     <Input
                       type="text"
                       className="h-7 text-xs"
@@ -9376,90 +9906,166 @@ ${stabSection}
                       onChange={e => setRoiCompPrice(e.target.value)}
                     />
                   </div>
+
+                  {/* Parts per Tool mode */}
+                  {roiLifeMode === "parts" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 80" value={roiCompParts} onChange={e => setRoiCompParts(e.target.value)} />
+                    </div>
+                  )}
+
+                  {/* Cut Time per Tool mode */}
+                  {roiLifeMode === "cut_time" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
+                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 28" value={roiCompCutTime} onChange={e => setRoiCompCutTime(e.target.value)} />
+                    </div>
+                  )}
+
+                  {/* Linear Inches mode */}
+                  {roiLifeMode === "linear_in" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Linear Inches per Tool</Label>
+                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 180" value={roiCompLinIn} onChange={e => setRoiCompLinIn(e.target.value)} />
+                    </div>
+                  )}
+
+                  {/* MRR — manual */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                    <Label className="text-xs text-zinc-400">MRR (in³/min)</Label>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 80"
-                      value={roiCompParts}
-                      onChange={e => setRoiCompParts(e.target.value)}
+                      placeholder="e.g. 0.180"
+                      value={roiCompMrr}
+                      onChange={e => setRoiCompMrr(e.target.value)}
                     />
                   </div>
+                  {/* Annual volume */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Time in Cut (min/part)</Label>
+                    <Label className="text-xs text-zinc-400">
+                      {roiLifeMode === "cut_time" ? "Annual Cutting Time (hours/yr)" : roiLifeMode === "linear_in" ? "Annual Linear Inches (in/yr)" : "Annual Volume (parts/yr)"}
+                    </Label>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 3.8"
-                      value={roiCompTime}
-                      onChange={e => setRoiCompTime(e.target.value)}
+                      placeholder={roiLifeMode === "cut_time" ? "e.g. 480" : roiLifeMode === "linear_in" ? "e.g. 12000" : "e.g. 1200"}
+                      value={roiAnnualVol}
+                      onChange={e => setRoiAnnualVol(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Shop Rate ($/hr)</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 85"
+                      value={roiShopRate}
+                      onChange={e => setRoiShopRate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Tool Change Time (min)</Label>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 5"
+                      value={roiChangeTime}
+                      onChange={e => setRoiChangeTime(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-[10px] text-zinc-600">Shop rate × change time applied to both sides — more parts/tool = fewer changeovers = lower cost</p>
                 </div>
               </div>
 
-              {/* Shop rate + monthly volume */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-zinc-400">Shop Rate ($/hr)</Label>
-                  <Input
-                    type="number"
-                    className="no-spinners h-7 text-xs"
-                    placeholder="e.g. 85"
-                    value={roiShopRate}
-                    onChange={e => setRoiShopRate(e.target.value)}
-                  />
+              {roiMissingFields.length > 0 && (
+                <div className="rounded-lg bg-red-950/40 border border-red-700/40 px-3 py-2 text-xs text-red-300">
+                  <span className="font-semibold">Missing fields: </span>{roiMissingFields.join(", ")}
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-zinc-400">Monthly Volume (parts/mo)</Label>
-                  <Input
-                    type="number"
-                    className="no-spinners h-7 text-xs"
-                    placeholder="e.g. 500"
-                    value={roiMonthlyVol}
-                    onChange={e => setRoiMonthlyVol(e.target.value)}
-                  />
-                </div>
-              </div>
+              )}
 
-              <button
-                type="button"
-                onClick={calcRoi}
-                className="rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-semibold px-4 py-1.5 transition-colors"
-              >
-                Calculate ROI
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={calcRoi}
+                  className="rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-semibold px-4 py-1.5 transition-colors"
+                >
+                  Calculate ROI
+                </button>
+                <input
+                  type="text"
+                  placeholder="ROI name (e.g. Acme Corp – 6061 AL)"
+                  value={roiName}
+                  onChange={e => setRoiName(e.target.value)}
+                  className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                />
+              </div>
 
               {/* Results */}
               {roiResult && (
                 <div className="space-y-3 pt-1">
                   {/* Hero savings */}
                   <div className="rounded-lg border border-green-600/50 bg-green-950/40 px-4 py-3 text-center">
-                    <div className="text-3xl font-bold text-green-400">${roiResult.savingsPerPart.toFixed(2)}</div>
-                    <div className="text-xs text-green-600 mt-0.5">savings per part</div>
-                    {roiResult.timeSavingsPct > 0 && (
-                      <span className="inline-block mt-1.5 rounded-full bg-green-800/60 border border-green-600/40 text-green-300 text-[10px] font-semibold px-2 py-0.5">
-                        {roiResult.timeSavingsPct.toFixed(1)}% faster cycle time
-                      </span>
-                    )}
+                    <div className="text-3xl font-bold text-green-400">${roiResult.annualSavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                    <div className="text-xs text-green-600 mt-0.5">total annual savings</div>
+                    <div className="text-xs text-zinc-500 mt-0.5">${roiResult.savingsPerPart.toFixed(4)}/{roiLifeMode === "cut_time" ? "min" : roiLifeMode === "linear_in" ? "inch" : "part"} · ${roiResult.monthlySavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo</div>
+                    <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
+                      {roiResult.timeSavingsPct > 0 && (
+                        <span className="rounded-full bg-green-800/60 border border-green-600/40 text-green-300 text-[10px] font-semibold px-2 py-0.5">
+                          {roiResult.timeSavingsPct.toFixed(1)}% faster cycle time
+                        </span>
+                      )}
+                      {roiResult.mrrGainPct > 0 && (
+                        <span className="rounded-full bg-blue-800/60 border border-blue-600/40 text-blue-300 text-[10px] font-semibold px-2 py-0.5">
+                          {roiResult.mrrGainPct.toFixed(1)}% more throughput (MRR)
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* 3 stat boxes */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-lg border border-green-700/40 bg-green-950/30 px-3 py-2 text-center">
-                      <div className="text-lg font-bold text-green-300">${roiResult.monthlySavings.toFixed(2)}</div>
-                      <div className="text-[10px] text-zinc-500">Monthly savings</div>
+                  {/* Reconditioning contribution */}
+                  {roiResult.reconGrinds > 0 && roiResult.reconSavingsPerPart > 0 && (
+                    <div className="rounded-lg border border-orange-700/30 bg-orange-950/20 px-3 py-2 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-orange-300 font-semibold">Reconditioning program</span>
+                        <span className="text-zinc-500 ml-1.5">({roiResult.reconGrinds} regrind{roiResult.reconGrinds > 1 ? "s" : ""})</span>
+                        <p className="text-zinc-500 text-[10px] mt-0.5">50% regrind price × {roiResult.reconGrinds} — same tool, extended lifecycle</p>
+                      </div>
+                      <span className="text-green-400 font-bold shrink-0 ml-3">
+                        +${(roiResult.reconSavingsPerPart * parseFloat(roiAnnualVol)).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
+                      </span>
                     </div>
-                    <div className="rounded-lg border border-green-700/40 bg-green-950/30 px-3 py-2 text-center">
-                      <div className="text-lg font-bold text-green-300">${roiResult.annualSavings.toFixed(2)}</div>
-                      <div className="text-[10px] text-zinc-500">Annual savings</div>
+                  )}
+
+                  {/* Extra savings breakdown if any */}
+                  {roiExtraSavings.some(i => parseFloat(i.annualAmt) > 0) && (
+                    <div className="rounded-lg border border-zinc-700/40 bg-zinc-800/20 px-3 py-2 text-xs space-y-1">
+                      <div className="text-zinc-400 font-semibold mb-1">Additional savings included:</div>
+                      {roiExtraSavings.filter(i => parseFloat(i.annualAmt) > 0).map(item => (
+                        <div key={item.id} className="flex justify-between text-zinc-400">
+                          <span>{item.label || "Unlabeled item"}</span>
+                          <span className={`font-semibold ${item.recurring === false ? "text-amber-400" : "text-green-400"}`}>
+                            +${parseFloat(item.annualAmt).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            {item.recurring === false ? " one-time" : "/yr"}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="rounded-lg border border-green-700/40 bg-green-950/30 px-3 py-2 text-center">
-                      <div className="text-lg font-bold text-green-300">{roiResult.savingsPct.toFixed(1)}%</div>
-                      <div className="text-[10px] text-zinc-500">Cost reduction</div>
+                  )}
+
+                  {/* One-time savings callout */}
+                  {roiResult.oneTimeSavings > 0 && (
+                    <div className="rounded-lg border border-amber-700/30 bg-amber-950/20 px-3 py-2 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-amber-300 font-semibold">One-time savings</span>
+                        <p className="text-zinc-500 text-[10px] mt-0.5">Not included in annual recurring — captured separately</p>
+                      </div>
+                      <span className="text-amber-400 font-bold shrink-0 ml-3">
+                        +${roiResult.oneTimeSavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
                     </div>
-                  </div>
+                  )}
 
                   {/* Comparison table */}
                   <div className="rounded-lg border border-zinc-700/50 overflow-hidden text-xs">
@@ -9468,22 +10074,34 @@ ${stabSection}
                         <tr>
                           <th className="text-left px-3 py-2 bg-zinc-800 text-zinc-400 font-medium"></th>
                           <th className="text-right px-3 py-2 bg-orange-900/40 text-orange-300 font-semibold">Core Cutter</th>
-                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Incumbent Tool</th>
+                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Their Tool</th>
                         </tr>
                       </thead>
                       <tbody>
+                        {(parseFloat(roiCcMrr) > 0 || parseFloat(roiCompMrr) > 0) && (
+                          <tr className="border-t border-zinc-700/40 bg-blue-950/20">
+                            <td className="px-3 py-1.5 text-zinc-400">MRR (in³/min)</td>
+                            <td className="px-3 py-1.5 text-right text-blue-300 font-semibold">{parseFloat(roiCcMrr) > 0 ? parseFloat(roiCcMrr).toFixed(3) : "—"}</td>
+                            <td className="px-3 py-1.5 text-right text-zinc-300">{parseFloat(roiCompMrr) > 0 ? parseFloat(roiCompMrr).toFixed(3) : "—"}</td>
+                          </tr>
+                        )}
                         <tr className="border-t border-zinc-700/40">
-                          <td className="px-3 py-1.5 text-zinc-400">Tool Cost / Part</td>
+                          <td className="px-3 py-1.5 text-zinc-400">
+                            {roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}
+                            {roiResult.reconGrinds > 0 && <span className="block text-[9px] text-orange-400">incl. {roiResult.reconGrinds} regrinds</span>}
+                          </td>
                           <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccToolCost.toFixed(4)}</td>
                           <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compToolCost.toFixed(4)}</td>
                         </tr>
-                        <tr className="border-t border-zinc-700/40 bg-zinc-800/30">
-                          <td className="px-3 py-1.5 text-zinc-400">Machine Cost / Part</td>
-                          <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccMachineCost.toFixed(4)}</td>
-                          <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compMachineCost.toFixed(4)}</td>
-                        </tr>
+                        {roiResult.ccMachineCost > 0 && (
+                          <tr className="border-t border-zinc-700/40 bg-zinc-800/30">
+                            <td className="px-3 py-1.5 text-zinc-400">Changeover Cost / {roiLifeMode === "cut_time" ? "Min" : roiLifeMode === "linear_in" ? "Inch" : "Part"}</td>
+                            <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccMachineCost.toFixed(4)}</td>
+                            <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compMachineCost.toFixed(4)}</td>
+                          </tr>
+                        )}
                         <tr className="border-t border-zinc-700/40">
-                          <td className="px-3 py-1.5 text-zinc-300 font-semibold">Total Cost / Part</td>
+                          <td className="px-3 py-1.5 text-zinc-300 font-semibold">Total Cost / {roiLifeMode === "cut_time" ? "Min" : roiLifeMode === "linear_in" ? "Inch" : "Part"}</td>
                           <td className="px-3 py-1.5 text-right text-orange-400 font-semibold">${roiResult.ccTotalCost.toFixed(4)}</td>
                           <td className="px-3 py-1.5 text-right text-zinc-200 font-semibold">${roiResult.compTotalCost.toFixed(4)}</td>
                         </tr>

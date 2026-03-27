@@ -2400,7 +2400,7 @@ export default function Calculators() {
     @media print{body{padding:0}}</style></head><body>
     <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;border-bottom:2px solid #e55a00;padding-bottom:12px;margin-bottom:20px;gap:12px">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="${window.location.origin}/COREcutCNC_long_dark_logo.png" alt="CoreCutCNC" style="height:48px;width:auto">
+        <img src="${window.location.origin}/CCLogo-long-whiteback%20TRANSPARENT.png" alt="Core Cutter" style="height:48px;width:auto">
       </div>
       <div style="text-align:center;color:#555;font-size:10px">
         <strong style="font-size:13px;color:#111;display:block">Calculator Results</strong>
@@ -2411,6 +2411,11 @@ export default function Calculators() {
       </div>
     </div>
     <div style="columns:2;column-gap:20px">${sections}</div>
+    <div style="margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:10px;color:#999;line-height:1.6">
+      <strong style="color:#555">Starting parameters only — not a guarantee of performance.</strong> These values are calculated references and should be verified against actual setup conditions including machine rigidity, material lot variation, and tooling condition. Always begin conservatively.<br>
+      ════════════════════════════════════════<br>
+      <strong>© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.</strong> &nbsp;|&nbsp; CoreCutCNC &nbsp;|&nbsp; corecutcnc.com
+    </div>
     <script>window.onload=()=>{window.print()}</script></body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }

@@ -111,6 +111,13 @@ export async function registerRoutes(
     console.log("[DB] roi_comparisons table ready");
   } catch (e: any) { console.warn("[DB] roi_comparisons migration failed:", e?.message); }
 
+  // Add roi_name and comp_brand columns if missing
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`ALTER TABLE roi_comparisons ADD COLUMN IF NOT EXISTS roi_name TEXT`);
+    await pool.query(`ALTER TABLE roi_comparisons ADD COLUMN IF NOT EXISTS comp_brand TEXT`);
+  } catch (e: any) { console.warn("[DB] roi_comparisons alter failed:", e?.message); }
+
   // ── Toolbox tables ────────────────────────────────────────────────────────
   try {
     const { pool } = await import("./db");
@@ -986,23 +993,31 @@ export async function registerRoutes(
       const curSku   = curResult.rows[0];
       const curScore = curSku ? scoreSku(curSku) : 0;
 
-      // ── Priority 1: Same LOC + same flutes, better geometry/coating ──────────
-      // Prefer exact LOC match — avoids recommending a short-LOC CB for a long-reach job
-      const sameLocSameFlute = peers.rows.filter((r: any) =>
-        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes
-      );
+      // When setup is already deflecting, flute count upgrade is as important as coating/geometry.
+      // Merge same-flute and next-flute candidates into one pool and apply a stability bonus
+      // to flute-count upgrades so they can beat a coating-only variant.
+      const stabOver = Number(current_stability_pct ?? 0) >= 100;
+      const STAB_FLUTE_BONUS = 2; // enough to beat a coating-only upgrade (max coat score = 3)
+
+      // ── Priority 1: Same LOC — same flutes OR (if deflecting) next flute up ──
+      const nextFlutes = curFlutes + 1;
+      const sameLocCandidates = peers.rows.filter((r: any) => {
+        const locMatch = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
+        const fluteMatch = Number(r.flutes) === curFlutes || (stabOver && Number(r.flutes) === nextFlutes);
+        return locMatch && fluteMatch;
+      });
       let bestSku: any = null;
       let bestScore = -1;
-      for (const row of sameLocSameFlute) {
-        const sc = scoreSku(row);
+      for (const row of sameLocCandidates) {
+        let sc = scoreSku(row);
+        // Stability bonus: flute upgrade gets +2 when setup is deflecting
+        if (stabOver && Number(row.flutes) === nextFlutes) sc += STAB_FLUTE_BONUS;
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
       if (bestSku && bestScore > curScore) {
-        // Found a same-LOC same-flute geometry/coating upgrade — use it
+        // Found a same-LOC upgrade (coating, geometry, or flute count when deflecting)
       } else {
         // ── Priority 1.5: Next diameter up, same series ───────────────────────
-        // Prefer stepping up in size within the same series (e.g. 505221→605221)
-        // before recommending a different series at the same diameter.
         const curSeries = (curSku?.tool_series ?? "").toLowerCase();
         const STD_DIAMETERS = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.5625, 0.625, 0.6875, 0.750, 0.875, 1.000, 1.25, 1.5];
         const nextDia = STD_DIAMETERS.find(d => d > dia + 0.001) ?? null;
@@ -1026,9 +1041,7 @@ export async function registerRoutes(
           }
         }
         if (!bestSku) {
-          // ── Priority 2: Same LOC, next flute count up ───────────────────────
-          // Only step up by 1 flute (e.g. 5→6), same LOC
-          const nextFlutes = curFlutes + 1;
+          // ── Priority 2: Same LOC, next flute count up (non-deflecting path) ──
           const sameLocNextFlute = peers.rows.filter((r: any) =>
             Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes
           );
@@ -1037,7 +1050,6 @@ export async function registerRoutes(
             const sc = scoreSku(row);
             if (sc > bestScore) { bestScore = sc; bestSku = row; }
           }
-          // Flute count upgrade: only surface if score ≥ curScore (same or better geometry)
           if (!bestSku || bestScore < curScore) {
             bestSku = null; bestScore = -1;
           }
@@ -1064,7 +1076,8 @@ export async function registerRoutes(
         const smallTaper  = taper === "CAT30" || taper === "BT30" || taper === "R8";
         const shallowDoc  = docXd > 0 && docXd < 0.5;
         const lowWoc      = wocPct > 0 && wocPct < 8;
-        if (weakHolder || weakWh || weakMachine || smallTaper || shallowDoc || lowWoc) {
+        const deflOver    = Number(current_stability_pct ?? 0) >= 100; // already deflecting — VXR increases force, makes it worse
+        if (weakHolder || weakWh || weakMachine || smallTaper || shallowDoc || lowWoc || deflOver) {
           // Fall back to best non-VXR peer at same LOC + same flutes
           const nonVxrPeers = sameLocSameFlute.filter((r: any) => !/^vxr/i.test(r.series ?? ""));
           bestSku = null; bestScore = -1;
@@ -1791,45 +1804,99 @@ export async function registerRoutes(
   app.post("/api/roi", async (req, res) => {
     try {
       const {
+        action,
         userEmail, userName, material, operation, toolDia, feedIpm,
-        ccEdp, ccToolPrice, ccPartsPer, ccTimeInCut,
-        compEdp, compPrice, compPartsPer, compTimeInCut,
-        shopRate, monthlyVolume,
-        savingsPerPart, monthlySavings, annualSavings, savingsPct,
+        ccEdp, ccToolPrice, ccPartsPer, ccTimeInCut, ccMrr,
+        compEdp, compBrand, compPrice, compPartsPer, compTimeInCut, compMrr,
+        shopRate, annualVolume,
+        savingsPerPart, monthlySavings, annualSavings, savingsPct, mrrGainPct,
+        reconGrinds, reconSavingsPerPart, oneTimeSavings, roiName,
       } = (req.body ?? {}) as {
+        action?: string;
         userEmail?: string; userName?: string; material?: string; operation?: string;
         toolDia?: number; feedIpm?: number; ccEdp?: string; ccToolPrice?: number;
-        ccPartsPer?: number; ccTimeInCut?: number; compEdp?: string; compPrice?: number;
-        compPartsPer?: number; compTimeInCut?: number; shopRate?: number; monthlyVolume?: number;
-        savingsPerPart?: number; monthlySavings?: number; annualSavings?: number; savingsPct?: number;
+        ccPartsPer?: number; ccTimeInCut?: number; ccMrr?: number;
+        compEdp?: string; compBrand?: string; compPrice?: number; compPartsPer?: number; compTimeInCut?: number; compMrr?: number;
+        shopRate?: number; annualVolume?: number;
+        savingsPerPart?: number; monthlySavings?: number; annualSavings?: number; savingsPct?: number; mrrGainPct?: number;
+        reconGrinds?: number; reconSavingsPerPart?: number; oneTimeSavings?: number; roiName?: string;
       };
 
       const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
       const geo = await geoFromIp(clientIp);
 
-      // Insert into DB
+      // Upsert into DB — one row per (email + CC EDP + material), updated on every Calculate click
       try {
         const { pool } = await import("./db");
+        const isEmail = action === "email";
         await pool.query(
           `INSERT INTO roi_comparisons (
             user_email, user_name, material, operation, tool_dia, feed_ipm,
-            cc_edp, cc_tool_price, cc_parts_per_tool, cc_time_in_cut,
-            comp_edp, comp_price, comp_parts_per_tool, comp_time_in_cut,
-            shop_rate, monthly_volume, savings_per_part, monthly_savings, annual_savings, savings_pct,
-            city, region, country, ip
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+            cc_edp, cc_tool_price, cc_parts_per_tool, cc_time_in_cut, cc_mrr,
+            comp_edp, comp_brand, comp_price, comp_parts_per_tool, comp_time_in_cut, comp_mrr,
+            shop_rate, annual_volume, monthly_volume,
+            savings_per_part, monthly_savings, annual_savings, savings_pct, mrr_gain_pct,
+            recon_grinds, recon_savings_per_part, one_time_savings,
+            roi_name,
+            city, region, country, ip, updated_at,
+            emailed_at
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,
+                    $20,$21,$22,$23,$24,$25,$26,$27,$28,
+                    $29,$30,$31,$32,now(),
+                    ${isEmail ? "now()" : "NULL"})
+          ON CONFLICT (user_email, cc_edp, material)
+          WHERE user_email IS NOT NULL AND cc_edp IS NOT NULL AND material IS NOT NULL
+          DO UPDATE SET
+            user_name = EXCLUDED.user_name,
+            operation = EXCLUDED.operation,
+            tool_dia = EXCLUDED.tool_dia,
+            feed_ipm = EXCLUDED.feed_ipm,
+            cc_tool_price = EXCLUDED.cc_tool_price,
+            cc_parts_per_tool = EXCLUDED.cc_parts_per_tool,
+            cc_time_in_cut = EXCLUDED.cc_time_in_cut,
+            cc_mrr = EXCLUDED.cc_mrr,
+            comp_edp = EXCLUDED.comp_edp,
+            comp_brand = EXCLUDED.comp_brand,
+            comp_price = EXCLUDED.comp_price,
+            comp_parts_per_tool = EXCLUDED.comp_parts_per_tool,
+            comp_time_in_cut = EXCLUDED.comp_time_in_cut,
+            comp_mrr = EXCLUDED.comp_mrr,
+            shop_rate = EXCLUDED.shop_rate,
+            annual_volume = EXCLUDED.annual_volume,
+            monthly_volume = EXCLUDED.annual_volume,
+            savings_per_part = EXCLUDED.savings_per_part,
+            monthly_savings = EXCLUDED.monthly_savings,
+            annual_savings = EXCLUDED.annual_savings,
+            savings_pct = EXCLUDED.savings_pct,
+            mrr_gain_pct = EXCLUDED.mrr_gain_pct,
+            recon_grinds = EXCLUDED.recon_grinds,
+            recon_savings_per_part = EXCLUDED.recon_savings_per_part,
+            one_time_savings = EXCLUDED.one_time_savings,
+            roi_name = EXCLUDED.roi_name,
+            city = EXCLUDED.city,
+            region = EXCLUDED.region,
+            country = EXCLUDED.country,
+            ip = EXCLUDED.ip,
+            updated_at = now()
+            ${isEmail ? ", emailed_at = COALESCE(roi_comparisons.emailed_at, now())" : ""}`,
           [
             userEmail || null, userName || null, material || null, operation || null,
-            toolDia ?? null, feedIpm ?? null, ccEdp || null, ccToolPrice ?? null,
-            ccPartsPer ?? null, ccTimeInCut ?? null, compEdp || null, compPrice ?? null,
-            compPartsPer ?? null, compTimeInCut ?? null, shopRate ?? null, monthlyVolume ?? null,
-            savingsPerPart ?? null, monthlySavings ?? null, annualSavings ?? null, savingsPct ?? null,
+            toolDia ?? null, feedIpm ?? null,
+            ccEdp || null, ccToolPrice ?? null, ccPartsPer ?? null, ccTimeInCut ?? null, ccMrr ?? null,
+            compEdp || null, compBrand || null, compPrice ?? null, compPartsPer ?? null, compTimeInCut ?? null, compMrr ?? null,
+            shopRate ?? null, annualVolume ?? null,
+            savingsPerPart ?? null, monthlySavings ?? null, annualSavings ?? null, savingsPct ?? null, mrrGainPct ?? null,
+            reconGrinds ?? null, reconSavingsPerPart ?? null, oneTimeSavings ?? null,
+            roiName || null,
             geo.city, geo.region, geo.country, clientIp,
           ]
         );
       } catch (dbErr: any) {
-        console.warn("[ROI] DB insert failed:", dbErr?.message);
+        console.warn("[ROI] DB upsert failed:", dbErr?.message);
       }
+
+      // If this is just a calculate save (not email), return early
+      if (action !== "email") return res.json({ ok: true });
 
       // Send email
       const smtpUser = process.env.SMTP_USER || "";

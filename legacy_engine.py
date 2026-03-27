@@ -5114,17 +5114,18 @@ def run(payload=None):
     # 4) Reduce WOC — conventional: meaningful above ~15%; HEM: always relevant (trade WOC ↓ for DOC ↑)
     _woc_now = float(data.get("woc_pct", 0) or 0)
     _doc_xd_now = (_doc_now / _d) if _d > 0 else 0.0
-    if _is_hem and _defl > _dlim:
+    if _is_hem and _defl > _dlim and _woc_now > 3.0:
         # In HEM the user is already at low WOC — dropping it further reduces radial force and flex.
+        # Skip if already at/below 3% floor — below that the tool rubs and no suggestion makes sense.
         # If they haven't hit the HEM DOC cap, suggest stepping DOC up to offset the MRR loss.
         _hem_mat = get_material_group(str(data.get("material", "") or ""))
         _hem_doc_cap = {"Aluminum": 3.0, "Non-Ferrous": 3.0,
-                        "Inconel": 2.0, "Titanium": 2.0, "Stainless": 2.5,
+                        "Inconel": 3.0, "Titanium": 3.0, "Stainless": 2.5,
                         "Hardened": 1.5}.get(_hem_mat, 2.5)
         _hem_loc = float(data.get("loc", 0) or 0)
         if _hem_loc > 0 and _d > 0:
             _hem_doc_cap = min(_hem_doc_cap, _hem_loc / _d)
-        _woc_target_hem = max(1.0, round(_woc_now * 0.6, 1))
+        _woc_target_hem = max(3.0, round(_woc_now * 0.6, 1))  # 3% floor — below this, tool rubs in superalloys
         _woc_ratio_hem  = _woc_target_hem / _woc_now if _woc_now > 0 else 1.0
         # DOC needed to keep MRR neutral (WOC × DOC = const)
         _doc_mrr_neutral = _doc_xd_now / _woc_ratio_hem if _woc_ratio_hem > 0 else _doc_xd_now
