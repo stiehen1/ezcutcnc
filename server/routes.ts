@@ -1049,7 +1049,7 @@ export async function registerRoutes(
       const isCircInterp = mode === "circ_interp";
       const slotAlum     = isSlot && isoCategory === "N";
       const slotTough    = isSlot && (isoCategory === "M" || isoCategory === "S" || isoCategory === "H");
-      const cbOk  = (docXd >= 1.0 && (mode === "hem" || wocPct >= 8)) || (isSlot);
+      const cbOk  = (docXd >= 1.0 && (mode === "hem" || mode === "trochoidal" || wocPct >= 8)) || (isSlot);
       const vrxOk = (docXd >= 1.0 && wocPct >= 12) || (slotTough && docXd >= 0.5);
 
       const scoreGeometry = (g: string | null): number => {
