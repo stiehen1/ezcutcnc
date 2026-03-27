@@ -1586,7 +1586,7 @@ export async function registerRoutes(
       await pool.query(
         `INSERT INTO leads (email, operation, name, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT DO NOTHING`,
-        [email.toLowerCase().trim(), "registration", name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
+        [email.toLowerCase().trim(), "tool_request", name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
       );
       res.json({ ok: true });
     } catch (err: any) {
