@@ -1003,26 +1003,7 @@ export async function registerRoutes(
       const docXd   = Number(payload.doc_xd ?? 0);
       const matKey  = String(payload.material ?? "");
 
-      // Peers: same diameter, exclude chamfer mills, not current EDP, not blanks
-      // For surfacing: restrict to ball-nose and corner-radius (bull-nose) tools only
-      const isSurfacing = mode === "surfacing";
-      const curLoc = Number(payload.loc ?? 0);
-      const peers = await pool.query(
-        `SELECT s.* FROM skus s
-         JOIN sku_uploads u ON s.upload_id = u.id
-         WHERE u.is_current = TRUE
-           AND ABS(s.cutting_diameter_in - $1) < 0.001
-           AND LOWER(s.edp) != LOWER($2)
-           AND s.edp NOT ILIKE '%-BLK'
-           AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
-           ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
-           ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
-         ORDER BY s.edp`,
-        [dia, current_edp]
-      );
-      if (peers.rows.length === 0) return res.json({ found: false });
-
-      // ISO category from material key (simple map — N/P/M/K/S/H)
+      // ISO category needed before peer query (used in peer filter for slot/aluminum)
       const ISO_MAP: Record<string, string> = {
         aluminum_wrought: "N", aluminum_cast: "N",
         steel_mild: "P", steel_free: "P", steel_alloy: "P",
@@ -1037,6 +1018,26 @@ export async function registerRoutes(
         tool_steel_s7: "H", tool_steel_d2: "H",
       };
       const isoCategory = ISO_MAP[matKey] ?? "P";
+
+      // Peers: same diameter, exclude chamfer mills, not current EDP, not blanks
+      // For surfacing: restrict to ball-nose and corner-radius (bull-nose) tools only
+      const isSurfacing = mode === "surfacing";
+      const curLoc = Number(payload.loc ?? 0);
+      const peers = await pool.query(
+        `SELECT s.* FROM skus s
+         JOIN sku_uploads u ON s.upload_id = u.id
+         WHERE u.is_current = TRUE
+           AND ABS(s.cutting_diameter_in - $1) < 0.001
+           AND LOWER(s.edp) != LOWER($2)
+           AND s.edp NOT ILIKE '%-BLK'
+           AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+           ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
+           ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
+           ${mode === "slot" && isoCategory === "N" ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)` : ""}
+         ORDER BY s.edp`,
+        [dia, current_edp]
+      );
+      if (peers.rows.length === 0) return res.json({ found: false });
 
       // Scoring helpers
       // Slotting is always 100% WOC — CB/VRX always valid regardless of DOC (chip breaking aids evacuation)
