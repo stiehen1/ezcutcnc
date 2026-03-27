@@ -190,10 +190,11 @@ export async function registerRoutes(
       if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {
         return { city: null, region: null, country: null, postal: null };
       }
-      const r = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(`https://ipwho.is/${ip}`, { signal: AbortSignal.timeout(3000) });
       if (!r.ok) return { city: null, region: null, country: null, postal: null };
       const d = await r.json() as any;
-      return { city: d.city || null, region: d.region || null, country: d.country_name || null, postal: d.postal || null };
+      if (!d.success) return { city: null, region: null, country: null, postal: null };
+      return { city: d.city || null, region: d.region || null, country: d.country || null, postal: d.postal || null };
     } catch {
       return { city: null, region: null, country: null, postal: null };
     }
