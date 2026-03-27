@@ -1016,6 +1016,7 @@ export async function registerRoutes(
            AND s.edp NOT ILIKE '%-BLK'
            AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
            ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
+           ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
          ORDER BY s.edp`,
         [dia, current_edp]
       );
@@ -1089,14 +1090,17 @@ export async function registerRoutes(
       // When setup is already deflecting, flute count upgrade is as important as coating/geometry.
       // Merge same-flute and next-flute candidates into one pool and apply a stability bonus
       // to flute-count upgrades so they can beat a coating-only variant.
+      // For circ_interp: always include next flute up — more flutes = smoother bore wall.
       const stabOver = Number(current_stability_pct ?? 0) >= 100;
+      const isCircInterp = mode === "circ_interp";
       const STAB_FLUTE_BONUS = 2; // enough to beat a coating-only upgrade (max coat score = 3)
+      const CIRC_FLUTE_BONUS = 2; // same bonus for circ_interp — more flutes always better for bore finish
 
-      // ── Priority 1: Same LOC — same flutes OR (if deflecting) next flute up ──
+      // ── Priority 1: Same LOC — same flutes OR (if deflecting / circ_interp) next flute up ──
       const nextFlutes = curFlutes + 1;
       const sameLocCandidates = peers.rows.filter((r: any) => {
         const locMatch = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
-        const fluteMatch = Number(r.flutes) === curFlutes || (stabOver && Number(r.flutes) === nextFlutes);
+        const fluteMatch = Number(r.flutes) === curFlutes || ((stabOver || isCircInterp) && Number(r.flutes) === nextFlutes);
         return locMatch && fluteMatch;
       });
       let bestSku: any = null;
@@ -1105,6 +1109,8 @@ export async function registerRoutes(
         let sc = scoreSku(row);
         // Stability bonus: flute upgrade gets +2 when setup is deflecting
         if (stabOver && Number(row.flutes) === nextFlutes) sc += STAB_FLUTE_BONUS;
+        // Circ interp bonus: more flutes = smoother bore wall (applies even when stable)
+        else if (isCircInterp && Number(row.flutes) === nextFlutes) sc += CIRC_FLUTE_BONUS;
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
       if (bestSku && bestScore > curScore) {
