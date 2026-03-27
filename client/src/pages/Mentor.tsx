@@ -1785,22 +1785,13 @@ export default function Mentor() {
     setSkuDropdownOpen(false);
     setSkuResults([]);
     setSkuLocked(true);
-    // Re-fill WOC/DOC from preset when HEM, trochoidal, or traditional is already selected
+    // Leave WOC/DOC blank on SKU select — user should complete setup first, then hit Optimal
     const _skuDia = Number(sku.cutting_diameter_in);
     const _skuLoc = Number(sku.loc_in);
-    const _curMode = form.mode;
-    const _optParams = (_curMode === "hem" || _curMode === "trochoidal" || _curMode === "traditional")
-      ? computeOptimalCutParams(_curMode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc, form.geometry)
-      : null;
-    if (_optParams) {
-      setDocText((_optParams.docXd * _skuDia).toFixed(3));
-      setDocPreset(_optParams.docKey);
-      setWocText((_optParams.wocPct / 100 * _skuDia).toFixed(4));
-      setWocPreset(_optParams.wocKey);
-    } else {
-      setDocText("");
-      setDocPreset(null);
-    }
+    setWocText("");
+    setWocPreset(null);
+    setDocText("");
+    setDocPreset(null);
     setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
     setLocText(Number(sku.loc_in).toFixed(3));
     setStickoutText(defaultStickout.toFixed(3));
@@ -4909,7 +4900,7 @@ ${stabSection}
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="e.g. .050 or 5%"
+                  placeholder="set after setup"
                   className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
                   value={wocText}
                   onChange={(e) => setWocText(e.target.value)}
@@ -5044,7 +5035,7 @@ ${stabSection}
                       inputMode="decimal"
                       className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
                       value={docText}
-                      placeholder={form.loc > 0 ? form.loc.toFixed(3) : "0.000"}
+                      placeholder="set after setup"
                       onChange={(e) => setDocText(e.target.value)}
                       onBlur={() => {
                         const n = parseFloat(docText);
