@@ -2,8 +2,6 @@
 
 A full-stack machining advisor for CNC shops and sales engineers. Calculates speeds, feeds, depths of cut, cutting forces, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, threadmilling, keyseat, and dovetail operations. Deployed at [corecutcnc.com](https://corecutcnc.com).
 
-Two access modes: **Customer mode** (requires an EDP# or Core Cutter print PDF) and **Engineering mode** (password-gated, unrestricted parameter input).
-
 Each operation includes a **Pro Tips panel** (how to use the app) and a collapsible **Machining Tips & Tricks accordion** (shop-floor best practices per operation type).
 
 ---
@@ -505,10 +503,10 @@ Appears in HEM and Traditional modes. Sets WOC and DOC to physics-optimal values
 
 Two-tier system:
 
-1. **Allowlist** — specific emails granted Engineering mode access (managed in `/admin`)
+1. **Allowlist** — specific emails granted access (managed in `/admin`)
 2. **Domain blocklist** — blocks entire email domains (e.g., competitor domains)
 
-OTP email verification via SMTP (Brevo) for Toolbox login. Engineering mode password set via `ENG_PASSWORD` env var.
+OTP email verification via SMTP (Brevo) for Toolbox login.
 
 ---
 
@@ -517,7 +515,6 @@ OTP email verification via SMTP (Brevo) for Toolbox login. Engineering mode pass
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | Neon PostgreSQL connection string |
-| `ENG_PASSWORD` | Engineering mode gate password |
 | `SMTP_USER` | SMTP username (Brevo) |
 | `SMTP_PASS` | SMTP password |
 | `SMTP_HOST` | SMTP host (default: `smtp-relay.brevo.com`) |
