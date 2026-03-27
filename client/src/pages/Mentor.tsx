@@ -9098,13 +9098,26 @@ ${stabSection}
         <Card className="rounded-none border-0 border-b border-zinc-700/40">
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center justify-between gap-4">
-              {/* Score label + bar */}
-              <div className="flex flex-col items-start gap-1.5 min-w-[110px]">
+              {/* Score number + label */}
+              <div className="flex flex-col items-start gap-0.5 min-w-[120px]">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Setup Readiness</span>
-                <span className={`text-sm font-bold leading-tight ${siColor}`}>{siLabel}</span>
-                <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-4xl font-black leading-none ${siColor}`}>{si}</span>
+                  <span className="text-zinc-600 text-base font-light">/100</span>
+                </div>
+                <span className={`text-[11px] font-semibold ${siColor}`}>{siLabel}</span>
+                <div className="w-full h-1 rounded-full bg-zinc-800 overflow-hidden mt-1">
                   <div className={`h-full rounded-full ${barColor}`} style={{ width: `${si}%` }} />
                 </div>
+                {/* Deflection % vs limit */}
+                {stability?.deflection_pct != null && (
+                  <div className="mt-1.5 text-[10px] text-zinc-500 leading-snug">
+                    Tool flex: <span className={`font-semibold ${deflPct < 100 ? "text-emerald-400" : deflPct < 175 ? "text-amber-400" : "text-orange-400"}`}>{deflPct.toFixed(0)}%</span> of limit
+                    {deflPct < 100
+                      ? <span className="text-zinc-600"> — target &lt;20%</span>
+                      : <span className={deflPct < 175 ? " text-amber-500" : " text-orange-500"}> — target &lt;20%</span>}
+                  </div>
+                )}
               </div>
               {/* Sub-scores */}
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
@@ -9170,8 +9183,8 @@ ${stabSection}
                             style={{ width: `${score}%` }}
                           />
                         </div>
-                        <span className={`text-right font-semibold text-xs w-14 ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-orange-400"}`}>
-                          {score >= 65 ? "Good" : score >= 35 ? "Fair" : "Low"}
+                        <span className={`text-right font-semibold text-xs w-16 ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-orange-400"}`}>
+                          {score >= 65 ? "Good" : score >= 35 ? "Fair" : "Low"} <span className="font-normal opacity-60">{score}</span>
                         </span>
                       </>
                     )}
@@ -9180,7 +9193,7 @@ ${stabSection}
                 })()}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">How ready this setup is to cut well. Green across all four categories is the goal — most successful production setups keep Tool Flex well under 20% of the deflection limit. Tap any label for details.</p>
+            <p className="text-[10px] text-muted-foreground mt-2">80–100 = excellent · 65–79 = good · 35–64 = fair · below 35 = needs attention. Tool Flex drives the score most — aim to keep it below 20% of the limit. Tap any label for details.</p>
           </CardContent>
         </Card>
         );
