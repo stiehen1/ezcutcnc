@@ -1785,11 +1785,11 @@ export default function Mentor() {
     setSkuDropdownOpen(false);
     setSkuResults([]);
     setSkuLocked(true);
-    // Re-fill DOC from preset when HEM/trochoidal is already selected
+    // Re-fill WOC/DOC from preset when HEM, trochoidal, or traditional is already selected
     const _skuDia = Number(sku.cutting_diameter_in);
     const _skuLoc = Number(sku.loc_in);
     const _curMode = form.mode;
-    const _optParams = (_curMode === "hem" || _curMode === "trochoidal")
+    const _optParams = (_curMode === "hem" || _curMode === "trochoidal" || _curMode === "traditional")
       ? computeOptimalCutParams(_curMode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc, form.geometry)
       : null;
     if (_optParams) {
