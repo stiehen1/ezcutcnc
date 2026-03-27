@@ -6690,10 +6690,10 @@ ${stabSection}
               ? Math.min(2 * Math.sqrt(Math.max(0, R * scallop_in - scallop_in * scallop_in)), form.tool_dia)
               : 0;
             const SURF_FINISH_PRESETS = [
-              { label: "Rough",    ra: 500,  hint: "Visible cusps — for semi-finish stock removal" },
-              { label: "Semi",     ra: 125,  hint: "Light cusps — leaves ~0.001 stock for finish pass" },
-              { label: "Finish",   ra: 32,   hint: "Smooth — typical mold/die finish pass" },
-              { label: "Fine",     ra: 16,   hint: "Near-mirror — tight stepover, slow but clean" },
+              { label: "Rough",    ra: 500,  apXD: 0.30, hint: "Visible cusps — fast stock removal, semi-finish pass follows" },
+              { label: "Semi",     ra: 125,  apXD: 0.20, hint: "Light cusps — leaves ~0.001\" for finish pass" },
+              { label: "Finish",   ra: 32,   apXD: 0.10, hint: "Smooth — typical mold/die finish pass" },
+              { label: "Fine",     ra: 16,   apXD: 0.05, hint: "Near-mirror — tight stepover, slow but clean" },
             ];
             return (
               <div className="space-y-4">
@@ -6703,21 +6703,28 @@ ${stabSection}
                     Surface Finish Target
                   </FieldLabel>
                   <div className="flex gap-1.5">
-                    {SURF_FINISH_PRESETS.map(({ label, ra, hint }) => {
+                    {SURF_FINISH_PRESETS.map(({ label, ra, apXD, hint }) => {
                       const active = form.target_ra_uin === ra;
+                      const apIn = form.tool_dia > 0 ? apXD * form.tool_dia : 0;
                       return (
                         <button
                           key={label}
                           type="button"
                           title={hint}
-                          onClick={() => setForm((p) => ({ ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: (ra * 4) / 1_000_000 }))}
+                          onClick={() => {
+                            const sc = (ra * 4) / 1_000_000;
+                            const newAp = form.tool_dia > 0 ? apXD * form.tool_dia : form.surfacing_ap_in;
+                            setForm((p) => ({ ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: sc, surfacing_ap_in: newAp }));
+                            if (newAp > 0) setSurfApText(newAp.toFixed(4));
+                          }}
                           className="flex-1 py-1.5 rounded border text-xs font-semibold transition-colors leading-tight"
                           style={active
                             ? { background: "#f97316", borderColor: "#f97316", color: "#000" }
                             : { background: "transparent", borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.6)" }}
                         >
                           {label}
-                          <div className="text-[9px] font-normal opacity-80">{ra} µin</div>
+                          <div className="text-[9px] font-normal opacity-80">{ra} µin Ra</div>
+                          {form.tool_dia > 0 && <div className="text-[9px] font-normal opacity-70">ap {(apXD * 100).toFixed(0)}%D</div>}
                         </button>
                       );
                     })}
@@ -6758,8 +6765,8 @@ ${stabSection}
                 <div className="flex gap-3 items-start">
                   {/* Axial pass depth */}
                   <div className="flex-1 min-w-0 space-y-2">
-                    <FieldLabel hint="Axial depth per contouring pass. For ball-nose finishing typically 0.020–0.100 in. Used to compute effective cutting diameter, MRR, and forces.">
-                      Axial Pass Depth <span className="font-normal text-zinc-500">(ap, in)</span>
+                    <FieldLabel hint="Axial depth per contouring pass — auto-set by the quality preset above, override if needed. Used to compute effective cutting diameter, MRR, and forces.">
+                      Axial Pass Depth <span className="font-normal text-zinc-500">(ap — override)</span>
                     </FieldLabel>
                     <input
                       type="text"
