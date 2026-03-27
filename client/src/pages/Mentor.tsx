@@ -1246,7 +1246,7 @@ export default function Mentor() {
     rpm_util_pct: 0.95,
     drill_feed_util_pct: 0.90,
 
-    woc_pct: 10, // default = HEM med (10%)
+    woc_pct: 0,
     doc_xd: 0,
 
     machine_hp: 0,
@@ -1532,7 +1532,7 @@ export default function Mentor() {
     slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
     circ_interp: { low: 0.05, med: 0.10, high: 0.25 },
   };
-  const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
+  const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>(null);
   const [docPreset, setDocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
 
   // Local text state for WOC/DOC — WOC shows actual inches (woc_pct/100 × tool_dia)
@@ -1805,10 +1805,9 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
-      // Re-fill doc_xd: for HEM always use high preset; otherwise preserve if same dia, reset if dia changed.
-      doc_xd: _optParams ? _optParams.docXd
-        : Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
-      woc_pct: _optParams ? _optParams.wocPct : p.woc_pct,
+      // WOC/DOC left blank — user sets via Optimal button after completing setup.
+      woc_pct: 0,
+      doc_xd: 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -1848,10 +1847,11 @@ export default function Mentor() {
     setForm(INITIAL_FORM);
     setIsoCategory("P");
     setOperation("milling");
-    setWocPreset("med");
-    setDocPreset("med");
+    setWocPreset(null);
+    setDocPreset(null);
     setWocText("");
     setDocText("");
+    setStickoutText("");
     setCrText("");
     setToolDiaText("");
     setLocText("");
@@ -6559,6 +6559,7 @@ ${stabSection}
                   type="text"
                   inputMode="decimal"
                   className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                  placeholder="set after setup"
                   value={docText}
                   onChange={(e) => setDocText(e.target.value)}
                   onBlur={() => {

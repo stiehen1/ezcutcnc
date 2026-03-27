@@ -1063,6 +1063,9 @@ export async function registerRoutes(
       // ── VXR rigidity gate ─────────────────────────────────────────────────
       // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces.
       // If VXR is blocked, fall back to best non-VXR peer rather than returning nothing.
+      const sameLocSameFlute = peers.rows.filter((r: any) =>
+        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes
+      );
       const isVxr = /^vxr/i.test(bestSku.series ?? "");
       let vxrRigidityNote: string | null = null;
       if (isVxr) {
@@ -1952,8 +1955,8 @@ export async function registerRoutes(
           <td style="padding:6px 10px;color:#f3f4f6;">$${fmtD(shopRate)}/hr</td>
         </tr>
         <tr style="background:#262626;">
-          <td style="padding:6px 10px;color:#9ca3af;">Monthly Volume</td>
-          <td style="padding:6px 10px;color:#f3f4f6;">${monthlyVolume ?? "—"} parts</td>
+          <td style="padding:6px 10px;color:#9ca3af;">Annual Volume</td>
+          <td style="padding:6px 10px;color:#f3f4f6;">${annualVolume ?? "—"} parts</td>
         </tr>
       </table>
 
