@@ -1372,6 +1372,7 @@ export default function Mentor() {
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
+  const [stickoutViolation, setStickoutViolation] = React.useState<string | null>(null);
   const [tmGcodeExpanded, setTmGcodeExpanded] = React.useState(false);
   const [modeTipsOpen, setModeTipsOpen] = React.useState(false);
 
@@ -4533,15 +4534,24 @@ ${stabSection}
                 })()}>{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
                 <Input type="text" inputMode="decimal" className="no-spinners" placeholder="e.g. 2.000"
                   value={stickoutText}
-                  onChange={e => setStickoutText(e.target.value)}
+                  onChange={e => { setStickoutText(e.target.value); setStickoutViolation(null); }}
                   onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
                   onBlur={() => {
                     const n = parseDim(stickoutText);
-                    const val = metric ? n / 25.4 : n;
-                    if (Number.isFinite(val) && val > 0) { setForm(p => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3)); }
-                    else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+                    let val = metric ? n / 25.4 : n;
+                    if (Number.isFinite(val) && val > 0) {
+                      const _fw = (form as any).flute_wash ?? 0;
+                      const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                      if (_minSo > 0 && val < _minSo) {
+                        val = _minSo;
+                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
+                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                      } else { setStickoutViolation(null); }
+                      setForm(p => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                    } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
                   }}
                 />
+                {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
               </div>
             </div>
           )}
@@ -4887,15 +4897,24 @@ ${stabSection}
                   className="no-spinners"
                   placeholder="e.g. 1.500"
                   value={stickoutText}
-                  onChange={(e) => setStickoutText(e.target.value)}
+                  onChange={(e) => { setStickoutText(e.target.value); setStickoutViolation(null); }}
                   onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
                   onBlur={() => {
                     const n = parseDim(stickoutText);
-                    const val = metric ? n / 25.4 : n;
-                    if (Number.isFinite(val) && val > 0) { setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3)); }
-                    else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+                    let val = metric ? n / 25.4 : n;
+                    if (Number.isFinite(val) && val > 0) {
+                      const _fw = (form as any).flute_wash ?? 0;
+                      const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                      if (_minSo > 0 && val < _minSo) {
+                        val = _minSo;
+                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
+                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                      } else { setStickoutViolation(null); }
+                      setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                    } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
                   }}
                 />
+                {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
               </div>
             </div>
           </div>}
@@ -9081,286 +9100,190 @@ ${stabSection}
       {operation === "milling" && (stabilityIndex || stability) && (
       <div className="rounded-2xl border border-zinc-700/50 overflow-hidden">
 
-      {/* MACHINING STABILITY INDEX */}
-      {stabilityIndex && (() => {
-        const si = stabilityIndex.overall;
-        const deflPct = stability?.deflection_pct ?? 0;
-        const siLabel = deflPct >= 175 ? "Some Adjustments Recommended"
-          : deflPct >= 100 ? "Worth a Second Look"
-          : si >= 80 ? "Excellent Setup" : si >= 65 ? "Looking Good" : si >= 50 ? "Decent — Room to Improve" : si >= 35 ? "A Few Things to Review" : "Several Changes Suggested";
-        const siColor = deflPct >= 175 ? "text-orange-400"
-          : deflPct >= 100 ? "text-amber-400"
-          : si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-orange-400";
-        const barColor = deflPct >= 175 ? "bg-orange-500"
-          : deflPct >= 100 ? "bg-amber-400"
-          : si >= 65 ? "bg-emerald-500" : si >= 35 ? "bg-amber-400" : "bg-orange-500";
+      {/* SETUP READINESS — unified section */}
+      {stabilityIndex && stability && (() => {
+        const si      = stabilityIndex.overall;
+        const deflPct = stability.deflection_pct ?? 0;
+        const siLabel = si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 35 ? "Fair" : "Needs Attention";
+        const siColor = si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-orange-400";
+        const barColor = si >= 65 ? "bg-emerald-500" : si >= 35 ? "bg-amber-400" : "bg-orange-500";
+        const isOver  = deflPct >= 100;
+        const isHem   = form.mode === "hem" || form.mode === "trochoidal";
+
+        const actionItems = stability.suggestions.filter((s: any) => s.type !== "info");
+        const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
+        const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info");
+
+        const deflPctSub = stability.deflection_pct;
+        const ld         = stability.l_over_d;
+        const loadPct    = result?.customer?.spindle_load_pct;
+        const ct         = result?.engineering?.chip_thickness_in;
+        const minCt      = (result?.customer?.fpt ?? 0) * 0.30;
+
+        const deflResult = deflPctSub != null
+          ? deflPctSub < 100  ? `✓ Tool flex is well within range.`
+          : deflPctSub < 175  ? `Tool is flexing ${(deflPctSub/100).toFixed(1)}× the flex limit — shortening stickout is the best first step.`
+          :                     `Tool is flexing ${(deflPctSub/100).toFixed(1)}× the flex limit — surface finish and tool life will benefit from the steps below.`
+          : null;
+        const loadResult = loadPct != null
+          ? loadPct < 50  ? `✓ Light power draw — ${loadPct.toFixed(0)}% of available HP.`
+          : loadPct < 80  ? `✓ Normal power draw — ${loadPct.toFixed(0)}% of available HP.`
+          : loadPct < 100 ? `⚠ Heavy power draw — ${loadPct.toFixed(0)}% of HP. Watch for stall.`
+          :                 `⚠ Over machine limit — reduce feed rate.`
+          : null;
+        const chipResult = ct != null
+          ? ct >= minCt ? `✓ Tool is cutting cleanly — chip thickness is healthy.`
+          :               `⚠ Chip is very thin — tool may be rubbing. Try increasing feed.`
+          : null;
+        const ldResult = ld != null
+          ? ld <= 3 ? `✓ Stickout is ${ld.toFixed(1)}× diameter — very stiff.`
+          : ld <= 5 ? `⚠ Stickout is ${ld.toFixed(1)}× diameter — watch for chatter.`
+          :           `⚠ Stickout is ${ld.toFixed(1)}× diameter — shorten if possible.`
+          : null;
+
         return (
-        <Card className="rounded-none border-0 border-b border-zinc-700/40">
-          <CardContent className="pt-4 pb-3">
-            <div className="flex items-center justify-between gap-4">
-              {/* Score number + label */}
-              <div className="flex flex-col items-start gap-0.5 min-w-[120px]">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Setup Readiness</span>
-                <div className="flex items-baseline gap-1.5">
+          <div className="border-t border-zinc-700/40 px-4 pt-4 pb-5 space-y-3">
+
+            {/* Score row */}
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold mb-1">Setup Readiness</div>
+                <div className="flex items-baseline gap-2">
                   <span className={`text-4xl font-black leading-none ${siColor}`}>{si}</span>
                   <span className="text-zinc-600 text-base font-light">/100</span>
+                  <span className={`text-base font-semibold ${siColor}`}>{siLabel}</span>
                 </div>
-                <span className={`text-[11px] font-semibold ${siColor}`}>{siLabel}</span>
-                <div className="w-full h-1 rounded-full bg-zinc-800 overflow-hidden mt-1">
-                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${si}%` }} />
+              </div>
+              {deflPct > 0 && (
+                <div className="text-right text-[11px] leading-snug pb-0.5">
+                  <span className={`font-semibold ${deflPct < 100 ? "text-emerald-400" : deflPct < 175 ? "text-amber-400" : "text-orange-400"}`}>
+                    Tool flex: {deflPct.toFixed(0)}% of limit
+                  </span>
+                  <div className="text-zinc-500">
+                    Stickout {UC(stability.stickout_in, 25.4, metric ? 1 : 2)}{metric ? "mm" : "\""} · Reach {fmtNum(stability.l_over_d, 1)}×D
+                  </div>
+                  {isOver && (
+                    <div className={`text-[10px] ${deflPct < 175 ? "text-amber-500" : "text-orange-400"}`}>
+                      {isHem ? "Shorten stickout or step up diameter" : "See steps below to lower tool flex"}
+                    </div>
+                  )}
                 </div>
-                {/* Deflection % vs limit */}
-                {stability?.deflection_pct != null && (
-                  <div className="mt-1.5 text-[10px] text-zinc-500 leading-snug">
-                    Tool flex: <span className={`font-semibold ${deflPct < 100 ? "text-emerald-400" : deflPct < 175 ? "text-amber-400" : "text-orange-400"}`}>{deflPct.toFixed(0)}%</span> of limit
-                    {deflPct < 100
-                      ? <span className="text-zinc-600"> — target &lt;20%</span>
-                      : <span className={deflPct < 175 ? " text-amber-500" : " text-orange-500"}> — target &lt;20%</span>}
-                  </div>
-                )}
-              </div>
-              {/* Sub-scores */}
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
-                {(() => {
-                  const deflPct = stability?.deflection_pct;
-                  const ld      = stability?.l_over_d;
-                  const loadPct = result?.customer?.spindle_load_pct;
-                  const ct      = result?.engineering?.chip_thickness_in;
-                  const minCt   = (result?.customer?.fpt ?? 0) * 0.30;
-
-                  const deflResult = deflPct != null
-                    ? deflPct < 100  ? `✓ Tool flex is well within a comfortable range.`
-                    : deflPct < 175  ? `Tool is flexing ${(deflPct/100).toFixed(1)}× the comfortable limit — shortening stickout is the best first step.`
-                    :                  `Tool is flexing ${(deflPct/100).toFixed(1)}× the comfortable limit — surface finish and tool life will benefit from the suggestions below.`
-                    : null;
-
-                  const loadResult = loadPct != null
-                    ? loadPct < 50   ? `✓ Light power draw — ${loadPct.toFixed(0)}% of available HP. Plenty of headroom.`
-                    : loadPct < 80   ? `✓ Normal power draw — ${loadPct.toFixed(0)}% of available HP.`
-                    : loadPct < 100  ? `⚠ Heavy power draw — ${loadPct.toFixed(0)}% of HP. Watch for spindle stall.`
-                    :                  `⚠ Over the machine's limit — reduce feed rate.`
-                    : null;
-
-                  const chipResult = ct != null
-                    ? ct >= minCt    ? `✓ Tool is cutting cleanly — chip thickness is healthy.`
-                    :                  `⚠ Chip is very thin — tool may be rubbing instead of cutting. Try increasing feed.`
-                    : null;
-
-                  const ldResult = ld != null
-                    ? ld <= 3        ? `✓ Stickout is ${ld.toFixed(1)}× the tool diameter — very stiff, no vibration concern.`
-                    : ld <= 5        ? `⚠ Stickout is ${ld.toFixed(1)}× the tool diameter — watch for chatter. Shorten if possible.`
-                    :                  `⚠ Stickout is ${ld.toFixed(1)}× the tool diameter — too long for reliable cutting. Shorten stickout.`
-                    : null;
-
-                  return ([
-                    ["Tool Flex",     stabilityIndex.defl, "How much the tool tip flexes under cutting force. High flex causes chatter, poor surface finish, and tool breakage. The single biggest fix is always shortening stickout.", deflResult],
-                    ["Spindle Load",  stabilityIndex.load, "How hard the spindle is working compared to what it has available. Under 80% is comfortable. Above 100% the machine will struggle or stall. Only shown when machine HP is entered.", loadResult],
-                    ["Chip Health",   stabilityIndex.chip, "Is the tool actually cutting or rubbing? A chip that's too thin means the tool is skating across the surface instead of shearing material — generates heat and kills the edge fast. Increase feed rate if this is low.", chipResult],
-                    ["Reach",         stabilityIndex.ld,   "Stickout length compared to tool diameter. Under 3× is stiff and predictable. Over 5× and you're fighting the tool. Shorter stickout is the most effective single change you can make.", ldResult],
-                  ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <TooltipProvider delayDuration={200}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-zinc-500 w-24 cursor-default flex items-center gap-0.5">
-                            {label}
-                            <span className="text-muted-foreground/50 text-[9px] leading-none">ⓘ</span>
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-64 text-xs">
-                          <p>{hint}</p>
-                          {resultLine && <p className="mt-1.5 font-semibold border-t border-zinc-600 pt-1.5">{resultLine}</p>}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    {score === -1 ? (
-                      <span className="text-xs text-zinc-600 italic">enter machine HP</span>
-                    ) : (
-                      <>
-                        <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[60px]">
-                          <div
-                            className={`h-full rounded-full ${score >= 65 ? "bg-emerald-400" : score >= 35 ? "bg-amber-400" : "bg-orange-400"}`}
-                            style={{ width: `${score}%` }}
-                          />
-                        </div>
-                        <span className={`text-right font-semibold text-xs w-16 ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-orange-400"}`}>
-                          {score >= 65 ? "Good" : score >= 35 ? "Fair" : "Low"} <span className="font-normal opacity-60">{score}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                ));
-                })()}
-              </div>
+              )}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">80–100 = excellent · 65–79 = good · 35–64 = fair · below 35 = needs attention. Tool Flex drives the score most — aim to keep it below 20% of the limit. Tap any label for details.</p>
-          </CardContent>
-        </Card>
+
+            {/* Score bar */}
+            <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${si}%` }} />
+            </div>
+
+            {/* Sub-scores */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] pt-1">
+              {([
+                ["Tool Flex",    stabilityIndex.defl, "How much the tool tip flexes under cutting force. High flex causes chatter and poor surface finish. Shortening stickout is the single biggest fix.", deflResult],
+                ["Spindle Load", stabilityIndex.load, "How hard the spindle is working vs. what it has available. Under 80% is comfortable. Above 100% the machine will struggle. Only shown when machine HP is entered.", loadResult],
+                ["Chip Health",  stabilityIndex.chip, "Is the tool cutting or rubbing? A chip that's too thin means the tool is skating across the surface — generates heat and kills the edge. Increase feed if this is low.", chipResult],
+                ["Reach",        stabilityIndex.ld,   "Stickout length vs. tool diameter. Under 3× is stiff. Over 5× and you're fighting the tool. Shorter stickout is the most effective single change.", ldResult],
+              ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
+                <div key={label} className="flex items-center gap-2">
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-zinc-500 w-24 shrink-0 cursor-default flex items-center gap-0.5">
+                          {label}
+                          <span className="text-muted-foreground/50 text-[9px] leading-none">ⓘ</span>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-64 text-xs">
+                        <p>{hint}</p>
+                        {resultLine && <p className="mt-1.5 font-semibold border-t border-zinc-600 pt-1.5">{resultLine}</p>}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {score === -1 ? (
+                    <span className="text-zinc-600 italic text-[10px]">enter machine HP</span>
+                  ) : (
+                    <>
+                      <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[50px] overflow-hidden">
+                        <div className={`h-full rounded-full ${score >= 65 ? "bg-emerald-400" : score >= 35 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${score}%` }} />
+                      </div>
+                      <span className={`text-right font-semibold w-16 shrink-0 ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-orange-400"}`}>
+                        {score >= 65 ? "Good" : score >= 35 ? "Fair" : "Poor"} <span className="font-normal opacity-50">{score}</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Caption */}
+            <p className="text-[10px] text-zinc-600">
+              <span className="text-emerald-400">80–100 excellent</span> · <span className="text-emerald-600">65–79 good</span> · <span className="text-amber-400">35–64 fair</span> · <span className="text-orange-400">below 35 needs attention</span> · tap any label for details
+            </p>
+
+            {/* Steps */}
+            {actionItems.length > 0 && (
+              <div className="border-t border-zinc-700/40 pt-3 space-y-2">
+                <div className="text-xs font-semibold text-zinc-400">Steps to help lower your tool flex</div>
+                <ul className="space-y-3">
+                  {actionItems.map((s: any, idx: number) => {
+                    const isBest = stability.suggestions.indexOf(s) === firstActionIdx && deflPct >= 175;
+                    return (
+                      <li key={idx} className="flex items-start gap-2 text-sm">
+                        <span className="mt-0.5 text-[11px] font-bold text-zinc-600 w-4 shrink-0 text-center">{idx + 1}</span>
+                        <span className="flex-1">
+                          <span className="font-medium text-zinc-200">{s.label}</span>
+                          {isBest && <span className="ml-2 text-[10px] font-semibold text-orange-400 uppercase tracking-wide">best fix</span>}
+                          {s.detail && (
+                            <div className="text-xs text-zinc-500 mt-0.5">
+                              {s.detail}
+                              {(() => {
+                                const edps = s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [];
+                                const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
+                                const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_xd < 1.0);
+                                if (!edps.length || cbInactive) return null;
+                                return (
+                                  <span className="ml-2 inline-flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-zinc-600">Try:</span>
+                                    {edps.map((edp: string) => (
+                                      <button key={edp} type="button"
+                                        className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
+                                        onClick={async () => {
+                                          try {
+                                            const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
+                                            const data: SkuRecord[] = await r.json();
+                                            const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
+                                            if (match) { applySkuToForm(match); setTimeout(() => runRef.current(), 100); }
+                                          } catch {}
+                                        }}
+                                      >{edp}</button>
+                                    ))}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {/* Info notes */}
+            {infoItems.map((s: any, idx: number) => (
+              <div key={idx} className="flex items-start gap-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+                <span className="mt-0.5 shrink-0 font-bold">ℹ</span>
+                <span>
+                  <span className="font-semibold">{s.label}</span>
+                  {s.detail && <div className="mt-0.5 opacity-80">{s.detail}</div>}
+                </span>
+              </div>
+            ))}
+
+          </div>
         );
       })()}
-
-      {/* STABILITY ADVISOR CARD */}
-      {stability ? (
-        <>
-          {(() => {
-
-            const pct = stability.deflection_pct;
-            const isRed    = pct >= 175;
-            const isYellow = pct >= 100 && pct < 175;
-            const isGreen  = pct < 100;
-
-            const verdict =
-              pct >= 175 ? "Adjustments Recommended" :
-              pct >= 100 ? "Worth Reviewing" :
-                           "Setup Looks Good";
-
-            const verdictColor =
-              isRed    ? "text-orange-400" :
-              isYellow ? "text-amber-400" :
-                         "text-emerald-500";
-
-            const isHem = form.mode === "hem" || form.mode === "trochoidal";
-            const explanation =
-              pct >= 175
-                ? isHem
-                  ? "HEM already accounts for the interrupted cutting cycle — this flex reading reflects a setup that would benefit from shortening stickout or stepping up to a larger diameter. The suggestions below will help."
-                  : "The tool has more flex than ideal for this setup — vibration and surface finish issues are possible. The suggestions below can help bring this into a better range."
-                : pct >= 100
-                ? isHem
-                  ? "HEM's light radial engagement helps here — you may run fine, but shortening stickout or upgrading the holder will make the cut more consistent."
-                  : "Tool flex is a bit higher than the comfortable zone. It may cut fine, but the suggestions below could improve finish and tool life."
-                : "This setup looks solid. Tool flex is well within the comfortable range — expect good surface finish and tool life.";
-
-            // First suggestion that is an actual action (not info/lbs)
-            const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info");
-
-            return (
-              <Card className="rounded-none border-0">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base leading-tight">Setup Notes</CardTitle>
-                    <span className={`text-sm font-semibold whitespace-nowrap ${verdictColor}`}>
-                      {verdict}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-
-                  {/* Plain-language verdict */}
-                  <div className={`text-sm rounded-lg px-3 py-2 ${isRed ? "bg-orange-950/40 text-orange-100" : isYellow ? "bg-amber-950/30 text-amber-100" : "bg-emerald-950/30 text-emerald-200"}`}>
-                    {explanation}
-                  </div>
-
-                  {/* Tech detail row */}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      Stickout <span className="font-medium text-foreground">{UC(stability.stickout_in, 25.4, metric ? 1 : 2)}{metric ? "mm" : "\""}</span>
-                      {" · "}Reach <span className="font-medium text-foreground">{fmtNum(stability.l_over_d, 1)}× tool diameter</span>
-                    </span>
-                    <span className={`font-medium ${verdictColor}`}>
-                      {pct < 100
-                        ? `${fmtNum(pct, 0)}% of flex limit`
-                        : `flexing ${(pct / 100).toFixed(1)}× the safe limit`}
-                    </span>
-                  </div>
-
-                  {/* Deflection bar */}
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={isRed ? "h-full rounded-full bg-red-500" : isYellow ? "h-full rounded-full bg-amber-500" : "h-full rounded-full bg-emerald-500"}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-
-                  {/* Suggestions */}
-                  {stability.suggestions.length > 0 ? (
-                    <>
-                      {(() => {
-                        const actionItems = stability.suggestions.filter((s: any) => s.type !== "info");
-                        const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
-                        return (
-                          <>
-                            {actionItems.length > 0 && (
-                              <>
-                                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">
-                                  Steps That May Help Increase Rigidity
-                                </div>
-                                <ul className="space-y-2">
-                                  {actionItems.map((s: any, idx: number) => {
-                                    const isBest = stability.suggestions.indexOf(s) === firstActionIdx && isRed;
-                                    return (
-                                      <li key={idx} className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1.5 ${isBest ? "bg-muted/50 border border-muted" : ""}`}>
-                                        <span className="mt-0.5 text-xs font-bold leading-none text-muted-foreground w-4 shrink-0 text-center">{idx + 1}</span>
-                                        <span className="flex-1">
-                                          <span className="font-medium">{s.label}</span>
-                                          {isBest && (
-                                            <span className="ml-2 text-xs font-semibold text-orange-400 uppercase tracking-wide">best fix</span>
-                                          )}
-                                          {s.detail ? (
-                                            <div className="text-xs text-muted-foreground mt-0.5">
-                                              {s.detail}
-                                              {(() => {
-                                                const edps = s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [];
-                                                const dia = form.tool_dia || 0.5;
-                                                const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
-                                                const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_xd < 1.0);
-                                                if (!edps.length || cbInactive) return null;
-                                                return (
-                                                  <span className="ml-2 inline-flex items-center gap-1.5 flex-wrap">
-                                                    <span className="text-zinc-500">Try:</span>
-                                                    {edps.map((edp: string) => (
-                                                      <button
-                                                        key={edp}
-                                                        type="button"
-                                                        className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
-                                                        onClick={async () => {
-                                                          try {
-                                                            const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
-                                                            const data: SkuRecord[] = await r.json();
-                                                            const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                                            if (match) {
-                                                              applySkuToForm(match);
-                                                              setTimeout(() => runRef.current(), 100);
-                                                            }
-                                                          } catch {}
-                                                        }}
-                                                      >
-                                                        {edp}
-                                                      </button>
-                                                    ))}
-                                                  </span>
-                                                );
-                                              })()}
-                                            </div>
-                                          ) : null}
-                                        </span>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              </>
-                            )}
-                            {infoItems.map((s: any, idx: number) => (
-                              <div key={idx} className="mt-2 flex items-start gap-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
-                                <span className="mt-0.5 shrink-0 font-bold">ℹ</span>
-                                <span>
-                                  <span className="font-semibold">{s.label}</span>
-                                  {s.detail && <div className="mt-0.5 opacity-80">{s.detail}</div>}
-                                </span>
-                              </div>
-                            ))}
-                          </>
-                        );
-                      })()}
-                    </>
-                  ) : null}
-
-                </CardContent>
-              </Card>
-            );
-          })()}
-        </>
-      ) : null}
 
       </div>
       )}
