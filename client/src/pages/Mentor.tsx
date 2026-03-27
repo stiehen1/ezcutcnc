@@ -1469,16 +1469,22 @@ export default function Mentor() {
       : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
       : flutes >= 7  ? { low: 6, med: 8, high: 10 } // P / M / K — 7–8 flutes
       :               { low: 7, med: 9, high: 12 };  // P / M / K — 5–6 flutes
-      // HEM DOC: all materials 3×D cap, hardened 1.5×D. High = full LOC or cap (whichever less).
-      // Med = 75% of high. Low = 75% of med.
-      const hemCap = iso === "H" ? 1.5 : 3.0;
-      const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
-      const docHigh = Math.round(rawHigh * 4) / 4;
-      const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
-      const docLow  = Math.round(docMed  * 0.75 * 4) / 4;
+      // HEM DOC: VXR fixed tiers; all others 3×D cap (hardened 1.5×D), capped at LOC.
+      let hemDoc: { low: number; med: number; high: number };
+      if (isVxr) {
+        const vxrCap = (n: number) => loc > 0 && dia > 0 ? Math.min(loc / dia, n) : n;
+        hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
+      } else {
+        const hemCap = iso === "H" ? 1.5 : 3.0;
+        const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
+        const docHigh = Math.round(rawHigh * 4) / 4;
+        const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
+        const docLow  = Math.round(docMed  * 0.75 * 4) / 4;
+        hemDoc = { low: docLow, med: docMed, high: docHigh };
+      }
       return {
         woc: hemWoc,
-        doc: { low: docLow, med: docMed, high: docHigh },
+        doc: hemDoc,
       };
     }
     if (mode === "traditional") {
