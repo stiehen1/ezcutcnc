@@ -3479,7 +3479,10 @@ def run(payload=None):
     _hrc = float(data.get("hardness_hrc", 0) or 0)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                         "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                        "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600")
+                        "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
+                        # PH/duplex stainless: SFM already calibrated for their hardness range — don't double-penalize
+                        "stainless_ph", "stainless_duplex", "stainless_superduplex",
+                        "stainless_440c", "stainless_420")
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)
