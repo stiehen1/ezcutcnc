@@ -1805,10 +1805,9 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
-      // Re-fill doc_xd: for HEM always use high preset; otherwise preserve if same dia, reset if dia changed.
-      doc_xd: _optParams ? _optParams.docXd
-        : Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
-      woc_pct: _optParams ? _optParams.wocPct : p.woc_pct,
+      // Preserve doc_xd if same dia, reset if dia changed; WOC/DOC left blank for user to set via Optimal button.
+      doc_xd: Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
+      woc_pct: p.woc_pct,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
