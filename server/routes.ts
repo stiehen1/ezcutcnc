@@ -2572,7 +2572,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     try {
       console.log("PDF extract route hit, file:", req.file?.originalname, "size:", req.file?.size);
       if (!req.file) {
-        return res.status(400).json({ error: "No PDF file uploaded" });
+        return res.status(400).json({ error: "No file uploaded" });
       }
 
       const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -2582,7 +2582,28 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       }
 
       const client = new Anthropic({ apiKey });
-      const pdfBase64 = req.file.buffer.toString("base64");
+      const fileBase64 = req.file.buffer.toString("base64");
+      const mimeType = req.file.mimetype;
+      const isImage = mimeType.startsWith("image/");
+
+      // Build content block — PDF uses document type, images use image type
+      const fileBlock: any = isImage
+        ? {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: fileBase64,
+            },
+          }
+        : {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: fileBase64,
+            },
+          };
 
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
@@ -2590,14 +2611,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         messages: [{
           role: "user",
           content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: pdfBase64,
-              },
-            } as any,
+            fileBlock,
             {
               type: "text",
               text: EXTRACTION_PROMPT,

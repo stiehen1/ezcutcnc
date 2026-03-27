@@ -3374,9 +3374,9 @@ ${stabSection}
                 <label className="flex flex-col items-center gap-1 cursor-pointer">
                   <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
                   <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
                   </span>
-                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                  <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
                   {!stepReqOpen && !stepReqSent && (
                   <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
                 )}
@@ -3908,9 +3908,9 @@ ${stabSection}
               <label className="flex flex-col items-center gap-1 cursor-pointer">
                 <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
                 <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
                 </span>
-                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
                 {!stepReqOpen && !stepReqSent && (
                   <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
                 )}
@@ -4034,9 +4034,9 @@ ${stabSection}
               <label className="flex flex-col items-center gap-1 cursor-pointer">
                 <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
                 <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
-                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
                 </span>
-                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
                 {!stepReqOpen && !stepReqSent && (
                   <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
                 )}
@@ -5321,9 +5321,9 @@ ${stabSection}
               <label className="flex flex-col items-center gap-1 cursor-pointer">
                 <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
                 <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
-                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
                 </span>
-                <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
                 {!stepReqOpen && !stepReqSent && (
                   <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
                 )}
@@ -5464,9 +5464,9 @@ ${stabSection}
                 <label className="flex flex-col items-center gap-1 cursor-pointer">
                   <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
                   <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print (PDF)"}
+                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
                   </span>
-                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                  <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
                   {!stepReqOpen && !stepReqSent && (
                   <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
                 )}
