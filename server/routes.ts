@@ -3205,6 +3205,18 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json({ ok: true });
   });
 
+  app.patch("/api/toolbox/items/:id", async (req, res) => {
+    const { email, token, title } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token || !title?.trim()) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const r = await pool.query(`UPDATE toolbox_items SET title = $1 WHERE id = $2 AND email = $3 RETURNING *`, [title.trim(), id, email.toLowerCase()]);
+    if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(r.rows[0]);
+  });
+
   // ── Material match: Level 1 alias + Level 3 AI ───────────────────────────
   app.post("/api/materials/match", async (req, res) => {
     try {

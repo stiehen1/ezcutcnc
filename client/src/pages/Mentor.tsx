@@ -9925,23 +9925,32 @@ ${stabSection}
       {/* Toolbox */}
       {mentor.data && (
         <div className="mt-5 rounded-xl border border-indigo-700/50 bg-indigo-950/30 px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-indigo-200 leading-snug">🧰 Save to Toolbox</p>
-              <p className="text-xs text-zinc-500 leading-snug mt-0.5">
-                Saves this setup to your account so you can pull it up again in any future session — no re-entering parameters.
-              </p>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-indigo-200 leading-snug">🧰 Save to Toolbox</p>
+                <p className="text-xs text-zinc-500 leading-snug mt-0.5">
+                  Saves this setup to your account so you can pull it up again in any future session — no re-entering parameters.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={saveToToolbox}
+                  disabled={tbSaving}
+                  className="rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold px-4 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {tbSaved ? "✓ Saved" : tbSaving ? "Saving…" : "Save Setup"}
+                </button>
+                <button type="button" onClick={() => setOperation("toolbox")} className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</button>
+              </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={saveToToolbox}
-                disabled={tbSaving}
-                className="rounded-lg border border-indigo-500 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-sm font-semibold px-4 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
-              >
-                {tbSaved ? "✓ Saved" : tbSaving ? "Saving…" : "Save Setup"}
-              </button>
-              <button type="button" onClick={() => setOperation("toolbox")} className="text-xs text-indigo-400 hover:text-indigo-300 whitespace-nowrap">View Toolbox →</button>
-            </div>
+            <input
+              type="text"
+              placeholder={`Title (optional) — e.g. "Job 1042 Op-10 finish pass"`}
+              value={tbTitle}
+              onChange={e => setTbTitle(e.target.value)}
+              className="w-full rounded-lg border border-indigo-700/50 bg-zinc-800/60 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+            />
           </div>
         </div>
       )}

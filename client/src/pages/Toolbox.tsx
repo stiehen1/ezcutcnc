@@ -23,6 +23,8 @@ export default function Toolbox() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [expanded, setExpanded] = React.useState<number | null>(null);
+  const [renamingId, setRenamingId] = React.useState<number | null>(null);
+  const [renameText, setRenameText] = React.useState("");
   const [roiItems, setRoiItems] = React.useState<any[]>([]);
   const [roiDraft, setRoiDraft] = React.useState<any>(null);
   const [roiExpanded, setRoiExpanded] = React.useState<number | null>(null);
@@ -102,6 +104,21 @@ export default function Toolbox() {
       body: JSON.stringify({ email: e, token: t }),
     });
     setItems(prev => prev.filter(i => i.id !== id));
+  }
+
+  async function renameItem(id: number, title: string) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    const r = await fetch(`/api/toolbox/items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t, title }),
+    });
+    if (r.ok) {
+      setItems(prev => prev.map(i => i.id === id ? { ...i, title } : i));
+      setRenamingId(null);
+      setRenameText("");
+    }
   }
 
   function signOut() {
@@ -221,6 +238,21 @@ export default function Toolbox() {
 
             {items.map(item => (
               <div key={item.id} className="border border-border rounded-xl overflow-hidden">
+                {renamingId === item.id ? (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-zinc-900/80" onClick={e => e.stopPropagation()}>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={renameText}
+                      onChange={e => setRenameText(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && renameText.trim()) renameItem(item.id, renameText); if (e.key === "Escape") { setRenamingId(null); setRenameText(""); } }}
+                      className="flex-1 bg-zinc-800 border border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+                      placeholder="Enter a title…"
+                    />
+                    <button className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold px-2" onClick={() => { if (renameText.trim()) renameItem(item.id, renameText); }}>Save</button>
+                    <button className="text-xs text-zinc-500 hover:text-white px-2" onClick={() => { setRenamingId(null); setRenameText(""); }}>Cancel</button>
+                  </div>
+                ) : (
                 <div
                   className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-zinc-900/50"
                   onClick={() => setExpanded(expanded === item.id ? null : item.id)}
@@ -234,6 +266,12 @@ export default function Toolbox() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      className="text-xs text-zinc-500 hover:text-indigo-400 px-2 py-1"
+                      onClick={e => { e.stopPropagation(); setRenamingId(item.id); setRenameText(item.title); }}
+                    >
+                      Rename
+                    </button>
+                    <button
                       className="text-xs text-red-400 hover:text-red-300 px-2 py-1"
                       onClick={e => { e.stopPropagation(); deleteItem(item.id); }}
                     >
@@ -242,6 +280,7 @@ export default function Toolbox() {
                     <span className="text-muted-foreground text-sm">{expanded === item.id ? "▲" : "▼"}</span>
                   </div>
                 </div>
+                )}
 
                 {expanded === item.id && item.data && (
                   <div className="border-t border-border px-4 py-3 bg-zinc-950/50">
