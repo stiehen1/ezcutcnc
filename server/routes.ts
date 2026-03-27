@@ -1039,15 +1039,24 @@ export async function registerRoutes(
       const isoCategory = ISO_MAP[matKey] ?? "P";
 
       // Scoring helpers
-      // Slotting is always 100% WOC — CB/VRX are always valid regardless of DOC (chip breaking helps evacuation)
+      // Slotting is always 100% WOC — CB/VRX always valid regardless of DOC (chip breaking aids evacuation)
+      // Slot geometry priority is material-dependent:
+      //   Aluminum (N): 3-fl CB preferred — chip clearance trumps toughness; VRX overkill
+      //   Steel (P):    4-fl CB preferred
+      //   Tough (M/S/H): 4-fl VRX preferred — hard materials need tougher edge
       const isSlot       = mode === "slot";
       const isCircInterp = mode === "circ_interp";
+      const slotAlum     = isSlot && isoCategory === "N";
+      const slotTough    = isSlot && (isoCategory === "M" || isoCategory === "S" || isoCategory === "H");
       const cbOk  = (docXd >= 1.0 && (mode === "hem" || wocPct >= 8)) || (isSlot);
-      const vrxOk = (docXd >= 1.0 && wocPct >= 12) || (isSlot && docXd >= 0.5);
+      const vrxOk = (docXd >= 1.0 && wocPct >= 12) || (slotTough && docXd >= 0.5);
 
       const scoreGeometry = (g: string | null): number => {
         if (isSurfacing || isCircInterp) return 2; // geometry irrelevant — coating/pitch/helix decide
         const geom = (g ?? "standard").toLowerCase();
+        // Slot aluminum: CB is top pick; VRX is overkill (penalize)
+        if (slotAlum && geom === "chipbreaker")        return 4;
+        if (slotAlum && geom === "truncated_rougher")  return 1;
         if (vrxOk && geom === "truncated_rougher") return 4;
         if (cbOk && geom === "chipbreaker")        return 3;
         if (geom === "standard")                   return 2;
@@ -1098,21 +1107,37 @@ export async function registerRoutes(
       const STAB_FLUTE_BONUS = 2; // enough to beat a coating-only upgrade (max coat score = 3)
       const CIRC_FLUTE_BONUS = 2; // same bonus for circ_interp — more flutes always better for bore finish
 
-      // ── Priority 1: Same LOC — same flutes OR (if deflecting / circ_interp) next flute up ──
+      // ── Priority 1: Same LOC — same flutes OR flute-count shift based on mode/material ──
       const nextFlutes = curFlutes + 1;
+      const prevFlutes = curFlutes - 1;
+      // Slot aluminum: also check one flute down (3-fl preferred for chip clearance)
+      // Slot tough: also check next flute up (4-fl preferred)
+      // Circ interp / deflecting: next flute up always beneficial
       const sameLocCandidates = peers.rows.filter((r: any) => {
-        const locMatch = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
-        const fluteMatch = Number(r.flutes) === curFlutes || ((stabOver || isCircInterp) && Number(r.flutes) === nextFlutes);
+        const locMatch  = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
+        const rf        = Number(r.flutes);
+        const geom      = (r.geometry ?? "standard").toLowerCase();
+        // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper
+        if (isSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
+        const fluteMatch = rf === curFlutes
+          || ((stabOver || isCircInterp) && rf === nextFlutes)
+          || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
+          || (slotTough && rf === nextFlutes);
         return locMatch && fluteMatch;
       });
       let bestSku: any = null;
       let bestScore = -1;
       for (const row of sameLocCandidates) {
         let sc = scoreSku(row);
+        const rf = Number(row.flutes);
         // Stability bonus: flute upgrade gets +2 when setup is deflecting
-        if (stabOver && Number(row.flutes) === nextFlutes) sc += STAB_FLUTE_BONUS;
+        if (stabOver && rf === nextFlutes) sc += STAB_FLUTE_BONUS;
         // Circ interp bonus: more flutes = smoother bore wall (applies even when stable)
-        else if (isCircInterp && Number(row.flutes) === nextFlutes) sc += CIRC_FLUTE_BONUS;
+        else if (isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
+        // Slot aluminum: fewer flutes bonus for chip clearance
+        else if (slotAlum && rf === prevFlutes) sc += 2;
+        // Slot tough: next flute bonus (matches preferred 4-fl pattern)
+        else if (slotTough && rf === nextFlutes) sc += 1;
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
       if (bestSku && bestScore > curScore) {
