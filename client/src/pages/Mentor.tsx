@@ -8297,9 +8297,14 @@ ${stabSection}
                             ⚠ {rec.rigidity_note}
                           </p>
                         )}
-                        {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && (
+                        {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && form.mode !== "finish" && (
                           <p className="text-[11px] text-zinc-400 leading-relaxed">
                             More flutes means a higher feed rate at the same chip load per tooth — directly increasing MRR with the same spindle speed.
+                          </p>
+                        )}
+                        {form.mode === "finish" && recSku.flutes > (form.flutes ?? 0) && (
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            More flutes reduce the chip load per tooth, lower cutting forces, and dampen chatter — all critical for surface finish quality. Run at full SFM, keep feed controlled. Flood coolant or mist for steel/stainless; air blast for aluminum to prevent chip recutting.
                           </p>
                         )}
 

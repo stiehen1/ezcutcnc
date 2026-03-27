@@ -1104,16 +1104,15 @@ export async function registerRoutes(
       // Merge same-flute and next-flute candidates into one pool and apply a stability bonus
       // to flute-count upgrades so they can beat a coating-only variant.
       // For circ_interp: always include next flute up — more flutes = smoother bore wall.
-      const stabOver = Number(current_stability_pct ?? 0) >= 100;
-      const STAB_FLUTE_BONUS = 2; // enough to beat a coating-only upgrade (max coat score = 3)
-      const CIRC_FLUTE_BONUS = 2; // same bonus for circ_interp — more flutes always better for bore finish
+      const stabOver  = Number(current_stability_pct ?? 0) >= 100;
+      const isFinish  = mode === "finish";
+      const STAB_FLUTE_BONUS  = 2;
+      const CIRC_FLUTE_BONUS  = 2;
+      const FINISH_FLUTE_BONUS = 2; // more flutes = better surface finish, less chatter at light WOC
 
       // ── Priority 1: Same LOC — same flutes OR flute-count shift based on mode/material ──
       const nextFlutes = curFlutes + 1;
       const prevFlutes = curFlutes - 1;
-      // Slot aluminum: also check one flute down (3-fl preferred for chip clearance)
-      // Slot tough: also check next flute up (4-fl preferred)
-      // Circ interp / deflecting: next flute up always beneficial
       const sameLocCandidates = peers.rows.filter((r: any) => {
         const locMatch  = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
         const rf        = Number(r.flutes);
@@ -1121,7 +1120,7 @@ export async function registerRoutes(
         // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper
         if (isSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
         const fluteMatch = rf === curFlutes
-          || ((stabOver || isCircInterp) && rf === nextFlutes)
+          || ((stabOver || isCircInterp || isFinish) && rf === nextFlutes)
           || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
           || (slotTough && rf === nextFlutes);
         return locMatch && fluteMatch;
@@ -1131,13 +1130,10 @@ export async function registerRoutes(
       for (const row of sameLocCandidates) {
         let sc = scoreSku(row);
         const rf = Number(row.flutes);
-        // Stability bonus: flute upgrade gets +2 when setup is deflecting
-        if (stabOver && rf === nextFlutes) sc += STAB_FLUTE_BONUS;
-        // Circ interp bonus: more flutes = smoother bore wall (applies even when stable)
+        if (stabOver && rf === nextFlutes)      sc += STAB_FLUTE_BONUS;
         else if (isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
-        // Slot aluminum: fewer flutes bonus for chip clearance
-        else if (slotAlum && rf === prevFlutes) sc += 2;
-        // Slot tough: next flute bonus (matches preferred 4-fl pattern)
+        else if (isFinish  && rf === nextFlutes) sc += FINISH_FLUTE_BONUS;
+        else if (slotAlum  && rf === prevFlutes) sc += 2;
         else if (slotTough && rf === nextFlutes) sc += 1;
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
