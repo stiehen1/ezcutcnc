@@ -4521,7 +4521,7 @@ ${stabSection}
                 <FieldLabel hint={(() => {
                   const _so_dia = form.tool_dia;
                   const _so_loc = form.loc;
-                  const _so_fw  = form.flute_wash ?? 0;
+                  const _so_fw  = (form as any).flute_wash ?? 0;
                   if (_so_dia > 0 && _so_loc > 0) {
                     const _clearance = 0.33 * _so_dia;
                     const parts = [`LOC (${_so_loc.toFixed(3)}")`];
@@ -4683,7 +4683,7 @@ ${stabSection}
                     {/* Engagement Angle */}
                     <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
                       title={`Arc of tool in contact with material. At ${form.woc_pct.toFixed(1)}% WOC the tool engages ${engAngleDeg.toFixed(1)}° of its 360° rotation. Higher angle = more heat and cutting force per revolution.`}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Eng. Angle</div>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Eng. Angle</div>
                       <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
                       <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
                         <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: arcColor }} />
@@ -4692,7 +4692,7 @@ ${stabSection}
                     {/* Chip Thinning */}
                     <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
                       title={`Chip thinning factor — at low WOC the chip formed is thinner than your programmed FPT. ${chipThinPct}% means the actual chip is only ${chipThinPct}% as thick as programmed. The engine compensates automatically by boosting feed. Below 30% risks rubbing instead of cutting.`}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Chip Thin</div>
+                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Chip Thin</div>
                       <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
                       <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
                         <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
@@ -4704,7 +4704,7 @@ ${stabSection}
                       return (
                         <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
                           title={`Average number of flutes simultaneously cutting. Sweet spot is 1.5–2.5 teeth — enough for smooth cutting without heat buildup. Too low = interrupted, chattery cut. Too high = heat and tool wear.`}>
-                          <div className="text-[9px] uppercase tracking-widest mb-1" style={labelStyle}>Teeth in Cut</div>
+                          <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Teeth in Cut</div>
                           <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
                           <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
                         </div>
