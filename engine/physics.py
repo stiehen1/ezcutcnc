@@ -184,7 +184,9 @@ def minimum_chip_thickness(material_group):
 
 
 def engagement_angle(woc, diameter):
-    return 2 * math.acos(1 - (2 * woc / diameter))
+    # Arc from tool entry to exit (radians). For WOC < D/2: arccos(1 - 2ae/D).
+    # Full slot (WOC=D) → π (180°), time-avg teeth = flutes/2. No factor-of-2.
+    return math.acos(max(-1.0, min(1.0, 1 - (2 * woc / diameter))))
 
 def _clamp(x, lo, hi):
     return lo if x < lo else hi if x > hi else x

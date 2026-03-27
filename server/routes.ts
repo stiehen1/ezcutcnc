@@ -712,10 +712,30 @@ export async function registerRoutes(
         const noBLK = `AND s.edp NOT ILIKE '%-BLK'`;
         for (const s of stability.suggestions) {
           const lookupFlutes = s.suggested_flutes ?? s.lookup_flutes;
-        if ((s.type === "tool" || s.type === "diameter") && lookupFlutes && s.lookup_dia) {
+        if ((s.type === "tool" || s.type === "diameter" || s.type === "shorter_loc") && lookupFlutes && s.lookup_dia) {
             try {
               const flutes = (s.suggested_flutes ?? s.lookup_flutes) as number;
               const currentEdp = String(s.lookup_edp ?? "");
+
+              // Corner radius constraint: if input tool has a CR, suggestions must have CR > 0 (no square/ball).
+              // For standard geometry: CR <= input CR (can go smaller, never larger).
+              // For chipbreaker/rougher: allow any CR — roughing just needs corner protection,
+              //   so a .090 CR is a valid alternative to a .060 CR tool.
+              const corner = (s.lookup_corner ?? "").toLowerCase();
+              const cr     = s.lookup_cr ?? 0;
+              const inputHasCr = corner !== "square" && corner !== "ball" && cr > 0;
+              const isRoughingGeom = payloadGeometry === "chipbreaker" || payloadGeometry === "truncated_rougher";
+              const crFilterS  = inputHasCr && !isRoughingGeom
+                ? ` AND CASE WHEN s.corner_condition  ~ '^[0-9]' THEN s.corner_condition::numeric  ELSE 999 END <= ${cr}`
+                : inputHasCr
+                  ? ` AND LOWER(s.corner_condition)  NOT IN ('square','ball')`  // roughing: any CR ok, just not square
+                  : "";
+              const crFilterS2 = inputHasCr && !isRoughingGeom
+                ? ` AND CASE WHEN s2.corner_condition ~ '^[0-9]' THEN s2.corner_condition::numeric ELSE 999 END <= ${cr}`
+                : inputHasCr
+                  ? ` AND LOWER(s2.corner_condition) NOT IN ('square','ball')`
+                  : "";
+
               // Primary: derive EDP by replacing first digit (flute count) — e.g. 505221 → 605221
               // Search for all coating variants (same base, last digit varies)
               // Only valid for flute-change suggestions (type === "tool"), not diameter changes
@@ -727,6 +747,7 @@ export async function registerRoutes(
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                    ${cbClause}
                    ${noBLK}
+                   ${crFilterS}
                    ORDER BY
                      CASE WHEN LOWER(COALESCE(s.geometry, 'standard')) = $2 THEN 0 ELSE 1 END,
                      s.edp`,
@@ -744,11 +765,35 @@ export async function registerRoutes(
 
               // Build corner condition string for direct text match
               // DB stores CR as text e.g. "0.03", "0.06"; square/ball as "square"/"ball"
-              const corner = (s.lookup_corner ?? "").toLowerCase();
-              const cr     = s.lookup_cr ?? 0;
               const cornerStr = (corner === "square" || corner === "ball")
                 ? corner
                 : String(parseFloat(cr.toFixed(4)));  // "0.03", "0.06", etc.
+
+              // Shorter-LOC same tool: find shortest stocked LOC >= required minimum but < input LOC.
+              // Same flutes, dia, corner — just a shorter-reach version of the same tool.
+              if (s.type === "shorter_loc") {
+                const inputLoc = Number((parsed.data as any).loc ?? 999);
+                const qsl = await pool.query(
+                  `SELECT s.edp FROM skus s
+                   JOIN sku_uploads u ON s.upload_id = u.id
+                   WHERE u.is_current = TRUE
+                     AND s.flutes = $1
+                     AND ABS(s.cutting_diameter_in - $2) < 0.001
+                     AND LOWER(s.corner_condition) = LOWER($3)
+                     AND COALESCE(s.loc_in, 0) >= $4
+                     AND COALESCE(s.loc_in, 0) < $5 - 0.05
+                     ${cbClause}
+                     ${noBLK}
+                     ${crFilterS}
+                   ORDER BY s.loc_in ASC, s.edp`,
+                  [flutes, dia, cornerStr, loc, inputLoc]
+                );
+                if (qsl.rows.length > 0) {
+                  s.suggested_edps = qsl.rows.map((r: any) => r.edp);
+                  s.suggested_edp  = s.suggested_edps[0];
+                }
+                continue;
+              }
 
               // For diameter suggestions: prefer tools where LOC >= required DOC (sufficient reach),
               // sorted by shortest sufficient LOC first. This avoids necked tools whose LOC
@@ -800,10 +845,12 @@ export async function registerRoutes(
                            AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                            ${cbClause.replace(/\bs\./g, "s2.")}
                            ${noBLK.replace(/\bs\./g, "s2.")}
+                           ${crFilterS2}
                        )
                        AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                        ${cbClause}
                        ${noBLK}
+                       ${crFilterS}
                      ORDER BY s.edp`,
                     [flutes, dia, loc]
                   );
@@ -821,6 +868,7 @@ export async function registerRoutes(
                          AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause}
                          ${noBLK}
+                         ${crFilterS}
                          AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                            SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                            FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -830,6 +878,7 @@ export async function registerRoutes(
                              AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                              ${cbClause.replace(/\bs\./g, "s2.")}
                              ${noBLK.replace(/\bs\./g, "s2.")}
+                             ${crFilterS2}
                          )
                        ORDER BY s.edp`,
                       [flutes, dia, loc]
@@ -878,6 +927,7 @@ export async function registerRoutes(
                      AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                      ${cbClause}
                      ${noBLK}
+                     ${crFilterS}
                      AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                        SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -887,6 +937,7 @@ export async function registerRoutes(
                          AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause.replace(/\bs\./g, "s2.")}
                          ${noBLK.replace(/\bs\./g, "s2.")}
+                         ${crFilterS2}
                      )
                    ORDER BY s.edp`,
                   [flutes, dia, loc]
@@ -898,6 +949,29 @@ export async function registerRoutes(
               }
               } // end non-diameter branch
             } catch (_) { /* catalog unavailable — skip enrichment */ }
+          }
+        }
+
+        // Post-enrichment: flag suggested EDPs whose LOC is shorter than input tool LOC.
+        // These get "Can you use [EDP] (X.XXX" LOC)?" phrasing in the UI instead of "Try:".
+        if (stability?.suggestions) {
+          for (const s of stability.suggestions) {
+            if (!s.suggested_edp || !s.lookup_loc) continue;
+            try {
+              const locResult = await pool.query(
+                `SELECT s2.loc_in, s2.oal_in FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                 WHERE u2.is_current = TRUE AND s2.edp = $1 LIMIT 1`,
+                [s.suggested_edp]
+              );
+              if (locResult.rows.length) {
+                const sugLoc = Number(locResult.rows[0].loc_in);
+                const sugOal = Number(locResult.rows[0].oal_in);
+                if (sugLoc > 0 && sugLoc < Number(s.lookup_loc) - 0.001) {
+                  s.suggested_edp_loc = sugLoc;
+                  if (sugOal > 0) s.suggested_edp_oal = sugOal;
+                }
+              }
+            } catch (_) { /* skip */ }
           }
         }
       }

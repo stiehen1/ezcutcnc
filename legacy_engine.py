@@ -3614,7 +3614,9 @@ def run(payload=None):
         loc = float(data.get("loc", 0) or 0)
         flute_wash = float(data.get("flute_wash", 0) or 0)
         lbs = float(data.get("lbs", 0) or 0)
-        _min_L = max(lbs, loc + flute_wash + (diameter * 0.15))
+        # When flute_wash unknown (no SKU data), use 33%D clearance to stay clear of holder
+        _clearance = diameter * (0.15 if flute_wash > 0 else 0.33)
+        _min_L = max(lbs, loc + flute_wash + _clearance)
         targets = []
         for frac in (0.90, 0.80, 0.70):
             L_new = max(L_old * frac, _min_L)
@@ -4939,10 +4941,12 @@ def run(payload=None):
 
     _lbs = float(data.get("lbs", 0) or 0)  # Length Below Shoulder (neck reach)
 
-    # Minimum stickout: LOC + flute_wash + 15% of diameter clearance buffer
+    # Minimum stickout: LOC + flute_wash + clearance buffer
+    # When flute_wash unknown (no SKU data), use 33%D to stay clear of holder
     _loc_for_min = float(data.get("loc", 0) or 0)
     _flute_wash_for_min = float(data.get("flute_wash", 0) or 0)
-    _min_so = max(_lbs, _loc_for_min + _flute_wash_for_min + (_d * 0.15))
+    _clearance_buf = _d * (0.15 if _flute_wash_for_min > 0 else 0.33)
+    _min_so = max(_lbs, _loc_for_min + _flute_wash_for_min + _clearance_buf)
     if _lbs > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
@@ -5042,6 +5046,32 @@ def run(payload=None):
                 "stickout_in": _ln,
                 "gain_pct": _gain,
             })
+
+    # 1b) Shorter-LOC same tool — when actual DOC < tool LOC, a shorter tool shortens the
+    #     cantilever directly (L³ law), same as stickout but at the tool level.
+    #     Only fires when there's meaningful LOC headroom (>0.1") above the DOC.
+    if _doc_now > 0 and _loc_now > 0 and _defl > _dlim:
+        _min_loc_needed = _doc_now + _d * 0.33   # DOC + holder-clearance buffer
+        _loc_headroom   = _loc_now - _min_loc_needed
+        if _loc_headroom > 0.10:                  # at least 0.1" shorter than current LOC
+            # Stiffness estimate: effective stickout drops by the LOC saved
+            _est_new_so   = max(_so - _loc_headroom, _min_so)
+            _est_gain     = round(((_so / _est_new_so) ** 3 - 1.0) * 100.0) if _est_new_so > 0 else 0
+            if _est_gain >= 10:
+                _hw_suggestions.append({
+                    "type": "shorter_loc",
+                    "label": f"Shorter-LOC tool — need ≥{_min_loc_needed:.3f}\" LOC to cover {_doc_now:.3f}\" DOC",
+                    "detail": (
+                        f"Same dia / geometry / corner — shorter reach drops cantilever length. "
+                        f"Est. up to {_est_gain}% stiffer (L³). Ask: does your fixture allow a shorter OAL?"
+                    ),
+                    "lookup_flutes": int(data.get("flutes", 0) or 0),
+                    "lookup_dia":    _d,
+                    "lookup_corner": str(data.get("corner_condition", "square") or "square"),
+                    "lookup_cr":     float(data.get("corner_radius", 0) or 0),
+                    "lookup_loc":    round(_min_loc_needed, 4),
+                    "lookup_edp":    str(data.get("edp", "") or ""),
+                })
 
     # 2) Toolholder upgrade
     _holder_progression = [
@@ -5368,7 +5398,7 @@ def run(payload=None):
         _tic_doc   = float(state.get("doc", 0) or doc or 0)
 
         _tic_ae  = max(-1.0, min(1.0, 1.0 - 2.0 * _tic_woc / _tic_d)) if _tic_d > 0 else 1.0
-        _tic_ang = 2.0 * math.acos(_tic_ae)            # radial engagement arc (rad)
+        _tic_ang = math.acos(_tic_ae)                   # radial engagement arc entry→exit (rad)
 
         # Helix wrap angle over DOC
         _helix_wrap_rad = (2.0 * _tic_doc * math.tan(math.radians(_tic_helix)) / _tic_d) if _tic_d > 0 else 0.0
