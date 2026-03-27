@@ -6544,7 +6544,8 @@ ${stabSection}
                       const dia = form.tool_dia || 0.5;
                       // Use material+mode+flute-aware target directly — no MRR-balance scaling
                       const locCap = form.loc > 0 ? form.loc / dia : 99;
-                      const optXd = Math.min(locCap, Math.max(dp.low, dp.med));
+                      const isHem = form.mode === "hem" || form.mode === "trochoidal";
+                      const optXd = Math.min(locCap, Math.max(dp.low, isHem ? dp.high : dp.med));
                       const optIn = optXd * dia;
                       setForm((p) => ({ ...p, doc_xd: optXd }));
                       setDocText(optIn.toFixed(3));
