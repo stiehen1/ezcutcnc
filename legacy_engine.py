@@ -5047,6 +5047,32 @@ def run(payload=None):
                 "gain_pct": _gain,
             })
 
+    # 1b) Shorter-LOC same tool — when actual DOC < tool LOC, a shorter tool shortens the
+    #     cantilever directly (L³ law), same as stickout but at the tool level.
+    #     Only fires when there's meaningful LOC headroom (>0.1") above the DOC.
+    if _doc_now > 0 and _loc_now > 0 and _defl > _dlim:
+        _min_loc_needed = _doc_now + _d * 0.33   # DOC + holder-clearance buffer
+        _loc_headroom   = _loc_now - _min_loc_needed
+        if _loc_headroom > 0.10:                  # at least 0.1" shorter than current LOC
+            # Stiffness estimate: effective stickout drops by the LOC saved
+            _est_new_so   = max(_so - _loc_headroom, _min_so)
+            _est_gain     = round(((_so / _est_new_so) ** 3 - 1.0) * 100.0) if _est_new_so > 0 else 0
+            if _est_gain >= 10:
+                _hw_suggestions.append({
+                    "type": "shorter_loc",
+                    "label": f"Shorter-LOC tool — need ≥{_min_loc_needed:.3f}\" LOC to cover {_doc_now:.3f}\" DOC",
+                    "detail": (
+                        f"Same dia / geometry / corner — shorter reach drops cantilever length. "
+                        f"Est. up to {_est_gain}% stiffer (L³). Ask: does your fixture allow a shorter OAL?"
+                    ),
+                    "lookup_flutes": int(data.get("flutes", 0) or 0),
+                    "lookup_dia":    _d,
+                    "lookup_corner": str(data.get("corner_condition", "square") or "square"),
+                    "lookup_cr":     float(data.get("corner_radius", 0) or 0),
+                    "lookup_loc":    round(_min_loc_needed, 4),
+                    "lookup_edp":    str(data.get("edp", "") or ""),
+                })
+
     # 2) Toolholder upgrade
     _holder_progression = [
         ("er_collet",     1.00, "ER Collet",      ""),

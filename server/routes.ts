@@ -712,22 +712,29 @@ export async function registerRoutes(
         const noBLK = `AND s.edp NOT ILIKE '%-BLK'`;
         for (const s of stability.suggestions) {
           const lookupFlutes = s.suggested_flutes ?? s.lookup_flutes;
-        if ((s.type === "tool" || s.type === "diameter") && lookupFlutes && s.lookup_dia) {
+        if ((s.type === "tool" || s.type === "diameter" || s.type === "shorter_loc") && lookupFlutes && s.lookup_dia) {
             try {
               const flutes = (s.suggested_flutes ?? s.lookup_flutes) as number;
               const currentEdp = String(s.lookup_edp ?? "");
 
-              // Corner radius constraint: if input tool has a CR, suggestions must have
-              // CR > 0 (no square/ball) and CR <= input CR. Use CASE to safely cast text col.
+              // Corner radius constraint: if input tool has a CR, suggestions must have CR > 0 (no square/ball).
+              // For standard geometry: CR <= input CR (can go smaller, never larger).
+              // For chipbreaker/rougher: allow any CR — roughing just needs corner protection,
+              //   so a .090 CR is a valid alternative to a .060 CR tool.
               const corner = (s.lookup_corner ?? "").toLowerCase();
               const cr     = s.lookup_cr ?? 0;
               const inputHasCr = corner !== "square" && corner !== "ball" && cr > 0;
-              const crFilterS  = inputHasCr
+              const isRoughingGeom = payloadGeometry === "chipbreaker" || payloadGeometry === "truncated_rougher";
+              const crFilterS  = inputHasCr && !isRoughingGeom
                 ? ` AND CASE WHEN s.corner_condition  ~ '^[0-9]' THEN s.corner_condition::numeric  ELSE 999 END <= ${cr}`
-                : "";
-              const crFilterS2 = inputHasCr
+                : inputHasCr
+                  ? ` AND LOWER(s.corner_condition)  NOT IN ('square','ball')`  // roughing: any CR ok, just not square
+                  : "";
+              const crFilterS2 = inputHasCr && !isRoughingGeom
                 ? ` AND CASE WHEN s2.corner_condition ~ '^[0-9]' THEN s2.corner_condition::numeric ELSE 999 END <= ${cr}`
-                : "";
+                : inputHasCr
+                  ? ` AND LOWER(s2.corner_condition) NOT IN ('square','ball')`
+                  : "";
 
               // Primary: derive EDP by replacing first digit (flute count) — e.g. 505221 → 605221
               // Search for all coating variants (same base, last digit varies)
@@ -761,6 +768,32 @@ export async function registerRoutes(
               const cornerStr = (corner === "square" || corner === "ball")
                 ? corner
                 : String(parseFloat(cr.toFixed(4)));  // "0.03", "0.06", etc.
+
+              // Shorter-LOC same tool: find shortest stocked LOC >= required minimum but < input LOC.
+              // Same flutes, dia, corner — just a shorter-reach version of the same tool.
+              if (s.type === "shorter_loc") {
+                const inputLoc = Number((parsed.data as any).loc ?? 999);
+                const qsl = await pool.query(
+                  `SELECT s.edp FROM skus s
+                   JOIN sku_uploads u ON s.upload_id = u.id
+                   WHERE u.is_current = TRUE
+                     AND s.flutes = $1
+                     AND ABS(s.cutting_diameter_in - $2) < 0.001
+                     AND LOWER(s.corner_condition) = LOWER($3)
+                     AND COALESCE(s.loc_in, 0) >= $4
+                     AND COALESCE(s.loc_in, 0) < $5 - 0.05
+                     ${cbClause}
+                     ${noBLK}
+                     ${crFilterS}
+                   ORDER BY s.loc_in ASC, s.edp`,
+                  [flutes, dia, cornerStr, loc, inputLoc]
+                );
+                if (qsl.rows.length > 0) {
+                  s.suggested_edps = qsl.rows.map((r: any) => r.edp);
+                  s.suggested_edp  = s.suggested_edps[0];
+                }
+                continue;
+              }
 
               // For diameter suggestions: prefer tools where LOC >= required DOC (sufficient reach),
               // sorted by shortest sufficient LOC first. This avoids necked tools whose LOC
