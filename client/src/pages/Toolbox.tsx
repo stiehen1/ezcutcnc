@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 type ToolboxItem = {
   id: number;
@@ -11,6 +11,7 @@ type ToolboxItem = {
 };
 
 export default function Toolbox() {
+  const [, navigate] = useLocation();
   const [email, setEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [token, setToken] = React.useState(() => localStorage.getItem("tb_token") || "");
   const [step, setStep] = React.useState<"email" | "code" | "items">(
@@ -322,18 +323,45 @@ export default function Toolbox() {
                       className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-green-950/20"
                       onClick={() => setRoiExpanded(roiExpanded === roi.id ? null : roi.id)}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">✅</span>
-                        <div>
-                          <div className="text-sm font-semibold text-green-300">
-                            ${Number(roi.annual_savings).toFixed(0)}/yr saved
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-lg flex-shrink-0">✅</span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-green-300 truncate">
+                            {roi.roi_name || `${roi.cc_edp || "CC"} vs ${roi.comp_brand || roi.comp_edp || "Incumbent"}`}
                           </div>
                           <div className="text-[11px] text-zinc-500">
-                            {roi.material} · {roi.cc_edp || "CC"}{roi.comp_edp ? ` vs ${roi.comp_edp}` : ""} · {formatDate(roi.created_at)}
+                            ${Number(roi.annual_savings).toFixed(0)}/yr · {roi.material} · {formatDate(roi.updated_at || roi.created_at)}
                           </div>
                         </div>
                       </div>
-                      <span className="text-muted-foreground text-sm">{roiExpanded === roi.id ? "▲" : "▼"}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            // Build a draft object from DB row so Mentor.tsx can restore it
+                            const draft = {
+                              roiName: roi.roi_name || "",
+                              compBrand: roi.comp_brand || "",
+                              compEdp: roi.comp_edp || "",
+                              compPrice: String(roi.comp_price ?? ""),
+                              compParts: String(roi.comp_parts_per_tool ?? ""),
+                              compTime: String(roi.comp_time_in_cut ?? ""),
+                              compMrr: String(roi.comp_mrr ?? ""),
+                              shopRate: String(roi.shop_rate ?? ""),
+                              annualVol: String(roi.annual_volume ?? ""),
+                              _roiLoadedId: roi.id,
+                            };
+                            localStorage.setItem("roi_draft", JSON.stringify(draft));
+                            localStorage.setItem("roi_resume", "1");
+                            navigate("/");
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-green-800/50 hover:bg-green-700/60 text-green-300 font-medium transition-colors"
+                        >
+                          Load
+                        </button>
+                        <span className="text-muted-foreground text-sm">{roiExpanded === roi.id ? "▲" : "▼"}</span>
+                      </div>
                     </div>
                     {roiExpanded === roi.id && (
                       <div className="border-t border-green-700/20 px-4 py-3 bg-green-950/20">
@@ -344,11 +372,11 @@ export default function Toolbox() {
                             ["Annual Savings", `$${Number(roi.annual_savings).toFixed(2)}`],
                             ["% Reduction", `${Number(roi.savings_pct).toFixed(1)}%`],
                             ["CC Tool Price", `$${Number(roi.cc_tool_price).toFixed(2)}`],
-                            ["Comp Tool Price", `$${Number(roi.comp_price).toFixed(2)}`],
+                            [roi.comp_brand ? `${roi.comp_brand} Price` : "Comp Tool Price", `$${Number(roi.comp_price).toFixed(2)}`],
                             ["CC Parts/Tool", roi.cc_parts_per_tool],
                             ["Comp Parts/Tool", roi.comp_parts_per_tool],
-                            ["Shop Rate", `$${Number(roi.shop_rate).toFixed(0)}/hr`],
-                            ["Monthly Volume", `${roi.monthly_volume} parts`],
+                            ...(roi.shop_rate ? [["Shop Rate", `$${Number(roi.shop_rate).toFixed(0)}/hr`]] : []),
+                            ...(roi.annual_volume ? [["Annual Volume", String(roi.annual_volume)]] : []),
                           ].map(([label, val]) => (
                             <div key={label as string}>
                               <div className="text-zinc-500">{label}</div>
