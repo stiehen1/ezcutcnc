@@ -186,17 +186,29 @@ export async function registerRoutes(
 
   // ── IP Geolocation helper ─────────────────────────────────────────────────
   async function geoFromIp(ip: string): Promise<{ city: string|null; region: string|null; country: string|null; postal: string|null }> {
+    const blank = { city: null, region: null, country: null, postal: null };
     try {
       if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {
-        return { city: null, region: null, country: null, postal: null };
+        return blank;
       }
-      const r = await fetch(`https://ipwho.is/${ip}`, { signal: AbortSignal.timeout(3000) });
-      if (!r.ok) return { city: null, region: null, country: null, postal: null };
-      const d = await r.json() as any;
-      if (!d.success) return { city: null, region: null, country: null, postal: null };
-      return { city: d.city || null, region: d.region || null, country: d.country || null, postal: d.postal || null };
+      // Primary: ipinfo.io (50k/month free, HTTPS, token via IPINFO_TOKEN env var)
+      const token = process.env.IPINFO_TOKEN;
+      const url = token ? `https://ipinfo.io/${ip}?token=${token}` : `https://ipinfo.io/${ip}/json`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        const d = await r.json() as any;
+        if (!d.bogon && d.city) {
+          return { city: d.city || null, region: d.region || null, country: d.country || null, postal: d.postal || null };
+        }
+      }
+      // Fallback: ipwho.is (HTTPS, 10k/month)
+      const r2 = await fetch(`https://ipwho.is/${ip}`, { signal: AbortSignal.timeout(3000) });
+      if (!r2.ok) return blank;
+      const d2 = await r2.json() as any;
+      if (!d2.success) return blank;
+      return { city: d2.city || null, region: d2.region || null, country: d2.country || null, postal: d2.postal || null };
     } catch {
-      return { city: null, region: null, country: null, postal: null };
+      return blank;
     }
   }
 
