@@ -9223,9 +9223,13 @@ ${stabSection}
                                 const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
                                 const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_xd < 1.0);
                                 if (!edps.length || cbInactive) return null;
+                                const shortLoc = s.suggested_edp_loc;
+                                const tryLabel = shortLoc
+                                  ? `Can you use (${shortLoc.toFixed(3)}" LOC)?`
+                                  : "Try:";
                                 return (
                                   <span className="ml-2 inline-flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-zinc-600">Try:</span>
+                                    <span className={shortLoc ? "text-amber-300 font-medium" : "text-zinc-600"}>{tryLabel}</span>
                                     {edps.map((edp: string) => (
                                       <button key={edp} type="button"
                                         className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
