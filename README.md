@@ -1,8 +1,6 @@
 # CoreCutCNC — Machining Advisor by Core Cutter LLC
 
-A full-stack machining advisor for CNC shops. Calculates speeds, feeds, depths of cut, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, and threadmilling. Deployed at [corecutcnc.com](https://corecutcnc.com).
-
-Two access modes: **Customer mode** (requires an EDP# or Core Cutter print PDF) and **Engineering mode** (password-gated, unrestricted parameter input).
+A full-stack machining advisor for CNC shops and sales engineers. Calculates speeds, feeds, depths of cut, cutting forces, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, threadmilling, keyseat, and dovetail operations. Deployed at [corecutcnc.com](https://corecutcnc.com).
 
 Each operation includes a **Pro Tips panel** (how to use the app) and a collapsible **Machining Tips & Tricks accordion** (shop-floor best practices per operation type).
 
@@ -15,20 +13,21 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 3. [File Structure](#file-structure)
 4. [Data Flow](#data-flow)
 5. [Operations Supported](#operations-supported)
-6. [API Schema](#api-schema)
-7. [Material System](#material-system)
-8. [Key Physics Constants](#key-physics-constants)
-9. [Chamfer Mill Physics](#chamfer-mill-physics)
-10. [Stability Advisor](#stability-advisor)
-11. [Toolholder Rigidity Hierarchy](#toolholder-rigidity-hierarchy)
-12. [Workholding Options](#workholding-options)
-13. [EDP Catalog Enrichment](#edp-catalog-enrichment)
-14. [Helix Angle Resolution](#helix-angle-resolution)
-15. [WOC/DOC Optimal Button](#wocdoc-optimal-button)
-16. [Access Control](#access-control)
-17. [Environment Variables](#environment-variables)
-18. [Development](#development)
-19. [Deployment](#deployment)
+6. [ROI Calculator](#roi-calculator)
+7. [API Schema](#api-schema)
+8. [Material System](#material-system)
+9. [Key Physics Constants](#key-physics-constants)
+10. [Chamfer Mill Physics](#chamfer-mill-physics)
+11. [Stability Advisor](#stability-advisor)
+12. [Toolholder Rigidity Hierarchy](#toolholder-rigidity-hierarchy)
+13. [Workholding Options](#workholding-options)
+14. [EDP Catalog Enrichment](#edp-catalog-enrichment)
+15. [Helix Angle Resolution](#helix-angle-resolution)
+16. [WOC/DOC Optimal Button](#wocdoc-optimal-button)
+17. [Access Control](#access-control)
+18. [Environment Variables](#environment-variables)
+19. [Development](#development)
+20. [Deployment](#deployment)
 
 ---
 
@@ -42,7 +41,7 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 | Backend | Node.js / Express 5 (TypeScript) |
 | Physics Engine | Python — `legacy_engine.py` + `engine/physics.py` |
 | Python Bridge | `mentor_bridge.py` — JSON stdin/stdout subprocess bridge |
-| Database | PostgreSQL (Neon serverless) via Drizzle ORM |
+| Database | PostgreSQL (Neon serverless) via `pg` pool |
 
 ---
 
@@ -50,8 +49,8 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 | Route | Page | Description |
 |---|---|---|
-| `/` | Mentor | Main machining advisor. Milling (endmill + chamfer mill), drilling, reaming, feed milling, threadmilling, keyseat, dovetail, 3D surface contouring |
-| `/toolbox` | Toolbox | SKU catalog browser, EDP lookup, tool specifications with STEP file download |
+| `/` | Mentor | Main machining advisor. Milling (endmill + chamfer mill), drilling, reaming, feed milling, threadmilling, keyseat, dovetail, 3D surface contouring. Also contains the ROI Calculator panel. |
+| `/toolbox` | Toolbox | SKU catalog browser, EDP lookup, tool specifications, saved ROI comparisons with Load-back support |
 | `/calculators` | Calculators | Standalone shop calculators: Speeds & Feeds, Bolt Circle (with G-code output), Chamfer Mill, Entry Load Spike, and others |
 | `/admin` | Admin | Password-protected admin panel — allowlist management and domain blocklist for access control |
 
@@ -63,8 +62,8 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 corecuttertoolapp/
 ├── client/src/
 │   ├── pages/
-│   │   ├── Mentor.tsx          # Main advisor UI (~5000+ lines)
-│   │   ├── Toolbox.tsx         # SKU catalog browser
+│   │   ├── Mentor.tsx          # Main advisor UI (~10,000+ lines)
+│   │   ├── Toolbox.tsx         # SKU catalog browser + saved ROI list
 │   │   ├── Calculators.tsx     # Standalone calculators
 │   │   └── Admin.tsx           # Admin access control panel
 │   ├── hooks/
@@ -72,12 +71,12 @@ corecuttertoolapp/
 │   └── components/             # Shared UI components (Radix/shadcn)
 ├── server/
 │   ├── index.ts                # Express server + session middleware
-│   └── routes.ts               # API routes, EDP catalog enrichment, OTP auth
+│   └── routes.ts               # API routes, EDP catalog enrichment, OTP auth, ROI upsert
 ├── shared/
 │   ├── routes.ts               # Zod schemas: MentorInput, MentorResponse
 │   ├── materials.ts            # Material system: ISO categories, notes, aliases, hardness ranges
 │   ├── coatings.ts             # Coating definitions and compatibility rules
-│   └── schema.ts               # Drizzle DB schema (skus, toolbox_sessions, toolbox_items)
+│   └── schema.ts               # Drizzle DB schema
 ├── legacy_engine.py            # Main Python calculation engine (~3500+ lines)
 ├── engine/physics.py           # Physics functions: deflection, force, chip thickness, thread geometry
 ├── mentor_bridge.py            # Python stdin/stdout JSON bridge
@@ -121,10 +120,10 @@ Modes: `hem`, `trochoidal`, `traditional`, `finish`, `face`, `slot`, `circ_inter
 
 - HEM SFM = 2× conventional for all materials
 - Chip thinning compensation applied automatically
-- Variable pitch/helix multipliers applied to deflection limit
+- Variable pitch/helix multipliers applied to deflection limit (×1.50 / ×1.25 / ×1.75 combined)
 - Chipbreaker and truncated rougher geometry support with engagement-dependent force reduction
-- **Machining Tips & Tricks accordion** — collapsible panel of shop-floor best practices, dynamically keyed to the active mode (different tips for HEM, Traditional, Finishing, Facing, Slotting, Circular Interpolation, and 3D Surfacing)
-- `surfacing` mode drives D_eff-based RPM, scallop↔stepover conversion, and tilt angle — see [3D Surface Contouring](#9-3d-surface-contouring-ball-nose--bull-nose)
+- Roughing geometry engagement rules: chipbreaker requires ≥8% WOC + ≥1×D DOC; truncated rougher requires ≥10% WOC + ≥1×D DOC — warnings shown and EDPs excluded from stability suggestions below these thresholds
+- **Machining Tips & Tricks accordion** — collapsible panel of shop-floor best practices, dynamically keyed to the active mode
 
 ### 2. Milling (Chamfer Mill)
 Series CMS (2/4 flute) and CMH (3/5 flute, 30° shear angle).
@@ -151,15 +150,13 @@ Series CMS (2/4 flute) and CMH (3/5 flute, 30° shear angle).
 ### 5. Feed Milling (High-Feed Mill)
 Solid carbide high-feed mill physics for Core Cutter specials. Lead angle 20°, dual-radius geometry, 4 and 5 flute, ≤52 HRC rated.
 
-- **Lead angle chip thinning (CTF):** `programmed_FPT = actual_chip / sin(lead_angle)`. At 20°: CTF = 2.924×. Programmed FPT is always shown alongside actual chip thickness so the machinist knows what's really happening at the edge.
-- **WOC default:** 8% of diameter (sweet spot 6–12%). Engine rejects user WOC > 25% — silently floors to 8%.
-- **Dual-radius DOC constraint:** `max_doc = min(CR × 1.5, D × 0.15)`. Both the corner radius geometric limit and axial depth limit are enforced.
-- **L/D derating:** L/D > 4 → DOC −20% / IPT −10%; L/D > 6 → DOC −35% / IPT −20%. Derate badge shown in results.
-- **Axial-dominant force model:** `radial_frac = 0.15` (vs 0.30 for standard milling) — lead angle redirects force into the spindle.
-- **Ramp angle limit:** `arctan(max_doc / (π × D))` — shown in results for CAM setup.
-- **Coating pairing:** T-Max for ferrous (steel, stainless, HRSA); D-Max (DLC) for aluminum and non-ferrous.
-- **Pro Tips panel:** Full "High-Feed Mill Advisor" — 7 sections covering chip thinning philosophy, WOC control, entry strategy, corner engagement, L/D behavior, and how to read results.
-- **Machining Tips & Tricks accordion:** 11 shop-floor tips + starting parameters table by material (Steel, Stainless, Titanium, Inconel, Cast Iron, Aluminum).
+- **Lead angle chip thinning (CTF):** `programmed_FPT = actual_chip / sin(lead_angle)`. At 20°: CTF = 2.924×
+- **WOC default:** 8% of diameter (sweet spot 6–12%). Engine rejects user WOC > 25% — silently floors to 8%
+- **Dual-radius DOC constraint:** `max_doc = min(CR × 1.5, D × 0.15)`
+- **L/D derating:** L/D > 4 → DOC −20% / IPT −10%; L/D > 6 → DOC −35% / IPT −20%
+- **Axial-dominant force model:** `radial_frac = 0.15` (vs 0.30 for standard milling)
+- **Ramp angle limit:** `arctan(max_doc / (π × D))` — shown in results for CAM setup
+- **Coating pairing:** T-Max for ferrous; D-Max (DLC) for aluminum and non-ferrous
 
 ### 6. Threadmilling
 - UN (UNC/UNF/UNEF), Metric, NPT, NPTF thread standards
@@ -168,36 +165,67 @@ Solid carbide high-feed mill physics for Core Cutter specials. Lead angle 20°, 
 - Spring pass recommendation
 - G-code output (Fanuc and Siemens dialects)
 - Deflection check at thread mill tool
-- Auto cut direction (top-down/bottom-up) based on material and hole type — user can override
-- Thread Details section shown before Tool Geometry (define thread requirement first)
+- Auto cut direction (top-down/bottom-up) based on material and hole type
 
 ### 7. Keyseat Milling
 - Arbor/neck diameter input for two-segment deflection model
 - Multi-pass axial depth strategy (pass-by-pass plan to Final Slot Depth)
 - Full-slot force model (no chip thinning, 180° engagement)
-- Cut Pass Depth + Final Slot Depth — required user inputs, pulse yellow when empty
 
 ### 8. Dovetail Milling
 - Dovetail angle input — effective cutting diameter adjusted for angled engagement
-- Lateral-entry-only model (no plunge; neck narrower than cutting head)
-- Radial Pass Depth + Final Wall Depth — correct terminology for lateral engagement
+- Lateral-entry-only model (no plunge)
 - Multi-pass radial wall strategy
 
 ### 9. 3D Surface Contouring (Ball Nose / Bull Nose)
-For finishing complex 3D surfaces and contoured profiles with ball nose or bull nose endmills.
+For finishing complex 3D surfaces and contoured profiles.
 
-- **Surface Finish Goal presets** — primary entry point: Rough (63–125 µin Ra), Semi-Finish (32–63 µin), Fine (8–32 µin), Mirror (<8 µin), Custom. Selecting a preset auto-fills the scallop height. Custom reveals the scallop/stepover toggle directly.
-- **Live Ra preview** — both scallop and stepover fields show a real-time theoretical Ra estimate as you type, so machinists can relate the input to a print callout without running the full calc.
-- **Input mode (secondary):** Drive by scallop height (enter target cusp height, stepover computed automatically) or drive by stepover (enter stepover directly, scallop height shown). Accessible via small toggle in the field header.
-- **D_eff at contact point** — RPM and SFM are calculated at the effective cutting diameter, not the tool OD:
+- **Surface Finish Goal presets** — Rough (63–125 µin Ra), Semi-Finish (32–63 µin), Fine (8–32 µin), Mirror (<8 µin), Custom
+- **Live Ra preview** — scallop and stepover fields show real-time theoretical Ra estimate as you type
+- **D_eff at contact point** — RPM and SFM calculated at effective cutting diameter, not tool OD
   - Ball nose: `D_eff = 2√(2R·ap − ap²)`
   - Bull nose (ap ≤ CR): `D_eff = (D − 2·CR) + 2√(2·CR·ap − ap²)`
-- **Tool tilt angle** (ball nose only, 0–30°) — shifts the contact point away from the dead center of the ball tip, raising D_eff and effective cutting velocity. Formula: `D_eff = 2√(R² − (R·cos(θ) − ap)²)`. Live preview shows velocity gain vs. 0° baseline.
-- **Scallop ↔ stepover conversion:** `ae = √(8·R·h)` / `h = ae² / (8·R)` where R is the corner radius (bull nose uses CR when ap ≤ CR)
-- Chip thinning based on stepover/D_eff ratio (not WOC/OD)
-- WOC/DOC inputs hidden; replaced by ap + stepover/scallop inputs
-- Results display: D_eff (% of OD), scallop height (color-coded green ≤0.0005", amber >0.002"), stepover ae, step-down ap
-- Print export: surfacing setup notes panel with tilt, climb milling, and semi-finish pass recommendations
+- **Tool tilt angle** (ball nose only, 0–30°) — raises D_eff and effective cutting velocity
+- **Scallop ↔ stepover conversion:** `ae = √(8·R·h)` / `h = ae² / (8·R)`
+
+---
+
+## ROI Calculator
+
+Built into the Mentor page as a collapsible panel. Designed for sales engineers to quickly build a cost-per-unit comparison between Core Cutter tooling and an incumbent competitor.
+
+### Measurement Modes
+
+Three self-contained modes — pick whichever metric the customer tracks:
+
+| Mode | Entry | Annual Volume Field |
+|---|---|---|
+| Parts per Tool | Number of parts per tool life | Parts/year |
+| Cut Time per Tool | Minutes of cut time per tool life | Cutting hours/year |
+| Linear Inches per Tool | Linear inches per tool life | Linear inches/year |
+
+Each mode computes cost per native unit ($/part, $/min, $/inch) without time-per-part conversion. Annual savings = (comp total cost − CC total cost) × annual units.
+
+### Cost Components
+
+- **Tool cost per unit** — price ÷ tool life units (with reconditioning lifecycle compounding if enabled)
+- **Changeover cost per unit** — `(1/N) × change_time_min × shop_rate/60` (applied to both sides — more tool life = fewer changeovers)
+- **Additional Savings** — itemized recurring or one-time savings (scrap reduction, downtime elimination, tool consolidation, etc.)
+
+### Reconditioning Program Option
+
+When enabled: configurable grind count (up to 5) and retention % per regrind. Lifecycle cost compounds across all grinds. Reconditioning savings per unit shown separately in results.
+
+### Saved ROIs (Toolbox)
+
+- Every Calculate click upserts the ROI to the database (one row per email + CC EDP + material)
+- **ROI Name field** — label each comparison (e.g. "Acme Corp – 4140 Roughing") for easy retrieval
+- Toolbox page shows all saved ROIs by name with annual savings, material, and date
+- **Load button** on each saved ROI restores incumbent fields and navigates back to the Mentor page
+
+### DB Columns (`roi_comparisons`)
+
+`user_email`, `user_name`, `material`, `operation`, `tool_dia`, `feed_ipm`, `cc_edp`, `cc_tool_price`, `cc_parts_per_tool`, `cc_time_in_cut`, `cc_mrr`, `comp_edp`, `comp_brand`, `comp_price`, `comp_parts_per_tool`, `comp_time_in_cut`, `comp_mrr`, `shop_rate`, `annual_volume`, `monthly_volume`, `savings_per_part`, `monthly_savings`, `annual_savings`, `savings_pct`, `mrr_gain_pct`, `recon_grinds`, `recon_savings_per_part`, `one_time_savings`, `roi_name`, `city`, `region`, `country`, `ip`, `updated_at`, `emailed_at`
 
 ---
 
@@ -211,13 +239,6 @@ Defined in `shared/routes.ts` using Zod. The full `MentorInput` and `MentorRespo
 |---|---|---|
 | `operation` | enum | `milling`, `drilling`, `reaming`, `threadmilling`, `keyseat`, `dovetail`, `feedmill` |
 | `mode` | enum | `hem`, `traditional`, `finish`, `face`, `slot`, `trochoidal`, `circ_interp`, `surfacing` |
-| `lead_angle` | number | Feed mill lead angle in degrees (default 20°). Drives chip thinning factor (CTF). |
-| `feedmill_doc_in` | number | Feed mill axial DOC per pass in inches (0 = auto from dual-radius constraint) |
-| `surfacing_input_mode` | enum | `scallop`, `stepover` — secondary control; Surface Finish Goal presets are the primary UI |
-| `surfacing_scallop_in` | number | Target scallop (cusp) height in inches — stepover computed automatically |
-| `surfacing_stepover_in` | number | Lateral stepover between passes in inches |
-| `surfacing_ap_in` | number | Axial step-down (ap) per pass in inches |
-| `surfacing_tilt_deg` | number | Tool tilt angle in degrees (0–30°), ball nose only — raises D_eff at contact point |
 | `material` | string | Material key (see material system) |
 | `tool_dia` | number | Cutting diameter (inches) |
 | `flutes` | number | Flute count |
@@ -228,7 +249,7 @@ Defined in `shared/routes.ts` using Zod. The full `MentorInput` and `MentorRespo
 | `helix_angle` | number | Helix angle in degrees (0 = use SERIES_HELIX or default 35°) |
 | `shank_dia` | number | Shank/body OD — activates two-segment cantilever deflection model when > cutting dia |
 | `spindle_taper` | enum | CAT30/40/50, BT30/40/50, HSK63/100, VDI30/40/50, BMT45/55/65, CAPTO C6/C8 |
-| `spindle_drive` | enum | `direct`, `belt`, `gear` — drives efficiency derating |
+| `spindle_drive` | enum | `direct`, `belt`, `gear` — drives efficiency derating (0.96/0.92/0.88) |
 | `toolholder` | enum | `shrink_fit`, `hydraulic`, `hp_collet`, `er_collet`, `milling_chuck`, `weldon`, `press_fit`, `capto` |
 | `dual_contact` | boolean | Dual-contact spindle engagement |
 | `workholding` | enum | See [Workholding Options](#workholding-options) |
@@ -244,18 +265,16 @@ Defined in `shared/routes.ts` using Zod. The full `MentorInput` and `MentorRespo
 
 ### Response Structure (`MentorResponse`)
 
-The response is split into logical sections:
-
 - **`customer`** — RPM, SFM, feed IPM, MRR, HP utilization, FPT, status notes
 - **`engineering`** — cutting force (lbf), deflection, chip thickness, chatter index, tool life estimate
 - **`stability`** — stickout, L/D ratio, deflection vs. limit (%), ordered suggestion list
-- **`drilling`** — drill-specific: thrust, torque, peck schedule, stability sub-object
-- **`reaming`** — reaming-specific: stock check, surface finish risk, tool life range
+- **`drilling`** — thrust, torque, peck schedule, stability sub-object
+- **`reaming`** — stock check, surface finish risk, tool life range
 - **`chamfer`** — effective diameter, tip dia, depth
 - **`thread_mill`** — pitch, passes, G-code, deflection check
 - **`keyseat`** — DOC, multi-pass plan, tips
 - **`dovetail`** — angle, DOC, multi-pass plan, lead CTF
-- **`feedmill`** — lead_angle_deg, lead_ctf, programmed_fpt_in, actual_chip_in, doc_in, rec_doc_in, max_doc_in, woc_pct, woc_in, ramp_angle_max_deg, ld_ratio, ld_derated, tips[]
+- **`feedmill`** — lead_angle_deg, lead_ctf, programmed_fpt_in, actual_chip_in, doc_in, woc_pct, ramp_angle_max_deg, ld_ratio, ld_derated, tips[]
 - **`entry_moves`** — ramp/helix entry parameters, sweep arc, straight entry IPM
 
 ---
@@ -273,364 +292,202 @@ Defined in `shared/materials.ts` (UI) and `legacy_engine.py` (physics constants)
 | M | Stainless | Yellow |
 | K | Cast Iron | Red |
 | S | Superalloys | Orange |
-| H | Hardened Steel / Armor Plate | Grey |
+| H | Hardened Steel | Grey |
 | O | Plastics & Composites | Cyan |
 
 ### P — Steel
 
 | Key | Grades | Conv. SFM | IPT_FRAC |
 |---|---|---|---|
-| `steel_mild` | A36, 1018, 1020, 10xx | 400 | 0.0060 |
+| `steel_mild` | A36, 1018, 1020 | 400 | 0.0060 |
 | `steel_free` | 12L14, 1215, 1117 | 425 | 0.0070 |
-| `steel_alloy` | 4130, 4140, 4340, 8620, 9310 | 350 | 0.0055 |
+| `steel_alloy` | 4130, 4140, 4340 | 350 | 0.0055 |
 | `tool_steel_p20` | P20 (~30 HRC) | 300 | 0.0050 |
 | `tool_steel_a2` | A2 | 240 | 0.0044 |
 | `tool_steel_h13` | H13 | 220 | 0.0040 |
 | `tool_steel_s7` | S7 | 240 | 0.0044 |
 | `tool_steel_d2` | D2 | 180 | 0.0032 |
-| `cpm_10v` | CPM 10V / A11 | 85 | — |
 
 ### M — Stainless Steel
 
 | Key | Grades | Conv. SFM | IPT_FRAC |
 |---|---|---|---|
-| `stainless_fm` | 303, 416 | 290 | — |
-| `stainless_ferritic` | 409, 430, 441 | 230 | — |
-| `stainless_410` | 410 | 215 | — |
-| `stainless_420` | 420 | 180 | — |
-| `stainless_440c` | 440C | 200 | — |
-| `stainless_304` | 304, 304L, 321 | 180 | 0.0035 |
-| `stainless_316` | 316, 316L (Mo) | 160 | 0.0030 |
-| `stainless_ph` | 17-4PH, 15-5PH, 13-8MO | 190 | 0.0035 |
-| `stainless_duplex` | 2205 | 145 | — |
-| `stainless_superduplex` | 2507 | 120 | — |
+| `stainless_fm` | 303, 416 (free machining) | 290 | 0.0042 |
+| `stainless_ferritic` | 409, 430, 441 | 230 | 0.0038 |
+| `stainless_410` | 410 | 215 | 0.0036 |
+| `stainless_420` | 420 | 200 | 0.0034 |
+| `stainless_440c` | 440C | 170 | 0.0030 |
+| `stainless_304` | 304, 304L | 180 | 0.0035 |
+| `stainless_316` | 316, 316L | 160 | 0.0030 |
+| `stainless_ph` | 17-4 PH, 15-5 PH | 190 | 0.0035 |
+| `stainless_duplex` | 2205 | 140 | 0.0028 |
+| `stainless_superduplex` | 2507 | 110 | 0.0024 |
 
-### K — Cast Iron
-
-| Key | Grades | Conv. SFM |
-|---|---|---|
-| `cast_iron_gray` | Class 30/40, GG20/25 | 375 |
-| `cast_iron_ductile` | 65-45-12, GGG-40/50 | 325 |
-| `cast_iron_cgi` | GJV-300/400 | 260 |
-| `cast_iron_malleable` | GTW/GTB | 275 |
-
-### N — Non-Ferrous / Aluminum
+### S — Superalloys (Ni/Co)
 
 | Key | Grades | Conv. SFM | IPT_FRAC |
 |---|---|---|---|
-| `aluminum_wrought` | 6061, 6082, 5052, 6xxx/5xxx | 1400 | 0.0125 |
-| `aluminum_wrought_hs` | 7075, 2024, 7xxx/2xxx | 1100 | — |
-| `aluminum_cast` | A356, A380, A390 | 650 | — |
-| `non_ferrous` | Copper, brass, bronze | 550 | — |
-
-### S — Superalloys / Titanium
-
-| Key | Grades | Conv. SFM | IPT_FRAC |
-|---|---|---|---|
-| `titanium_cp` | Grade 1–4 | 250 | — |
-| `titanium_64` | Ti-6Al-4V Grade 5 | 180 | — |
-| `hiTemp_fe` | A-286, Incoloy 800 | 95 | 0.0034 |
-| `hiTemp_co` | Stellite | 135 | — |
+| `inconel_718` | Inconel 718 | 110 | 0.0032 |
+| `inconel_625` | Inconel 625 | 110 | 0.0036 |
+| `hastelloy_x` | Hastelloy X | 82 | 0.0029 |
+| `waspaloy` | Waspaloy | 68 | 0.0024 |
+| `mp35n` | MP35N | 60 | 0.0022 |
 | `monel_k500` | Monel K-500 | 115 | 0.0041 |
-| `inconel_625` | 625, Hastelloy C-276 | 110 | 0.0036 |
-| `inconel_718` | 718, 718 Plus | 110 | 0.0032 |
-| `hastelloy_x` | Hastelloy X, X-750, Nimonic C-263 | 82 | 0.0029 |
-| `inconel_617` | 617, Haynes 230 | 78 | — |
-| `waspaloy` | Waspaloy, René 41/77/80, Nimonic 80A/90 | 68 | 0.0024 |
-| `mp35n` | MP35N, Udimet 720, René 95 | 60 | 0.0022 |
+| `hiTemp_fe` | A-286 (Fe-based) | 95 | 0.0034 |
+| `hiTemp_co` | Stellite (Co-based) | 135 | — |
 
-HEM SFM = 2× conventional for all superalloys. All Ni superalloy keys map to group "Inconel" and are excluded from `hardness_sfm_mult`.
+HEM SFM = 2× conventional for all superalloys. All Ni-based keys are excluded from `hardness_sfm_mult`.
 
-### H — Hardened Steel / Armor Plate
+### H — Hardened Steel
 
-| Key | Description | Conv. SFM |
-|---|---|---|
-| `hardened_lt55` | Hardened steel 35–54 HRC | 240 |
-| `hardened_gt55` | Hardened steel ≥55 HRC | 100 |
-| `armor_milspec` | MIL-A-12560 / MIL-A-46100 (~260–300 HB) | 240 |
-| `armor_ar400` | AR400 / AR450 (~360–480 HB) | 175 |
-| `armor_ar500` | AR500 / Armox 500T (~470–540 HB) | 130 |
-| `armor_ar600` | AR550 / AR600 / Armox 600T (~570–640 HB) | 75 |
-
-### O — Plastics & Composites
-
-| Key | Description | Conv. SFM |
-|---|---|---|
-| `plastic_unfilled` | PEEK, POM, PA, PC, PPS, PEI | 450 |
-| `plastic_filled` | GF/CF fiber-reinforced thermoplastics | 350 |
-| `composite_tpc` | Continuous-fiber TPC laminates (CF-PEEK, GF-PP) | 400 |
-
-### Material Aliases
-
-`shared/materials.ts` exports `MATERIAL_ALIASES` — a lookup table mapping common grade names, trade names, UNS numbers, and DIN designations to material keys (e.g., `"6061-t6"` → `"aluminum_wrought"`, `"4140"` → `"steel_alloy"`). Used for instant material matching from user text input.
-
-### Hardness Ranges
-
-`MATERIAL_HARDNESS_RANGE` in `shared/materials.ts` defines physically plausible hardness min/max per material (with scale). The UI warns the user when an entered hardness falls outside the valid range for the selected material.
+| Key | Description | Conv. SFM | IPT_FRAC |
+|---|---|---|---|
+| `hardened_lt55` | Generic hardened, < 55 HRC | 240 | 0.0045 |
+| `hardened_gt55` | Generic hardened, ≥ 55 HRC | 100 | 0.0012 |
 
 ---
 
 ## Key Physics Constants
 
-All shop-validated.
-
 ### IPT Architecture
 
-`IPT_FRAC` stores chip load as a **fraction of diameter** (e.g., 0.0055 = 0.55%×D). Calculation: `ipt = IPT_FRAC[material] × diameter`. This ensures chip load scales correctly across all tool diameters without manual adjustment.
+`IPT_FRAC` dict stores chip load as **fraction of diameter** (e.g., `0.0055` = 0.55%×D).
 
-`HEM_IPT_MULT` applies an additional boost for HEM/trochoidal (2.0× most materials, 2.4× Inconel 718).
-
-### Deflection Model
-
-```
-I = pi × core_dia^4 / 64          (second moment of area)
-deflection = F × L^3 / (3 × E × I)
-
-Carbide E = 90,000,000 psi
-core_dia = tool_dia × core_ratio[flutes]
+```python
+ipt = IPT_FRAC[mat] * diameter
 ```
 
-Core ratio by flute count:
+Scales correctly across all tool sizes. `HEM_IPT_MULT` applies an additional HEM boost (2.0× most materials, 1.8× Inconel).
 
-| Flutes | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| Core ratio | 0.58 | 0.62 | 0.66 | 0.70 | 0.74 | 0.76 | 0.78 | 0.80 | 0.82 | 0.83 | 0.84 |
-
-When `shank_dia > cutting_dia`, a two-segment cantilever deflection model is used.
-
-### Chip Thinning
-
-```
-factor = sin(arccos(1 - 2 × woc_pct / 100))
-```
-
-Minimum chip thinning factor: 0.25 (floor enforced by WOC Optimal button).
-
-### Radial Force Fraction
-
-WOC-scaled radial force fraction:
-```
-radial_frac = max(0.15, min(0.35, 0.15 + 0.40 × woc_pct / 100))
-```
-
-### Teeth in Cut
-
-```
-teeth = max(0.1, arc_fraction × flutes)
-```
-
-The `max(0.1, ...)` floor (not `max(1, ...)`) is intentional — the original `max(1, ...)` over-predicted force 2.8× at HEM WOC levels.
+### HEM SFM
+HEM SFM = **2× conventional** for all materials.
 
 ### Spindle Drive Efficiency
 
-Applied to all three calc paths (milling, drilling, reaming):
-
-| Drive type | Efficiency |
+| Drive | Efficiency |
 |---|---|
-| `direct` | 0.96 |
-| `belt` | 0.92 |
-| `gear` | 0.88 |
+| Direct | 0.96 |
+| Belt | 0.92 |
+| Gear | 0.88 |
 
-KPI label shows "Avail HP" (derated available cutting HP, not nameplate).
+Applied to all three calc paths (milling, drilling, reaming). KPI label: "Avail HP" (derated available cutting HP).
 
-### Helix Force Factor
+### Stability Force Model
 
-| Helix angle | Force factor |
+- `teeth = max(0.1, arc_fraction × flutes)` — WOC-proportional tooth engagement, no wrong clamping at HEM WOC
+- `radial_frac = max(0.15, min(0.35, 0.15 + 0.40 × woc_pct/100))` — WOC-scaled radial force fraction
+- `HELIX_FORCE_FACTOR`: {35°: 1.00, 38°: 0.95, 45°: 0.90}
+
+### Geometry Force Multipliers (Kc)
+
+| Geometry | Kc multiplier |
 |---|---|
-| 35° | 1.00 |
-| 38° | 0.95 |
-| 45° | 0.90 |
-
-### Geometry Kc Factor
-
-| Geometry | Kc factor |
-|---|---|
-| `standard` | 1.00 |
-| `chipbreaker` | 0.80 |
-| `truncated_rougher` | 0.83 |
-
-### Holder Runout Factor
-
-Applied to IPT (lower runout = better chip load consistency):
-
-| Holder | Runout factor |
-|---|---|
-| `shrink_fit` | 1.00 |
-| `capto` | 1.00 |
-| `press_fit` | 0.99 |
-| `hydraulic` | 0.97 |
-| `hp_collet` | 0.97 |
-| `milling_chuck` | 0.95 |
-| `shell_mill_arbor` | 0.95 |
-| `weldon` | 0.92 |
-| `er_collet` | 0.90 |
+| Standard | 1.00 |
+| Chipbreaker | ~0.80 (−20%) |
+| Truncated Rougher | ~0.83 (−17%) |
 
 ---
 
 ## Chamfer Mill Physics
 
-```
-D_eff = tip_dia + 2 × depth × tan(half_angle)
-cutting_edge_length = radial_reach / sin(half_angle)
-max_chamfer_depth = radial_reach / tan(half_angle)
-chip_thinning_factor = sin(half_angle)   -- programmed FPT ÷ sin(half_angle)
-actual_woc = depth × tan(half_angle)     -- WOC grows with depth
-MRR = feed × depth × woc × 0.5          -- triangular cross-section
-```
+Series CMS (2/4 flute, 0° shear) and CMH (3/5 flute, 30° shear angle).
 
-**CMH series (30° shear angle):**
-- SFM ×1.15 vs. CMS/baseline
-- Force factor = 0.933
-- Minimum chip floor: 30% of base IPT_FRAC × body_dia
-
-**Multi-pass strategy:**
-- Max rough depth per pass = body_dia × 15% × chip_room_mult (10% for hard materials)
-- Chip room multiplier by flute count: {2fl: 1.35, 3fl: 1.15, 4fl: 1.00, 5fl: 0.85}
-
-**Saddling sweet spot:**
-- CMH: middle 80% of cutting edge
-- CMS: middle 60% of cutting edge
+- Effective cutting diameter computed from chamfer angle and contact depth
+- Multi-pass rough/finish separation
+- Tip diameter and saddling guidance
+- SFM calculated at effective diameter (not shank OD)
 
 ---
 
 ## Stability Advisor
 
-The stability section is split into two cards displayed below the main results:
+### Thresholds (Mentor.tsx)
 
-### Setup Score card
-Composite score (0–100) with four sub-scores. **Deflection overrides the label** — if deflection is ≥ 100% of the safe limit, the top label always reflects that regardless of the composite score (prevents "Moderate" showing alongside "High Chatter Risk").
-
-| Sub-score label | What it measures |
+| Deflection % | Status |
 |---|---|
-| **Tool Flex** | How much the tool tip flexes under cutting force (was "Defl Score") |
-| **Spindle Load** | Power draw vs. available HP (was "Mach Load") |
-| **Chip Health** | Whether the tool is cutting or rubbing — chip thickness vs. minimum (was "Chip Quality") |
-| **Reach** | Stickout relative to tool diameter — shorter is always stiffer (was "L/D Ratio") |
+| < 100% | "Setup Looks Stable" (green) |
+| 100–175% | "Chatter Risk" (yellow) |
+| ≥ 175% | "High Chatter Risk" (red) |
 
-Score label priority: deflection ≥ 175% → **High Chatter Risk** (red); ≥ 100% → **Chatter Risk** (amber); otherwise composite-driven (Excellent / Good / Moderate / Caution / High Risk).
+Messages are advisory only — no "do not run" language.
 
-### Chatter & Vibration Check card (was "Rigidity & Chatter Audit")
-Plain-language verdict + "What You Can Do" suggestions. Uses machinist-facing language throughout:
+### Suggestion Order
 
-- "260% of safe limit" → **"flexing 2.6× the safe limit"**
-- "L/D 3.1 (length-to-diameter ratio)" → **"Reach: 3.1× tool diameter"**
-- "Setup Looks Stable" → **"Setup Looks Good"**
-- "Possible Improvements" → **"What You Can Do"**
+1. Reduce stickout (floor = LOC + flute_wash + 15%×dia)
+2. Upgrade toolholder
+3. Dual contact FYI note (info type, dimmed) — only fires when deflection > limit AND dual_contact=False AND taper is CAT/BT
+4. Reduced-neck tool (composite beam model)
+5. Reduce DOC
+6. Reduce WOC (>15% only)
+7. Shorter extension holder (if holder_gage_length set)
+7b. Increase flute count (next 1–2 steps, skipped if gain <6%)
+8. Increase tool diameter
 
-**Suggestion order when deflection > limit:**
+### Variable Pitch/Helix Multipliers
 
-1. **Shorten stickout** — minimum = LOC + flute_wash + 15% dia
-2. **Upgrade toolholder** — next step up in rigidity hierarchy
-3. **Dual contact FYI** — info note (dimmed); fires only for CAT/BT tapers when dual_contact=False
-4. **Reduced-neck tool** — composite beam deflection model
-5. **Reduce DOC**
-6. **Reduce WOC** — only fires when WOC > 15%
-7. **Shorter extension holder** — only fires when holder_gage_length is set
-8. **Increase flute count** — next 1–2 steps; skipped when gain < 6%
-9. **Increase tool diameter**
-
-**Chatter thresholds:**
-
-| Deflection | Status | Color |
-|---|---|---|
-| < 100% of limit | Setup Looks Good | Green |
-| 100–175% of limit | Chatter Risk | Amber |
-| ≥ 175% of limit | High Chatter Risk | Red |
-
-All messages are advisory — no "do not run" language.
-
-**Roughing geometry engagement rules:**
-
-- **Chipbreaker**: requires ≥ 8% WOC and ≥ 1×D DOC. Below either threshold: amber warning, Low WOC button floors at 8%, chipbreaker EDPs excluded from stability suggestions.
-- **Truncated Rougher (VRX)**: requires ≥ 10% WOC and ≥ 1×D DOC. Same enforcement, floors at 10%.
+| Configuration | Deflection limit multiplier |
+|---|---|
+| Variable pitch only | ×1.50 |
+| Variable helix only | ×1.25 |
+| Both | ×1.75 |
 
 ---
 
 ## Toolholder Rigidity Hierarchy
 
-Rigidity factor divides tool deflection in `calc_state()`:
-
-| Holder | Rigidity factor |
+| Holder | Rigidity Factor |
 |---|---|
-| `er_collet` | 1.00 (baseline) |
-| `hp_collet` | 1.05 |
-| `weldon` | 1.08 |
-| `milling_chuck` | 1.12 |
-| `hydraulic` | 1.14 |
-| `press_fit` | 1.17 |
-| `shrink_fit` | 1.18 |
-| `capto` | 1.20 |
+| ER Collet | 1.00 |
+| HP Collet | 1.05 |
+| Weldon | 1.08 |
+| Milling Chuck | 1.12 |
+| Hydraulic | 1.14 |
+| Press Fit | 1.17 |
+| Shrink Fit | 1.18 |
+| Capto | 1.20 |
+
+Rigidity factor divides deflection in `calc_state()`.
 
 ---
 
 ## Workholding Options
 
-Workholding compliance multiplies chatter index. Rigidity order from most to least rigid:
-
-`between_centers` (0.75) → `rigid_fixture` (0.80) → `tombstone` (0.82) → `collet_chuck` (0.85) → `4_jaw_chuck` (0.88) → `5th_axis_vise` (0.88) → `dovetail` (0.90) → `trunnion_4th` (0.91) → `face_plate` (0.93) → `vise` (1.00, baseline) → `3_jaw_chuck` (1.05) → `toe_clamps` (1.08) → `soft_jaws` (1.20)
-
-| Key | Factor | Context |
-|---|---|---|
-| `between_centers` | 0.75 | Shaft between centers — most rigid setup possible |
-| `rigid_fixture` | 0.80 | Bolted/doweled fixture plate |
-| `tombstone` | 0.82 | HMC pallet tombstone |
-| `collet_chuck` | 0.85 | Bar stock collet chuck |
-| `4_jaw_chuck` | 0.88 | Independent 4-jaw — rigid when dialed in; mill rotary/4th-axis use |
-| `5th_axis_vise` | 0.88 | Precision 5-axis vise (Mate, Schunk, etc.) |
-| `dovetail` | 0.90 | Mechanical pull-out lock |
-| `trunnion_4th` | 0.91 | 4th-axis trunnion with axis locked via brake |
-| `face_plate` | 0.93 | Face plate with clamps |
-| `vise` | 1.00 | Standard Kurt-style vise — baseline |
-| `3_jaw_chuck` | 1.05 | Self-centering 3-jaw; mill rotary table / 4th-axis indexer use |
-| `toe_clamps` | 1.08 | Direct clamping, some flex under radial load |
-| `soft_jaws` | 1.20 | Custom soft jaws — most compliant |
-
-**Mill context for chucks:** `3_jaw_chuck` and `4_jaw_chuck` are available on VMC/HMC machine types for rotary table, 4th-axis, and indexer setups. `trunnion_4th` covers dedicated trunnion tables where the axis locks rigid for cutting.
+Vise, 3-jaw chuck, collet fixture, angle plate, magnetic chuck, tombstone, pallet fixture, and custom. Rigidity multiplier applied to deflection limit based on workholding type.
 
 ---
 
 ## EDP Catalog Enrichment
 
-After the Python engine runs and before Zod validation, the Express server queries the PostgreSQL `skus` table to enrich stability suggestions with real EDP numbers.
+Runs in `server/routes.ts` after the Python engine returns results and before Zod validation. Queries the SKU catalog to surface relevant tool suggestions in the stability advisor.
 
-**For flute-change suggestions (`type=tool`):**
-- Query: `ILIKE derivedBase%` — matches all coating variants of the same base EDP
-- Returns all EDPs at the suggested diameter, LOC, and flute count
-
-**For diameter suggestions (`type=diameter`):**
-- Full query: flutes + diameter + corner condition + closest LOC (subquery)
-- Returns all EDPs at the closest available LOC
-
-**Returns:**
-- `suggested_edps[]` — full array, displayed comma-separated in the UI (yellow)
-- `suggested_edp` — first item (legacy compatibility)
-
-**Geometry exclusion rules applied to EDP queries:**
-- Chipbreaker excluded when `woc_pct < 8` OR `doc_xd < 1.0`
-- Truncated rougher excluded when `woc_pct < 10` OR `doc_xd < 1.0`
+- **Flute change suggestions** (`type=tool`): ILIKE match on `derivedBase%` (first-digit replacement, all coating variants)
+- **Diameter change suggestions** (`type=diameter`): full query — flutes + dia + corner + closest LOC subquery; returns all EDPs at that LOC
+- Returns `suggested_edps[]` array + `suggested_edp` (first); UI displays all comma-separated in yellow
+- **Roughing geometry exclusion:** when `woc_pct < 8` OR `doc_xd < 1.0`, chipbreaker excluded; when `woc_pct < 10` OR `doc_xd < 1.0`, truncated_rougher also excluded
+- `lookup_loc` present on both flute and diameter suggestions
 
 ---
 
 ## Helix Angle Resolution
 
-Priority chain:
+Priority chain in `legacy_engine.py`:
 
-1. `payload.helix_angle` (from SKU upload column — takes precedence)
-2. `SERIES_HELIX[tool_series]` lookup table
+1. `payload["helix_angle"]` (from SKU column)
+2. `SERIES_HELIX[tool_series]` lookup
 3. Default: 35°
 
-**SERIES_HELIX table:**
+### SERIES_HELIX Table
 
 | Series | Helix |
 |---|---|
 | AL2 | 45° |
 | AL3 | 37° |
 | FEM5 | 45° |
-| QTR3 | 41° (variable 40/41/42°; use 41 avg; `variable_helix=true` captures stability benefit) |
+| QTR3 | 41° (avg of 40/41/42) |
 | VST4 | 38° |
 | VST5 | 39° |
 | VST6 | 37° |
-| VMF7 / VMF9 / VMF11 | 38° |
+| VMF7/9/11 | 38° |
 | VXR4 | 42° |
 | VXR5 | 39° |
 
@@ -638,27 +495,18 @@ Priority chain:
 
 ## WOC/DOC Optimal Button
 
-Physics-based optimal engagement calculation — not a MRR-balance formula.
-
-- Uses ISO-category + flute-count aware WOC/DOC target
-- Validates chip thinning floor: `sin(arccos(1 - 2 × WOC/100)) >= 0.25`
-- Live display below WOC field (always visible when WOC + flutes are set):
-  - Engagement angle (degrees)
-  - Chip thinning % (green < 55%, amber 30–55%, red < 30%)
-  - Teeth in cut
+Appears in HEM and Traditional modes. Sets WOC and DOC to physics-optimal values for the selected material and tool geometry. HEM defaults to ~3% WOC for superalloys, 8–15% for steel/stainless.
 
 ---
 
 ## Access Control
 
-The Toolbox and Customer mode require authentication via OTP email.
+Two-tier system:
 
-- **Allowlist**: approved emails receive OTP codes via email
-- **Domain blocklist**: entire domains can be blocked at the OTP delivery step
-- **Active sessions view**: admin can see active sessions and force-logout any user
-- **Admin panel**: password-protected via `ADMIN_PASSWORD` environment variable
+1. **Allowlist** — specific emails granted access (managed in `/admin`)
+2. **Domain blocklist** — blocks entire email domains (e.g., competitor domains)
 
-Database tables: `toolbox_sessions` (email, token, OTP), `toolbox_items` (saved results per user).
+OTP email verification via SMTP (Brevo) for Toolbox login.
 
 ---
 
@@ -667,11 +515,13 @@ Database tables: `toolbox_sessions` (email, token, OTP), `toolbox_items` (saved 
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | Neon PostgreSQL connection string |
-| `ADMIN_PASSWORD` | Admin panel access password |
-| `ENG_PASSWORD` | Engineering mode password |
-| `ANTHROPIC_API_KEY` | Claude Vision API key for CC print PDF extraction |
-| `PYTHONIOENCODING` | Set to `utf-8` — required for Windows cp1252 compatibility |
-| SMTP credentials | For OTP email delivery (nodemailer) |
+| `SMTP_USER` | SMTP username (Brevo) |
+| `SMTP_PASS` | SMTP password |
+| `SMTP_HOST` | SMTP host (default: `smtp-relay.brevo.com`) |
+| `SMTP_FROM` | From address for OTP emails |
+| `ROI_EMAIL_TO` | Recipient for ROI email submissions |
+| `ADMIN_PASSWORD` | Admin panel password |
+| `PYTHONIOENCODING` | Must be `utf-8` (set automatically in spawn env) |
 
 ---
 
@@ -679,22 +529,27 @@ Database tables: `toolbox_sessions` (email, token, OTP), `toolbox_items` (saved 
 
 ```bash
 npm install
-npm run dev      # starts Express + Vite concurrently (via concurrently)
+npm run dev       # starts Express + Vite dev server on port 5000
 ```
 
-The Python engine runs as a subprocess of Express — no separate Python server process is needed. Each API request spawns a new `mentor_bridge.py` process, writes the payload to stdin, and reads JSON from stdout.
+The `dev` script uses `tsx` with hot reload — no build step needed during development.
 
-**Python dependency:** stdlib only (`math`, `sys`, `json`). No pip install required.
+Python dependencies: none beyond stdlib. The physics engine runs as a subprocess.
 
 ---
 
-## Deployment
+## Deployment (Replit)
 
-Production at [corecutcnc.com](https://corecutcnc.com) — hosted on Replit Autoscale Deployments.
+```bash
+git pull
+npm run build     # compiles Vite frontend + bundles server to dist/index.cjs
+npm run start     # NODE_ENV=production node dist/index.cjs
+```
 
-**Deploy steps:**
-1. Push changes from VS Code: `git push origin main`
-2. In Replit shell: `git fetch origin && git reset --hard origin/main`
-3. Click **Republish** in the Replit Deployments tab
+If port 5000 is already in use (previous process still running):
 
-The Express server serves the compiled React frontend as static files in production. Replit Deployments runs the build (`npm run build`) and starts the server (`node dist/index.cjs`) automatically on republish.
+```bash
+fuser -k 5000/tcp && npm run start
+```
+
+DB migrations run automatically on server startup via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
