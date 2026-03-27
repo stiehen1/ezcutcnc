@@ -4499,38 +4499,6 @@ ${stabSection}
             </div>
           </>)}
 
-          {/* Entry Type Preferences — milling only */}
-          {(operation === "milling") && (
-            <div className="mt-5 space-y-2">
-              <FieldLabel hint="Select which entry strategies to show in results. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
-                Entry Type Preferences
-              </FieldLabel>
-              <div className="flex flex-wrap gap-3">
-                {[
-                  { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: form.tool_type !== "chamfer_mill" },
-                  { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
-                  { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" },
-                  { key: "straight", label: "Straight-In",     color: "text-amber-400 border-amber-500/60",  recommended: false },
-                ].map(({ key, label, color, recommended }) => {
-                  const checked = entryTypes.includes(key);
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== key) : [...p, key])}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
-                    >
-                      <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 ${checked ? "bg-current border-current" : "border-zinc-600"}`}>
-                        {checked && <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 10 10" fill="currentColor"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
-                      </span>
-                      {label}{recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* Machine Power */}
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
@@ -6705,6 +6673,45 @@ ${stabSection}
               </div>
             </div>
           </div>}
+
+          {/* Tool Entry */}
+          {operation === "milling" && (
+            <>
+            <div className="flex items-center gap-3 my-7">
+              <div className="flex-1 border-t-2 border-orange-500" />
+              <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Entry</div>
+              <div className="flex-1 border-t-2 border-orange-500" />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Select which entry strategies to show in results. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
+                Entry Type Preferences
+              </FieldLabel>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: form.tool_type !== "chamfer_mill" },
+                  { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
+                  { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" },
+                  { key: "straight", label: "Straight-In",     color: "text-amber-400 border-amber-500/60",  recommended: false },
+                ].map(({ key, label, color, recommended }) => {
+                  const checked = entryTypes.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== key) : [...p, key])}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
+                    >
+                      <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 ${checked ? "bg-current border-current" : "border-zinc-600"}`}>
+                        {checked && <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 10 10" fill="currentColor"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                      </span>
+                      {label}{recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            </>
+          )}
 
           {/* Actions */}
           {!skuLocked && !pdfExtracted && (
