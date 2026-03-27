@@ -126,7 +126,10 @@ export default function Toolbox() {
           <span className="text-sm font-semibold text-muted-foreground">/ Toolbox</span>
         </div>
         {step === "items" && (
-          <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground">Sign out</button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500 hidden sm:block">{email}</span>
+            <button onClick={signOut} className="text-xs text-muted-foreground hover:text-foreground">Sign out</button>
+          </div>
         )}
         {step !== "items" && <div className="w-16" />}
       </div>

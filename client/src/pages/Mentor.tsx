@@ -4553,6 +4553,9 @@ ${stabSection}
                 >
                   <span className="text-[11px] font-semibold text-zinc-300">
                     Saved Machines <span className="text-zinc-500 font-normal">({savedMachines.length})</span>
+                    {(tbEmail || localStorage.getItem("tb_email")) && (
+                      <span className="ml-2 text-[10px] font-normal text-zinc-500">— {tbEmail || localStorage.getItem("tb_email")}</span>
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
