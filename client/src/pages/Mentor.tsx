@@ -3565,1359 +3565,6 @@ ${stabSection}
           })()}
           </>)}
 
-          {/* Tool Geometry — adapts per operation */}
-          {operation !== "threadmilling" && operation !== "keyseat" && operation !== "dovetail" && (
-          <div className="flex items-center gap-3 my-7">
-            <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
-            <div className="flex-1 border-t-2 border-orange-500" />
-          </div>
-          )}
-
-          {operation === "milling" ? (<>
-          {/* EDP# / SKU lookup */}
-          <div className="mb-4 relative">
-            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">Core Cutter EDP# (required to run — auto-fills tool specifications)</FieldLabel>
-            <div className="relative mt-1.5">
-              <Input
-                type="text"
-                className="no-spinners pr-8"
-                placeholder={form.tool_type === "chamfer_mill" ? "e.g. H09055" : "e.g. 505221"}
-                value={edpText}
-                onChange={(e) => { if (skuLocked) clearSku(); setEdpText(e.target.value); }}
-                onFocus={() => { if (skuResults.length > 0 && !skuLocked) setSkuDropdownOpen(true); }}
-                onBlur={() => setTimeout(() => setSkuDropdownOpen(false), 150)}
-              />
-              {skuLocked && skuDescription && (
-                <span className="pointer-events-none absolute inset-y-0 left-[5rem] right-8 flex items-center overflow-hidden">
-                  <span className="text-[11px] text-muted-foreground truncate">— {skuDescription}</span>
-                </span>
-              )}
-              {skuLocked && (
-                <button
-                  type="button"
-                  title="Clear EDP# and unlock fields"
-                  onClick={clearSku}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-500 hover:text-orange-700 text-sm leading-none"
-                >✕</button>
-              )}
-            </div>
-            {edpNotFound && !skuLocked && (
-              <p className="mt-1 text-xs font-semibold text-red-500">⚠ Invalid EDP Number Entered</p>
-            )}
-            {skuLocked && (
-              <p className="mt-1 text-[11px] text-orange-400 flex items-center gap-2 flex-wrap">
-                <span>Auto-filled from {edpText} — fields populated from catalog.{" "}
-                <button type="button" onClick={clearSku} className="underline hover:text-orange-600">Clear</button></span>
-                <button
-                  type="button"
-                  onClick={() => requireEmail("stp", stpUrl(edpText))}
-                  className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
-                  title={`Download Core_Cutter_${edpText} v1.step`}
-                >⬇ .STP</button>
-              </p>
-            )}
-            {skuDropdownOpen && skuResults.length > 0 && (
-              <div className="absolute z-50 left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-52 overflow-y-auto">
-                {skuResults.filter(s => {
-                  if (form.mode !== "surfacing") return true;
-                  const cc = String(s.corner_condition ?? "square").toLowerCase();
-                  return cc === "ball" || (!isNaN(Number(cc)) && Number(cc) > 0);
-                }).map((s) => (
-                  <button
-                    key={s.EDP ?? s.edp}
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-baseline gap-2 overflow-hidden"
-                    onMouseDown={(e) => { e.preventDefault(); applySkuToForm(s); }}
-                  >
-                    <span className="font-semibold">{s.EDP ?? s.edp}</span>
-                    <span className="text-muted-foreground text-xs whitespace-nowrap truncate">
-                      {s.flutes}fl · {Number(s.cutting_diameter_in).toFixed(4)}" · {Number(s.loc_in).toFixed(3)}" LOC{s.oal_in ? ` · ${Number(s.oal_in).toFixed(3)}" OAL` : ""}
-                      {s.series ? ` · ${s.series}` : ""}
-                      {" · "}{(() => {
-                        const cc = String(s.corner_condition ?? "square").toLowerCase();
-                        if (cc === "ball") return "Ball";
-                        const cr = Number(s.corner_condition);
-                        if (!isNaN(cr) && cr > 0) return `CR ${cr.toFixed(4)}"`;
-                        return "Square";
-                      })()}
-                      {s.coating ? <span className="ml-1 text-orange-400 font-medium">· {s.coating}</span> : null}
-                      {s.geometry === "chipbreaker" ? <span className="ml-1 text-sky-400 font-medium">· Chipbreaker</span> : null}
-                      {s.geometry === "truncated_rougher" ? <span className="ml-1 text-sky-400 font-medium">· VXR Rougher</span> : null}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* PDF Print Upload — shown in customer mode or as shortcut in eng mode */}
-          {(operation === "milling") && (!skuLocked) && (
-            <div className={`rounded-lg border p-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
-              {pdfExtracted ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
-                    <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
-                  </div>
-                  <div className="flex items-center gap-2 pt-1">
-                    <FieldLabel hint="Flute wash is the distance from the end of the LOC to where the flutes fully disappear into the shank — this section must not slide into the toolholder. Not called out on CC prints; estimated at 20% of LOC. Measure from the physical tool and correct here if needed.">Flute Wash (in)</FieldLabel>
-                    <Input type="text" inputMode="decimal" className="no-spinners w-24 h-7 text-xs"
-                      placeholder="est."
-                      value={pdfFluteWashText}
-                      onChange={e => setPdfFluteWashText(e.target.value)}
-                      onBlur={() => {
-                        const n = parseFloat(pdfFluteWashText);
-                        const fw = Number.isFinite(n) && n >= 0 ? n : pdfFluteWash;
-                        setPdfFluteWash(fw);
-                        setPdfFluteWashText(fw > 0 ? fw.toFixed(4) : "0.0000");
-                        // Recompute default stickout with corrected flute wash
-                        const loc = form.loc; const dia = form.tool_dia;
-                        if (loc > 0 && dia > 0) {
-                          const so = Math.ceil((loc + fw + 0.33 * dia) * 200) / 200;
-                          setForm(p => ({ ...p, stickout: so, flute_wash: fw }));
-                          setStickoutText(so.toFixed(3));
-                        }
-                      }}
-                    />
-                    <span className="text-[10px] text-amber-400/70">estimated — verify with tool</span>
-                  </div>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center gap-1 cursor-pointer">
-                  <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-                  <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
-                  </span>
-                  <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-                  {!stepReqOpen && !stepReqSent && (
-                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
-                )}
-                {stepReqOpen && !stepReqSent && (
-                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
-                    <input
-                      type="email"
-                      placeholder="your@email.com"
-                      value={stepReqEmail}
-                      onChange={e => setStepReqEmail(e.target.value)}
-                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      disabled={stepReqLoading || !stepReqEmail}
-                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
-                      onClick={async () => {
-                        setStepReqLoading(true);
-                        try {
-                          await fetch("/api/step-request", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
-                          });
-                          setStepReqSent(true);
-                          setStepReqOpen(false);
-                        } finally { setStepReqLoading(false); }
-                      }}
-                    >{stepReqLoading ? "…" : "Send"}</button>
-                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
-                  </div>
-                )}
-                {stepReqSent && (
-                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
-                )}
-                </label>
-              )}
-            </div>
-          )}
-
-          <div className="grid gap-3" style={{ gridTemplateColumns: form.tool_type === "chamfer_mill" ? "4rem 1fr 1fr" : "4rem 1fr 1fr 1fr" }}>
-            <div className="space-y-2">
-              <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
-              <Input
-                type="number"
-                step="1"
-                className="no-spinners"
-                value={form.flutes || ""}
-                onChange={onNum("flutes")}
-              />
-            </div>
-            <div className="space-y-2">
-              <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia (in)", "Cut Dia (mm)")}</FieldLabel>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="no-spinners"
-                value={toolDiaText}
-                onChange={(e) => setToolDiaText(e.target.value)}
-                onFocus={() => {
-                  if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3));
-                }}
-                onBlur={() => {
-                  const n = parseDim(toolDiaText);
-                  if (Number.isFinite(n) && n > 0) {
-                    const stored = metric ? n / 25.4 : n;
-                    setForm((p) => ({ ...p, tool_dia: stored }));
-                    setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
-                  } else {
-                    setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3)) : "");
-                  }
-                }}
-              />
-            </div>
-            {<div className="space-y-2">
-              <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC (in)", "LOC (mm)")}</FieldLabel>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="no-spinners"
-                value={locText}
-                onChange={(e) => setLocText(e.target.value)}
-                onFocus={() => {
-                  if (form.loc) setLocText(metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3));
-                }}
-                onBlur={() => {
-                  const n = parseDim(locText);
-                  if (Number.isFinite(n) && n > 0) {
-                    const stored = metric ? n / 25.4 : n;
-                    setForm((p) => ({ ...p, loc: stored }));
-                    setLocText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
-                  } else {
-                    setLocText(form.loc ? (metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3)) : "");
-                  }
-                }}
-              />
-            </div>}
-            {form.tool_type !== "chamfer_mill" && form.lbs > 0 && <div className="space-y-2">
-              <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>{UL("LBS (in)", "LBS (mm)")}</FieldLabel>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="no-spinners"
-                value={lbsText}
-                onChange={(e) => setLbsText(e.target.value)}
-                onFocus={() => {
-                  if (form.lbs) setLbsText(metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3));
-                }}
-                onBlur={() => {
-                  const n = parseDim(lbsText);
-                  if (Number.isFinite(n) && n > 0) {
-                    const stored = metric ? n / 25.4 : n;
-                    setForm((p) => ({ ...p, lbs: stored }));
-                    setLbsText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
-                  } else if (!lbsText.trim() || lbsText.trim() === "0") {
-                    setForm((p) => ({ ...p, lbs: 0 }));
-                    setLbsText("");
-                  } else {
-                    setLbsText(form.lbs ? (metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3)) : "");
-                  }
-                }}
-              />
-            </div>}
-          </div>
-
-          {/* Chamfer Mill specific fields */}
-          {form.tool_type === "chamfer_mill" && (
-            <div className="space-y-4 mt-2">
-              <div className="space-y-1.5">
-                <FieldLabel hint="CMH series: high-performance with shear angle and edge prep — runs significantly higher chip load. CMS series: straight-flute, center-cutting — lower chip load (~65% of CMH).">Series</FieldLabel>
-                <div className="flex gap-1.5">
-                  {(["CMH", "CMS"] as const).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setForm((p) => ({ ...p, chamfer_series: s }))}
-                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                      style={{
-                        backgroundColor: form.chamfer_series === s ? "#6366f1" : "transparent",
-                        borderColor: "#6366f1",
-                        color: form.chamfer_series === s ? "#fff" : "#6366f1",
-                      }}
-                    >{s}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <FieldLabel hint="Included angle of the chamfer mill (tip angle). CMS series: 60°, 90°, 120°. CMH series: 60°, 82°, 90°, 100°, 120°.">Chamfer Angle</FieldLabel>
-                <div className="flex flex-wrap gap-1.5">
-                  {([60, 82, 90, 100, 120] as const).map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => setForm((p) => ({ ...p, chamfer_angle: a }))}
-                      className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                      style={{
-                        backgroundColor: form.chamfer_angle === a ? "#6366f1" : "transparent",
-                        borderColor: "#6366f1",
-                        color: form.chamfer_angle === a ? "#fff" : "#6366f1",
-                      }}
-                    >{a}°</button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <FieldLabel hint="Tip diameter (flat at the very tip). CMH series has a tip flat — enter from catalog. CMS series is center-cutting with a point, leave at 0.">Tip Dia (in)</FieldLabel>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      className="no-spinners"
-                      placeholder="0 = point (CMS)"
-                      value={chamferTipDiaText}
-                      onChange={(e) => setChamferTipDiaText(e.target.value)}
-                      onBlur={() => {
-                        const n = parseFloat(chamferTipDiaText);
-                        if (Number.isFinite(n) && n >= 0) {
-                          setForm((p) => ({ ...p, chamfer_tip_dia: n }));
-                          setChamferTipDiaText(n > 0 ? n.toFixed(4) : "");
-                        } else {
-                          setChamferTipDiaText(form.chamfer_tip_dia > 0 ? form.chamfer_tip_dia.toFixed(4) : "");
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-                {skuChamferEdgeLength && form.tool_dia > 0 && (() => {
-                  const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
-                  const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
-                  const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
-                  const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
-                  const isCms = !(form.chamfer_tip_dia > 0);
-                  const tipX = isCms ? 138 : 128;
-                  return (
-                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 space-y-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-orange-400">Cutting Edge Length</span>
-                        <span className="font-mono font-semibold text-orange-400">{edgeLength.toFixed(4)}"</span>
-                        <span className="text-zinc-600">|</span>
-                        <span className="text-blue-400">Max Chamfer Depth</span>
-                        <span className="font-mono font-semibold text-blue-400">{maxDepth.toFixed(4)}"</span>
-                      </div>
-                      {(() => {
-                        const topY = 12, clY = 74;
-                        const bodyX1 = 22, chamferX = 58;
-                        const tipX = isCms ? 230 : 205;
-                        const tipHalfPx = (!isCms && form.tool_dia > 0)
-                          ? Math.max(5, (form.chamfer_tip_dia / form.tool_dia) * (clY - topY))
-                          : 0;
-                        const tipY = clY - tipHalfPx;
-                        const lMidX = (chamferX + tipX) / 2;
-                        const lMidY = (topY + tipY) / 2;
-                        const lAngle = Math.round(Math.atan2(tipY - topY, tipX - chamferX) * 180 / Math.PI);
-                        const dArrowY = clY + 13;
-                        return (
-                          <svg viewBox="0 0 265 98" width="100%" height="88" className="block mt-1">
-                            <defs>
-                              <clipPath id="cc-hatch2">
-                                <rect x={bodyX1} y={topY} width="9" height={clY - topY}/>
-                              </clipPath>
-                            </defs>
-                            {/* Cross-hatch on left end face */}
-                            <g clipPath="url(#cc-hatch2)">
-                              {[0,7,14,21,28,35,42,49,56,63,70].map((d,i) =>
-                                <line key={i} x1={bodyX1+d-(clY-topY)} y1={clY} x2={bodyX1+d} y2={topY} stroke="#666" strokeWidth="0.75"/>
-                              )}
-                            </g>
-                            {/* Tool body top wall */}
-                            <line x1={bodyX1} y1={topY} x2={chamferX} y2={topY} stroke="#888" strokeWidth="1.5"/>
-                            {/* Left end cap */}
-                            <line x1={bodyX1} y1={topY} x2={bodyX1} y2={clY} stroke="#888" strokeWidth="1.5"/>
-                            {/* Shoulder line where body meets chamfer */}
-                            <line x1={chamferX} y1={topY} x2={chamferX} y2={clY} stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
-                            {/* Centerline — proper long-short-long drafting linetype */}
-                            <line x1={bodyX1-6} y1={clY} x2={tipX+12} y2={clY} stroke="#4a4a5a" strokeWidth="1" strokeDasharray="12,3,3,3"/>
-                            {/* Chamfer cutting edge (orange) */}
-                            <line x1={chamferX} y1={topY} x2={tipX} y2={tipY} stroke="#f97316" strokeWidth="2.5"/>
-                            {/* Saddling zone — white overlay centered on cutting edge */}
-                            {form.chamfer_depth > 0 && (() => {
-                              const saddleFrac = Math.min(1, form.chamfer_depth / edgeLength);
-                              const half = saddleFrac / 2;
-                              const f1 = 0.5 - half; // start fraction along edge
-                              const f2 = 0.5 + half; // end fraction along edge
-                              const sx1 = chamferX + (tipX - chamferX) * f1;
-                              const sy1 = topY + (tipY - topY) * f1;
-                              const sx2 = chamferX + (tipX - chamferX) * f2;
-                              const sy2 = topY + (tipY - topY) * f2;
-                              const isOver = form.chamfer_depth > edgeLength;
-                              return (
-                                <line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
-                                  stroke={isOver ? "#ef4444" : "rgba(255,255,255,0.80)"}
-                                  strokeWidth="5" strokeLinecap="round"/>
-                              );
-                            })()}
-                            {/* CMS: point on CL */}
-                            {isCms && <polygon points={`${tipX},${clY} ${tipX-9},${clY-7} ${tipX-9},${clY}`} fill="#f97316" opacity="0.85"/>}
-                            {/* CMH: gray flat face from tipY down to CL */}
-                            {!isCms && <line x1={tipX} y1={tipY} x2={tipX} y2={clY} stroke="#52525b" strokeWidth="2.5"/>}
-                            {/* Depth ref ticks */}
-                            <line x1={chamferX} y1={clY} x2={chamferX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
-                            <line x1={tipX} y1={clY} x2={tipX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
-                            {/* Depth arrow */}
-                            <line x1={chamferX} y1={dArrowY} x2={tipX} y2={dArrowY} stroke="#3b82f6" strokeWidth="1.5"/>
-                            <polygon points={`${chamferX},${dArrowY} ${chamferX+7},${dArrowY-3} ${chamferX+7},${dArrowY+3}`} fill="#3b82f6"/>
-                            <polygon points={`${tipX},${dArrowY} ${tipX-7},${dArrowY-3} ${tipX-7},${dArrowY+3}`} fill="#3b82f6"/>
-                            <text x={(chamferX+tipX)/2} y={dArrowY+9} fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle">d={maxDepth.toFixed(3)}"</text>
-                            {/* L label along cutting edge */}
-                            <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`}>L={edgeLength.toFixed(3)}"</text>
-                            {/* Series label */}
-                            <text x={tipX - 10} y={topY - 1} fontSize="8" fill="#6b7280" textAnchor="end">{isCms ? "CMS — Center Cutting" : "CMH — Non-Center (flat tip)"}</text>
-                          </svg>
-                        );
-                      })()}
-                    </div>
-                  );
-                })()}
-                <div className="space-y-1.5">
-                  <FieldLabel hint={
-                    <div className="space-y-2">
-                      <p>Chamfer length — the length of the angled chamfer face as dimensioned on the print (the "L" edge in the diagram). Enter this directly from the print; the app calculates the Z axial depth for CAM programming automatically and compares it against the tool's cutting edge length.</p>
-                      {/* Chamfer geometry diagram */}
-                      {(() => {
-                        const isCmh = form.chamfer_tip_dia > 0;
-                        const x1 = 100, y1 = 10;
-                        const x2 = isCmh ? 128 : 138, y2 = 50;
-                        const dx = x2 - x1, dy = y2 - y1;
-                        const len = Math.sqrt(dx*dx + dy*dy);
-                        const ux = dx/len, uy = dy/len;
-                        const px = -uy, py = ux; // left perpendicular
-                        const off = 9;
-                        const lx1 = x1 + px*off, ly1 = y1 + py*off;
-                        const lx2 = x2 + px*off, ly2 = y2 + py*off;
-                        const midX = (lx1+lx2)/2, midY = (ly1+ly2)/2;
-                        const ang = Math.atan2(dy, dx) * 180 / Math.PI;
-                        const a = 5; // arrowhead size
-                        return (
-                          <svg viewBox="0 0 165 105" width="165" height="105" className="block mx-auto">
-                            {/* Tool body */}
-                            <line x1="20" y1="10" x2="20" y2="50" stroke="#888" strokeWidth="1.5"/>
-                            <line x1="20" y1="10" x2={x1} y2={y1} stroke="#888" strokeWidth="1.5"/>
-                            {/* Chamfer cutting edge */}
-                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f97316" strokeWidth="2"/>
-                            {/* Tip flat or point */}
-                            {isCmh
-                              ? <line x1={x2} y1={y2} x2={x2} y2="68" stroke="#f97316" strokeWidth="2"/>
-                              : null}
-                            {/* Axis dashed */}
-                            <line x1="20" y1="50" x2={x2} y2="50" stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
-                            {/* L dimension line along hypotenuse (offset) */}
-                            <line x1={lx1} y1={ly1} x2={lx2} y2={ly2} stroke="#f97316" strokeWidth="1.2"/>
-                            {/* Tick marks at ends */}
-                            <line x1={lx1+px*3} y1={ly1+py*3} x2={lx1-px*3} y2={ly1-py*3} stroke="#f97316" strokeWidth="1"/>
-                            <line x1={lx2+px*3} y1={ly2+py*3} x2={lx2-px*3} y2={ly2-py*3} stroke="#f97316" strokeWidth="1"/>
-                            {/* L label at midpoint */}
-                            <text x={midX + px*7} y={midY + py*7} fontSize="9" fill="#f97316" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" transform={`rotate(${ang},${midX + px*7},${midY + py*7})`}>L</text>
-                            {/* Z axial arrow (secondary — output) */}
-                            <line x1={x2+8} y1="10" x2={x2+8} y2="50" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2,2"/>
-                            <polygon points={`${x2+8},10 ${x2+5},17 ${x2+11},17`} fill="#60a5fa"/>
-                            <polygon points={`${x2+8},50 ${x2+5},43 ${x2+11},43`} fill="#60a5fa"/>
-                            <text x={x2+13} y="33" fontSize="8" fill="#60a5fa" dominantBaseline="middle">Z</text>
-                            {/* OD label */}
-                            <text x="58" y="8" fontSize="8" fill="#aaa" textAnchor="middle">OD</text>
-                            {/* Series label */}
-                            <text x="5" y="98" fontSize="8" fill="#6b7280">{isCmh ? "CMH — flat tip" : "CMS — center cutting"}</text>
-                          </svg>
-                        );
-                      })()}
-                    </div>
-                  }>Chamfer Length (in)</FieldLabel>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    className={`no-spinners ${!(form.chamfer_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-                    placeholder={(() => {
-                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "face width (in)";
-                      const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
-                      const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
-                      const edgeLen = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
-                      if (!(edgeLen > 0)) return "face width (in)";
-                      // Sweet spot: middle 60% of edge for CMS, middle 80% for CMH
-                      const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
-                      const lo = edgeLen * skip;
-                      const hi = edgeLen * (1 - skip);
-                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" face`;
-                    })()}
-                    value={chamferDepthText}
-                    onChange={(e) => setChamferDepthText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseFloat(chamferDepthText);
-                      if (Number.isFinite(n) && n > 0) {
-                        setForm((p) => ({ ...p, chamfer_depth: n }));
-                        setChamferDepthText(n.toFixed(4));
-                      } else {
-                        setChamferDepthText(form.chamfer_depth > 0 ? form.chamfer_depth.toFixed(4) : "");
-                      }
-                    }}
-                  />
-                  {(() => {
-                    if (!(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
-                    const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
-                    const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
-                    const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
-                    const zDepth = form.chamfer_depth * Math.cos(halfRad);
-                    if (form.chamfer_depth > edgeLength) {
-                      return (
-                        <p className="mt-1 text-xs text-red-400">
-                          ⚠ Chamfer length exceeds tool edge ({edgeLength.toFixed(4)}") — need a larger tool.
-                        </p>
-                      );
-                    }
-                    return (
-                      <p className="mt-1 text-xs text-zinc-400">
-                        Z depth to program in CAM: <span className="text-blue-400 font-mono font-semibold">{zDepth.toFixed(4)}"</span>
-                      </p>
-                    );
-                  })()}
-                </div>
-                {/* Col 2: suggest a larger tool when depth exceeds max */}
-                {chamferUpgradeSuggestion && (
-                  <div className="flex items-start">
-                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 text-xs w-full">
-                      <div className="text-amber-400 font-semibold text-[10px] uppercase tracking-wide mb-1">Suggested Larger Tool</div>
-                      <div className="font-mono text-amber-300 font-semibold">{chamferUpgradeSuggestion.edp}</div>
-                      <div className="text-zinc-400 text-[10px] mt-0.5">{chamferUpgradeSuggestion.dia.toFixed(4)}" dia — reaches this depth</div>
-                      {chamferUpgradeSuggestion.desc && <div className="text-zinc-500 text-[10px] mt-0.5 leading-tight">{chamferUpgradeSuggestion.desc}</div>}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Machining Tips accordion — chamfer mill */}
-          {form.tool_type === "chamfer_mill" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">Think "wipe the edge" — not "cut the edge."</span> Chamfer tools concentrate load at the tip. Keep radial engagement under 10–15% of diameter and axial depth just enough to hit size. Light, consistent engagement protects the tip and produces a cleaner edge than aggressive cuts.</div>
-                  <div><span className="font-semibold text-white">Helical flutes (CMH style) are a major advantage.</span> Straight flutes hit the full edge instantly — helical flutes engage progressively along the cutting edge, dramatically reducing tip shock. This eliminates micro-chipping, reduces vibration, improves chip evacuation, and makes chamfer milling behave more like an endmill than a scraper. CMH geometry shines in production work, tough materials, and interrupted cuts (cross-holes, cast edges, flame-cut stock).</div>
-                  <div><span className="font-semibold text-white">Always use helical or rolling entry.</span> Never plunge straight onto an edge. Use a helical interpolation entry or a lead-in arc to let the helix engage progressively — this is where you unlock the full benefit of helical geometry. Lead-out the same way.</div>
-                  <div><span className="font-semibold text-white">Chip load lives in a narrow window.</span> Too low = rubbing = poor finish and rapid wear. Too high = instant tip failure. Start at 0.0005–0.002 IPT depending on tool size and material. Keep feed consistent through corners — feed drops cause rubbing at the tip.</div>
-                  <div><span className="font-semibold text-white">Z-depth controls chamfer size.</span> A 0.001" Z shift produces a noticeable chamfer size change. Use your Z wear offset to dial in size — not reprogramming. This is how tight-tolerance chamfers are held in production.</div>
-                  <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
-                  <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
-                  <div><span className="font-semibold text-white">Run 10–20% lower SFM than endmilling.</span> Tip concentration and thin edge geometry mean chamfer tools don't tolerate the same surface speeds as full-diameter endmills.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Corner Condition — endmill only */}
-          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
-            <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = bull nose for 3D contouring. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
-            {form.mode === "surfacing" && (
-              <p className="text-[10px] text-amber-400">3D surfacing requires a ball or bull nose tool — square corner excluded.</p>
-            )}
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(["square", "corner_radius"] as const).filter(k => form.mode !== "surfacing" || k !== "square").map((key) => {
-                const label = key === "square" ? "Square" : "Corner Radius";
-                const tt = key === "square" ? "endmill" : "corner_radius";
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => { setForm((p) => ({ ...p, corner_condition: key, tool_type: tt, corner_radius: key === "square" ? 0 : p.corner_radius })); if (key === "square") setCrText(""); }}
-                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                    style={{ backgroundColor: form.corner_condition === key ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.corner_condition === key ? "#fff" : "#6366f1" }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-              {form.corner_condition === "corner_radius" && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">{UL("CR (in)", "CR (mm)")}</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className="h-7 w-20 text-xs no-spinners rounded-md border border-input bg-background px-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
-                    value={crText}
-                    onChange={(e) => setCrText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseFloat(crText);
-                      if (Number.isFinite(n) && n > 0) {
-                        const val = metric ? n / 25.4 : n;
-                        setForm((p) => ({ ...p, corner_radius: val }));
-                        setCrText(metric ? n.toFixed(2) : val.toFixed(3));
-                      } else {
-                        setCrText(form.corner_radius > 0 ? (metric ? (form.corner_radius * 25.4).toFixed(2) : form.corner_radius.toFixed(3)) : "");
-                      }
-                    }}
-                  />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => setForm((p) => ({ ...p, corner_condition: "ball", tool_type: "ballnose", corner_radius: 0 }))}
-                className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                style={{ backgroundColor: form.corner_condition === "ball" ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.corner_condition === "ball" ? "#fff" : "#6366f1" }}
-              >
-                Ball Nose
-              </button>
-            </div>
-          </div>}
-
-          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
-            <FieldLabel hint="Standard = full-length flute. Chipbreaker (-CB) = notched flute that segments the chip, net ~20% force reduction. Truncated Rougher (VXR) = serrated flute with negative K-land edge prep — K-land strengthens the edge but adds back ~12% pressure, so net force reduction is ~17% vs standard.">
-              Flute Geometry
-            </FieldLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {([
-                { key: "standard",          label: "Standard" },
-                { key: "chipbreaker",       label: "Chipbreaker (CB)" },
-                { key: "truncated_rougher", label: "Truncated Rougher (VXR)" },
-              ] as const).map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setForm((p) => ({ ...p, geometry: key }))}
-                  className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: form.geometry === key ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1",
-                    color: form.geometry === key ? "#fff" : "#6366f1",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>}
-
-          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5 mt-1">
-            <FieldLabel hint="Variable Pitch spaces flute angles unevenly to disrupt regenerative chatter — the primary driver of vibration in steel, stainless, and titanium. Variable Helix varies the helix angle along the flute length to spread axial cutting forces and further dampen vibration. Most Core Cutter steel/stainless/titanium tools are Variable Pitch; select tools add Variable Helix. Aluminum tools are typically neither.">
-              Tool Design
-            </FieldLabel>
-            <div className="flex gap-4">
-              {([
-                { key: "variable_pitch" as const, label: "Variable Pitch" },
-                { key: "variable_helix" as const, label: "Variable Helix" },
-              ]).map(({ key, label }) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form[key]}
-                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.checked }))}
-                    className="w-4 h-4 rounded accent-indigo-500"
-                  />
-                  <span className="text-xs font-semibold text-indigo-400">{label}</span>
-                </label>
-              ))}
-            </div>
-          </div>}
-          </>) : operation === "drilling" ? (<>
-          {/* PDF Upload for drilling */}
-          {!pdfExtracted && (
-            <div className="rounded-lg border border-dashed border-gray-600 p-3 mb-3">
-              <label className="flex flex-col items-center gap-1 cursor-pointer">
-                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-                <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
-                </span>
-                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-                {!stepReqOpen && !stepReqSent && (
-                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
-                )}
-                {stepReqOpen && !stepReqSent && (
-                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
-                    <input
-                      type="email"
-                      placeholder="your@email.com"
-                      value={stepReqEmail}
-                      onChange={e => setStepReqEmail(e.target.value)}
-                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      disabled={stepReqLoading || !stepReqEmail}
-                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
-                      onClick={async () => {
-                        setStepReqLoading(true);
-                        try {
-                          await fetch("/api/step-request", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
-                          });
-                          setStepReqSent(true);
-                          setStepReqOpen(false);
-                        } finally { setStepReqLoading(false); }
-                      }}
-                    >{stepReqLoading ? "…" : "Send"}</button>
-                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
-                  </div>
-                )}
-                {stepReqSent && (
-                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
-                )}
-              </label>
-            </div>
-          )}
-          {pdfExtracted && (
-            <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
-              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
-              <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
-            </div>
-          )}
-
-
-          {/* Auto-apply flute geo silently, show read-only point angle */}
-          {(() => {
-            const iso = isoCategory;
-            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
-            const isDeep = depthD > 5;
-            const isVeryDeep = depthD > 7;
-            const hasCoolant = form.drill_coolant_fed;
-            let recGeo: "standard" | "med_helix" | "high_helix" = "standard";
-            if (iso === "M") recGeo = isDeep ? "high_helix" : "med_helix";
-            else if (iso === "S") recGeo = "high_helix";
-            else if (iso === "P") recGeo = isDeep ? "med_helix" : "standard";
-            if (hasCoolant && recGeo === "high_helix" && !isVeryDeep) recGeo = "med_helix";
-            else if (hasCoolant && recGeo === "med_helix" && !isDeep) recGeo = "standard";
-            if (!hasCoolant && isDeep && recGeo === "standard") recGeo = "med_helix";
-            if (!hasCoolant && isVeryDeep && recGeo === "med_helix") recGeo = "high_helix";
-            if (form.drill_geometry !== recGeo) setTimeout(() => setForm((p) => ({ ...p, drill_geometry: recGeo })), 0);
-            return (
-              <div className="space-y-1.5 mt-3">
-                <FieldLabel hint="Point angle as specified on the CC drill print.">Point Angle</FieldLabel>
-                <div className="flex gap-2">
-                  {([118, 130, 135, 140, 145] as const).map((pa) => {
-                    const isSelected = form.drill_point_angle === pa;
-                    return (
-                      <div key={pa} className="flex-1 rounded py-2 text-xs font-semibold border text-center"
-                        style={{
-                          backgroundColor: isSelected ? "#6366f1" : "transparent",
-                          borderColor: isSelected ? "#6366f1" : "#3f3f46",
-                          color: isSelected ? "#fff" : "#52525b",
-                        }}>{pa}°</div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-          {/* Machining Tips accordion — drilling */}
-          {operation === "drilling" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">Never baby a carbide drill — it needs load to live.</span> Low feed causes rubbing and work hardening, especially in stainless and HRSA. Maintain proper chip load and avoid hesitation feed at any point in the cycle.</div>
-                  <div><span className="font-semibold text-white">Through-spindle coolant changes everything.</span> Chip evacuation becomes force-assisted, heat is removed at the cutting edge, and you can drill deeper, faster, and more reliably. Under 3×D: no peck needed. 3–5×D: light chip break if needed. 5×D+: controlled peck or high-pressure coolant required. Coolant pressure matters — 300+ PSI minimum, 1000+ PSI for stainless and Inconel.</div>
-                  <div><span className="font-semibold text-white">No coolant = your responsibility to manage chips.</span> Without through coolant you must peck — no exceptions on deeper holes. 1–2×D: light peck. 3×D+: mandatory peck cycle. Use G73 (high-speed peck) for most carbide drilling; G83 (full retract) for deep holes or poor chip formers. Air blast and MQL help significantly — avoid running completely dry if possible.</div>
-                  <div><span className="font-semibold text-white">Spot drill angle must equal or exceed your drill point angle.</span> If the spot angle is smaller than the drill point angle, the chisel edge contacts first — the drill walks, loads unevenly, and chips. Common pairings: 118° drill → 120–140° spot; 135° drill → 140° spot; 140°+ drill → match or exceed. Only spot deep enough to create a chamfered seat — spot diameter ≈ drill diameter.</div>
-                  <div><span className="font-semibold text-white">Control chip shape without coolant.</span> You want short 6's and 9's — not stringers or bird nests. Increase feed to shorten chips; reduce SFM to reduce heat and stringing. Non-coolant drilling typically runs 20–40% lower SFM than coolant-fed.</div>
-                  <div><span className="font-semibold text-white">Entry and exit control.</span> Always spot or chamfer before drilling, especially on holes deeper than 3×D. Reduce feed 30–50% at breakthrough to prevent edge grabbing and chip packing on exit.</div>
-                  <div><span className="font-semibold text-white">Runout is a silent killer.</span> Target ≤0.0005" TIR — beyond that one flute does all the work and the drill fails instantly. Hydraulic or shrink-fit holders preferred; avoid long ER stickout.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Margin chipping = poor chip evacuation. Corner breakdown = feed too low (rubbing). Catastrophic break = chip packing or coolant loss. Built-up edge = aluminum or stainless without lubrication. Work hardening = stainless/HRSA with hesitation feed or too low chip load.</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          </>) : null}
-
-          {/* Reaming Tool Geometry */}
-          {operation === "reaming" && (<>
-          {/* PDF Upload for reaming */}
-          <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
-            {pdfExtracted ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
-                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center gap-1 cursor-pointer">
-                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
-                <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
-                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
-                </span>
-                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-                {!stepReqOpen && !stepReqSent && (
-                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
-                )}
-                {stepReqOpen && !stepReqSent && (
-                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
-                    <input
-                      type="email"
-                      placeholder="your@email.com"
-                      value={stepReqEmail}
-                      onChange={e => setStepReqEmail(e.target.value)}
-                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      disabled={stepReqLoading || !stepReqEmail}
-                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
-                      onClick={async () => {
-                        setStepReqLoading(true);
-                        try {
-                          await fetch("/api/step-request", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
-                          });
-                          setStepReqSent(true);
-                          setStepReqOpen(false);
-                        } finally { setStepReqLoading(false); }
-                      }}
-                    >{stepReqLoading ? "…" : "Send"}</button>
-                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
-                  </div>
-                )}
-                {stepReqSent && (
-                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
-                )}
-              </label>
-            )}
-          </div>
-
-          {form.tool_dia > 0 && (
-              <div className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2.5 text-xs space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Reamer OD</span>
-                  <span className="font-semibold text-foreground">{metric ? (form.tool_dia * 25.4).toFixed(3) + " mm" : form.tool_dia.toFixed(4) + '"'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Tolerance Band ({reamTolClass})</span>
-                  <span className="font-mono text-indigo-300">{reamTolBand(form.tool_dia, reamTolClass)}</span>
-                </div>
-                {(() => {
-                  const stock = reamStockRange(form.tool_dia);
-                  if (!stock) return null;
-                  const ideal = +(form.tool_dia - stock.ideal).toFixed(4);
-                  const lo    = +(form.tool_dia - stock.max).toFixed(4);
-                  const hi    = +(form.tool_dia - stock.min).toFixed(4);
-                  const drills = nearestDrills(ideal, lo, hi);
-                  const ranked = [...drills].sort((a, b) => Math.abs(a.dia - ideal) - Math.abs(b.dia - ideal));
-                  const rankStyle = [
-                    "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400",
-                    "border-amber-500/60  bg-amber-500/10  text-amber-300  hover:bg-amber-500/25  hover:border-amber-400",
-                  ];
-                  return (<>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Recommended Pre-Drill</span>
-                      <span className="font-semibold text-foreground">{metric ? (ideal * 25.4).toFixed(3) + " mm" : ideal.toFixed(4) + '"'}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-zinc-400">Nearest Drill Sizes</span>
-                      <div className="flex gap-1.5 flex-wrap justify-end">
-                        {ranked.map((d, i) => (
-                          <button key={d.label} type="button"
-                            title="Click to use this pre-drill size"
-                            onClick={() => setForm((p) => ({ ...p, ream_pre_drill_dia: +d.dia.toFixed(4) }))}
-                            className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold transition-all cursor-pointer ${rankStyle[i] ?? "border-zinc-600 bg-zinc-800 text-foreground"}`}>
-                            {d.label}
-                            <span className="font-normal text-[10px] opacity-60">{d.dia.toFixed(4)}"</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>);
-                })()}
-              </div>
-            )}
-
-          {/* Reamer Type — Standard or Step */}
-          <div className="space-y-1.5 mt-3">
-            <FieldLabel hint="Standard = single diameter reamer. Step Reamer = two cutting diameters (entry and largest). SFM is set by the largest diameter; feed (IPR) is set by the entry (smallest) diameter.">Reamer Type</FieldLabel>
-            <div className="flex gap-2">
-              {([0, 1] as const).map((n) => (
-                <button key={n} type="button"
-                  onClick={() => {
-                    setReamStepDiaText("");
-                    setForm((p) => ({ ...p, ream_steps: n, ream_step_diameters: [], ream_step_lengths: [] }));
-                  }}
-                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: form.ream_steps === n ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1", color: form.ream_steps === n ? "#fff" : "#6366f1",
-                  }}
-                >{n === 0 ? "Standard" : "Step Reamer"}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Step reamer — largest diameter */}
-          {form.ream_steps > 0 && (
-            <div className="mt-3 space-y-1">
-              <FieldLabel hint="Largest diameter on the step reamer. SFM and RPM are calculated on this diameter; feed is set by the entry (smallest) diameter.">Largest Dia (in)</FieldLabel>
-              <Input
-                type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 0.625"
-                value={reamStepDiaText}
-                onChange={(e) => setReamStepDiaText(e.target.value)}
-                onBlur={() => {
-                  const n = parseDim(reamStepDiaText);
-                  if (Number.isFinite(n) && n > 0) {
-                    setForm((p) => ({ ...p, ream_step_diameters: [n] }));
-                    setReamStepDiaText(n.toFixed(4));
-                  }
-                }}
-              />
-            </div>
-          )}
-
-          {/* Flutes + Shank — shared across both modes */}
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div>
-              <FieldLabel hint="Number of flutes on the reamer. Leave blank to use the standard count for this diameter.">Flutes</FieldLabel>
-              <Input type="number" step="1" className="no-spinners"
-                placeholder={String(reamFlutes(form.tool_dia))}
-                value={form.flutes || ""} onChange={onNum("flutes")} />
-              {form.tool_dia > 0 && (
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground">
-                    Standard: <span className="font-semibold text-foreground">{reamFlutes(form.tool_dia)}-flute</span>
-                  </span>
-                  {form.flutes > 0 && form.flutes !== reamFlutes(form.tool_dia) && (
-                    <button type="button"
-                      className="rounded bg-indigo-600/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300 hover:bg-indigo-600/50 transition-colors"
-                      onClick={() => setForm((p) => ({ ...p, flutes: reamFlutes(form.tool_dia) }))}>
-                      Use standard
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div>
-              <FieldLabel hint="Shank diameter. Defaults to cut diameter if left blank.">{UL("Shank Dia (in.)", "Shank Dia (mm)")}</FieldLabel>
-              <Input type="number" step={metric ? "0.01" : "0.0001"} className="no-spinners"
-                placeholder={form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(3) : form.tool_dia.toFixed(4)) : (metric ? "e.g. 12.70" : "e.g. 0.500")}
-                value={form.ream_shank_dia ? (metric ? (form.ream_shank_dia * 25.4).toFixed(3) : form.ream_shank_dia) : ""}
-                onChange={onUnitNum("ream_shank_dia", 25.4)} />
-            </div>
-          </div>
-
-          {/* Reaming — Coolant Delivery (Identity 1 vs 2/3) */}
-          <div className="space-y-1.5 mt-3">
-            <FieldLabel hint="Coolant-fed reamers have internal coolant passages that deliver coolant directly to the cutting edges — critical for blind holes, deep holes, and gummy materials. Non-coolant-fed relies entirely on external coolant.">Coolant Delivery</FieldLabel>
-            <div className="flex gap-2">
-              {([
-                { val: false, label: "Non-Coolant Fed" },
-                { val: true,  label: "Coolant Fed (Through)" },
-              ] as const).map(({ val, label }) => (
-                <button key={String(val)} type="button"
-                  onClick={() => setForm((p) => ({ ...p, ream_coolant_fed: val }))}
-                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor: form.ream_coolant_fed === val ? "#6366f1" : "transparent",
-                    borderColor: "#6366f1", color: form.ream_coolant_fed === val ? "#fff" : "#6366f1",
-                  }}
-                >{label}</button>
-              ))}
-            </div>
-          </div>
-          </>)}
-
-          {/* Machining Tips accordion — endmill milling */}
-          {operation === "milling" && form.tool_type !== "chamfer_mill" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <div>
-                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                  {form.mode && MILLING_MODE_TIPS[form.mode] && (
-                    <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
-                      — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring"}[form.mode] ?? ""}
-                    </span>
-                  )}
-                </div>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (() => {
-                const tips = MILLING_MODE_TIPS[form.mode] ?? MILLING_MODE_TIPS.hem;
-                return (
-                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                    {tips.map((tip, i) => (
-                      <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Cut Engagement — milling only, not chamfer mills */}
-          {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
-          <div className="flex items-center gap-3 my-7">
-            <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Cut Engagement</div>
-            <div className="flex-1 border-t-2 border-orange-500" />
-          </div>
-          {/* circ_interp: hole dimensions live here */}
-          {form.mode === "circ_interp" && (
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="space-y-1.5">
-                <FieldLabel hint="Diameter of the existing pre-drilled or pre-bored hole the tool will enter. Must be larger than the tool diameter.">{UL("Existing Hole Ø (in)", "Existing Hole Ø (mm)")}</FieldLabel>
-                <input type="text" inputMode="decimal" placeholder="e.g. 0.750"
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
-                  value={existingHoleText}
-                  onChange={(e) => setExistingHoleText(e.target.value)}
-                  onBlur={() => {
-                    const n = parseFloat(existingHoleText);
-                    if (Number.isFinite(n) && n > 0) {
-                      const val = metric ? n / 25.4 : n;
-                      setForm((p) => ({ ...p, existing_hole_dia: val }));
-                      setExistingHoleText(metric ? n.toFixed(2) : val.toFixed(3));
-                    } else { setExistingHoleText(form.existing_hole_dia > 0 ? form.existing_hole_dia.toFixed(3) : ""); }
-                  }}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <FieldLabel hint="Final target hole diameter after circular interpolation. The radial wall removed per pass = (Target − Existing) / 2.">{UL("Target Hole Ø (in)", "Target Hole Ø (mm)")}</FieldLabel>
-                <input type="text" inputMode="decimal" placeholder="e.g. 1.250"
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring no-spinners"
-                  value={targetHoleText}
-                  onChange={(e) => setTargetHoleText(e.target.value)}
-                  onBlur={() => {
-                    const n = parseFloat(targetHoleText);
-                    if (Number.isFinite(n) && n > 0) {
-                      const val = metric ? n / 25.4 : n;
-                      setForm((p) => ({ ...p, target_hole_dia: val }));
-                      setTargetHoleText(metric ? n.toFixed(2) : val.toFixed(3));
-                    } else { setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(3) : ""); }
-                  }}
-                />
-              </div>
-              {form.existing_hole_dia > 0 && form.target_hole_dia > form.existing_hole_dia && form.tool_dia > 0 && (() => {
-                const tooBig = form.existing_hole_dia < form.tool_dia * 1.1;
-                const radialClearance = (form.existing_hole_dia - form.tool_dia) / 2;
-                const tightClearance = radialClearance > 0 && radialClearance < 0.050;
-                if (!tooBig && !tightClearance) return null;
-                return (
-                  <div className="col-span-2 space-y-1">
-                    {tooBig && <p className="text-xs text-red-400">⛔ Entry bore too small — must be &gt;1.1× tool diameter.</p>}
-                    {!tooBig && tightClearance && <p className="text-xs text-amber-400">⚠ Radial clearance {radialClearance.toFixed(3)}" per side — tight, rubbing risk on entry.</p>}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-          {/* ── Surfacing 3D contouring inputs (replaces WOC/DOC) ─────────────── */}
-          {form.mode === "surfacing" && (
-            <div className="space-y-4">
-              {/* Surface Finish Goal — primary entry point */}
-              <div className="space-y-1.5">
-                <FieldLabel hint="Select the finish quality your print calls for. The app sets the scallop height automatically. Use Custom to enter a specific scallop height or stepover directly.">Surface Finish Goal</FieldLabel>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {([
-                    { key: "rough",      label: "Rough",       ra: "63–125 µin", scallop: 0.003  },
-                    { key: "semi",       label: "Semi-Finish", ra: "32–63 µin",  scallop: 0.001  },
-                    { key: "fine",       label: "Fine",        ra: "8–32 µin",   scallop: 0.0003 },
-                    { key: "mirror",     label: "Mirror",      ra: "<8 µin",     scallop: 0.0001 },
-                    { key: "custom",     label: "Custom",      ra: "",           scallop: 0      },
-                  ] as const).map(({ key, label, ra, scallop }) => {
-                    const active = (() => {
-                      if (key === "custom") return !["rough","semi","fine","mirror"].some(k =>
-                        k === "rough"  ? form.surfacing_scallop_in === 0.003  :
-                        k === "semi"   ? form.surfacing_scallop_in === 0.001  :
-                        k === "fine"   ? form.surfacing_scallop_in === 0.0003 :
-                                         form.surfacing_scallop_in === 0.0001
-                      );
-                      return (
-                        key === "rough"  ? form.surfacing_scallop_in === 0.003  :
-                        key === "semi"   ? form.surfacing_scallop_in === 0.001  :
-                        key === "fine"   ? form.surfacing_scallop_in === 0.0003 :
-                                          form.surfacing_scallop_in === 0.0001
-                      );
-                    })();
-                    return (
-                      <button key={key} type="button"
-                        onClick={() => {
-                          if (key !== "custom" && scallop > 0) {
-                            setForm(p => ({ ...p, surfacing_input_mode: "scallop", surfacing_scallop_in: scallop }));
-                            setSurfScallopText(scallop.toFixed(5));
-                          }
-                          // custom: just reveal the toggle below, no scallop change
-                        }}
-                        className="rounded-lg flex flex-col items-center justify-center gap-0.5 px-1 py-2 text-center border transition-all"
-                        style={{ backgroundColor: active ? "#6366f1" : "transparent", borderColor: "#6366f1", color: active ? "#fff" : "#6366f1" }}
-                      >
-                        <span className="text-[11px] font-semibold leading-tight">{label}</span>
-                        {ra && <span className="text-[9px] opacity-75 leading-tight">{ra}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Scallop or Stepover */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <FieldLabel hint={form.surfacing_input_mode === "scallop"
-                      ? "Cusp height left between passes — the ridges the ball nose leaves on the surface. Stepover is computed from this automatically."
-                      : "Lateral distance between passes. Enter directly; scallop height is shown as a live preview."
-                    }>{form.surfacing_input_mode === "scallop" ? "Scallop Height (in)" : "Stepover (in)"}</FieldLabel>
-                    <div className="flex gap-1 mb-1">
-                      {(["scallop", "stepover"] as const).map(m => (
-                        <button key={m} type="button"
-                          onClick={() => setForm(p => ({ ...p, surfacing_input_mode: m }))}
-                          className="rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-all"
-                          style={{ backgroundColor: form.surfacing_input_mode === m ? "#52525b" : "transparent", borderColor: "#52525b", color: form.surfacing_input_mode === m ? "#fff" : "#71717a" }}
-                        >{m === "scallop" ? "Scallop" : "Stepover"}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {form.surfacing_input_mode === "scallop" ? (
-                    <>
-                      <Input type="text" inputMode="decimal" placeholder="e.g. 0.0005"
-                        className={`no-spinners ${!(form.surfacing_scallop_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-                        value={surfScallopText}
-                        onChange={e => setSurfScallopText(e.target.value)}
-                        onBlur={() => {
-                          const n = parseFloat(surfScallopText);
-                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_scallop_in: n })); setSurfScallopText(n.toFixed(5)); }
-                          else setSurfScallopText(form.surfacing_scallop_in > 0 ? form.surfacing_scallop_in.toFixed(5) : "");
-                        }}
-                      />
-                      {form.surfacing_scallop_in > 0 && form.tool_dia > 0 && (() => {
-                        const R = form.tool_dia / 2;
-                        const h = form.surfacing_scallop_in;
-                        const raUin = Math.round((h * 1000000) / 4);
-                        return <div className="text-[10px] text-zinc-400 mt-0.5">≈ {raUin} µin Ra theoretical</div>;
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      <Input type="text" inputMode="decimal" placeholder="e.g. 0.050"
-                        className={`no-spinners ${!(form.surfacing_stepover_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-                        value={surfStepoverText}
-                        onChange={e => setSurfStepoverText(e.target.value)}
-                        onBlur={() => {
-                          const n = parseFloat(surfStepoverText);
-                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_stepover_in: n })); setSurfStepoverText(n.toFixed(4)); }
-                          else setSurfStepoverText(form.surfacing_stepover_in > 0 ? form.surfacing_stepover_in.toFixed(4) : "");
-                        }}
-                      />
-                      {form.surfacing_stepover_in > 0 && form.tool_dia > 0 && (() => {
-                        const R = form.tool_dia / 2;
-                        const ae = form.surfacing_stepover_in;
-                        const scallop = ae > 0 && R > 0 ? (ae * ae) / (8 * R) : 0;
-                        const raUin = scallop > 0 ? Math.round((scallop * 1000000) / 4) : 0;
-                        return raUin > 0 ? <div className="text-[10px] text-zinc-400 mt-0.5">≈ {scallop.toFixed(5)}" scallop / {raUin} µin Ra</div> : null;
-                      })()}
-                    </>
-                  )}
-                </div>
-
-                {/* Step-down (ap) */}
-                <div className="space-y-1.5">
-                  <FieldLabel hint={`Axial depth per pass (Z-step). Finishing: 0.010–0.050" typical. Smaller ap tracks surface more accurately but requires more passes.`}>Step-Down / ap (in)</FieldLabel>
-                  <Input type="text" inputMode="decimal" placeholder="e.g. 0.020"
-                    className={`no-spinners ${!(form.surfacing_ap_in > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-                    value={surfApText}
-                    onChange={e => setSurfApText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseFloat(surfApText);
-                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, surfacing_ap_in: n })); setSurfApText(n.toFixed(4)); }
-                      else setSurfApText(form.surfacing_ap_in > 0 ? form.surfacing_ap_in.toFixed(4) : "");
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Tool tilt (ball nose only) */}
-              {form.corner_condition === "ball" && (
-                <div className="space-y-1.5">
-                  <FieldLabel hint="Tilt the spindle axis away from the surface normal to shift the contact point away from the dead center of the ball. Even 10–15° significantly raises D_eff and cutting velocity, improving surface finish. 0° = no tilt (tip-cutting).">Tool Tilt Angle (°) <span className="text-xs font-normal text-muted-foreground">— ball nose only, optional</span></FieldLabel>
-                  <div className="flex items-center gap-3">
-                    <Input type="number" inputMode="decimal" min="0" max="30" step="1" placeholder="0"
-                      className="no-spinners w-24"
-                      value={form.surfacing_tilt_deg || ""}
-                      onChange={e => {
-                        const n = parseFloat(e.target.value);
-                        setForm(p => ({ ...p, surfacing_tilt_deg: Number.isFinite(n) ? Math.max(0, Math.min(30, n)) : 0 }));
-                      }}
-                    />
-                    <div className="flex gap-1">
-                      {[0, 5, 10, 15].map(v => (
-                        <button key={v} type="button"
-                          onClick={() => setForm(p => ({ ...p, surfacing_tilt_deg: v }))}
-                          className="rounded px-2 py-1 text-[10px] font-semibold border transition-all"
-                          style={{ background: form.surfacing_tilt_deg === v ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.surfacing_tilt_deg === v ? "#fff" : "#6366f1" }}
-                        >{v}°</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Live D_eff / stepover / scallop preview */}
-              {form.tool_dia > 0 && form.surfacing_ap_in > 0 && (form.surfacing_scallop_in > 0 || form.surfacing_stepover_in > 0) && (() => {
-                const D = form.tool_dia; const R = D / 2;
-                const CR = form.corner_radius || 0; const cc = form.corner_condition;
-                const ap = form.surfacing_ap_in;
-                const tiltDeg = form.surfacing_tilt_deg || 0;
-                const tiltRad = tiltDeg * Math.PI / 180;
-                let d_eff = D;
-                if (cc === "ball") {
-                  if (tiltRad > 0.0001) {
-                    const tiltOffset = R * Math.cos(tiltRad);
-                    const apAdj = Math.min(ap, R + tiltOffset);
-                    const inner = R ** 2 - (tiltOffset - apAdj) ** 2;
-                    d_eff = 2 * Math.sqrt(Math.max(0, inner));
-                  } else {
-                    const ap_c = Math.max(0.0001, Math.min(ap, R));
-                    d_eff = 2 * Math.sqrt(Math.max(0, 2 * R * ap_c - ap_c ** 2));
-                  }
-                } else if (cc === "corner_radius" && CR > 0 && ap <= CR) {
-                  const ap_c = Math.max(0.0001, Math.min(ap, CR));
-                  d_eff = (D - 2 * CR) + 2 * Math.sqrt(Math.max(0, 2 * CR * ap_c - ap_c ** 2));
-                }
-                d_eff = Math.min(Math.max(0.001, d_eff), D);
-                const R_sc = cc === "ball" ? R : (cc === "corner_radius" && CR > 0 && ap <= CR) ? CR : R;
-                let ae = 0, scallop = 0;
-                if (form.surfacing_input_mode === "scallop" && form.surfacing_scallop_in > 0) {
-                  ae = Math.min(Math.sqrt(8 * R_sc * form.surfacing_scallop_in), D * 0.5);
-                  scallop = form.surfacing_scallop_in;
-                } else if (form.surfacing_stepover_in > 0) {
-                  ae = form.surfacing_stepover_in;
-                  scallop = R_sc > 0 ? (ae ** 2) / (8 * R_sc) : 0;
-                }
-                if (!(d_eff > 0) || !(ae > 0)) return null;
-                return (
-                  <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2.5 text-xs space-y-1.5">
-                    <div className="flex gap-4 flex-wrap">
-                      <div><span className="text-zinc-400">D_eff at contact </span><span className="font-mono font-semibold text-sky-300">{d_eff.toFixed(4)}"</span></div>
-                      <div><span className="text-zinc-400">Stepover </span><span className="font-mono font-semibold text-emerald-300">{ae.toFixed(4)}" ({(ae / D * 100).toFixed(1)}% Ø)</span></div>
-                      <div><span className="text-zinc-400">Scallop </span><span className="font-mono font-semibold text-orange-300">{(scallop * 1000).toFixed(3)} thou</span></div>
-                    </div>
-                    {d_eff < D * 0.3 && cc === "ball" && tiltDeg === 0 && <p className="text-amber-400 text-[10px]">⚠ D_eff is {(d_eff / D * 100).toFixed(0)}% of tool Ø — near dead center. Add 10–15° tool tilt to raise D_eff and cutting velocity significantly.</p>}
-                    {d_eff < D * 0.3 && cc === "ball" && tiltDeg > 0 && <p className="text-amber-400 text-[10px]">⚠ D_eff still low at {tiltDeg}° tilt — try increasing ap or tilt angle.</p>}
-                    {cc === "ball" && tiltDeg > 0 && d_eff >= D * 0.3 && (() => {
-                      // Show no-tilt D_eff for comparison
-                      const ap_c0 = Math.max(0.0001, Math.min(ap, R));
-                      const d_eff_0 = Math.min(2 * Math.sqrt(Math.max(0, 2 * R * ap_c0 - ap_c0 ** 2)), D);
-                      return <p className="text-emerald-400 text-[10px]">✓ {tiltDeg}° tilt raised D_eff from {d_eff_0.toFixed(4)}" → {d_eff.toFixed(4)}" (+{((d_eff / d_eff_0 - 1) * 100).toFixed(0)}% cutting velocity)</p>;
-                    })()}
-                  </div>
-                );
-              })()}
-
-              {/* Stickout for surfacing */}
-              <div className="space-y-1.5">
-                <FieldLabel hint={(() => {
-                  const _so_dia = form.tool_dia;
-                  const _so_loc = form.loc;
-                  const _so_fw  = (form as any).flute_wash ?? 0;
-                  if (_so_dia > 0 && _so_loc > 0) {
-                    const _clearance = 0.33 * _so_dia;
-                    const parts = [`LOC (${_so_loc.toFixed(3)}")`];
-                    if (_so_fw > 0) parts.push(`flute wash (${_so_fw.toFixed(3)}")`);
-                    parts.push(`holder clearance (0.33×D = ${_clearance.toFixed(3)}")`);
-                    return `Distance from toolholder face to tool tip. Default = ${parts.join(" + ")} — keeps flutes clear of the holder. Adjust shorter if your setup allows.`;
-                  }
-                  return "Distance from toolholder face to tool tip. Default fills once LOC and diameter are known.";
-                })()}>{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
-                <Input type="text" inputMode="decimal" className="no-spinners" placeholder="e.g. 2.000"
-                  value={stickoutText}
-                  onChange={e => { setStickoutText(e.target.value); setStickoutViolation(null); }}
-                  onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
-                  onBlur={() => {
-                    const n = parseDim(stickoutText);
-                    let val = metric ? n / 25.4 : n;
-                    if (Number.isFinite(val) && val > 0) {
-                      const _fw = (form as any).flute_wash ?? 0;
-                      const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
-                      if (_minSo > 0 && val < _minSo) {
-                        val = _minSo;
-                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
-                      } else { setStickoutViolation(null); }
-                      setForm(p => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
-                    } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
-                  }}
-                />
-                {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-              </div>
-            </div>
-          )}
-
-
-          {form.mode === "face" && (
-            <div className="mt-3 w-52 space-y-2">
-              <FieldLabel hint="Target surface roughness in micro-inches (µin). Common finish specs: 63 µin = machined, 32 µin = smooth machined, 16 µin = fine, 8 µin = very fine. The advisor will show the theoretical Ra with your current parameters and the max feed needed to hit this target.">Target Ra (µin) <span className="text-xs font-normal text-muted-foreground">(optional)</span></FieldLabel>
-              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="e.g. 32"
-                  className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                  value={raText}
-                  onChange={(e) => setRaText(e.target.value)}
-                  onBlur={() => {
-                    const n = parseFloat(raText);
-                    if (Number.isFinite(n) && n > 0) {
-                      setForm((p) => ({ ...p, target_ra_uin: n }));
-                      setRaText(n.toFixed(0));
-                    } else {
-                      setForm((p) => ({ ...p, target_ra_uin: 0 }));
-                      setRaText("");
-                    }
-                  }}
-                />
-                <span className="text-xs text-muted-foreground shrink-0">µin</span>
-              </div>
-              <div className="flex gap-1">
-                {[8, 16, 32, 63, 125].map(v => (
-                  <button key={v} type="button"
-                    onClick={() => { setForm((p) => ({ ...p, target_ra_uin: v })); setRaText(String(v)); }}
-                    className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
-                    style={{
-                      background: form.target_ra_uin === v ? "#eab308" : "transparent",
-                      borderColor: form.target_ra_uin === v ? "#eab308" : "rgba(255,255,255,0.25)",
-                      color: form.target_ra_uin === v ? "#000" : "rgba(255,255,255,0.6)",
-                    }}
-                  >{v}</button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Chipbreaker / truncated rougher engagement warning */}
-          {(form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (() => {
-            const dia = form.tool_dia || 0.5;
-            const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
-            const wocTooLow = form.woc_pct > 0 && form.woc_pct < minWoc;
-            const docTooLow = form.doc_xd > 0 && form.doc_xd < 1.0;
-            if (!wocTooLow && !docTooLow) return null;
-            const geoLabel = form.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated Rougher";
-            const reasons = [
-              wocTooLow && `WOC ${form.woc_pct.toFixed(1)}% is below ${minWoc}% minimum`,
-              docTooLow && `DOC ${form.doc_xd.toFixed(2)}×D is below 1×D minimum`,
-            ].filter(Boolean).join(" · ");
-            return (
-              <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
-                <span className="mt-0.5 shrink-0">⚠</span>
-                <span><span className="font-semibold">{geoLabel} geometry inactive</span> — {reasons}. Requires ≥{minWoc}% WOC and ≥1×D DOC to engage. Consider Standard geometry at this engagement.</span>
-              </div>
-            );
-          })()}
-          </>)}
-
           {/* Hole Details — reaming */}
           {operation === "reaming" && (<>
           <div className="flex items-center gap-3 my-7">
@@ -6694,6 +5341,1007 @@ ${stabSection}
             </div>
           </div>
 
+          {/* Tool Geometry — adapts per operation */}
+          {operation !== "threadmilling" && operation !== "keyseat" && operation !== "dovetail" && (
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          )}
+
+          {operation === "milling" ? (<>
+          {/* EDP# / SKU lookup */}
+          <div className="mb-4 relative">
+            <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">Core Cutter EDP# (required to run — auto-fills tool specifications)</FieldLabel>
+            <div className="relative mt-1.5">
+              <Input
+                type="text"
+                className="no-spinners pr-8"
+                placeholder={form.tool_type === "chamfer_mill" ? "e.g. H09055" : "e.g. 505221"}
+                value={edpText}
+                onChange={(e) => { if (skuLocked) clearSku(); setEdpText(e.target.value); }}
+                onFocus={() => { if (skuResults.length > 0 && !skuLocked) setSkuDropdownOpen(true); }}
+                onBlur={() => setTimeout(() => setSkuDropdownOpen(false), 150)}
+              />
+              {skuLocked && skuDescription && (
+                <span className="pointer-events-none absolute inset-y-0 left-[5rem] right-8 flex items-center overflow-hidden">
+                  <span className="text-[11px] text-muted-foreground truncate">— {skuDescription}</span>
+                </span>
+              )}
+              {skuLocked && (
+                <button
+                  type="button"
+                  title="Clear EDP# and unlock fields"
+                  onClick={clearSku}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-500 hover:text-orange-700 text-sm leading-none"
+                >✕</button>
+              )}
+            </div>
+            {edpNotFound && !skuLocked && (
+              <p className="mt-1 text-xs font-semibold text-red-500">⚠ Invalid EDP Number Entered</p>
+            )}
+            {skuLocked && (
+              <p className="mt-1 text-[11px] text-orange-400 flex items-center gap-2 flex-wrap">
+                <span>Auto-filled from {edpText} — fields populated from catalog.{" "}
+                <button type="button" onClick={clearSku} className="underline hover:text-orange-600">Clear</button></span>
+                <button
+                  type="button"
+                  onClick={() => requireEmail("stp", stpUrl(edpText))}
+                  className="inline-flex items-center gap-0.5 rounded border border-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
+                  title={`Download Core_Cutter_${edpText} v1.step`}
+                >⬇ .STP</button>
+              </p>
+            )}
+            {skuDropdownOpen && skuResults.length > 0 && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-52 overflow-y-auto">
+                {skuResults.filter(s => {
+                  if (form.mode !== "surfacing") return true;
+                  const cc = String(s.corner_condition ?? "square").toLowerCase();
+                  return cc === "ball" || (!isNaN(Number(cc)) && Number(cc) > 0);
+                }).map((s) => (
+                  <button
+                    key={s.EDP ?? s.edp}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-baseline gap-2 overflow-hidden"
+                    onMouseDown={(e) => { e.preventDefault(); applySkuToForm(s); }}
+                  >
+                    <span className="font-semibold">{s.EDP ?? s.edp}</span>
+                    <span className="text-muted-foreground text-xs whitespace-nowrap truncate">
+                      {s.flutes}fl · {Number(s.cutting_diameter_in).toFixed(4)}" · {Number(s.loc_in).toFixed(3)}" LOC{s.oal_in ? ` · ${Number(s.oal_in).toFixed(3)}" OAL` : ""}
+                      {s.series ? ` · ${s.series}` : ""}
+                      {" · "}{(() => {
+                        const cc = String(s.corner_condition ?? "square").toLowerCase();
+                        if (cc === "ball") return "Ball";
+                        const cr = Number(s.corner_condition);
+                        if (!isNaN(cr) && cr > 0) return `CR ${cr.toFixed(4)}"`;
+                        return "Square";
+                      })()}
+                      {s.coating ? <span className="ml-1 text-orange-400 font-medium">· {s.coating}</span> : null}
+                      {s.geometry === "chipbreaker" ? <span className="ml-1 text-sky-400 font-medium">· Chipbreaker</span> : null}
+                      {s.geometry === "truncated_rougher" ? <span className="ml-1 text-sky-400 font-medium">· VXR Rougher</span> : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* PDF Print Upload — shown in customer mode or as shortcut in eng mode */}
+          {(operation === "milling") && (!skuLocked) && (
+            <div className={`rounded-lg border p-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
+              {pdfExtracted ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+                    <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <FieldLabel hint="Flute wash is the distance from the end of the LOC to where the flutes fully disappear into the shank — this section must not slide into the toolholder. Not called out on CC prints; estimated at 20% of LOC. Measure from the physical tool and correct here if needed.">Flute Wash (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners w-24 h-7 text-xs"
+                      placeholder="est."
+                      value={pdfFluteWashText}
+                      onChange={e => setPdfFluteWashText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(pdfFluteWashText);
+                        const fw = Number.isFinite(n) && n >= 0 ? n : pdfFluteWash;
+                        setPdfFluteWash(fw);
+                        setPdfFluteWashText(fw > 0 ? fw.toFixed(4) : "0.0000");
+                        // Recompute default stickout with corrected flute wash
+                        const loc = form.loc; const dia = form.tool_dia;
+                        if (loc > 0 && dia > 0) {
+                          const so = Math.ceil((loc + fw + 0.33 * dia) * 200) / 200;
+                          setForm(p => ({ ...p, stickout: so, flute_wash: fw }));
+                          setStickoutText(so.toFixed(3));
+                        }
+                      }}
+                    />
+                    <span className="text-[10px] text-amber-400/70">estimated — verify with tool</span>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center gap-1 cursor-pointer">
+                  <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                  <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                    {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
+                  </span>
+                  <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                  {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
+                </label>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-3" style={{ gridTemplateColumns: form.tool_type === "chamfer_mill" ? "4rem 1fr 1fr" : "4rem 1fr 1fr 1fr" }}>
+            <div className="space-y-2">
+              <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
+              <Input
+                type="number"
+                step="1"
+                className="no-spinners"
+                value={form.flutes || ""}
+                onChange={onNum("flutes")}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia (in)", "Cut Dia (mm)")}</FieldLabel>
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="no-spinners"
+                value={toolDiaText}
+                onChange={(e) => setToolDiaText(e.target.value)}
+                onFocus={() => {
+                  if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3));
+                }}
+                onBlur={() => {
+                  const n = parseDim(toolDiaText);
+                  if (Number.isFinite(n) && n > 0) {
+                    const stored = metric ? n / 25.4 : n;
+                    setForm((p) => ({ ...p, tool_dia: stored }));
+                    setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                  } else {
+                    setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3)) : "");
+                  }
+                }}
+              />
+            </div>
+            {<div className="space-y-2">
+              <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC (in)", "LOC (mm)")}</FieldLabel>
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="no-spinners"
+                value={locText}
+                onChange={(e) => setLocText(e.target.value)}
+                onFocus={() => {
+                  if (form.loc) setLocText(metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3));
+                }}
+                onBlur={() => {
+                  const n = parseDim(locText);
+                  if (Number.isFinite(n) && n > 0) {
+                    const stored = metric ? n / 25.4 : n;
+                    setForm((p) => ({ ...p, loc: stored }));
+                    setLocText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                  } else {
+                    setLocText(form.loc ? (metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3)) : "");
+                  }
+                }}
+              />
+            </div>}
+            {form.tool_type !== "chamfer_mill" && form.lbs > 0 && <div className="space-y-2">
+              <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>{UL("LBS (in)", "LBS (mm)")}</FieldLabel>
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="no-spinners"
+                value={lbsText}
+                onChange={(e) => setLbsText(e.target.value)}
+                onFocus={() => {
+                  if (form.lbs) setLbsText(metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3));
+                }}
+                onBlur={() => {
+                  const n = parseDim(lbsText);
+                  if (Number.isFinite(n) && n > 0) {
+                    const stored = metric ? n / 25.4 : n;
+                    setForm((p) => ({ ...p, lbs: stored }));
+                    setLbsText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                  } else if (!lbsText.trim() || lbsText.trim() === "0") {
+                    setForm((p) => ({ ...p, lbs: 0 }));
+                    setLbsText("");
+                  } else {
+                    setLbsText(form.lbs ? (metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3)) : "");
+                  }
+                }}
+              />
+            </div>}
+          </div>
+
+          {/* Chamfer Mill specific fields */}
+          {form.tool_type === "chamfer_mill" && (
+            <div className="space-y-4 mt-2">
+              <div className="space-y-1.5">
+                <FieldLabel hint="CMH series: high-performance with shear angle and edge prep — runs significantly higher chip load. CMS series: straight-flute, center-cutting — lower chip load (~65% of CMH).">Series</FieldLabel>
+                <div className="flex gap-1.5">
+                  {(["CMH", "CMS"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, chamfer_series: s }))}
+                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.chamfer_series === s ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1",
+                        color: form.chamfer_series === s ? "#fff" : "#6366f1",
+                      }}
+                    >{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel hint="Included angle of the chamfer mill (tip angle). CMS series: 60°, 90°, 120°. CMH series: 60°, 82°, 90°, 100°, 120°.">Chamfer Angle</FieldLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {([60, 82, 90, 100, 120] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, chamfer_angle: a }))}
+                      className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.chamfer_angle === a ? "#6366f1" : "transparent",
+                        borderColor: "#6366f1",
+                        color: form.chamfer_angle === a ? "#fff" : "#6366f1",
+                      }}
+                    >{a}°</button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Tip diameter (flat at the very tip). CMH series has a tip flat — enter from catalog. CMS series is center-cutting with a point, leave at 0.">Tip Dia (in)</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      className="no-spinners"
+                      placeholder="0 = point (CMS)"
+                      value={chamferTipDiaText}
+                      onChange={(e) => setChamferTipDiaText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(chamferTipDiaText);
+                        if (Number.isFinite(n) && n >= 0) {
+                          setForm((p) => ({ ...p, chamfer_tip_dia: n }));
+                          setChamferTipDiaText(n > 0 ? n.toFixed(4) : "");
+                        } else {
+                          setChamferTipDiaText(form.chamfer_tip_dia > 0 ? form.chamfer_tip_dia.toFixed(4) : "");
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                {skuChamferEdgeLength && form.tool_dia > 0 && (() => {
+                  const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+                  const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+                  const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                  const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
+                  const isCms = !(form.chamfer_tip_dia > 0);
+                  const tipX = isCms ? 138 : 128;
+                  return (
+                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-orange-400">Cutting Edge Length</span>
+                        <span className="font-mono font-semibold text-orange-400">{edgeLength.toFixed(4)}"</span>
+                        <span className="text-zinc-600">|</span>
+                        <span className="text-blue-400">Max Chamfer Depth</span>
+                        <span className="font-mono font-semibold text-blue-400">{maxDepth.toFixed(4)}"</span>
+                      </div>
+                      {(() => {
+                        const topY = 12, clY = 74;
+                        const bodyX1 = 22, chamferX = 58;
+                        const tipX = isCms ? 230 : 205;
+                        const tipHalfPx = (!isCms && form.tool_dia > 0)
+                          ? Math.max(5, (form.chamfer_tip_dia / form.tool_dia) * (clY - topY))
+                          : 0;
+                        const tipY = clY - tipHalfPx;
+                        const lMidX = (chamferX + tipX) / 2;
+                        const lMidY = (topY + tipY) / 2;
+                        const lAngle = Math.round(Math.atan2(tipY - topY, tipX - chamferX) * 180 / Math.PI);
+                        const dArrowY = clY + 13;
+                        return (
+                          <svg viewBox="0 0 265 98" width="100%" height="88" className="block mt-1">
+                            <defs>
+                              <clipPath id="cc-hatch2">
+                                <rect x={bodyX1} y={topY} width="9" height={clY - topY}/>
+                              </clipPath>
+                            </defs>
+                            {/* Cross-hatch on left end face */}
+                            <g clipPath="url(#cc-hatch2)">
+                              {[0,7,14,21,28,35,42,49,56,63,70].map((d,i) =>
+                                <line key={i} x1={bodyX1+d-(clY-topY)} y1={clY} x2={bodyX1+d} y2={topY} stroke="#666" strokeWidth="0.75"/>
+                              )}
+                            </g>
+                            {/* Tool body top wall */}
+                            <line x1={bodyX1} y1={topY} x2={chamferX} y2={topY} stroke="#888" strokeWidth="1.5"/>
+                            {/* Left end cap */}
+                            <line x1={bodyX1} y1={topY} x2={bodyX1} y2={clY} stroke="#888" strokeWidth="1.5"/>
+                            {/* Shoulder line where body meets chamfer */}
+                            <line x1={chamferX} y1={topY} x2={chamferX} y2={clY} stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
+                            {/* Centerline — proper long-short-long drafting linetype */}
+                            <line x1={bodyX1-6} y1={clY} x2={tipX+12} y2={clY} stroke="#4a4a5a" strokeWidth="1" strokeDasharray="12,3,3,3"/>
+                            {/* Chamfer cutting edge (orange) */}
+                            <line x1={chamferX} y1={topY} x2={tipX} y2={tipY} stroke="#f97316" strokeWidth="2.5"/>
+                            {/* Saddling zone — white overlay centered on cutting edge */}
+                            {form.chamfer_depth > 0 && (() => {
+                              const saddleFrac = Math.min(1, form.chamfer_depth / edgeLength);
+                              const half = saddleFrac / 2;
+                              const f1 = 0.5 - half; // start fraction along edge
+                              const f2 = 0.5 + half; // end fraction along edge
+                              const sx1 = chamferX + (tipX - chamferX) * f1;
+                              const sy1 = topY + (tipY - topY) * f1;
+                              const sx2 = chamferX + (tipX - chamferX) * f2;
+                              const sy2 = topY + (tipY - topY) * f2;
+                              const isOver = form.chamfer_depth > edgeLength;
+                              return (
+                                <line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+                                  stroke={isOver ? "#ef4444" : "rgba(255,255,255,0.80)"}
+                                  strokeWidth="5" strokeLinecap="round"/>
+                              );
+                            })()}
+                            {/* CMS: point on CL */}
+                            {isCms && <polygon points={`${tipX},${clY} ${tipX-9},${clY-7} ${tipX-9},${clY}`} fill="#f97316" opacity="0.85"/>}
+                            {/* CMH: gray flat face from tipY down to CL */}
+                            {!isCms && <line x1={tipX} y1={tipY} x2={tipX} y2={clY} stroke="#52525b" strokeWidth="2.5"/>}
+                            {/* Depth ref ticks */}
+                            <line x1={chamferX} y1={clY} x2={chamferX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
+                            <line x1={tipX} y1={clY} x2={tipX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
+                            {/* Depth arrow */}
+                            <line x1={chamferX} y1={dArrowY} x2={tipX} y2={dArrowY} stroke="#3b82f6" strokeWidth="1.5"/>
+                            <polygon points={`${chamferX},${dArrowY} ${chamferX+7},${dArrowY-3} ${chamferX+7},${dArrowY+3}`} fill="#3b82f6"/>
+                            <polygon points={`${tipX},${dArrowY} ${tipX-7},${dArrowY-3} ${tipX-7},${dArrowY+3}`} fill="#3b82f6"/>
+                            <text x={(chamferX+tipX)/2} y={dArrowY+9} fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle">d={maxDepth.toFixed(3)}"</text>
+                            {/* L label along cutting edge */}
+                            <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`}>L={edgeLength.toFixed(3)}"</text>
+                            {/* Series label */}
+                            <text x={tipX - 10} y={topY - 1} fontSize="8" fill="#6b7280" textAnchor="end">{isCms ? "CMS — Center Cutting" : "CMH — Non-Center (flat tip)"}</text>
+                          </svg>
+                        );
+                      })()}
+                    </div>
+                  );
+                })()}
+                <div className="space-y-1.5">
+                  <FieldLabel hint={
+                    <div className="space-y-2">
+                      <p>Chamfer length — the length of the angled chamfer face as dimensioned on the print (the "L" edge in the diagram). Enter this directly from the print; the app calculates the Z axial depth for CAM programming automatically and compares it against the tool's cutting edge length.</p>
+                      {/* Chamfer geometry diagram */}
+                      {(() => {
+                        const isCmh = form.chamfer_tip_dia > 0;
+                        const x1 = 100, y1 = 10;
+                        const x2 = isCmh ? 128 : 138, y2 = 50;
+                        const dx = x2 - x1, dy = y2 - y1;
+                        const len = Math.sqrt(dx*dx + dy*dy);
+                        const ux = dx/len, uy = dy/len;
+                        const px = -uy, py = ux; // left perpendicular
+                        const off = 9;
+                        const lx1 = x1 + px*off, ly1 = y1 + py*off;
+                        const lx2 = x2 + px*off, ly2 = y2 + py*off;
+                        const midX = (lx1+lx2)/2, midY = (ly1+ly2)/2;
+                        const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+                        const a = 5; // arrowhead size
+                        return (
+                          <svg viewBox="0 0 165 105" width="165" height="105" className="block mx-auto">
+                            {/* Tool body */}
+                            <line x1="20" y1="10" x2="20" y2="50" stroke="#888" strokeWidth="1.5"/>
+                            <line x1="20" y1="10" x2={x1} y2={y1} stroke="#888" strokeWidth="1.5"/>
+                            {/* Chamfer cutting edge */}
+                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f97316" strokeWidth="2"/>
+                            {/* Tip flat or point */}
+                            {isCmh
+                              ? <line x1={x2} y1={y2} x2={x2} y2="68" stroke="#f97316" strokeWidth="2"/>
+                              : null}
+                            {/* Axis dashed */}
+                            <line x1="20" y1="50" x2={x2} y2="50" stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
+                            {/* L dimension line along hypotenuse (offset) */}
+                            <line x1={lx1} y1={ly1} x2={lx2} y2={ly2} stroke="#f97316" strokeWidth="1.2"/>
+                            {/* Tick marks at ends */}
+                            <line x1={lx1+px*3} y1={ly1+py*3} x2={lx1-px*3} y2={ly1-py*3} stroke="#f97316" strokeWidth="1"/>
+                            <line x1={lx2+px*3} y1={ly2+py*3} x2={lx2-px*3} y2={ly2-py*3} stroke="#f97316" strokeWidth="1"/>
+                            {/* L label at midpoint */}
+                            <text x={midX + px*7} y={midY + py*7} fontSize="9" fill="#f97316" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" transform={`rotate(${ang},${midX + px*7},${midY + py*7})`}>L</text>
+                            {/* Z axial arrow (secondary — output) */}
+                            <line x1={x2+8} y1="10" x2={x2+8} y2="50" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2,2"/>
+                            <polygon points={`${x2+8},10 ${x2+5},17 ${x2+11},17`} fill="#60a5fa"/>
+                            <polygon points={`${x2+8},50 ${x2+5},43 ${x2+11},43`} fill="#60a5fa"/>
+                            <text x={x2+13} y="33" fontSize="8" fill="#60a5fa" dominantBaseline="middle">Z</text>
+                            {/* OD label */}
+                            <text x="58" y="8" fontSize="8" fill="#aaa" textAnchor="middle">OD</text>
+                            {/* Series label */}
+                            <text x="5" y="98" fontSize="8" fill="#6b7280">{isCmh ? "CMH — flat tip" : "CMS — center cutting"}</text>
+                          </svg>
+                        );
+                      })()}
+                    </div>
+                  }>Chamfer Length (in)</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className={`no-spinners ${!(form.chamfer_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                    placeholder={(() => {
+                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "face width (in)";
+                      const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+                      const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+                      const edgeLen = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                      if (!(edgeLen > 0)) return "face width (in)";
+                      // Sweet spot: middle 60% of edge for CMS, middle 80% for CMH
+                      const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
+                      const lo = edgeLen * skip;
+                      const hi = edgeLen * (1 - skip);
+                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" face`;
+                    })()}
+                    value={chamferDepthText}
+                    onChange={(e) => setChamferDepthText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(chamferDepthText);
+                      if (Number.isFinite(n) && n > 0) {
+                        setForm((p) => ({ ...p, chamfer_depth: n }));
+                        setChamferDepthText(n.toFixed(4));
+                      } else {
+                        setChamferDepthText(form.chamfer_depth > 0 ? form.chamfer_depth.toFixed(4) : "");
+                      }
+                    }}
+                  />
+                  {(() => {
+                    if (!(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
+                    const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
+                    const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
+                    const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                    const zDepth = form.chamfer_depth * Math.cos(halfRad);
+                    if (form.chamfer_depth > edgeLength) {
+                      return (
+                        <p className="mt-1 text-xs text-red-400">
+                          ⚠ Chamfer length exceeds tool edge ({edgeLength.toFixed(4)}") — need a larger tool.
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className="mt-1 text-xs text-zinc-400">
+                        Z depth to program in CAM: <span className="text-blue-400 font-mono font-semibold">{zDepth.toFixed(4)}"</span>
+                      </p>
+                    );
+                  })()}
+                </div>
+                {/* Col 2: suggest a larger tool when depth exceeds max */}
+                {chamferUpgradeSuggestion && (
+                  <div className="flex items-start">
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 text-xs w-full">
+                      <div className="text-amber-400 font-semibold text-[10px] uppercase tracking-wide mb-1">Suggested Larger Tool</div>
+                      <div className="font-mono text-amber-300 font-semibold">{chamferUpgradeSuggestion.edp}</div>
+                      <div className="text-zinc-400 text-[10px] mt-0.5">{chamferUpgradeSuggestion.dia.toFixed(4)}" dia — reaches this depth</div>
+                      {chamferUpgradeSuggestion.desc && <div className="text-zinc-500 text-[10px] mt-0.5 leading-tight">{chamferUpgradeSuggestion.desc}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Machining Tips accordion — chamfer mill */}
+          {form.tool_type === "chamfer_mill" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">Think "wipe the edge" — not "cut the edge."</span> Chamfer tools concentrate load at the tip. Keep radial engagement under 10–15% of diameter and axial depth just enough to hit size. Light, consistent engagement protects the tip and produces a cleaner edge than aggressive cuts.</div>
+                  <div><span className="font-semibold text-white">Helical flutes (CMH style) are a major advantage.</span> Straight flutes hit the full edge instantly — helical flutes engage progressively along the cutting edge, dramatically reducing tip shock. This eliminates micro-chipping, reduces vibration, improves chip evacuation, and makes chamfer milling behave more like an endmill than a scraper. CMH geometry shines in production work, tough materials, and interrupted cuts (cross-holes, cast edges, flame-cut stock).</div>
+                  <div><span className="font-semibold text-white">Always use helical or rolling entry.</span> Never plunge straight onto an edge. Use a helical interpolation entry or a lead-in arc to let the helix engage progressively — this is where you unlock the full benefit of helical geometry. Lead-out the same way.</div>
+                  <div><span className="font-semibold text-white">Chip load lives in a narrow window.</span> Too low = rubbing = poor finish and rapid wear. Too high = instant tip failure. Start at 0.0005–0.002 IPT depending on tool size and material. Keep feed consistent through corners — feed drops cause rubbing at the tip.</div>
+                  <div><span className="font-semibold text-white">Z-depth controls chamfer size.</span> A 0.001" Z shift produces a noticeable chamfer size change. Use your Z wear offset to dial in size — not reprogramming. This is how tight-tolerance chamfers are held in production.</div>
+                  <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
+                  <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
+                  <div><span className="font-semibold text-white">Run 10–20% lower SFM than endmilling.</span> Tip concentration and thin edge geometry mean chamfer tools don't tolerate the same surface speeds as full-diameter endmills.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Corner Condition — endmill only */}
+          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
+            <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = bull nose for 3D contouring. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
+            {form.mode === "surfacing" && (
+              <p className="text-[10px] text-amber-400">3D surfacing requires a ball or bull nose tool — square corner excluded.</p>
+            )}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(["square", "corner_radius"] as const).filter(k => form.mode !== "surfacing" || k !== "square").map((key) => {
+                const label = key === "square" ? "Square" : "Corner Radius";
+                const tt = key === "square" ? "endmill" : "corner_radius";
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => { setForm((p) => ({ ...p, corner_condition: key, tool_type: tt, corner_radius: key === "square" ? 0 : p.corner_radius })); if (key === "square") setCrText(""); }}
+                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                    style={{ backgroundColor: form.corner_condition === key ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.corner_condition === key ? "#fff" : "#6366f1" }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {form.corner_condition === "corner_radius" && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">{UL("CR (in)", "CR (mm)")}</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="h-7 w-20 text-xs no-spinners rounded-md border border-input bg-background px-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                    value={crText}
+                    onChange={(e) => setCrText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(crText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const val = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, corner_radius: val }));
+                        setCrText(metric ? n.toFixed(2) : val.toFixed(3));
+                      } else {
+                        setCrText(form.corner_radius > 0 ? (metric ? (form.corner_radius * 25.4).toFixed(2) : form.corner_radius.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, corner_condition: "ball", tool_type: "ballnose", corner_radius: 0 }))}
+                className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                style={{ backgroundColor: form.corner_condition === "ball" ? "#6366f1" : "transparent", borderColor: "#6366f1", color: form.corner_condition === "ball" ? "#fff" : "#6366f1" }}
+              >
+                Ball Nose
+              </button>
+            </div>
+          </div>}
+
+          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
+            <FieldLabel hint="Standard = full-length flute. Chipbreaker (-CB) = notched flute that segments the chip, net ~20% force reduction. Truncated Rougher (VXR) = serrated flute with negative K-land edge prep — K-land strengthens the edge but adds back ~12% pressure, so net force reduction is ~17% vs standard.">
+              Flute Geometry
+            </FieldLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { key: "standard",          label: "Standard" },
+                { key: "chipbreaker",       label: "Chipbreaker (CB)" },
+                { key: "truncated_rougher", label: "Truncated Rougher (VXR)" },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, geometry: key }))}
+                  className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.geometry === key ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1",
+                    color: form.geometry === key ? "#fff" : "#6366f1",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>}
+
+          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5 mt-1">
+            <FieldLabel hint="Variable Pitch spaces flute angles unevenly to disrupt regenerative chatter — the primary driver of vibration in steel, stainless, and titanium. Variable Helix varies the helix angle along the flute length to spread axial cutting forces and further dampen vibration. Most Core Cutter steel/stainless/titanium tools are Variable Pitch; select tools add Variable Helix. Aluminum tools are typically neither.">
+              Tool Design
+            </FieldLabel>
+            <div className="flex gap-4">
+              {([
+                { key: "variable_pitch" as const, label: "Variable Pitch" },
+                { key: "variable_helix" as const, label: "Variable Helix" },
+              ]).map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form[key]}
+                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.checked }))}
+                    className="w-4 h-4 rounded accent-indigo-500"
+                  />
+                  <span className="text-xs font-semibold text-indigo-400">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>}
+          </>) : operation === "drilling" ? (<>
+          {/* PDF Upload for drilling */}
+          {!pdfExtracted && (
+            <div className="rounded-lg border border-dashed border-gray-600 p-3 mb-3">
+              <label className="flex flex-col items-center gap-1 cursor-pointer">
+                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
+                </span>
+                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
+              </label>
+            </div>
+          )}
+          {pdfExtracted && (
+            <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
+              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+              <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+            </div>
+          )}
+
+
+          {/* Auto-apply flute geo silently, show read-only point angle */}
+          {(() => {
+            const iso = isoCategory;
+            const depthD = form.tool_dia > 0 && form.drill_hole_depth > 0 ? form.drill_hole_depth / form.tool_dia : 0;
+            const isDeep = depthD > 5;
+            const isVeryDeep = depthD > 7;
+            const hasCoolant = form.drill_coolant_fed;
+            let recGeo: "standard" | "med_helix" | "high_helix" = "standard";
+            if (iso === "M") recGeo = isDeep ? "high_helix" : "med_helix";
+            else if (iso === "S") recGeo = "high_helix";
+            else if (iso === "P") recGeo = isDeep ? "med_helix" : "standard";
+            if (hasCoolant && recGeo === "high_helix" && !isVeryDeep) recGeo = "med_helix";
+            else if (hasCoolant && recGeo === "med_helix" && !isDeep) recGeo = "standard";
+            if (!hasCoolant && isDeep && recGeo === "standard") recGeo = "med_helix";
+            if (!hasCoolant && isVeryDeep && recGeo === "med_helix") recGeo = "high_helix";
+            if (form.drill_geometry !== recGeo) setTimeout(() => setForm((p) => ({ ...p, drill_geometry: recGeo })), 0);
+            return (
+              <div className="space-y-1.5 mt-3">
+                <FieldLabel hint="Point angle as specified on the CC drill print.">Point Angle</FieldLabel>
+                <div className="flex gap-2">
+                  {([118, 130, 135, 140, 145] as const).map((pa) => {
+                    const isSelected = form.drill_point_angle === pa;
+                    return (
+                      <div key={pa} className="flex-1 rounded py-2 text-xs font-semibold border text-center"
+                        style={{
+                          backgroundColor: isSelected ? "#6366f1" : "transparent",
+                          borderColor: isSelected ? "#6366f1" : "#3f3f46",
+                          color: isSelected ? "#fff" : "#52525b",
+                        }}>{pa}°</div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          {/* Machining Tips accordion — drilling */}
+          {operation === "drilling" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (
+                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                  <div><span className="font-semibold text-white">Never baby a carbide drill — it needs load to live.</span> Low feed causes rubbing and work hardening, especially in stainless and HRSA. Maintain proper chip load and avoid hesitation feed at any point in the cycle.</div>
+                  <div><span className="font-semibold text-white">Through-spindle coolant changes everything.</span> Chip evacuation becomes force-assisted, heat is removed at the cutting edge, and you can drill deeper, faster, and more reliably. Under 3×D: no peck needed. 3–5×D: light chip break if needed. 5×D+: controlled peck or high-pressure coolant required. Coolant pressure matters — 300+ PSI minimum, 1000+ PSI for stainless and Inconel.</div>
+                  <div><span className="font-semibold text-white">No coolant = your responsibility to manage chips.</span> Without through coolant you must peck — no exceptions on deeper holes. 1–2×D: light peck. 3×D+: mandatory peck cycle. Use G73 (high-speed peck) for most carbide drilling; G83 (full retract) for deep holes or poor chip formers. Air blast and MQL help significantly — avoid running completely dry if possible.</div>
+                  <div><span className="font-semibold text-white">Spot drill angle must equal or exceed your drill point angle.</span> If the spot angle is smaller than the drill point angle, the chisel edge contacts first — the drill walks, loads unevenly, and chips. Common pairings: 118° drill → 120–140° spot; 135° drill → 140° spot; 140°+ drill → match or exceed. Only spot deep enough to create a chamfered seat — spot diameter ≈ drill diameter.</div>
+                  <div><span className="font-semibold text-white">Control chip shape without coolant.</span> You want short 6's and 9's — not stringers or bird nests. Increase feed to shorten chips; reduce SFM to reduce heat and stringing. Non-coolant drilling typically runs 20–40% lower SFM than coolant-fed.</div>
+                  <div><span className="font-semibold text-white">Entry and exit control.</span> Always spot or chamfer before drilling, especially on holes deeper than 3×D. Reduce feed 30–50% at breakthrough to prevent edge grabbing and chip packing on exit.</div>
+                  <div><span className="font-semibold text-white">Runout is a silent killer.</span> Target ≤0.0005" TIR — beyond that one flute does all the work and the drill fails instantly. Hydraulic or shrink-fit holders preferred; avoid long ER stickout.</div>
+                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Margin chipping = poor chip evacuation. Corner breakdown = feed too low (rubbing). Catastrophic break = chip packing or coolant loss. Built-up edge = aluminum or stainless without lubrication. Work hardening = stainless/HRSA with hesitation feed or too low chip load.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          </>) : null}
+
+          {/* Reaming Tool Geometry */}
+          {operation === "reaming" && (<>
+          {/* PDF Upload for reaming */}
+          <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
+            {pdfExtracted ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center gap-1 cursor-pointer">
+                <span className="text-xs text-gray-400">Upload CC-XXXXX print to auto-fill dimensions</span>
+                <span className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors pointer-events-none">
+                  {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
+                </span>
+                <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                {!stepReqOpen && !stepReqSent && (
+                  <span className="text-[10px] text-zinc-500 mt-1">Need a .STEP file for CAM? <button type="button" onClick={() => setStepReqOpen(true)} className="text-indigo-400 hover:text-indigo-300 underline">Contact us</button></span>
+                )}
+                {stepReqOpen && !stepReqSent && (
+                  <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={stepReqEmail}
+                      onChange={e => setStepReqEmail(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={stepReqLoading || !stepReqEmail}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded px-2 py-1 text-[11px] font-semibold"
+                      onClick={async () => {
+                        setStepReqLoading(true);
+                        try {
+                          await fetch("/api/step-request", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: stepReqEmail, tool_number: pdfToolNumber }),
+                          });
+                          setStepReqSent(true);
+                          setStepReqOpen(false);
+                        } finally { setStepReqLoading(false); }
+                      }}
+                    >{stepReqLoading ? "…" : "Send"}</button>
+                    <button type="button" onClick={() => setStepReqOpen(false)} className="text-zinc-500 hover:text-white text-[11px]">✕</button>
+                  </div>
+                )}
+                {stepReqSent && (
+                  <span className="text-[10px] text-emerald-400 mt-1">✓ Request sent — we'll email your .STEP file shortly</span>
+                )}
+              </label>
+            )}
+          </div>
+
+          {form.tool_dia > 0 && (
+              <div className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2.5 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Reamer OD</span>
+                  <span className="font-semibold text-foreground">{metric ? (form.tool_dia * 25.4).toFixed(3) + " mm" : form.tool_dia.toFixed(4) + '"'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Tolerance Band ({reamTolClass})</span>
+                  <span className="font-mono text-indigo-300">{reamTolBand(form.tool_dia, reamTolClass)}</span>
+                </div>
+                {(() => {
+                  const stock = reamStockRange(form.tool_dia);
+                  if (!stock) return null;
+                  const ideal = +(form.tool_dia - stock.ideal).toFixed(4);
+                  const lo    = +(form.tool_dia - stock.max).toFixed(4);
+                  const hi    = +(form.tool_dia - stock.min).toFixed(4);
+                  const drills = nearestDrills(ideal, lo, hi);
+                  const ranked = [...drills].sort((a, b) => Math.abs(a.dia - ideal) - Math.abs(b.dia - ideal));
+                  const rankStyle = [
+                    "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400",
+                    "border-amber-500/60  bg-amber-500/10  text-amber-300  hover:bg-amber-500/25  hover:border-amber-400",
+                  ];
+                  return (<>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Recommended Pre-Drill</span>
+                      <span className="font-semibold text-foreground">{metric ? (ideal * 25.4).toFixed(3) + " mm" : ideal.toFixed(4) + '"'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400">Nearest Drill Sizes</span>
+                      <div className="flex gap-1.5 flex-wrap justify-end">
+                        {ranked.map((d, i) => (
+                          <button key={d.label} type="button"
+                            title="Click to use this pre-drill size"
+                            onClick={() => setForm((p) => ({ ...p, ream_pre_drill_dia: +d.dia.toFixed(4) }))}
+                            className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold transition-all cursor-pointer ${rankStyle[i] ?? "border-zinc-600 bg-zinc-800 text-foreground"}`}>
+                            {d.label}
+                            <span className="font-normal text-[10px] opacity-60">{d.dia.toFixed(4)}"</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>);
+                })()}
+              </div>
+            )}
+
+          {/* Reamer Type — Standard or Step */}
+          <div className="space-y-1.5 mt-3">
+            <FieldLabel hint="Standard = single diameter reamer. Step Reamer = two cutting diameters (entry and largest). SFM is set by the largest diameter; feed (IPR) is set by the entry (smallest) diameter.">Reamer Type</FieldLabel>
+            <div className="flex gap-2">
+              {([0, 1] as const).map((n) => (
+                <button key={n} type="button"
+                  onClick={() => {
+                    setReamStepDiaText("");
+                    setForm((p) => ({ ...p, ream_steps: n, ream_step_diameters: [], ream_step_lengths: [] }));
+                  }}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.ream_steps === n ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.ream_steps === n ? "#fff" : "#6366f1",
+                  }}
+                >{n === 0 ? "Standard" : "Step Reamer"}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Step reamer — largest diameter */}
+          {form.ream_steps > 0 && (
+            <div className="mt-3 space-y-1">
+              <FieldLabel hint="Largest diameter on the step reamer. SFM and RPM are calculated on this diameter; feed is set by the entry (smallest) diameter.">Largest Dia (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 0.625"
+                value={reamStepDiaText}
+                onChange={(e) => setReamStepDiaText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(reamStepDiaText);
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm((p) => ({ ...p, ream_step_diameters: [n] }));
+                    setReamStepDiaText(n.toFixed(4));
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Flutes + Shank — shared across both modes */}
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <FieldLabel hint="Number of flutes on the reamer. Leave blank to use the standard count for this diameter.">Flutes</FieldLabel>
+              <Input type="number" step="1" className="no-spinners"
+                placeholder={String(reamFlutes(form.tool_dia))}
+                value={form.flutes || ""} onChange={onNum("flutes")} />
+              {form.tool_dia > 0 && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">
+                    Standard: <span className="font-semibold text-foreground">{reamFlutes(form.tool_dia)}-flute</span>
+                  </span>
+                  {form.flutes > 0 && form.flutes !== reamFlutes(form.tool_dia) && (
+                    <button type="button"
+                      className="rounded bg-indigo-600/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300 hover:bg-indigo-600/50 transition-colors"
+                      onClick={() => setForm((p) => ({ ...p, flutes: reamFlutes(form.tool_dia) }))}>
+                      Use standard
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <FieldLabel hint="Shank diameter. Defaults to cut diameter if left blank.">{UL("Shank Dia (in.)", "Shank Dia (mm)")}</FieldLabel>
+              <Input type="number" step={metric ? "0.01" : "0.0001"} className="no-spinners"
+                placeholder={form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(3) : form.tool_dia.toFixed(4)) : (metric ? "e.g. 12.70" : "e.g. 0.500")}
+                value={form.ream_shank_dia ? (metric ? (form.ream_shank_dia * 25.4).toFixed(3) : form.ream_shank_dia) : ""}
+                onChange={onUnitNum("ream_shank_dia", 25.4)} />
+            </div>
+          </div>
+
+          {/* Reaming — Coolant Delivery (Identity 1 vs 2/3) */}
+          <div className="space-y-1.5 mt-3">
+            <FieldLabel hint="Coolant-fed reamers have internal coolant passages that deliver coolant directly to the cutting edges — critical for blind holes, deep holes, and gummy materials. Non-coolant-fed relies entirely on external coolant.">Coolant Delivery</FieldLabel>
+            <div className="flex gap-2">
+              {([
+                { val: false, label: "Non-Coolant Fed" },
+                { val: true,  label: "Coolant Fed (Through)" },
+              ] as const).map(({ val, label }) => (
+                <button key={String(val)} type="button"
+                  onClick={() => setForm((p) => ({ ...p, ream_coolant_fed: val }))}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.ream_coolant_fed === val ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.ream_coolant_fed === val ? "#fff" : "#6366f1",
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+          </>)}
+
+          {/* Machining Tips accordion — endmill milling */}
+          {operation === "milling" && form.tool_type !== "chamfer_mill" && (
+            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setMachiningTipsOpen(o => !o)}
+              >
+                <div>
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  {form.mode && MILLING_MODE_TIPS[form.mode] && (
+                    <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
+                      — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring"}[form.mode] ?? ""}
+                    </span>
+                  )}
+                </div>
+                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+              </button>
+              {machiningTipsOpen && (() => {
+                const tips = MILLING_MODE_TIPS[form.mode] ?? MILLING_MODE_TIPS.hem;
+                return (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    {tips.map((tip, i) => (
+                      <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Cut Engagement</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          </>)}
 
           {/* ── Standard WOC/DOC (hidden for surfacing mode) ─────────────────── */}
           {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
