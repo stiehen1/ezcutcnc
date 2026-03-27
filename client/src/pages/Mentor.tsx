@@ -6769,7 +6769,7 @@ ${stabSection}
 
                 {/* Axial pass depth */}
                 <div className="flex-1 min-w-0 space-y-2">
-                  <FieldLabel hint="Axial depth per contouring pass (ap). For ball-nose finishing this is typically 0.02–0.10\". Used to compute MRR and cutting forces.">
+                  <FieldLabel hint="Axial depth per contouring pass (ap). For ball-nose finishing this is typically 0.02–0.10 in. Used to compute MRR and cutting forces.">
                     Axial Pass Depth <span className="font-normal text-zinc-500">(ap, in)</span>
                   </FieldLabel>
                   <input
