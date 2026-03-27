@@ -1384,6 +1384,7 @@ export default function Mentor() {
   const [edpNotFound, setEdpNotFound] = React.useState(false);
   const [optimalRec, setOptimalRec] = React.useState<any>(null);
   const [optimalLoading, setOptimalLoading] = React.useState(false);
+  const [optimalExpanded, setOptimalExpanded] = React.useState(false);
   const [skuChamferEdgeLength, setSkuChamferEdgeLength] = React.useState<number | null>(null);
 
   // Quote modals — shared customer form, separate open/status per product
@@ -8081,72 +8082,84 @@ ${stabSection}
                   cmpRows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed && meaningfulGain(curFeed, recFeed) });
 
                 return (
-                  <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 px-4 py-3 space-y-2">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">💡 Optimized EDP Match for This Setup</span>
-                    <div className="text-xs text-zinc-200 font-semibold">
-                      EDP# {recSku.edp}
-                      {tags ? <span className="ml-2 font-normal text-zinc-400">· {tags}</span> : null}
-                    </div>
-
-                    {/* Side-by-side comparison table */}
-                    {cmpRows.length > 0 && (
-                      <div className="rounded-lg overflow-hidden border border-zinc-700/50 text-xs">
-                        <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                          <span></span>
-                          <span className="text-center">Current</span>
-                          <span className="text-center text-emerald-400">Optimized</span>
-                        </div>
-                        {cmpRows.map((r) => (
-                          <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
-                            <span className="text-zinc-400">{r.label}</span>
-                            <span className="text-center text-zinc-300">{r.cur}</span>
-                            <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : "text-zinc-300"}`}>
-                              {r.opt}{r.better ? " ✓" : ""}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Geometry benefit note */}
-                    {geom === "chipbreaker" && (
-                      <p className="text-[11px] text-zinc-400 leading-relaxed">
-                        Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate. MRR stays similar; the gain is stability and tool life.
-                      </p>
-                    )}
-                    {geom === "truncated_rougher" && (
-                      <p className="text-[11px] text-zinc-400 leading-relaxed">
-                        VXR (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
-                      </p>
-                    )}
-                    {rec.rigidity_note && (
-                      <p className="text-[11px] text-amber-400 leading-relaxed">
-                        ⚠ {rec.rigidity_note}
-                      </p>
-                    )}
-                    {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && (
-                      <p className="text-[11px] text-zinc-400 leading-relaxed">
-                        More flutes means a higher feed rate at the same chip load per tooth — directly increasing MRR with the same spindle speed.
-                      </p>
-                    )}
-
-                    {/* WOC warning only when geometry won't engage */}
-                    {!wocOk && (
-                      <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
-                        ⚠ {geom === "truncated_rougher" ? "VRX requires ≥10% WOC" : "CB requires ≥8% WOC"} — increase WOC after switching.
-                      </div>
-                    )}
+                  <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 overflow-hidden">
+                    {/* Collapsed ribbon — always visible */}
                     <button
                       type="button"
-                      className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
-                      onClick={() => {
-                        applySkuToForm(recSku as any);
-                        setOptimalRec(null);
-                        setTimeout(() => runRef.current(), 100);
-                      }}
+                      className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-emerald-900/20 transition-colors"
+                      onClick={() => setOptimalExpanded(x => !x)}
                     >
-                      Run Optimal Tool Parameters
+                      <span className="text-xs font-semibold text-emerald-300">
+                        💡 This tool option might be worth looking at too: <span className="text-white">EDP# {recSku.edp}</span>
+                        {tags ? <span className="ml-1.5 font-normal text-zinc-400">· {tags}</span> : null}
+                      </span>
+                      <span className="text-emerald-400 text-xs ml-2">{optimalExpanded ? "▲" : "▼"}</span>
                     </button>
+
+                    {/* Expanded detail panel */}
+                    {optimalExpanded && (
+                      <div className="px-4 pb-3 space-y-2 border-t border-emerald-700/30">
+                        {/* Side-by-side comparison table */}
+                        {cmpRows.length > 0 && (
+                          <div className="rounded-lg overflow-hidden border border-zinc-700/50 text-xs mt-2">
+                            <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                              <span></span>
+                              <span className="text-center">Current</span>
+                              <span className="text-center text-emerald-400">Optimized</span>
+                            </div>
+                            {cmpRows.map((r) => (
+                              <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                                <span className="text-zinc-400">{r.label}</span>
+                                <span className="text-center text-zinc-300">{r.cur}</span>
+                                <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : "text-zinc-300"}`}>
+                                  {r.opt}{r.better ? " ✓" : ""}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Geometry benefit note */}
+                        {geom === "chipbreaker" && (
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate. MRR stays similar; the gain is stability and tool life.
+                          </p>
+                        )}
+                        {geom === "truncated_rougher" && (
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            VXR (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
+                          </p>
+                        )}
+                        {rec.rigidity_note && (
+                          <p className="text-[11px] text-amber-400 leading-relaxed">
+                            ⚠ {rec.rigidity_note}
+                          </p>
+                        )}
+                        {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && (
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            More flutes means a higher feed rate at the same chip load per tooth — directly increasing MRR with the same spindle speed.
+                          </p>
+                        )}
+
+                        {/* WOC warning only when geometry won't engage */}
+                        {!wocOk && (
+                          <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
+                            ⚠ {geom === "truncated_rougher" ? "VRX requires ≥10% WOC" : "CB requires ≥8% WOC"} — increase WOC after switching.
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
+                          onClick={() => {
+                            applySkuToForm(recSku as any);
+                            setOptimalRec(null);
+                            setTimeout(() => runRef.current(), 100);
+                          }}
+                        >
+                          Run Optimal Tool Parameters
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -9042,33 +9055,31 @@ ${stabSection}
 
       {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only */}
       {operation === "milling" && (stabilityIndex || stability) && (
-      <div className="rounded-2xl border border-amber-500/30 overflow-hidden">
+      <div className="rounded-2xl border border-zinc-700/50 overflow-hidden">
 
       {/* MACHINING STABILITY INDEX */}
       {stabilityIndex && (() => {
         const si = stabilityIndex.overall;
         const deflPct = stability?.deflection_pct ?? 0;
-        // Deflection overrides the composite label — never show "Moderate" when chatter risk is high
-        const siLabel = deflPct >= 175 ? "High Chatter Risk"
-          : deflPct >= 100 ? "Chatter Risk"
-          : si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 50 ? "Moderate" : si >= 35 ? "Caution" : "High Risk";
-        const siColor = deflPct >= 175 ? "text-red-400"
+        const siLabel = deflPct >= 175 ? "Some Adjustments Recommended"
+          : deflPct >= 100 ? "Worth a Second Look"
+          : si >= 80 ? "Excellent Setup" : si >= 65 ? "Looking Good" : si >= 50 ? "Decent — Room to Improve" : si >= 35 ? "A Few Things to Review" : "Several Changes Suggested";
+        const siColor = deflPct >= 175 ? "text-orange-400"
           : deflPct >= 100 ? "text-amber-400"
-          : si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-red-400";
+          : si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-orange-400";
+        const barColor = deflPct >= 175 ? "bg-orange-500"
+          : deflPct >= 100 ? "bg-amber-400"
+          : si >= 65 ? "bg-emerald-500" : si >= 35 ? "bg-amber-400" : "bg-orange-500";
         return (
-        <Card className="rounded-none border-0 border-b border-amber-500/20">
+        <Card className="rounded-none border-0 border-b border-zinc-700/40">
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center justify-between gap-4">
-              {/* Big score */}
-              <div className="flex flex-col items-start">
-                <span className={`text-xs font-semibold uppercase tracking-wide ${siColor}`}>
-                  {siLabel}
-                </span>
-                <div className="flex items-baseline gap-1">
-                  <span className={`text-5xl font-black leading-none ${siColor}`}>
-                    {stabilityIndex.overall}
-                  </span>
-                  <span className="text-zinc-500 text-xl font-light leading-none">/100</span>
+              {/* Score label + bar */}
+              <div className="flex flex-col items-start gap-1.5 min-w-[110px]">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Setup Readiness</span>
+                <span className={`text-sm font-bold leading-tight ${siColor}`}>{siLabel}</span>
+                <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${si}%` }} />
                 </div>
               </div>
               {/* Sub-scores */}
@@ -9081,9 +9092,9 @@ ${stabSection}
                   const minCt   = (result?.customer?.fpt ?? 0) * 0.30;
 
                   const deflResult = deflPct != null
-                    ? deflPct < 100  ? `✓ Tool flex is good — well within the safe zone.`
-                    : deflPct < 175  ? `⚠ Tool is flexing ${(deflPct/100).toFixed(1)}× what it should. Shorten stickout first.`
-                    :                  `⚠ Tool is flexing ${(deflPct/100).toFixed(1)}× too much — chatter and breakage risk. Shorten stickout before running.`
+                    ? deflPct < 100  ? `✓ Tool flex is well within a comfortable range.`
+                    : deflPct < 175  ? `Tool is flexing ${(deflPct/100).toFixed(1)}× the comfortable limit — shortening stickout is the best first step.`
+                    :                  `Tool is flexing ${(deflPct/100).toFixed(1)}× the comfortable limit — surface finish and tool life will benefit from the suggestions below.`
                     : null;
 
                   const loadResult = loadPct != null
@@ -9131,11 +9142,13 @@ ${stabSection}
                       <>
                         <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[60px]">
                           <div
-                            className={`h-full rounded-full ${score >= 65 ? "bg-emerald-400" : score >= 35 ? "bg-amber-400" : "bg-red-400"}`}
+                            className={`h-full rounded-full ${score >= 65 ? "bg-emerald-400" : score >= 35 ? "bg-amber-400" : "bg-orange-400"}`}
                             style={{ width: `${score}%` }}
                           />
                         </div>
-                        <span className={`text-right font-semibold text-xs ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>{score}<span className="text-zinc-600 font-normal">/100</span></span>
+                        <span className={`text-right font-semibold text-xs w-14 ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-orange-400"}`}>
+                          {score >= 65 ? "Good" : score >= 35 ? "Fair" : "Low"}
+                        </span>
                       </>
                     )}
                   </div>
@@ -9143,7 +9156,7 @@ ${stabSection}
                 })()}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">Setup Score — how ready this setup is to cut well. Based on tool flex, spindle load, chip thickness, and stickout reach. Tap any label for details.</p>
+            <p className="text-[10px] text-muted-foreground mt-2">How ready this setup is to cut well. Green across all four categories is the goal — most successful production setups keep Tool Flex well under 20% of the deflection limit. Tap any label for details.</p>
           </CardContent>
         </Card>
         );
@@ -9160,21 +9173,26 @@ ${stabSection}
             const isGreen  = pct < 100;
 
             const verdict =
-              pct >= 175 ? "High Chatter Risk" :
-              pct >= 100 ? "Chatter Risk" :
+              pct >= 175 ? "Adjustments Recommended" :
+              pct >= 100 ? "Worth Reviewing" :
                            "Setup Looks Good";
 
             const verdictColor =
-              isRed    ? "text-red-400" :
+              isRed    ? "text-orange-400" :
               isYellow ? "text-amber-400" :
                          "text-emerald-500";
 
+            const isHem = form.mode === "hem" || form.mode === "trochoidal";
             const explanation =
               pct >= 175
-                ? "The tool is flexing too much for this setup — chatter, vibration, and rough surface finish are likely. Don't run this as-is. Follow the suggestions below to fix it."
+                ? isHem
+                  ? "HEM already accounts for the interrupted cutting cycle — this flex reading reflects a setup that would benefit from shortening stickout or stepping up to a larger diameter. The suggestions below will help."
+                  : "The tool has more flex than ideal for this setup — vibration and surface finish issues are possible. The suggestions below can help bring this into a better range."
                 : pct >= 100
-                ? "Tool flex is above the safe zone. It may cut, but expect some chatter or rough finish. Review the suggestions below before you run."
-                : "This setup looks solid. Tool flex is in the safe zone — good surface finish and tool life expected.";
+                ? isHem
+                  ? "HEM's light radial engagement helps here — you may run fine, but shortening stickout or upgrading the holder will make the cut more consistent."
+                  : "Tool flex is a bit higher than the comfortable zone. It may cut fine, but the suggestions below could improve finish and tool life."
+                : "This setup looks solid. Tool flex is well within the comfortable range — expect good surface finish and tool life.";
 
             // First suggestion that is an actual action (not info/lbs)
             const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info");
@@ -9183,7 +9201,7 @@ ${stabSection}
               <Card className="rounded-none border-0">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base leading-tight">Chatter & Vibration Check</CardTitle>
+                    <CardTitle className="text-base leading-tight">Setup Notes</CardTitle>
                     <span className={`text-sm font-semibold whitespace-nowrap ${verdictColor}`}>
                       {verdict}
                     </span>
@@ -9192,7 +9210,7 @@ ${stabSection}
                 <CardContent className="space-y-3">
 
                   {/* Plain-language verdict */}
-                  <div className={`text-sm rounded-lg px-3 py-2 ${isRed ? "bg-red-950/40 text-red-200" : isYellow ? "bg-amber-950/40 text-amber-200" : "bg-emerald-950/30 text-emerald-200"}`}>
+                  <div className={`text-sm rounded-lg px-3 py-2 ${isRed ? "bg-orange-950/40 text-orange-100" : isYellow ? "bg-amber-950/30 text-amber-100" : "bg-emerald-950/30 text-emerald-200"}`}>
                     {explanation}
                   </div>
 
@@ -9228,7 +9246,7 @@ ${stabSection}
                             {actionItems.length > 0 && (
                               <>
                                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">
-                                  What You Can Do
+                                  Steps That May Help Increase Rigidity
                                 </div>
                                 <ul className="space-y-2">
                                   {actionItems.map((s: any, idx: number) => {
@@ -9251,8 +9269,28 @@ ${stabSection}
                                                 const cbInactive = (form.geometry === "chipbreaker" || form.geometry === "truncated_rougher") && (form.woc_pct < minWoc || form.doc_xd < 1.0);
                                                 if (!edps.length || cbInactive) return null;
                                                 return (
-                                                  <span className="ml-2 inline-flex items-center gap-2 flex-wrap">
-                                                    <span className="font-semibold text-amber-400">EDP# {edps.join(", ")}</span>
+                                                  <span className="ml-2 inline-flex items-center gap-1.5 flex-wrap">
+                                                    <span className="text-zinc-500">Try:</span>
+                                                    {edps.map((edp: string) => (
+                                                      <button
+                                                        key={edp}
+                                                        type="button"
+                                                        className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
+                                                        onClick={async () => {
+                                                          try {
+                                                            const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
+                                                            const data: SkuRecord[] = await r.json();
+                                                            const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
+                                                            if (match) {
+                                                              applySkuToForm(match);
+                                                              setTimeout(() => runRef.current(), 100);
+                                                            }
+                                                          } catch {}
+                                                        }}
+                                                      >
+                                                        {edp}
+                                                      </button>
+                                                    ))}
                                                   </span>
                                                 );
                                               })()}

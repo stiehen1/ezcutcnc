@@ -1053,15 +1053,18 @@ export async function registerRoutes(
       const isVxr = /^vxr/i.test(bestSku.series ?? "");
       let vxrRigidityNote: string | null = null;
       if (isVxr) {
-        const holder   = String(payload.toolholder ?? "").toLowerCase();
-        const availHp  = Number(payload.machine_hp ?? 0);
-        const taper    = String(payload.spindle_taper ?? "").toUpperCase();
-        const weakHolder  = holder === "er_collet";
+        const holder      = String(payload.toolholder ?? "").toLowerCase();
+        const wh          = String(payload.workholding ?? "").toLowerCase();
+        const availHp     = Number(payload.machine_hp ?? 0);
+        const taper       = String(payload.spindle_taper ?? "").toUpperCase();
+        // Hard blocks — setup cannot support VXR forces
+        const weakHolder  = ["er_collet", "weldon"].includes(holder);
+        const weakWh      = ["toe_clamps", "soft_jaws", "3_jaw_chuck", "4_jaw_chuck", "collet_chuck", "between_centers", "face_plate"].includes(wh);
         const weakMachine = availHp > 0 && availHp < 10;
         const smallTaper  = taper === "CAT30" || taper === "BT30" || taper === "R8";
         const shallowDoc  = docXd > 0 && docXd < 0.5;
         const lowWoc      = wocPct > 0 && wocPct < 8;
-        if (weakHolder || weakMachine || smallTaper || shallowDoc || lowWoc) {
+        if (weakHolder || weakWh || weakMachine || smallTaper || shallowDoc || lowWoc) {
           // Fall back to best non-VXR peer at same LOC + same flutes
           const nonVxrPeers = sameLocSameFlute.filter((r: any) => !/^vxr/i.test(r.series ?? ""));
           bestSku = null; bestScore = -1;
@@ -1072,9 +1075,10 @@ export async function registerRoutes(
           if (!bestSku || bestScore <= curScore) return res.json({ found: false });
         } else {
           // Borderline setup — show card with a note
-          const borderlineHolder = ["weldon", "hp_collet"].includes(holder);
-          if (borderlineHolder || (availHp > 0 && availHp < 15)) {
-            vxrRigidityNote = "VXR geometry is aggressive — best results with shrink-fit or hydraulic holder, rigid workholding, and 15+ HP.";
+          const borderlineHolder = ["hp_collet", "milling_chuck"].includes(holder);
+          const borderlineWh     = wh === "vise";
+          if (borderlineHolder || borderlineWh || (availHp > 0 && availHp < 15)) {
+            vxrRigidityNote = "VXR geometry is aggressive — best results with shrink-fit or hydraulic holder, rigid fixture or vise with solid workholding, and 15+ HP.";
           }
         }
       }

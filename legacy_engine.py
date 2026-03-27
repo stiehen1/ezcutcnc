@@ -3503,6 +3503,13 @@ def run(payload=None):
     # Apply holder runout correction: lower runout holders can exploit more of the rated IPT
     _runout_factor = HOLDER_RUNOUT_FACTOR.get(data.get("toolholder", "er_collet"), 0.92)
     ipt *= _runout_factor
+    # Workholding feed scaler: weak workholding (toe clamps, soft jaws) requires backing off
+    # chip load to avoid chattering the part loose. Rigid fixtures allow a small boost.
+    # Cap upside at +5% (conservative — rigidity gain is already captured in stability score).
+    _wh_key_feed = str(data.get("workholding", "vise") or "vise")
+    _wh_factor_feed = WORKHOLDING_COMPLIANCE.get(_wh_key_feed, 1.0)
+    _wh_feed_mult = max(0.70, min(1.05, 1.0 / _wh_factor_feed))
+    ipt *= _wh_feed_mult
     # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
     if mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
         _surf_ae_pct = (_surf_stepover_in / _surf_d_eff) * 100.0
@@ -3542,6 +3549,8 @@ def run(payload=None):
     _woc_eff = float(data.get("woc_pct", 50) or 50)
     if _mode_eff in ("hem", "trochoidal") and _woc_eff < 15.0:
         _base_dlim *= 2.0
+    _wh_key_sol = str(data.get("workholding", "vise") or "vise")
+    _base_dlim /= WORKHOLDING_COMPLIANCE.get(_wh_key_sol, 1.0)
     deflection_limit = _base_dlim
     current_doc = doc  # current axial depth of cut
 
@@ -4911,13 +4920,23 @@ def run(payload=None):
     if _mode_str in ("hem", "trochoidal") and _woc_for_dlim < 15.0:
         _dlim *= 2.0
 
+    # Workholding compliance: rigid fixtures raise the effective limit (system can absorb more
+    # tool flex without chatter); weak setups like toe clamps lower it.
+    # wh_factor < 1.0 = stiffer than vise → _dlim increases (divide by smaller number)
+    # wh_factor > 1.0 = weaker than vise  → _dlim decreases (divide by larger number)
+    _wh_key    = str(data.get("workholding", "vise") or "vise")
+    _wh_factor = WORKHOLDING_COMPLIANCE.get(_wh_key, 1.0)
+    _dlim /= _wh_factor
+
     _defl_pct = round(_defl / _dlim * 100, 1) if _dlim > 0 else 0.0
 
     _stab_suggestions = []
+    _imm_suggestions  = []   # immediate / no-hardware fixes — shown first
+    _hw_suggestions   = []   # hardware / setup changes — shown second
+
     _lbs = float(data.get("lbs", 0) or 0)  # Length Below Shoulder (neck reach)
 
-    # Minimum stickout: LOC + flute_wash + 15% of diameter clearance buffer (holder body must clear the work)
-    # Also cannot go below LBS for necked tools
+    # Minimum stickout: LOC + flute_wash + 15% of diameter clearance buffer
     _loc_for_min = float(data.get("loc", 0) or 0)
     _flute_wash_for_min = float(data.get("flute_wash", 0) or 0)
     _min_so = max(_lbs, _loc_for_min + _flute_wash_for_min + (_d * 0.15))
@@ -4930,46 +4949,111 @@ def run(payload=None):
 
     _doc_now = float(state.get("doc", 0) or 0)
     _loc_now = float(data.get("loc", 0) or 0)
+    _is_hem  = _mode_str in ("hem", "trochoidal")
 
-    # 1) Reduce stickout — free, biggest gain (L³), no tooling change
+    # ── IMMEDIATE / NO-HARDWARE FIXES ─────────────────────────────────────────
+
+    # A) Reduce feed rate — fastest fix; force scales linearly with chip load
+    if _defl > _dlim:
+        _feed_ratio  = _dlim / _defl
+        _feed_pct    = round((1.0 - _feed_ratio) * 100)
+        _feed_now    = float(state.get("feed", 0.0) or 0.0)
+        _feed_target = round(_feed_now * _feed_ratio, 1) if _feed_now > 0 else 0
+        if _feed_pct >= 5:
+            _feed_label = f"Back off feed rate ~{_feed_pct}%"
+            if _feed_target > 0:
+                _feed_label += f" — try {_feed_target} IPM"
+            _imm_suggestions.append({
+                "type": "feed",
+                "label": _feed_label,
+                "detail": "Cutting force scales directly with feed — easiest adjustment at the control, no hardware needed.",
+            })
+
+    # B) Reduce DOC — skip in HEM (tanks MRR); multi-pass reframe when target is too shallow
+    if not _is_hem and _doc_now > 0 and _defl > _dlim:
+        _doc_ratio     = _dlim / _defl
+        _doc_target    = _doc_now * _doc_ratio
+        _doc_xd_target = round(_doc_target / _d, 2) if _d > 0 else 0
+        _doc_gain      = round((1.0 - _doc_ratio) * 100)
+        _woc_for_doc   = float(data.get("woc_pct", 0) or 0)
+        _doc_min_xd    = 0.5 if _woc_for_doc >= 90.0 else 0.1
+        _doc_min       = _doc_min_xd * _d if _d > 0 else 0
+        if _doc_target < _doc_min:
+            import math as _math_doc
+            _passes = int(_math_doc.ceil(_doc_now / _doc_target)) if _doc_target > 0 else "?"
+            _imm_suggestions.append({
+                "type": "doc",
+                "label": f"Break into {_passes} passes at {_doc_target:.3f}\" DOC ({_doc_xd_target}×D)",
+                "detail": (
+                    f"Each pass stays within the safe flex limit — {_passes} axial passes to full depth. "
+                    f"~{_doc_gain}% less force per pass."
+                    + (" (stickout fixed by LBS — DOC is your primary lever)" if _lbs > 0 else "")
+                ),
+            })
+        else:
+            _detail = f"~{_doc_gain}% less axial force — brings flex to safe limit"
+            if _lbs > 0:
+                _detail += " (stickout fixed by LBS — DOC is your primary lever)"
+            _imm_suggestions.append({
+                "type": "doc",
+                "label": f"Reduce DOC to {_doc_target:.3f}\" ({_doc_xd_target}×D)",
+                "detail": _detail,
+            })
+
+    # C) Reduce WOC — meaningful above ~15%; handled below (kept with WOC section)
+
+    # D) Detune RPM 10–15% — breaks resonant chatter frequency; free, instant at the control
+    if _defl > _dlim * 1.10:
+        _rpm_now = float(state.get("rpm", 0.0) or 0.0)
+        _rpm_low = round(_rpm_now * 0.88)
+        _rpm_high = round(_rpm_now * 0.92)
+        if _rpm_now > 0:
+            _imm_suggestions.append({
+                "type": "rpm_detune",
+                "label": f"Try reducing RPM to {_rpm_low}–{_rpm_high} (detune ~10–12%)",
+                "detail": "Chatter resonance is frequency-dependent — dropping RPM shifts the tooth-pass frequency off the system's natural frequency. Quick to test at the control with no hardware change.",
+            })
+
+    # ── HARDWARE / SETUP IMPROVEMENTS ─────────────────────────────────────────
+
+    # 1) Reduce stickout — free, biggest mechanical gain (L³)
     _seen_stickout = set()
     if _so > 0:
         for frac in (0.70, 0.80):
             _ln = round(max(_so * frac, _min_so), 3)
             if _ln >= _so - 1e-4:
-                continue  # already at minimum or floor is above current stickout
+                continue
             if _ln in _seen_stickout:
-                continue  # skip duplicate (both fracs clamped to same floor)
+                continue
             _gain = round(((_so / _ln) ** 3 - 1.0) * 100.0) if _ln > 0 else 0
             if _gain < 10:
-                continue  # LOC-constrained floor too close to current stickout — not worth showing
+                continue
             _seen_stickout.add(_ln)
             _at_floor = _ln >= _min_so - 1e-4 and _so * frac < _min_so - 1e-4
             _floor_note = f" (min — LOC{'+wash' if _flute_wash_for_min > 0 else ''} clearance floor)" if _at_floor else ""
-            _stab_suggestions.append({
+            _hw_suggestions.append({
                 "type": "stickout",
-                "label": f'Reduce Stickout to {_ln:.2f}"',
+                "label": f'Shorten stickout to {_ln:.2f}"',
                 "detail": f"{_gain}% stiffer{_floor_note}",
                 "stickout_in": _ln,
                 "gain_pct": _gain,
             })
 
-    # 2) Toolholder upgrade — same tool, stiffer grip reduces deflection
+    # 2) Toolholder upgrade
     _holder_progression = [
         ("er_collet",     1.00, "ER Collet",      ""),
-        ("hp_collet",     1.05, "HP Collet",     "e.g. Lyndex SK, Pioneer FX"),
+        ("hp_collet",     1.05, "HP Collet",      "e.g. Lyndex SK, Pioneer FX"),
         ("weldon",        1.08, "Weldon / Side-Lock", ""),
-        ("milling_chuck", 1.12, "Milling Chuck", ""),
-        ("hydraulic",     1.14, "Hydraulic",     ""),
-        ("press_fit",     1.17, "Press-Fit",     ""),
-        ("shrink_fit",    1.18, "Shrink Fit",    ""),
-        ("capto",         1.20, "Capto",         ""),
+        ("milling_chuck", 1.12, "Milling Chuck",  ""),
+        ("hydraulic",     1.14, "Hydraulic",      ""),
+        ("press_fit",     1.17, "Press-Fit",      ""),
+        ("shrink_fit",    1.18, "Shrink Fit",     ""),
+        ("capto",         1.20, "Capto",          ""),
     ]
     _current_holder = data.get("toolholder", "er_collet")
-    _current_rig = TOOLHOLDER_RIGIDITY.get(_current_holder, 1.0)
-    _current_dc  = bool(data.get("dual_contact", False))
+    _current_rig    = TOOLHOLDER_RIGIDITY.get(_current_holder, 1.0)
+    _current_dc     = bool(data.get("dual_contact", False))
     if _defl > _dlim:
-        # Find next stiffer holder
         _next_holder = next(
             ((k, r, lbl, brands) for k, r, lbl, brands in _holder_progression if r > _current_rig + 0.01),
             None
@@ -4980,82 +5064,48 @@ def run(payload=None):
             _nh_defl_pct  = round(_defl / _nh_rig_total * _current_rig / _dlim * 100, 1) if _dlim > 0 else 0
             _nh_gain      = round((1.0 - _current_rig / _nh_rig) * 100)
             _nh_label     = f"Upgrade to {_nh_lbl}" + (f" ({_nh_brands})" if _nh_brands else "")
-            _stab_suggestions.append({
+            _hw_suggestions.append({
                 "type": "holder",
                 "label": _nh_label,
-                "detail": f"~{_nh_gain}% stiffer grip — est. deflection drops to {_nh_defl_pct}% of limit",
+                "detail": f"~{_nh_gain}% stiffer grip — est. flex drops to {_nh_defl_pct}% of limit",
             })
-        # Dual contact — informational only, spindle is a machine spec not a user choice
+        # Dual contact — informational only
         _taper = data.get("spindle_taper", "")
         if not _current_dc and _taper and (_taper.startswith("CAT") or _taper.startswith("BT")):
             _dc_defl_pct = round(_defl / (_current_rig * 1.08) / _dlim * 100, 1) if _dlim > 0 else 0
-            _stab_suggestions.append({
+            _hw_suggestions.append({
                 "type": "info",
                 "label": "FYI: Dual Contact spindle would help big time here!",
                 "detail": (
                     f"Did you forget to select Dual Contact above? If your machine supports it, "
                     f"enable it now — it adds ~8% spindle stiffness and est. deflection drops to {_dc_defl_pct}% of limit. "
-                    f"If your current machine doesn't have dual contact, it might be worth moving this job to one that does in the shop, "
-                    f"as this is a machine spec and not a setup change."
+                    f"If your machine doesn't support it, it may be worth moving this job to a dual contact spindled machine in your shop."
                 ),
             })
 
-    # 3) Reduced-neck tool — same reach, shorter LOC, multiple passes
+    # 3) Reduced-neck tool — same reach, shorter flute section, multiple passes
     if _lbs == 0 and _defl > _dlim and _so > 0 and _doc_now > 0:
         import math as _math
-        _flutes_n = int(data.get("flutes", 4) or 4)
+        _flutes_n    = int(data.get("flutes", 4) or 4)
         _core_ratio_n = {2:0.60,3:0.65,4:0.70,5:0.75,6:0.80,7:0.82}.get(_flutes_n, 0.70)
-        _E_n = 90_000_000
-        _I_flute_n = (_math.pi * (_d * _core_ratio_n)**4) / 64.0
-        _I_neck_n  = (_math.pi * _d**4) / 64.0  # solid neck ≈ full cutting diameter
-        _loc_neck = max(min(1.5 * _d, _doc_now * 0.5), _d)
-        _passes = _math.ceil(_doc_now / _loc_neck)
+        _E_n         = 90_000_000
+        _I_flute_n   = (_math.pi * (_d * _core_ratio_n)**4) / 64.0
+        _I_neck_n    = (_math.pi * _d**4) / 64.0
+        _loc_neck    = max(min(1.5 * _d, _doc_now * 0.5), _d)
+        _passes      = _math.ceil(_doc_now / _loc_neck)
         if _I_flute_n > 0:
-            _force_est = _defl * 3 * _E_n * _I_flute_n / (_so ** 3)
-            _defl_neck = (_force_est / (3 * _E_n)) * (
+            _force_est  = _defl * 3 * _E_n * _I_flute_n / (_so ** 3)
+            _defl_neck  = (_force_est / (3 * _E_n)) * (
                 _loc_neck**3 / _I_flute_n +
                 (_so**3 - _loc_neck**3) / _I_neck_n
             )
             _defl_neck_pct = round(_defl_neck / _dlim * 100, 1) if _dlim > 0 else 0
             if _defl_neck < _defl * 0.85:
-                _stab_suggestions.append({
+                _hw_suggestions.append({
                     "type": "tool",
                     "label": f'Reduced-neck tool: {_so:.2f}" reach, {_loc_neck:.3f}" LOC ({round(_loc_neck/_d,1)}×D)',
-                    "detail": f"{_passes} axial pass{'es' if _passes > 1 else ''} to full depth — est. deflection drops to {_defl_neck_pct}% of limit",
+                    "detail": f"{_passes} axial pass{'es' if _passes > 1 else ''} to full depth — est. flex drops to {_defl_neck_pct}% of limit",
                 })
-
-    # 3) Reduce DOC — linear force reduction, no tooling swap needed
-    if _doc_now > 0 and _defl > _dlim:
-        _doc_ratio = _dlim / _defl
-        _doc_target = _doc_now * _doc_ratio
-        _doc_xd_target = round(_doc_target / _d, 2) if _d > 0 else 0
-        _doc_gain = round((1.0 - _doc_ratio) * 100)
-        # Practical floor: slotting (WOC≥90%) → min 0.5×D; other ops → min 0.1×D
-        _woc_for_doc = float(data.get("woc_pct", 0) or 0)
-        _doc_min_xd = 0.5 if _woc_for_doc >= 90.0 else 0.1
-        _doc_min = _doc_min_xd * _d if _d > 0 else 0
-        if _doc_target < _doc_min:
-            # Back-solved DOC is below practical minimum — reframe as multi-pass strategy
-            import math as _math_doc
-            _passes = int(_math_doc.ceil(_doc_now / _doc_target)) if _doc_target > 0 else "?"
-            _stab_suggestions.append({
-                "type": "doc",
-                "label": f"Multi-pass: {_passes} passes at {_doc_target:.3f}\" DOC ({_doc_xd_target}×D)",
-                "detail": (
-                    f"{_passes} axial passes to full depth — each pass stays within the safe deflection limit. "
-                    f"~{_doc_gain}% less axial force per pass."
-                    + (" (stickout fixed by LBS — DOC is your primary lever)" if _lbs > 0 else "")
-                ),
-            })
-        else:
-            _detail = f"~{_doc_gain}% less axial force — brings deflection to limit"
-            if _lbs > 0:
-                _detail += " (stickout fixed by LBS — DOC is your primary lever)"
-            _stab_suggestions.append({
-                "type": "doc",
-                "label": f"Reduce DOC to {_doc_target:.3f}\" ({_doc_xd_target}×D)",
-                "detail": _detail,
-            })
 
     # 4) Reduce WOC — lighter engagement, meaningful above ~15%
     _woc_now = float(data.get("woc_pct", 0) or 0)
@@ -5078,7 +5128,7 @@ def run(payload=None):
                 _hem_flutes = "7-flute"
             else:
                 _hem_flutes = "5 or 7-flute"
-            _stab_suggestions.append({
+            _hw_suggestions.append({
                 "type": "woc",
                 "label": f"Switch to HEM / trochoidal — use {_hem_dia:.4f}\" {_hem_flutes} tool",
                 "detail": (
@@ -5091,7 +5141,7 @@ def run(payload=None):
         else:
             _woc_target = max(8.0, _woc_now * 0.5)
             _woc_gain = round((1.0 - (_woc_target / _woc_now)) * 100)
-            _stab_suggestions.append({
+            _imm_suggestions.append({
                 "type": "woc",
                 "label": f"Reduce WOC to {_woc_target:.0f}% Ø",
                 "detail": f"~{_woc_gain}% less radial engagement — fewer simultaneous teeth, lower radial force",
@@ -5118,7 +5168,7 @@ def run(payload=None):
                 _so**3 / (_E_c * _I_t)
             )
             _defl_short_pct = round(_defl_short / _dlim * 100, 1) if _dlim > 0 else 0
-            _stab_suggestions.append({
+            _hw_suggestions.append({
                 "type": "holder",
                 "label": f'Use shorter extension holder ({_hgl_short:.2f}" gage vs current {_hgl:.2f}")',
                 "detail": f"Shorter nose projection — est. deflection drops to {_defl_short_pct}% of limit",
@@ -5127,7 +5177,7 @@ def run(payload=None):
     # 5b) Extension holder warning — multi-joint compliance note
     _ext_holder = bool(data.get("extension_holder", False))
     if _ext_holder:
-        _stab_suggestions.append({
+        _hw_suggestions.append({
             "type": "info",
             "label": "Extension holder in use — spindle → holder → extension → tool",
             "detail": (
@@ -5207,7 +5257,7 @@ def run(payload=None):
                 _fl_note = f" — side mill max {_nf_max_woc:.0f}% WOC"
         else:
             _fl_note = f" — max {_nf_max_woc:.0f}% WOC for chip clearance"
-        _stab_suggestions.append({
+        _hw_suggestions.append({
             "type": "tool",
             "label": f"Use {_nf}-flute tool (same diameter)",
             "detail": f"~{_fl_pct_gain}% stiffer core — est. deflection drops to {_defl_fl_pct}% of limit{_fl_note}",
@@ -5225,7 +5275,7 @@ def run(payload=None):
     _next_d = next((s for s in _common if s > _d + 1e-4), None)
     if _next_d:
         _d_gain = round((_next_d / _d) ** 4, 1)
-        _stab_suggestions.append({
+        _hw_suggestions.append({
             "type": "diameter",
             "label": f'Increase Tool Diameter to {_next_d:.3f}"',
             "detail": f"{_d_gain}× stiffer (D\u2074 law)",
@@ -5237,6 +5287,9 @@ def run(payload=None):
             "lookup_cr": float(data.get("corner_radius", 0) or 0),
             "lookup_edp": str(data.get("edp", "") or ""),
         })
+
+    # Merge: immediate fixes first (change at the control), hardware/setup changes second
+    _stab_suggestions = _stab_suggestions + _imm_suggestions + _hw_suggestions
 
     _stability = {
         "stickout_in": _so,
