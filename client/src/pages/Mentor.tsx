@@ -1944,8 +1944,7 @@ export default function Mentor() {
         if (!(form.doc_xd > 0)) missing.push("Bore Depth");
       } else if (form.mode === "surfacing") {
         if (!(form.surfacing_ap_in > 0)) missing.push("Axial Pass Depth (ap)");
-        if (form.surfacing_input_mode === "scallop" && !(form.surfacing_scallop_in > 0)) missing.push("Scallop Height");
-        if (form.surfacing_input_mode === "stepover" && !(form.surfacing_stepover_in > 0)) missing.push("Stepover");
+        if (!(form.target_ra_uin > 0)) missing.push("Surface Finish Target (Ra)");
       } else {
         if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
         if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
@@ -6681,144 +6680,134 @@ ${stabSection}
           </div>}
 
           {/* ── Surfacing Cut Engagement (3D Surface Contouring) ─────────────── */}
-          {form.mode === "surfacing" && (
-            <div className="space-y-4">
-              {/* Scallop / Stepover toggle */}
-              <div className="space-y-2">
-                <FieldLabel hint="Choose how to define the radial engagement. Scallop Height is the peak-to-valley cusp height left on the surface — the engine converts this to stepover based on ball radius. Stepover is a direct radial width of cut.">
-                  Radial Input Mode
-                </FieldLabel>
-                <div className="flex gap-2">
-                  {(["scallop", "stepover"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setForm((p) => ({ ...p, surfacing_input_mode: mode }))}
-                      className="flex-1 py-1.5 rounded border text-xs font-semibold transition-colors"
-                      style={form.surfacing_input_mode === mode
-                        ? { background: "#f97316", borderColor: "#f97316", color: "#000" }
-                        : { background: "transparent", borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.6)" }}
-                    >
-                      {mode === "scallop" ? "Scallop Height" : "Stepover (in)"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start">
-                {/* Scallop or Stepover input */}
-                <div className="flex-1 min-w-0 space-y-2">
-                  {form.surfacing_input_mode === "scallop" ? (
-                    <>
-                      <FieldLabel hint="Target surface scallop height in inches. Smaller = better surface finish but more passes. Typical range 0.0005–0.005 in. The engine converts this to stepover: ae = 2 x sqrt(R x sc - sc^2) where R = tool radius.">
-                        Scallop Height <span className="font-normal text-zinc-500">(in)</span>
-                      </FieldLabel>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="e.g. 0.001"
-                        className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
-                        value={surfScallopText}
-                        onChange={(e) => setSurfScallopText(e.target.value)}
-                        onBlur={() => {
-                          const n = parseFloat(surfScallopText);
-                          if (Number.isFinite(n) && n > 0) {
-                            setForm((p) => ({ ...p, surfacing_scallop_in: n }));
-                            setSurfScallopText(n.toFixed(4));
-                          } else {
-                            setSurfScallopText(form.surfacing_scallop_in > 0 ? form.surfacing_scallop_in.toFixed(4) : "");
-                          }
-                        }}
-                      />
-                      {/* Show derived stepover if tool dia is known */}
-                      {form.surfacing_scallop_in > 0 && form.tool_dia > 0 && (() => {
-                        const R = form.tool_dia / 2;
-                        const sc = form.surfacing_scallop_in;
-                        const ae = sc < R ? 2 * Math.sqrt(R * sc - sc * sc) : form.tool_dia;
-                        return <p className="text-[10px] text-zinc-400">→ Stepover: {ae.toFixed(4)}" ({((ae / form.tool_dia) * 100).toFixed(1)}%×D)</p>;
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      <FieldLabel hint="Direct radial stepover (width of cut) for surface contouring passes. Enter in decimal inches. Typical 5–15% of tool diameter for finishing.">
-                        Stepover <span className="font-normal text-zinc-500">(in)</span>
-                      </FieldLabel>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="e.g. 0.025"
-                        className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
-                        value={surfStepoverText}
-                        onChange={(e) => setSurfStepoverText(e.target.value)}
-                        onBlur={() => {
-                          const n = parseFloat(surfStepoverText);
-                          if (Number.isFinite(n) && n > 0) {
-                            setForm((p) => ({ ...p, surfacing_stepover_in: n }));
-                            setSurfStepoverText(n.toFixed(4));
-                          } else {
-                            setSurfStepoverText(form.surfacing_stepover_in > 0 ? form.surfacing_stepover_in.toFixed(4) : "");
-                          }
-                        }}
-                      />
-                      {form.surfacing_stepover_in > 0 && form.tool_dia > 0 && (
-                        <p className="text-[10px] text-zinc-400">{((form.surfacing_stepover_in / form.tool_dia) * 100).toFixed(1)}% of tool diameter</p>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Axial pass depth */}
-                <div className="flex-1 min-w-0 space-y-2">
-                  <FieldLabel hint="Axial depth per contouring pass (ap). For ball-nose finishing this is typically 0.02–0.10 in. Used to compute MRR and cutting forces.">
-                    Axial Pass Depth <span className="font-normal text-zinc-500">(ap, in)</span>
+          {form.mode === "surfacing" && (() => {
+            // Ra (µin) → scallop height (in): sc = Ra_in * 4; Ra_in = Ra_uin / 1,000,000
+            // From ball-nose theory: Ra ≈ ae²/(32R), so ae = sqrt(32*R*Ra_in), sc = ae²/(8R) = Ra_in*4
+            const R = form.tool_dia > 0 ? form.tool_dia / 2 : 0;
+            const ra_uin = form.target_ra_uin || 0;
+            const scallop_in = ra_uin > 0 ? (ra_uin * 4) / 1_000_000 : form.surfacing_scallop_in;
+            const ae = (R > 0 && scallop_in > 0)
+              ? Math.min(2 * Math.sqrt(Math.max(0, R * scallop_in - scallop_in * scallop_in)), form.tool_dia)
+              : 0;
+            const SURF_FINISH_PRESETS = [
+              { label: "Rough",    ra: 500,  hint: "Visible cusps — for semi-finish stock removal" },
+              { label: "Semi",     ra: 125,  hint: "Light cusps — leaves ~0.001 stock for finish pass" },
+              { label: "Finish",   ra: 32,   hint: "Smooth — typical mold/die finish pass" },
+              { label: "Fine",     ra: 16,   hint: "Near-mirror — tight stepover, slow but clean" },
+            ];
+            return (
+              <div className="space-y-4">
+                {/* Surface Finish Quality */}
+                <div className="space-y-2">
+                  <FieldLabel hint="Target surface finish expressed as Ra (roughness average). The engine converts this to the correct scallop height and stepover for your ball-nose or bull-nose tool. Rough = fast but visible cusps; Fine = slow but near-mirror.">
+                    Surface Finish Target
                   </FieldLabel>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="e.g. 0.050"
-                    className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
-                    value={surfApText}
-                    onChange={(e) => setSurfApText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseFloat(surfApText);
-                      const dia = form.tool_dia || 0.5;
-                      if (Number.isFinite(n) && n > 0) {
-                        setForm((p) => ({ ...p, surfacing_ap_in: n }));
-                        setSurfApText(n.toFixed(4));
-                      } else {
-                        setSurfApText(form.surfacing_ap_in > 0 ? form.surfacing_ap_in.toFixed(4) : "");
-                      }
-                    }}
-                  />
-                  {form.surfacing_ap_in > 0 && form.tool_dia > 0 && (
-                    <p className="text-[10px] text-zinc-400">{(form.surfacing_ap_in / form.tool_dia).toFixed(2)}×D axial</p>
+                  <div className="flex gap-1.5">
+                    {SURF_FINISH_PRESETS.map(({ label, ra, hint }) => {
+                      const active = form.target_ra_uin === ra;
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          title={hint}
+                          onClick={() => setForm((p) => ({ ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: (ra * 4) / 1_000_000 }))}
+                          className="flex-1 py-1.5 rounded border text-xs font-semibold transition-colors leading-tight"
+                          style={active
+                            ? { background: "#f97316", borderColor: "#f97316", color: "#000" }
+                            : { background: "transparent", borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.6)" }}
+                        >
+                          {label}
+                          <div className="text-[9px] font-normal opacity-80">{ra} µin</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Custom Ra input */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Custom Ra (µin)"
+                      className="flex h-8 flex-1 items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
+                      value={surfScallopText}
+                      onChange={(e) => setSurfScallopText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(surfScallopText);
+                        if (Number.isFinite(n) && n > 0) {
+                          const sc = (n * 4) / 1_000_000;
+                          setForm((p) => ({ ...p, target_ra_uin: n, surfacing_input_mode: "scallop", surfacing_scallop_in: sc }));
+                          setSurfScallopText(n.toFixed(0));
+                        } else {
+                          setSurfScallopText(ra_uin > 0 ? ra_uin.toFixed(0) : "");
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-zinc-500 shrink-0">µin Ra</span>
+                  </div>
+                  {/* Derived stepover info */}
+                  {scallop_in > 0 && (
+                    <div className="flex gap-3 mt-1 text-[10px] text-zinc-400">
+                      <span>Scallop: {(scallop_in * 1000).toFixed(2)} thou</span>
+                      {ae > 0 && form.tool_dia > 0 && (
+                        <span>Stepover: {ae.toFixed(4)}" ({((ae / form.tool_dia) * 100).toFixed(1)}%D)</span>
+                      )}
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* Optional tilt angle */}
-              <div className="space-y-2">
-                <FieldLabel hint="Tool tilt angle for lead/lag in surface contouring (0–30°). A small lead tilt (3–5°) avoids the zero-SFM center point on ball-nose tools and improves surface finish. Leave 0 for vertical.">
-                  Tool Tilt <span className="font-normal text-zinc-500">(°, optional)</span>
-                </FieldLabel>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={30}
-                    step={1}
-                    className="flex-1"
-                    value={form.surfacing_tilt_deg}
-                    onChange={(e) => setForm((p) => ({ ...p, surfacing_tilt_deg: Number(e.target.value) }))}
-                  />
-                  <span className="text-sm font-semibold w-10 text-right">{form.surfacing_tilt_deg}°</span>
+                <div className="flex gap-3 items-start">
+                  {/* Axial pass depth */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <FieldLabel hint="Axial depth per contouring pass. For ball-nose finishing typically 0.020–0.100 in. Used to compute effective cutting diameter, MRR, and forces.">
+                      Axial Pass Depth <span className="font-normal text-zinc-500">(ap, in)</span>
+                    </FieldLabel>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="e.g. 0.050"
+                      className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring no-spinners"
+                      value={surfApText}
+                      onChange={(e) => setSurfApText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseFloat(surfApText);
+                        if (Number.isFinite(n) && n > 0) {
+                          setForm((p) => ({ ...p, surfacing_ap_in: n }));
+                          setSurfApText(n.toFixed(4));
+                        } else {
+                          setSurfApText(form.surfacing_ap_in > 0 ? form.surfacing_ap_in.toFixed(4) : "");
+                        }
+                      }}
+                    />
+                    {form.surfacing_ap_in > 0 && form.tool_dia > 0 && (
+                      <p className="text-[10px] text-zinc-400">{(form.surfacing_ap_in / form.tool_dia).toFixed(2)}×D axial</p>
+                    )}
+                  </div>
+
+                  {/* Tool tilt */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <FieldLabel hint="Lead tilt away from vertical (0–30°). A 3–5° tilt shifts the contact point off the dead-center of the ball, raises effective SFM, and improves finish. Use 0 for straight vertical.">
+                      Tool Tilt <span className="font-normal text-zinc-500">(°)</span>
+                    </FieldLabel>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min={0}
+                        max={30}
+                        step={1}
+                        className="flex-1"
+                        value={form.surfacing_tilt_deg}
+                        onChange={(e) => setForm((p) => ({ ...p, surfacing_tilt_deg: Number(e.target.value) }))}
+                      />
+                      <span className="text-sm font-semibold w-8 text-right">{form.surfacing_tilt_deg}°</span>
+                    </div>
+                    {form.surfacing_tilt_deg === 0 && (
+                      <p className="text-[10px] text-amber-400">3–5° tilt recommended</p>
+                    )}
+                  </div>
                 </div>
-                {form.surfacing_tilt_deg === 0 && (
-                  <p className="text-[10px] text-amber-400">⚠ 0° tilt — ball center has zero SFM. A 3–5° lead tilt improves surface finish.</p>
-                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Tool Entry */}
           {operation === "milling" && (
