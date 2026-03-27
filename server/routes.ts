@@ -1004,6 +1004,8 @@ export async function registerRoutes(
       const matKey  = String(payload.material ?? "");
 
       // Peers: same diameter, exclude chamfer mills, not current EDP, not blanks
+      // For surfacing: restrict to ball-nose and corner-radius (bull-nose) tools only
+      const isSurfacing = mode === "surfacing";
       const curLoc = Number(payload.loc ?? 0);
       const peers = await pool.query(
         `SELECT s.* FROM skus s
@@ -1013,6 +1015,7 @@ export async function registerRoutes(
            AND LOWER(s.edp) != LOWER($2)
            AND s.edp NOT ILIKE '%-BLK'
            AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+           ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
          ORDER BY s.edp`,
         [dia, current_edp]
       );
@@ -1039,6 +1042,7 @@ export async function registerRoutes(
       const vrxOk = docXd >= 1.0 && wocPct >= 12;  // VXR needs heavier engagement — min 12% WOC in HEM
 
       const scoreGeometry = (g: string | null): number => {
+        if (isSurfacing) return 2; // geometry irrelevant for ball-nose surfacing — coating/pitch/helix decide
         const geom = (g ?? "standard").toLowerCase();
         if (vrxOk && geom === "truncated_rougher") return 4;
         if (cbOk && geom === "chipbreaker")        return 3;
