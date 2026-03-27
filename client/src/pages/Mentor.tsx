@@ -1530,7 +1530,7 @@ export default function Mentor() {
   const WOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
     hem:         dynPresets.woc,
     traditional: dynPresets.woc,
-    finish:      { low: 2, med: 5, high: 10 },
+    finish:      { low: 3, med: 5, high: 7 },
     face:        { low: 50, med: 75, high: 90 },
     trochoidal:  dynPresets.woc,
     slot:        { low: 100,med: 100,high: 100 },
@@ -1539,7 +1539,7 @@ export default function Mentor() {
   const DOC_PRESETS: Record<string, { low: number; med: number; high: number }> = {
     hem:         dynPresets.doc,
     traditional: dynPresets.doc,
-    finish:      { low: 0.25, med: 1.0, high: form.loc > 0 && form.tool_dia > 0 ? Math.round((form.loc / form.tool_dia) * 100) / 100 : 2.0 },
+    finish:      { low: 1.0, med: 2.0, high: Math.min(3.0, form.loc > 0 && form.tool_dia > 0 ? Math.floor((form.loc / form.tool_dia) * 100) / 100 : 3.0) },
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
     slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
@@ -6369,7 +6369,9 @@ ${stabSection}
                     const dia = form.tool_dia || 0.5;
                     if (Number.isFinite(n) && n > 0) {
                       // % or integer (≥1) → treat as percent; decimal (<1, no %) → treat as inches
-                      const pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
+                      let pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
+                      // Finish mode: floor at 3% WOC — below this chip thinning causes rubbing not cutting
+                      if (form.mode === "finish" && pct < 3) pct = 3;
                       setForm((p) => ({ ...p, woc_pct: pct }));
                       setWocText(((pct / 100) * dia).toFixed(4));
                       setWocPreset(null);

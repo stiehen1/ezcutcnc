@@ -3514,7 +3514,11 @@ def run(payload=None):
     _wh_feed_mult = max(0.70, min(1.05, 1.0 / _wh_factor_feed))
     ipt *= _wh_feed_mult
     # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
-    if mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
+    # Finish mode: chip thinning NOT applied — thinner chip is intentional for surface quality;
+    # boosting feed to compensate defeats the purpose and degrades finish.
+    if mode == "finish":
+        chip_factor = 1.0
+    elif mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
         _surf_ae_pct = (_surf_stepover_in / _surf_d_eff) * 100.0
         chip_factor = chip_thinning_factor(_surf_ae_pct, _surf_d_eff)
     else:
