@@ -38,3 +38,6 @@ author = "agent"
 task = "shell.exec"
 args = "npm run build && node dist/index.cjs"
 waitForPort = 5000
+
+[agent]
+expertMode = true
