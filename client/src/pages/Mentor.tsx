@@ -1479,8 +1479,19 @@ export default function Mentor() {
     setSkuDropdownOpen(false);
     setSkuResults([]);
     setSkuLocked(true);
-    setDocText("");
-    setDocPreset(null);
+    // Re-fill DOC from preset when HEM/trochoidal is already selected
+    const _skuDia = Number(sku.cutting_diameter_in);
+    const _skuLoc = Number(sku.loc_in);
+    const _curMode = form.mode;
+    if (_curMode === "hem" || _curMode === "trochoidal") {
+      const _freshPresets = getDynamicPresets(_curMode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc);
+      const _docHigh = _freshPresets.doc.high;
+      setDocText((_docHigh * _skuDia).toFixed(3));
+      setDocPreset("high");
+    } else {
+      setDocText("");
+      setDocPreset(null);
+    }
     setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
     setLocText(Number(sku.loc_in).toFixed(3));
     setStickoutText(defaultStickout.toFixed(3));
@@ -1494,9 +1505,10 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: Number(sku.cutting_diameter_in),
-      // Preserve doc_xd if diameter hasn't changed — prevents wiping a DOC the user already set.
-      // Reset to 0 only when switching to a different tool size (xD ratio would be wrong).
-      doc_xd: Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
+      // Re-fill doc_xd: for HEM always use high preset; otherwise preserve if same dia, reset if dia changed.
+      doc_xd: (p.mode === "hem" || p.mode === "trochoidal")
+        ? getDynamicPresets(p.mode, isoCategory, Number(sku.flutes), Number(sku.cutting_diameter_in), Number(sku.loc_in)).doc.high
+        : Math.abs(Number(sku.cutting_diameter_in) - p.tool_dia) < 0.001 ? p.doc_xd : 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
