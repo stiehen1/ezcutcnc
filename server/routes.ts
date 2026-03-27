@@ -198,7 +198,9 @@ export async function registerRoutes(
       if (r.ok) {
         const d = await r.json() as any;
         if (!d.bogon && d.city) {
-          return { city: d.city || null, region: d.region || null, country: d.country || null, postal: d.postal || null };
+          const countryNames: Record<string,string> = { US:"United States", CA:"Canada", MX:"Mexico", GB:"United Kingdom", DE:"Germany", FR:"France", AU:"Australia", JP:"Japan", CN:"China", IN:"India", BR:"Brazil", KR:"South Korea", IT:"Italy", ES:"Spain", NL:"Netherlands", SE:"Sweden", NO:"Norway", DK:"Denmark", FI:"Finland", CH:"Switzerland", AT:"Austria", BE:"Belgium", PL:"Poland", CZ:"Czech Republic", SG:"Singapore", NZ:"New Zealand", IE:"Ireland", IL:"Israel", ZA:"South Africa", AE:"United Arab Emirates" };
+          const country = d.country ? (countryNames[d.country] ?? d.country) : null;
+          return { city: d.city || null, region: d.region || null, country, postal: d.postal || null };
         }
       }
       // Fallback: ipwho.is (HTTPS, 10k/month)
