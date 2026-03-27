@@ -1464,7 +1464,9 @@ export default function Mentor() {
         iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
-      :               { low: 7, med: 9, high: 12 };  // P / M / K — steel, stainless, cast iron
+      : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
+      : flutes >= 7  ? { low: 6, med: 8, high: 10 } // P / M / K — 7–8 flutes
+      :               { low: 7, med: 9, high: 12 };  // P / M / K — 5–6 flutes
       // HEM DOC: all materials 3×D cap, hardened 1.5×D. High = full LOC or cap (whichever less).
       // Med = 75% of high. Low = 75% of med.
       const hemCap = iso === "H" ? 1.5 : 3.0;
