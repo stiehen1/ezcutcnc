@@ -716,6 +716,19 @@ export async function registerRoutes(
             try {
               const flutes = (s.suggested_flutes ?? s.lookup_flutes) as number;
               const currentEdp = String(s.lookup_edp ?? "");
+
+              // Corner radius constraint: if input tool has a CR, suggestions must have
+              // CR > 0 (no square/ball) and CR <= input CR. Use CASE to safely cast text col.
+              const corner = (s.lookup_corner ?? "").toLowerCase();
+              const cr     = s.lookup_cr ?? 0;
+              const inputHasCr = corner !== "square" && corner !== "ball" && cr > 0;
+              const crFilterS  = inputHasCr
+                ? ` AND CASE WHEN s.corner_condition  ~ '^[0-9]' THEN s.corner_condition::numeric  ELSE 999 END <= ${cr}`
+                : "";
+              const crFilterS2 = inputHasCr
+                ? ` AND CASE WHEN s2.corner_condition ~ '^[0-9]' THEN s2.corner_condition::numeric ELSE 999 END <= ${cr}`
+                : "";
+
               // Primary: derive EDP by replacing first digit (flute count) — e.g. 505221 → 605221
               // Search for all coating variants (same base, last digit varies)
               // Only valid for flute-change suggestions (type === "tool"), not diameter changes
@@ -727,6 +740,7 @@ export async function registerRoutes(
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                    ${cbClause}
                    ${noBLK}
+                   ${crFilterS}
                    ORDER BY
                      CASE WHEN LOWER(COALESCE(s.geometry, 'standard')) = $2 THEN 0 ELSE 1 END,
                      s.edp`,
@@ -744,8 +758,6 @@ export async function registerRoutes(
 
               // Build corner condition string for direct text match
               // DB stores CR as text e.g. "0.03", "0.06"; square/ball as "square"/"ball"
-              const corner = (s.lookup_corner ?? "").toLowerCase();
-              const cr     = s.lookup_cr ?? 0;
               const cornerStr = (corner === "square" || corner === "ball")
                 ? corner
                 : String(parseFloat(cr.toFixed(4)));  // "0.03", "0.06", etc.
@@ -800,10 +812,12 @@ export async function registerRoutes(
                            AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                            ${cbClause.replace(/\bs\./g, "s2.")}
                            ${noBLK.replace(/\bs\./g, "s2.")}
+                           ${crFilterS2}
                        )
                        AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                        ${cbClause}
                        ${noBLK}
+                       ${crFilterS}
                      ORDER BY s.edp`,
                     [flutes, dia, loc]
                   );
@@ -821,6 +835,7 @@ export async function registerRoutes(
                          AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause}
                          ${noBLK}
+                         ${crFilterS}
                          AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                            SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                            FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -830,6 +845,7 @@ export async function registerRoutes(
                              AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                              ${cbClause.replace(/\bs\./g, "s2.")}
                              ${noBLK.replace(/\bs\./g, "s2.")}
+                             ${crFilterS2}
                          )
                        ORDER BY s.edp`,
                       [flutes, dia, loc]
@@ -878,6 +894,7 @@ export async function registerRoutes(
                      AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                      ${cbClause}
                      ${noBLK}
+                     ${crFilterS}
                      AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                        SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -887,6 +904,7 @@ export async function registerRoutes(
                          AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
                          ${cbClause.replace(/\bs\./g, "s2.")}
                          ${noBLK.replace(/\bs\./g, "s2.")}
+                         ${crFilterS2}
                      )
                    ORDER BY s.edp`,
                   [flutes, dia, loc]
