@@ -2528,7 +2528,8 @@ ${stabSection}
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(cleanHtml, "string").save();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }).from(cleanHtml as any, "string" as any).save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
@@ -5862,7 +5863,6 @@ ${stabSection}
                   <div><span className="font-semibold text-white">Z-depth controls chamfer size.</span> A 0.001" Z shift produces a noticeable chamfer size change. Use your Z wear offset to dial in size — not reprogramming. This is how tight-tolerance chamfers are held in production.</div>
                   <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
                   <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
-                  <div><span className="font-semibold text-white">Run 10–20% lower SFM than endmilling.</span> Tip concentration and thin edge geometry mean chamfer tools don't tolerate the same surface speeds as full-diameter endmills.</div>
                   <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
                 </div>
               )}
@@ -6621,7 +6621,7 @@ ${stabSection}
                 );
               })()}
               {/* DOC out-of-range note — suppressed for circ_interp (DOC = full bore depth, not axial pitch) */}
-              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && form.mode !== "circ_interp" && (() => {
+              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (form.mode as string) !== "circ_interp" && (() => {
                 const dp = DOC_PRESETS[form.mode];
                 const isHem = form.mode === "hem" || form.mode === "trochoidal";
                 const locXd = form.loc > 0 && form.tool_dia > 0 ? form.loc / form.tool_dia : null;
@@ -8751,7 +8751,7 @@ ${stabSection}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">No pre-drilled hole? Use helical interpolation entry in CAM</span> — ramp in a continuous helix to bore depth, then circular passes to size the wall. Set ramp feed to <strong>40–50% of Feed (IPM)</strong>. Ramp angle ≤2°; center-cutting geometry required.</p>
                         {(() => {
                           const D = form.tool_dia;
-                          const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : form.bore_dia;
+                          const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : (form as any).bore_dia;
                           if (!(D > 0) || !(boreDia > 0)) return (
                             <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> Enter tool and bore diameters above to see whether helical entry leaves a standing post.</p>
                           );
