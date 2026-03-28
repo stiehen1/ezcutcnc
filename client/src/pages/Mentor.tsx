@@ -6867,7 +6867,7 @@ ${stabSection}
                     <div><span className="font-semibold text-white">Deep threads (&gt;2×D):</span> Break into multiple Z passes and reduce chip load with depth. At 2×D reduce IPT ~20–30%; at 4×D consider multiple radial passes as well.</div>
                     <div><span className="font-semibold text-white">Chip evacuation is everything.</span> Chip packing in internal threads = instant failure. Flood coolant for steel/stainless; high-pressure coolant for HRSA; air blast for aluminum. Never recut chips.</div>
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Premature wear = rubbing (increase IPT slightly). Chipping = no lead-in arc. Oversize threads = WOC or deflection too high. Poor finish = chip recutting. Breakage = chip packing (reduce DOC or improve coolant).</div>
-                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Thread Mills) for you — contact us!</span></div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (60-Deg Tooth Profile Thread Mills) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
