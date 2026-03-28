@@ -380,7 +380,7 @@ export default function Mentor() {
   const mentor = useMentor();
 
 
-  const [isoCategory, setIsoCategory] = React.useState<IsoCategory>("P");
+  const [isoCategory, setIsoCategory] = React.useState<IsoCategory | "">("");
   const [matSearchInput, setMatSearchInput]   = React.useState("");
   const [matSearchLoading, setMatSearchLoading] = React.useState(false);
   const [matMatchResult, setMatMatchResult]   = React.useState<{ key: string; label: string; confidence: string; source: string; note: string | null } | null>(null);
