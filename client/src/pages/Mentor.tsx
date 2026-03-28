@@ -5054,7 +5054,7 @@ ${stabSection}
                     <span className="text-xs font-medium text-zinc-300 cursor-default">Is an Extension Holder being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-64 text-xs">
-                    An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability advisor will flag this.
+                    An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability mentor will flag this.
                   </TooltipContent>
                 </Tooltip>
                 {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
@@ -7650,10 +7650,10 @@ ${stabSection}
                 );
               })()}
 
-              {/* Drill Design Advisor */}
+              {/* Drill Design Mentor */}
               {drillResult.geometry_tip && (
                 <div className="rounded-lg border border-sky-500/50 bg-sky-500/10 px-3 py-2.5 text-xs">
-                  <p className="font-semibold text-sky-300 mb-0.5">Drill Design Advisor</p>
+                  <p className="font-semibold text-sky-300 mb-0.5">Drill Design Mentor</p>
                   <p className="text-sky-100/80">{drillResult.geometry_tip}</p>
                 </div>
               )}

@@ -1,7 +1,7 @@
 {
   "name": "CoreCutCNC",
   "short_name": "CoreCutCNC",
-  "description": "Core Cutter machining advisor — speeds, feeds, and stability analysis",
+  "description": "Core Cutter machining mentor — speeds, feeds, and stability analysis",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",
