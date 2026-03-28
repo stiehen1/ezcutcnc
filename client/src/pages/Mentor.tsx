@@ -1046,10 +1046,12 @@ export default function Mentor() {
   const [pdfConvertedFromMm, setPdfConvertedFromMm] = React.useState(false);
   const [pdfFluteWash, setPdfFluteWash] = React.useState<number>(0);
   const [pdfFluteWashText, setPdfFluteWashText] = React.useState<string>("");
+  const [pdfOal, setPdfOal] = React.useState<number>(0);
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
     setPdfExtracted(false);
+    setPdfOal(0);
     try {
       const formData = new FormData();
       formData.append("pdf", file);
@@ -1155,6 +1157,7 @@ export default function Mentor() {
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
       setPdfConvertedFromMm(!!e._converted_from_mm);
+      setPdfOal(e.oal > 0 ? e.oal : 0);
       mentor.reset();
       const toastParts: string[] = [];
       if (e.tool_number) toastParts.push(`Tool ${e.tool_number}`);
@@ -1162,7 +1165,28 @@ export default function Mentor() {
       if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Safe Lock shank — shrink fit set");
-      toast({ title: "Print read successfully", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + "Review extracted dimensions below and correct any misreads before running." });
+      // Build list of which fields were populated
+      const filledFields: string[] = [];
+      if (e.tool_dia > 0) filledFields.push("Tool Dia");
+      if (e.flutes > 0) filledFields.push("Flutes");
+      if (e.loc > 0) filledFields.push("LOC");
+      if (e.lbs > 0) filledFields.push("LBS/TSC");
+      if (e.helix_angle > 0) filledFields.push("Helix");
+      if (e.corner_condition) filledFields.push("Corner");
+      if (e.corner_radius > 0) filledFields.push("Corner Radius");
+      if (e.shank_dia > 0) filledFields.push("Shank Dia");
+      if (e.coating) filledFields.push("Coating");
+      if (e.keyseat_arbor_dia > 0) filledFields.push("Arbor Dia");
+      if (e.dovetail_angle > 0) filledFields.push("Dovetail Angle");
+      if (e.chamfer_angle > 0) filledFields.push("Chamfer Angle");
+      if (e.chamfer_tip_dia > 0) filledFields.push("Tip Dia");
+      if (e.thread_tpi > 0) filledFields.push("TPI");
+      if (e.cutting_material) filledFields.push("Material");
+      if (e.oal > 0) filledFields.push("OAL");
+      const fieldSummary = filledFields.length
+        ? `${filledFields.length} field${filledFields.length > 1 ? "s" : ""} pre-filled: ${filledFields.join(", ")}.`
+        : "No fields could be read.";
+      toast({ title: "Print uploaded — please verify all dimensions", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + fieldSummary + " Verify each one matches your print before running.", duration: 10000 });
     } catch {
       toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
     }
@@ -3890,7 +3914,7 @@ ${stabSection}
           <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+                <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
                 <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
@@ -4033,7 +4057,7 @@ ${stabSection}
             <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+                  <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
                   <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                 </div>
               ) : (
@@ -5354,7 +5378,7 @@ ${stabSection}
               {pdfExtracted ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+                    <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
                     <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
@@ -5978,7 +6002,7 @@ ${stabSection}
           )}
           {pdfExtracted && (
             <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
-              <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+              <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
               <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
@@ -6027,7 +6051,7 @@ ${stabSection}
           <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">✓ Dimensions extracted from CC print{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — review fields below</span>
+                <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
                 <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
