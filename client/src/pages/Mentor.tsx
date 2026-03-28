@@ -3635,6 +3635,7 @@ ${stabSection}
                   <div><span className="font-semibold text-white">Runout kills accuracy.</span> Target ≤0.0002" TIR — absolute max 0.0005". Any runout beyond that creates an oversize hole immediately. Hydraulic or shrink-fit holders only. Avoid worn collets and long ER stickout.</div>
                   <div><span className="font-semibold text-white">Coolant matters.</span> Through-spindle is ideal for consistent size and finish. Flood aimed directly at entry is next best. In stainless and titanium, chip evacuation matters more than speed — use the strongest coolant available and don't dwell at depth.</div>
                   <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Oversize = runout, too much stock, or low feed. Tapered hole = deflection or poor entry alignment. Bad finish = rubbing (low feed) or chip packing. Chipping = no entry chamfer or interrupted entry. Built-up edge = wrong coating or SFM too low.</div>
+                  <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Reamers & Step Reamers) for you — contact us!</span></div>
                 </div>
               )}
             </div>
@@ -3922,6 +3923,7 @@ ${stabSection}
                   <div><span className="font-semibold text-white">Deep threads (&gt;2×D):</span> Break into multiple Z passes and reduce chip load with depth. At 2×D reduce IPT ~20–30%; at 4×D consider multiple radial passes as well.</div>
                   <div><span className="font-semibold text-white">Chip evacuation is everything.</span> Chip packing in internal threads = instant failure. Flood coolant for steel/stainless; high-pressure coolant for HRSA; air blast for aluminum. Never recut chips.</div>
                   <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Premature wear = rubbing (increase IPT slightly). Chipping = no lead-in arc. Oversize threads = WOC or deflection too high. Poor finish = chip recutting. Breakage = chip packing (reduce DOC or improve coolant).</div>
+                  <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Thread Mills) for you — contact us!</span></div>
                 </div>
               )}
             </div>
@@ -4316,6 +4318,7 @@ ${stabSection}
                     <div><span className="font-semibold text-white">Stickout is the biggest deflection driver.</span> Keep it as short as your setup allows. Shrink fit is the top holder choice; hydraulic is good; high-quality ER is acceptable. Avoid worn collets and long gauge lengths.</div>
                     <div><span className="font-semibold text-white">If it chatters:</span> reduce stickout first → reduce depth → reduce feed. In that order.</div>
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tooth chipping = too high IPT. Full breakage = chip packing. Tapered slot = deflection (reduce depth/add passes). Burnishing = IPT too low (increase feed slightly). Chatter = stickout or rigidity issue.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Keyseat Cutters) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
@@ -4343,6 +4346,7 @@ ${stabSection}
                     <div><span className="font-semibold text-white">Air blast is the preferred coolant.</span> Goal is chip evacuation, not cooling. Mist is also good. Flood is acceptable but watch for chip packing. Through-spindle is rarely applicable.</div>
                     <div><span className="font-semibold text-white">If it sounds wrong, it is wrong.</span> Dovetail cutters don't chatter and recover — reduce stickout, then reduce radial pass depth, then reduce chip load.</div>
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tip chipping = too high IPT. Neck break = excess WOC or stickout. Chatter = poor rigidity. Built-up edge = SFM too low (especially aluminum). Tool pullout = weak holder.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Dovetail Cutters) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
@@ -4481,6 +4485,7 @@ ${stabSection}
                     </div>
 
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Bottom line:</span> Low WOC + high feed + moderate DOC + constant engagement path = insane MRR with stable cutting. If you remember one thing: WOC is the lever — adjust it before anything else.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (High Feed Mills) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
@@ -5865,6 +5870,7 @@ ${stabSection}
                   <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
                   <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
                   <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
+                  <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Chamfer Mills) for you — contact us!</span></div>
                 </div>
               )}
             </div>
@@ -6086,6 +6092,7 @@ ${stabSection}
                   <div><span className="font-semibold text-white">Entry and exit control.</span> Always spot or chamfer before drilling, especially on holes deeper than 3×D. Reduce feed 30–50% at breakthrough to prevent edge grabbing and chip packing on exit.</div>
                   <div><span className="font-semibold text-white">Runout is a silent killer.</span> Target ≤0.0005" TIR — beyond that one flute does all the work and the drill fails instantly. Hydraulic or shrink-fit holders preferred; avoid long ER stickout.</div>
                   <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Margin chipping = poor chip evacuation. Corner breakdown = feed too low (rubbing). Catastrophic break = chip packing or coolant loss. Built-up edge = aluminum or stainless without lubrication. Work hardening = stainless/HRSA with hesitation feed or too low chip load.</div>
+                  <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Drills & Step Drills) for you — contact us!</span></div>
                 </div>
               )}
             </div>
@@ -6312,6 +6319,7 @@ ${stabSection}
                     {tips.map((tip, i) => (
                       <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
                     ))}
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Endmills & Special Profiles) for you — contact us!</span></div>
                   </div>
                 );
               })()}
