@@ -307,14 +307,15 @@ function reamFlutes(D: number): number {
 
 const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> = {
   hem: [
-    { title: "HEM is a force control strategy, not just a toolpath.", body: "Controlling engagement angle controls heat, deflection, and tool life. Target 8–15% WOC with 1.0–2.5×D axial DOC. Deep DOC and light WOC is modern high-performance cutting — most shops leave money on the table by running shallow DOC and wide WOC." },
+    { title: "HEM is a force control strategy, not just a toolpath.", body: "Controlling engagement angle controls heat, deflection, and tool life. Target 8–15% WOC with 1.0–3.0×D axial DOC — aluminum can push 3.5–4.0×D. Deep DOC and light WOC is modern high-performance cutting — most shops leave money on the table by running shallow DOC and wide WOC." },
     { title: "Engagement angle is the only knob that matters.", body: "Steel/stainless target 20°–35° (8–15% WOC). HRSA and titanium target 10°–25° (5–10% WOC). This keeps cutting forces consistent, heat in the chip, and deflection predictable. Too light means rubbing; too heavy means force spikes and chatter." },
-    { title: "Low engagement requires higher feed — or you're rubbing.", body: "At ~10% WOC, increase IPT 1.5–2.0×. At ~5% WOC, increase IPT 2.0–2.5×. The engine calculates chip thinning and adjusts FPT automatically. If you don't compensate, you rub instead of cut — heat skyrockets and tool life tanks with no obvious cause." },
+    { title: "Low engagement requires higher feed — or you're rubbing.", body: "At ~10% WOC, increase IPT 1.5–2.0×. At ~5% WOC, increase IPT 2.0–2.5×. The engine calculates chip thinning and adjusts FPT automatically. If you don't compensate, you rub instead of cut — heat skyrockets and tool life tanks with no obvious cause. In HRSA (Inconel 718, titanium), 3–5% WOC with very high chip-thinning-adjusted feed is proven shop practice — the low radial load keeps heat in the chip and protects the cutting edge." },
     { title: "Stickout is the silent killer.", body: "Deflection scales with L³ — a 20% increase in stickout means ~73% more deflection. Shorten stickout before touching feeds or speeds. Reduced neck tools remove shank interference so cutting edges work at full LOC, but drop WOC to 5–12% and use adaptive toolpaths only — no slotting." },
-    { title: "Variable pitch and variable helix kill chatter.", body: "These geometry features break up the harmonic frequency that causes chatter. The engine accounts for them in the stability calculation — make sure variable_pitch and variable_helix are set correctly. Gain: up to 1.50× and 1.25× chatter limit respectively, or 1.75× when both are active." },
-    { title: "Entry strategy protects tool life.", body: "Never drop straight into full-width material. Use helical ramp, 2–5° ramp-in, or a pre-drilled entry for deep work. CAM defaults often spike engagement at inside corners and chip tools silently — add corner smoothing and eliminate 90° inside corners from your toolpath." },
-    { title: "Know when NOT to HEM.", body: "HEM breaks down when the tool is too long, the machine lacks rigidity, or workholding is weak. In those cases a hybrid strategy — higher WOC, lower DOC, slower feed — outperforms pure HEM. The stability panel tells you where you are. Red means HEM isn't your answer today." },
-    { title: "Coolant by material.", body: "Steel/stainless/HRSA — air blast or light coolant; avoid thermal shock with premium coatings. Aluminum — flood or mist, chip evacuation is priority #1. Through-coolant tools are a major advantage in deep pockets. Sound is your chatter indicator; chip color is your heat indicator." },
+    { title: "Variable pitch and variable helix kill chatter.", body: "These geometry features break up the harmonic frequency that causes chatter. The engine accounts for them in the stability calculation — make sure variable_pitch and variable_helix are set correctly. Gain: up to 1.50× and 1.25× chatter limit respectively, or 1.75× when both are active. Core Cutter lineup: aluminum tools are standard geometry (neither); steel/stainless tools are all variable pitch; QTR3 series is both variable pitch and variable helix — the most chatter-resistant geometry in the line." },
+    { title: "Entry strategy — in order of preference.", body: "① Pre-drilled hole (best): drill or bore the entry before HEM passes begin. The tool drops in cleanly, no edge contact at entry, zero chip load spike. Best for deep pockets, tight tolerances, and hard materials. ② Sweep-in / roll-in: tangential arc lead-in from outside the stock — tool engagement builds from zero, very low shock, recommended by the app when a pre-hole isn't used. ③ Helical interpolation: ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed; verify center-cutting geometry. ④ Linear ramp: straight-line ramp at 2–5° angle. Simple and widely supported in CAM but builds engagement faster than helical. Use when helix clearance is unavailable. Never straight plunge into full-width material. CAM defaults often spike engagement at inside corners — add corner smoothing and eliminate 90° inside corners from your toolpath." },
+    { title: "Know when to back off HEM parameters.", body: "HEM breaks down when the tool is too long, the machine lacks rigidity, or workholding is weak. When the stability panel goes red, don't abandon HEM — reduce DOC first, then WOC, then feed until you're green. If you can't get green at productive parameters, switch to traditional roughing: wider WOC (30–50%), shallower DOC, slower feed. Short LOC, rigid setup, and high HP machines often favor traditional roughing on cycle time anyway." },
+    { title: "Coolant by material.", body: "Steel/stainless — flood or mist; lubrication prevents BUE and galling. HRSA (Inconel, titanium) — never dry; these work-harden instantly from heat and will destroy a tool in seconds without coolant. Aluminum — flood or mist preferred, chip evacuation is priority #1. Cast iron — dry is often correct; coolant causes thermal cracking and smears graphite into the surface. Key rule: if you use coolant, flood it consistently — intermittent coolant causes thermal shock and cracks premium PVD coatings. Either fully wet or fully dry, never interrupted. Through-coolant tools are a major advantage in deep pockets. Sound is your chatter indicator; chip color is your heat indicator." },
+    { title: "When can you run dry?", body: "Dry machining works when heat stays in the chip and the coating handles it. Best candidates: cast iron (dry preferred — see above). Aluminum always needs at least air blast — never truly dry; DLC coating (D-Max) handles flood, mist, or air blast equally well and prevents built-up edge in any condition, and high-SFM steel cuts with AlTiN/TiAlN coatings where the coating itself is the heat barrier. Note: thermal shock from flood coolant is significantly reduced in HEM because the tool spends most of its time out of the cut — the short arc of engagement means consistent cooling rather than violent hot/cold cycling. You cannot run dry in: HRSA (Inconel, titanium, cobalt alloys), stainless steel, any deep pocket or blind hole where chips can't escape, or any interrupted cut where the tool needs lubrication to prevent galling at re-entry. If chips are coming out discolored blue or black — you're dry when you shouldn't be." },
   ],
   traditional: [
     { title: "Slotting is the highest-load traditional condition — treat it that way.", body: "Full-width engagement means no chip thinning, high heat, and limited chip escape. Keep DOC conservative (0.5–1.0×D), reduce IPT to 50–70% of side-milling values. Only AL2/AL3 for non-ferrous and VST4 for ferrous/titanium are approved for full slotting. VST6 and VMF are never slotting tools." },
@@ -1460,9 +1461,11 @@ export default function Mentor() {
     if (mode === "hem" || mode === "trochoidal") {
       // WOC three-point targets by ISO category (shop-validated HEM ranges)
       const { wocMed: alWocMed } = getHemMed(iso, flutes); // aluminum keeps per-flute table
-      const isVxr = tool_series === "VXR4" || tool_series === "VXR5";
+      const isVxr  = tool_series === "VXR4" || tool_series === "VXR5";
+      const isQtr3 = /^QTR3/i.test(tool_series);
       const hemWoc =
         isVxr                ? { low: 10, med: 15, high: 18 } // VXR truncated rougher — high MRR
+      : isQtr3               ? { low: 7,  med: 9,  high: 10 } // QTR3 small-dia variable-helix
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
@@ -1488,13 +1491,15 @@ export default function Mentor() {
       };
     }
     if (mode === "traditional") {
+      const isQtr3 = /^QTR3/i.test(tool_series);
       const { wocMed, docMed } = getTradMed(iso, flutes);
-      const wocLow  = Math.max(10, Math.round(wocMed * 0.60));
-      const wocHigh = Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
+      const wocLow  = isQtr3 ? 12 : Math.max(10, Math.round(wocMed * 0.60));
+      const wocMedFinal = isQtr3 ? 14 : wocMed;
+      const wocHigh = isQtr3 ? 16 : Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
       return {
-        woc: { low: wocLow, med: wocMed, high: wocHigh },
+        woc: { low: wocLow, med: wocMedFinal, high: wocHigh },
         doc: { low: docLow, med: loc > 0 && dia > 0 ? Math.min(docMed, loc / dia) : docMed, high: Math.round(docHigh * 4) / 4 },
       };
     }
@@ -1828,8 +1833,8 @@ export default function Mentor() {
       tool_type: form_tool_type as any,
       corner_radius: crIn,
       geometry: sku.geometry ?? "standard",
-      variable_pitch: sku.variable_pitch ?? false,
-      variable_helix: sku.variable_helix ?? false,
+      variable_pitch: sku.variable_pitch != null ? sku.variable_pitch : ["QTR3","QTR3-RN"].includes((sku.series ?? "").toUpperCase()),
+      variable_helix: sku.variable_helix != null ? sku.variable_helix : ["QTR3","QTR3-RN"].includes((sku.series ?? "").toUpperCase()),
       shank_dia: Number(sku.shank_dia_in ?? 0),
       stickout: defaultStickout,
       tool_series: sku.series ?? "",
@@ -2172,7 +2177,7 @@ export default function Mentor() {
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>` : "";
     const straightRows = (em && entryTypes.includes("straight")) ? `
-        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight-In Entry</td></tr>
+        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight Plunge</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>` : "";
     const entrySection = (mil && em && (sweepRows || rampRows || helixRows || straightRows)) ? `
       <h3>Entry Moves</h3>
@@ -2528,6 +2533,7 @@ ${stabSection}
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    // @ts-ignore — html2pdf types don't declare the (src, type) overload
     }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
@@ -3611,33 +3617,6 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Machining Tips accordion — reaming */}
-          {operation === "reaming" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">Pre-drill stock is everything.</span> Reamers are finishing tools — not hole makers. Too little stock = rubbing + size drift. Too much = chatter + oversize + wear. Typical allowance: ≤1/4" dia → +0.0015–0.0025"; 1/4–1/2" → +0.002–0.003"; &gt;1/2" → +0.003–0.005". The engine auto-calculates this from your finished hole diameter.</div>
-                  <div><span className="font-semibold text-white">Never baby a reamer.</span> Low feed = rubbing = poor finish + taper. Feed rates are higher than most expect: 0.0015–0.004 IPR for small tools, 0.003–0.008 IPR for larger. Run 50–70% of drilling SFM for that material.</div>
-                  <div><span className="font-semibold text-white">Feed rate controls size.</span> Oversize hole → reduce feed slightly, check runout, reduce stock allowance. Undersize → increase feed or stock slightly. Feed directly affects finished size more than most realize — you can dial tenths with feed adjustments.</div>
-                  <div><span className="font-semibold text-white">LHH + RHC is the standard for precision work.</span> Left-hand helix with right-hand cut pushes chips forward (into the hole ahead of the tool), preventing chips from dragging along the finished wall. This stabilizes cutting pressure and produces a cleaner finish. Use it for blind holes, deep holes, stainless, titanium, and tight-tolerance work — essentially everything. RH helix is only used for through-holes where chip evacuation out the back is the priority.</div>
-                  <div><span className="font-semibold text-white">Never peck a reamer.</span> No G83, no chip-breaking cycles. If chips are packing — wrong flute style, wrong coolant, or too deep for a straight flute. Switch to spiral flute or add through-spindle coolant instead.</div>
-                  <div><span className="font-semibold text-white">Chamfer the hole entry.</span> Sharp edge entry chips margins instantly. A countersink or entry chamfer before reaming dramatically improves size consistency and tool life.</div>
-                  <div><span className="font-semibold text-white">Runout kills accuracy.</span> Target ≤0.0002" TIR — absolute max 0.0005". Any runout beyond that creates an oversize hole immediately. Hydraulic or shrink-fit holders only. Avoid worn collets and long ER stickout.</div>
-                  <div><span className="font-semibold text-white">Coolant matters.</span> Through-spindle is ideal for consistent size and finish. Flood aimed directly at entry is next best. In stainless and titanium, chip evacuation matters more than speed — use the strongest coolant available and don't dwell at depth.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Oversize = runout, too much stock, or low feed. Tapered hole = deflection or poor entry alignment. Bad finish = rubbing (low feed) or chip packing. Chipping = no entry chamfer or interrupted entry. Built-up edge = wrong coating or SFM too low.</div>
-                </div>
-              )}
-            </div>
-          )}
-
           </>)}
 
           {/* Thread Details — thread milling */}
@@ -3898,33 +3877,6 @@ ${stabSection}
               </div>
             );
           })()}
-          {/* Machining Tips accordion — threadmilling */}
-          {operation === "threadmilling" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">Deflection-controlled process — not horsepower.</span> Thread accuracy comes down to deflection and radial force, not spindle load. If thread size is inconsistent it's deflection or runout — not your CAM.</div>
-                  <div><span className="font-semibold text-white">Always climb mill.</span> Lower cutting forces, better finish, less rubbing at entry/exit. Exception: thin-wall or unstable parts may need conventional to prevent pull-in. Internal threads — almost always climb.</div>
-                  <div><span className="font-semibold text-white">Radial engagement 1–5% of diameter.</span> Threadmilling is a low-engagement finishing process. Too much WOC causes chatter, pitch error, and oversized threads. If threads look oversized or "drunken" — WOC too high or deflection problem.</div>
-                  <div><span className="font-semibold text-white">Chip load balance is critical.</span> Too light = rubbing = rapid wear. Too heavy = deflection = pitch and size issues. Typical range: 0.0005–0.0025 IPT. Threadmills fail more from rubbing than overload.</div>
-                  <div><span className="font-semibold text-white">Top-down vs bottom-up:</span> Top-down is the default and works well for most blind holes and shorter threads. Bottom-up is strongly preferred for deep threads (&gt;2×D), HRSA materials (Inconel, Ti, stainless), and anywhere chip evacuation is poor — it pulls chips up and out instead of packing them in. Random breakage after good first parts is almost always chip packing from top-down in a tough material. The engine auto-selects based on material and depth — you can override if your setup requires.</div>
-                  <div><span className="font-semibold text-white">Arc lead-in and lead-out are not optional.</span> Never drop straight in or stop at the endpoint. Use a 0.5–1.0× tool dia arc entry and arc exit. Eliminates notch wear and dwell marks at the start point — the #1 cause of premature chipping.</div>
-                  <div><span className="font-semibold text-white">Deep threads (&gt;2×D):</span> Break into multiple Z passes and reduce chip load with depth. At 2×D reduce IPT ~20–30%; at 4×D consider multiple radial passes as well.</div>
-                  <div><span className="font-semibold text-white">Chip evacuation is everything.</span> Chip packing in internal threads = instant failure. Flood coolant for steel/stainless; high-pressure coolant for HRSA; air blast for aluminum. Never recut chips.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Premature wear = rubbing (increase IPT slightly). Chipping = no lead-in arc. Oversize threads = WOC or deflection too high. Poor finish = chip recutting. Breakage = chip packing (reduce DOC or improve coolant).</div>
-                </div>
-              )}
-            </div>
-          )}
-
           </>)}
 
           {/* Thread Mill Tool Geometry */}
@@ -4314,6 +4266,7 @@ ${stabSection}
                     <div><span className="font-semibold text-white">Stickout is the biggest deflection driver.</span> Keep it as short as your setup allows. Shrink fit is the top holder choice; hydraulic is good; high-quality ER is acceptable. Avoid worn collets and long gauge lengths.</div>
                     <div><span className="font-semibold text-white">If it chatters:</span> reduce stickout first → reduce depth → reduce feed. In that order.</div>
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tooth chipping = too high IPT. Full breakage = chip packing. Tapered slot = deflection (reduce depth/add passes). Burnishing = IPT too low (increase feed slightly). Chatter = stickout or rigidity issue.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Keyseat Cutters) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
@@ -4341,6 +4294,7 @@ ${stabSection}
                     <div><span className="font-semibold text-white">Air blast is the preferred coolant.</span> Goal is chip evacuation, not cooling. Mist is also good. Flood is acceptable but watch for chip packing. Through-spindle is rarely applicable.</div>
                     <div><span className="font-semibold text-white">If it sounds wrong, it is wrong.</span> Dovetail cutters don't chatter and recover — reduce stickout, then reduce radial pass depth, then reduce chip load.</div>
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Tip chipping = too high IPT. Neck break = excess WOC or stickout. Chatter = poor rigidity. Built-up edge = SFM too low (especially aluminum). Tool pullout = weak holder.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Dovetail Cutters) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
@@ -4479,6 +4433,7 @@ ${stabSection}
                     </div>
 
                     <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Bottom line:</span> Low WOC + high feed + moderate DOC + constant engagement path = insane MRR with stable cutting. If you remember one thing: WOC is the lever — adjust it before anything else.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (High Feed Mills) for you — contact us!</span></div>
                   </div>
                 )}
               </div>
@@ -5665,6 +5620,8 @@ ${stabSection}
                             <line x1={bodyX1} y1={topY} x2={chamferX} y2={topY} stroke="#888" strokeWidth="1.5"/>
                             {/* Left end cap */}
                             <line x1={bodyX1} y1={topY} x2={bodyX1} y2={clY} stroke="#888" strokeWidth="1.5"/>
+                            {/* "Tool" label rotated inside body */}
+                            <text x={(bodyX1+chamferX)/2} y={(topY+clY)/2} fontSize="11" fill="#f97316" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" transform={`rotate(-90,${(bodyX1+chamferX)/2},${(topY+clY)/2})`} opacity="0.85">Tool</text>
                             {/* Shoulder line where body meets chamfer */}
                             <line x1={chamferX} y1={topY} x2={chamferX} y2={clY} stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
                             {/* Centerline — proper long-short-long drafting linetype */}
@@ -5768,16 +5725,16 @@ ${stabSection}
                     inputMode="decimal"
                     className={`no-spinners ${!(form.chamfer_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                     placeholder={(() => {
-                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "face width (in)";
+                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "chamfer length (in)";
                       const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                       const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                       const edgeLen = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
-                      if (!(edgeLen > 0)) return "face width (in)";
+                      if (!(edgeLen > 0)) return "chamfer length (in)";
                       // Sweet spot: middle 60% of edge for CMS, middle 80% for CMH
                       const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
                       const lo = edgeLen * skip;
                       const hi = edgeLen * (1 - skip);
-                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" face`;
+                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" preferred`;
                     })()}
                     value={chamferDepthText}
                     onChange={(e) => setChamferDepthText(e.target.value)}
@@ -5792,10 +5749,21 @@ ${stabSection}
                     }}
                   />
                   {(() => {
-                    if (!(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
+                    if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
                     const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                     const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                     const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                    if (!(edgeLength > 0)) return null;
+                    const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
+                    const lo = edgeLength * skip;
+                    const hi = edgeLength * (1 - skip);
+                    if (!(form.chamfer_depth > 0)) {
+                      return (
+                        <p className="mt-1 text-xs text-zinc-500 leading-snug">
+                          Preferred saddle zone: <span className="text-zinc-400 font-mono">{lo.toFixed(3)}"–{hi.toFixed(3)}"</span> — keeps the cut centered on the edge, away from the tip and shoulder for best tool life and finish.
+                        </p>
+                      );
+                    }
                     const zDepth = form.chamfer_depth * Math.cos(halfRad);
                     if (form.chamfer_depth > edgeLength) {
                       return (
@@ -5807,6 +5775,9 @@ ${stabSection}
                     return (
                       <p className="mt-1 text-xs text-zinc-400">
                         Z depth to program in CAM: <span className="text-blue-400 font-mono font-semibold">{zDepth.toFixed(4)}"</span>
+                        {(form.chamfer_depth < lo || form.chamfer_depth > hi) && (
+                          <span className="ml-2 text-amber-400">⚠ outside preferred saddle zone ({lo.toFixed(3)}"–{hi.toFixed(3)}")</span>
+                        )}
                       </p>
                     );
                   })()}
@@ -5842,12 +5813,12 @@ ${stabSection}
                   <div><span className="font-semibold text-white">Think "wipe the edge" — not "cut the edge."</span> Chamfer tools concentrate load at the tip. Keep radial engagement under 10–15% of diameter and axial depth just enough to hit size. Light, consistent engagement protects the tip and produces a cleaner edge than aggressive cuts.</div>
                   <div><span className="font-semibold text-white">Helical flutes (CMH style) are a major advantage.</span> Straight flutes hit the full edge instantly — helical flutes engage progressively along the cutting edge, dramatically reducing tip shock. This eliminates micro-chipping, reduces vibration, improves chip evacuation, and makes chamfer milling behave more like an endmill than a scraper. CMH geometry shines in production work, tough materials, and interrupted cuts (cross-holes, cast edges, flame-cut stock).</div>
                   <div><span className="font-semibold text-white">Always use helical or rolling entry.</span> Never plunge straight onto an edge. Use a helical interpolation entry or a lead-in arc to let the helix engage progressively — this is where you unlock the full benefit of helical geometry. Lead-out the same way.</div>
-                  <div><span className="font-semibold text-white">Chip load lives in a narrow window.</span> Too low = rubbing = poor finish and rapid wear. Too high = instant tip failure. Start at 0.0005–0.002 IPT depending on tool size and material. Keep feed consistent through corners — feed drops cause rubbing at the tip.</div>
+                  <div><span className="font-semibold text-white">Chip load lives in a narrow window.</span> Too low = rubbing = poor finish and rapid wear. Too high = instant tip failure. Start at 0.0005–0.002 IPT depending on tool size and material. Keep feed consistent throughout the cut — any deceleration (CAM look-ahead, arc moves, direction changes) causes rubbing at the tip.</div>
                   <div><span className="font-semibold text-white">Z-depth controls chamfer size.</span> A 0.001" Z shift produces a noticeable chamfer size change. Use your Z wear offset to dial in size — not reprogramming. This is how tight-tolerance chamfers are held in production.</div>
                   <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
                   <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
-                  <div><span className="font-semibold text-white">Run 10–20% lower SFM than endmilling.</span> Tip concentration and thin edge geometry mean chamfer tools don't tolerate the same surface speeds as full-diameter endmills.</div>
                   <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
+                  <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Chamfer Mills) for you — contact us!</span></div>
                 </div>
               )}
             </div>
@@ -6048,32 +6019,6 @@ ${stabSection}
               </div>
             );
           })()}
-          {/* Machining Tips accordion — drilling */}
-          {operation === "drilling" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">Never baby a carbide drill — it needs load to live.</span> Low feed causes rubbing and work hardening, especially in stainless and HRSA. Maintain proper chip load and avoid hesitation feed at any point in the cycle.</div>
-                  <div><span className="font-semibold text-white">Through-spindle coolant changes everything.</span> Chip evacuation becomes force-assisted, heat is removed at the cutting edge, and you can drill deeper, faster, and more reliably. Under 3×D: no peck needed. 3–5×D: light chip break if needed. 5×D+: controlled peck or high-pressure coolant required. Coolant pressure matters — 300+ PSI minimum, 1000+ PSI for stainless and Inconel.</div>
-                  <div><span className="font-semibold text-white">No coolant = your responsibility to manage chips.</span> Without through coolant you must peck — no exceptions on deeper holes. 1–2×D: light peck. 3×D+: mandatory peck cycle. Use G73 (high-speed peck) for most carbide drilling; G83 (full retract) for deep holes or poor chip formers. Air blast and MQL help significantly — avoid running completely dry if possible.</div>
-                  <div><span className="font-semibold text-white">Spot drill angle must equal or exceed your drill point angle.</span> If the spot angle is smaller than the drill point angle, the chisel edge contacts first — the drill walks, loads unevenly, and chips. Common pairings: 118° drill → 120–140° spot; 135° drill → 140° spot; 140°+ drill → match or exceed. Only spot deep enough to create a chamfered seat — spot diameter ≈ drill diameter.</div>
-                  <div><span className="font-semibold text-white">Control chip shape without coolant.</span> You want short 6's and 9's — not stringers or bird nests. Increase feed to shorten chips; reduce SFM to reduce heat and stringing. Non-coolant drilling typically runs 20–40% lower SFM than coolant-fed.</div>
-                  <div><span className="font-semibold text-white">Entry and exit control.</span> Always spot or chamfer before drilling, especially on holes deeper than 3×D. Reduce feed 30–50% at breakthrough to prevent edge grabbing and chip packing on exit.</div>
-                  <div><span className="font-semibold text-white">Runout is a silent killer.</span> Target ≤0.0005" TIR — beyond that one flute does all the work and the drill fails instantly. Hydraulic or shrink-fit holders preferred; avoid long ER stickout.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Margin chipping = poor chip evacuation. Corner breakdown = feed too low (rubbing). Catastrophic break = chip packing or coolant loss. Built-up edge = aluminum or stainless without lubrication. Work hardening = stainless/HRSA with hesitation feed or too low chip load.</div>
-                </div>
-              )}
-            </div>
-          )}
-
           </>) : null}
 
           {/* Reaming Tool Geometry */}
@@ -6270,37 +6215,6 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* Machining Tips accordion — endmill milling */}
-          {operation === "milling" && form.tool_type !== "chamfer_mill" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <div>
-                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                  {form.mode && MILLING_MODE_TIPS[form.mode] && (
-                    <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
-                      — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring"}[form.mode] ?? ""}
-                    </span>
-                  )}
-                </div>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (() => {
-                const tips = MILLING_MODE_TIPS[form.mode] ?? MILLING_MODE_TIPS.hem;
-                return (
-                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                    {tips.map((tip, i) => (
-                      <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
@@ -6309,8 +6223,8 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Standard WOC/DOC (hidden for surfacing mode) ─────────────────── */}
-          {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
+          {/* ── Standard WOC/DOC (hidden for surfacing mode and chamfer_mill) ── */}
+          {form.mode !== "surfacing" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
@@ -6565,7 +6479,7 @@ ${stabSection}
                   }}
                 />
                 <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(3))}xD` : ""}
+                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
                 </span>
               </div>
               {/* DOC Low/Med/High buttons */}
@@ -6586,7 +6500,7 @@ ${stabSection}
                         onClick={() => {
                           const rawInches = val * dia;
                           const clampedInches = form.loc > 0 ? Math.min(rawInches, form.loc) : rawInches;
-                          const clampedXd = clampedInches / dia;
+                          const clampedXd = Math.round((clampedInches / dia) * 1000) / 1000;
                           setForm((p) => ({ ...p, doc_xd: clampedXd }));
                           setDocText(clampedInches.toFixed(3));
                           setDocPreset(clampedXd < val - 0.001 ? null : key);
@@ -6605,7 +6519,7 @@ ${stabSection}
                 );
               })()}
               {/* DOC out-of-range note — suppressed for circ_interp (DOC = full bore depth, not axial pitch) */}
-              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && form.mode !== "circ_interp" && (() => {
+              {DOC_PRESETS[form.mode] && form.doc_xd > 0 && (form.mode as string) !== "circ_interp" && (() => {
                 const dp = DOC_PRESETS[form.mode];
                 const isHem = form.mode === "hem" || form.mode === "trochoidal";
                 const locXd = form.loc > 0 && form.tool_dia > 0 ? form.loc / form.tool_dia : null;
@@ -6817,7 +6731,7 @@ ${stabSection}
                   { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: form.tool_type !== "chamfer_mill" },
                   { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
                   { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" },
-                  { key: "straight", label: "Straight-In",     color: "text-amber-400 border-amber-500/60",  recommended: false },
+                  { key: "straight", label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",  recommended: false },
                 ].map(({ key, label, color, recommended }) => {
                   const checked = entryTypes.includes(key);
                   return (
@@ -6940,6 +6854,27 @@ ${stabSection}
           ) : threadResult ? (
             /* ── THREAD MILLING OUTPUT ───────────────────────────── */
             <>
+              {/* Machining Tips — thread milling (top of results) */}
+              <div className="mb-4 rounded-xl border border-zinc-700 overflow-hidden">
+                <button type="button" className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors" onClick={() => setMachiningTipsOpen(o => !o)}>
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    <div><span className="font-semibold text-white">Deflection-controlled process — not horsepower.</span> Thread accuracy comes down to deflection and radial force, not spindle load. If thread size is inconsistent it's deflection or runout — not your CAM.</div>
+                    <div><span className="font-semibold text-white">Always climb mill.</span> Lower cutting forces, better finish, less rubbing at entry/exit. Exception: thin-wall or unstable parts may need conventional to prevent pull-in. Internal threads — almost always climb.</div>
+                    <div><span className="font-semibold text-white">Radial engagement 1–5% of diameter.</span> Threadmilling is a low-engagement finishing process. Too much WOC causes chatter, pitch error, and oversized threads. If threads look oversized or "drunken" — WOC too high or deflection problem.</div>
+                    <div><span className="font-semibold text-white">Chip load balance is critical.</span> Too light = rubbing = rapid wear. Too heavy = deflection = pitch and size issues. Typical range: 0.0005–0.0025 IPT. Threadmills fail more from rubbing than overload.</div>
+                    <div><span className="font-semibold text-white">Top-down vs bottom-up:</span> Top-down is the default and works well for most blind holes and shorter threads. Bottom-up is strongly preferred for deep threads (&gt;2×D), HRSA materials (Inconel, Ti, stainless), and anywhere chip evacuation is poor — it pulls chips up and out instead of packing them in. Random breakage after good first parts is almost always chip packing from top-down in a tough material. The engine auto-selects based on material and depth — you can override if your setup requires.</div>
+                    <div><span className="font-semibold text-white">Arc lead-in and lead-out are not optional.</span> Never drop straight in or stop at the endpoint. Use a 0.5–1.0× tool dia arc entry and arc exit. Eliminates notch wear and dwell marks at the start point — the #1 cause of premature chipping.</div>
+                    <div><span className="font-semibold text-white">Deep threads (&gt;2×D):</span> Break into multiple Z passes and reduce chip load with depth. At 2×D reduce IPT ~20–30%; at 4×D consider multiple radial passes as well.</div>
+                    <div><span className="font-semibold text-white">Chip evacuation is everything.</span> Chip packing in internal threads = instant failure. Flood coolant for steel/stainless; high-pressure coolant for HRSA; air blast for aluminum. Never recut chips.</div>
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Premature wear = rubbing (increase IPT slightly). Chipping = no lead-in arc. Oversize threads = WOC or deflection too high. Poor finish = chip recutting. Breakage = chip packing (reduce DOC or improve coolant).</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (60-Deg Tooth Profile Thread Mills) for you — contact us!</span></div>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Kpi label="RPM"           hint="Spindle speed for thread milling, based on target SFM at the cutter OD." value={fmtInt(threadResult.rpm)} />
                 <Kpi label="SFM"           hint="Surface Feet per Minute at the cutter OD. Thread form engagement reduces SFM target vs. flat milling." value={fmtNum(threadResult.sfm, 0)} />
@@ -7246,6 +7181,27 @@ ${stabSection}
           ) : reamResult ? (
             /* ── REAMING OUTPUT ──────────────────────────────────── */
             <>
+              {/* Machining Tips — reaming (top of results) */}
+              <div className="mb-4 rounded-xl border border-zinc-700 overflow-hidden">
+                <button type="button" className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors" onClick={() => setMachiningTipsOpen(o => !o)}>
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    <div><span className="font-semibold text-white">Pre-drill stock is everything.</span> Reamers are finishing tools — not hole makers. Too little stock = rubbing + size drift. Too much = chatter + oversize + wear. Typical allowance: ≤1/4" dia → +0.0015–0.0025"; 1/4–1/2" → +0.002–0.003"; &gt;1/2" → +0.003–0.005". The engine auto-calculates this from your finished hole diameter.</div>
+                    <div><span className="font-semibold text-white">Never baby a reamer.</span> Low feed = rubbing = poor finish + taper. Feed rates are higher than most expect: 0.0015–0.004 IPR for small tools, 0.003–0.008 IPR for larger. Run 50–70% of drilling SFM for that material.</div>
+                    <div><span className="font-semibold text-white">Feed rate controls size.</span> Oversize hole → reduce feed slightly, check runout, reduce stock allowance. Undersize → increase feed or stock slightly. Feed directly affects finished size more than most realize — you can dial tenths with feed adjustments.</div>
+                    <div><span className="font-semibold text-white">Helix direction is an application choice, not a speed/feed choice.</span> LHH/RHC (left-hand helix, right-hand cut) pushes chips forward ahead of the tool — correct for through holes where chips can exit cleanly. RHH/RHC (right-hand helix, right-hand cut) pulls chips back up toward the spindle — correct for blind holes where you cannot drive chips into the bottom. Both designs start at the same SFM and feed for a given material and diameter. Adjust from that baseline based on hole depth, coolant effectiveness, stock allowance, and finish results — not because of helix hand itself. If the wrong helix is chosen the symptoms are: poor finish, size drift, bellmouth/taper, chip packing, or premature wear.</div>
+                    <div><span className="font-semibold text-white">Never peck a reamer.</span> No G83, no chip-breaking cycles. If chips are packing — wrong flute style, wrong coolant, or too deep for a straight flute. Switch to spiral flute or add through-spindle coolant instead.</div>
+                    <div><span className="font-semibold text-white">Chamfer the hole entry.</span> Sharp edge entry chips margins instantly. A countersink or entry chamfer before reaming dramatically improves size consistency and tool life.</div>
+                    <div><span className="font-semibold text-white">Runout kills accuracy.</span> Target ≤0.0002" TIR — absolute max 0.0005". Any runout beyond that creates an oversize hole immediately. Hydraulic or shrink-fit holders only. Avoid worn collets and long ER stickout.</div>
+                    <div><span className="font-semibold text-white">Coolant matters.</span> Through-spindle is ideal for consistent size and finish. Flood aimed directly at entry is next best. In stainless and titanium, chip evacuation matters more than speed — use the strongest coolant available and don't dwell at depth.</div>
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Oversize = runout, too much stock, or low feed. Tapered hole = deflection or poor entry alignment. Bad finish = rubbing (low feed) or chip packing. Chipping = no entry chamfer or interrupted entry. Built-up edge = wrong coating or SFM too low.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Reamers & Step Reamers) for you — contact us!</span></div>
+                  </div>
+                )}
+              </div>
               {/* KPI grid */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Kpi label="RPM"          hint="Spindle speed for reaming. Significantly lower than drilling — typically 50–65% of the equivalent drill speed to maintain surface finish and dimensional accuracy." value={fmtInt(reamResult.rpm)} />
@@ -7589,6 +7545,26 @@ ${stabSection}
           ) : drillResult ? (
             /* ── DRILLING OUTPUT ─────────────────────────────────── */
             <>
+              {/* Machining Tips — drilling (top of results) */}
+              <div className="mb-4 rounded-xl border border-zinc-700 overflow-hidden">
+                <button type="button" className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors" onClick={() => setMachiningTipsOpen(o => !o)}>
+                  <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (
+                  <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                    <div><span className="font-semibold text-white">Never baby a carbide drill — it needs load to live.</span> Low feed causes rubbing and work hardening, especially in stainless and HRSA. Maintain proper chip load and avoid hesitation feed at any point in the cycle.</div>
+                    <div><span className="font-semibold text-white">Through-spindle coolant changes everything.</span> Chip evacuation becomes force-assisted, heat is removed at the cutting edge, and you can drill deeper, faster, and more reliably. Under 3×D: no peck needed. 3–5×D: light chip break if needed. 5×D+: controlled peck or high-pressure coolant required. Coolant pressure matters — 300+ PSI minimum, 1000+ PSI for stainless and Inconel.</div>
+                    <div><span className="font-semibold text-white">No coolant = your responsibility to manage chips.</span> Without through coolant you must peck — no exceptions on deeper holes. 1–2×D: light peck. 3×D+: mandatory peck cycle. Use G73 (high-speed peck) for most carbide drilling; G83 (full retract) for deep holes or poor chip formers. Air blast and MQL help significantly — avoid running completely dry if possible.</div>
+                    <div><span className="font-semibold text-white">Spot drill angle must equal or exceed your drill point angle.</span> If the spot angle is smaller than the drill point angle, the chisel edge contacts first — the drill walks, loads unevenly, and chips. Common pairings: 118° drill → 120–140° spot; 135° drill → 140° spot; 140°+ drill → match or exceed. Only spot deep enough to create a chamfered seat — spot diameter ≈ drill diameter. <span className="text-orange-400 font-semibold">Core Cutter can quote spot drills at any angle — contact us.</span></div>
+                    <div><span className="font-semibold text-white">Control chip shape without coolant.</span> You want short 6's and 9's — not stringers or bird nests. Increase feed to shorten chips; reduce SFM to reduce heat and stringing. Non-coolant drilling typically runs 20–40% lower SFM than coolant-fed.</div>
+                    <div><span className="font-semibold text-white">Entry and exit control.</span> Always spot or chamfer before drilling, especially on holes deeper than 3×D. Reduce feed 30–50% at breakthrough to prevent edge grabbing and chip packing on exit.</div>
+                    <div><span className="font-semibold text-white">Runout is a silent killer.</span> Target ≤0.0005" TIR — beyond that one flute does all the work and the drill fails instantly. Hydraulic or shrink-fit holders preferred; avoid long ER stickout.</div>
+                    <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Failure modes:</span> Margin chipping = poor chip evacuation. Corner breakdown = feed too low (rubbing). Catastrophic break = chip packing or coolant loss. Built-up edge = aluminum or stainless without lubrication. Work hardening = stainless/HRSA with hesitation feed or too low chip load.</div>
+                    <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Drills & Step Drills) for you — contact us!</span></div>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Kpi label="RPM"           hint="Spindle speed for this drill, based on target SFM for the material and drill diameter, capped at your Max RPM setting." value={fmtInt(drillResult.rpm)} />
                 <Kpi label="SFM"           hint="Surface Feet per Minute at the drill OD. Primary driver of tool life and heat in drilling. For step drills, SFM is based on the largest (outer) diameter." value={fmtNum(drillResult.sfm, 0)} />
@@ -7880,6 +7856,38 @@ ${stabSection}
             </>
           ) : (
             <>
+              {/* Machining Tips accordion — endmill milling (top of results) */}
+              {operation === "milling" && form.tool_type !== "chamfer_mill" && (
+                <div className="mb-4 rounded-xl border border-zinc-700 overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                    onClick={() => setMachiningTipsOpen(o => !o)}
+                  >
+                    <div>
+                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                      {form.mode && MILLING_MODE_TIPS[form.mode] && (
+                        <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
+                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring"}[form.mode] ?? ""}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {machiningTipsOpen && (() => {
+                    const tips = MILLING_MODE_TIPS[form.mode] ?? MILLING_MODE_TIPS.hem;
+                    return (
+                      <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                        {tips.map((tip, i) => (
+                          <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
+                        ))}
+                        <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Endmills & Special Profiles) for you — contact us!</span></div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Chamfer Mill: geometry + chip thinning panel */}
               {chamferResult && (
                 <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 text-sm space-y-3">
@@ -8176,142 +8184,6 @@ ${stabSection}
                   ))}
                 </div>
               )}
-
-              {/* Optimal Tool Recommendation Card */}
-              {optimalLoading && (
-                <div className="mb-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
-                  Finding optimal tool match…
-                </div>
-              )}
-              {!optimalLoading && optimalRec && (() => {
-                const rec = optimalRec;
-                const recSku = rec.recommended_sku;
-                const recCust = rec.recommended_result?.customer ?? {};
-                const recEng  = rec.recommended_result?.engineering ?? {};
-                const recStab = rec.recommended_result?.stability ?? {};
-                const curMrr     = customer?.mrr_in3_min ?? 0;
-                const recMrr     = recCust?.mrr_in3_min ?? 0;
-                const curFeed    = customer?.feed_ipm ?? 0;
-                const recFeed    = recCust?.feed_ipm ?? 0;
-                const curStabPct = result?.stability?.deflection_pct ?? null;
-                const recStabPct = recStab?.deflection_pct ?? null;
-                const curForce   = result?.engineering?.force_lbf ?? null;
-                const recForce   = recEng?.force_lbf ?? null;
-                const geomLabel: Record<string, string> = {
-                  chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std"
-                };
-                const tags = [
-                  recSku.geometry && recSku.geometry !== "standard" ? geomLabel[recSku.geometry] ?? recSku.geometry : null,
-                  recSku.coating ?? null,
-                  recSku.series ?? null,
-                  recSku.variable_pitch && recSku.variable_helix ? "Var Pitch+Helix"
-                    : recSku.variable_pitch ? "Var Pitch"
-                    : recSku.variable_helix ? "Var Helix" : null,
-                ].filter(Boolean).join(" · ");
-                const geom = recSku.geometry ?? "standard";
-                const wocOk = geom === "truncated_rougher" ? (form.woc_pct ?? 0) >= 10
-                            : geom === "chipbreaker"       ? (form.woc_pct ?? 0) >= 8
-                            : true;
-
-                // Comparison rows — only show rows where we have both values
-                const cmpRows: { label: string; cur: string; opt: string; better: boolean }[] = [];
-                const meaningfulGain = (cur: number, opt: number, pct = 5) => Math.abs((opt - cur) / (cur || 1)) * 100 >= pct;
-                if (curStabPct != null && recStabPct != null)
-                  cmpRows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct && meaningfulGain(curStabPct, recStabPct) });
-                if (curForce != null && recForce != null)
-                  cmpRows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce && meaningfulGain(curForce, recForce) });
-                if (curMrr > 0 && recMrr > 0)
-                  cmpRows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr && meaningfulGain(curMrr, recMrr) });
-                if (curFeed > 0 && recFeed > 0)
-                  cmpRows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed && meaningfulGain(curFeed, recFeed) });
-
-                return (
-                  <div className="mb-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 overflow-hidden">
-                    {/* Collapsed ribbon — always visible */}
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-emerald-900/20 transition-colors"
-                      onClick={() => setOptimalExpanded(x => !x)}
-                    >
-                      <span className="text-xs font-semibold text-emerald-300">
-                        💡 This tool option might be worth looking at too: <span className="text-white">EDP# {recSku.edp}</span>
-                        {tags ? <span className="ml-1.5 font-normal text-zinc-400">· {tags}</span> : null}
-                      </span>
-                      <span className="text-emerald-400 text-xs ml-2">{optimalExpanded ? "▲" : "▼"}</span>
-                    </button>
-
-                    {/* Expanded detail panel */}
-                    {optimalExpanded && (
-                      <div className="px-4 pb-3 space-y-2 border-t border-emerald-700/30">
-                        {/* Side-by-side comparison table */}
-                        {cmpRows.length > 0 && (
-                          <div className="rounded-lg overflow-hidden border border-zinc-700/50 text-xs mt-2">
-                            <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                              <span></span>
-                              <span className="text-center">Current</span>
-                              <span className="text-center text-emerald-400">Optimized</span>
-                            </div>
-                            {cmpRows.map((r) => (
-                              <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
-                                <span className="text-zinc-400">{r.label}</span>
-                                <span className="text-center text-zinc-300">{r.cur}</span>
-                                <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : "text-zinc-300"}`}>
-                                  {r.opt}{r.better ? " ✓" : ""}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Geometry benefit note */}
-                        {geom === "chipbreaker" && (
-                          <p className="text-[11px] text-zinc-400 leading-relaxed">
-                            Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate. MRR stays similar; the gain is stability and tool life.
-                          </p>
-                        )}
-                        {geom === "truncated_rougher" && (
-                          <p className="text-[11px] text-zinc-400 leading-relaxed">
-                            VXR (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
-                          </p>
-                        )}
-                        {rec.rigidity_note && (
-                          <p className="text-[11px] text-amber-400 leading-relaxed">
-                            ⚠ {rec.rigidity_note}
-                          </p>
-                        )}
-                        {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && form.mode !== "finish" && (
-                          <p className="text-[11px] text-zinc-400 leading-relaxed">
-                            More flutes means a higher feed rate at the same chip load per tooth — directly increasing MRR with the same spindle speed.
-                          </p>
-                        )}
-                        {form.mode === "finish" && recSku.flutes > (form.flutes ?? 0) && (
-                          <p className="text-[11px] text-zinc-400 leading-relaxed">
-                            More flutes reduce the chip load per tooth, lower cutting forces, and dampen chatter — all critical for surface finish quality. Run at full SFM, keep feed controlled. Flood coolant or mist for steel/stainless; air blast for aluminum to prevent chip recutting.
-                          </p>
-                        )}
-
-                        {/* WOC warning only when geometry won't engage */}
-                        {!wocOk && (
-                          <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
-                            ⚠ {geom === "truncated_rougher" ? "VRX requires ≥10% WOC" : "CB requires ≥8% WOC"} — increase WOC after switching.
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
-                          onClick={() => {
-                            applySkuToForm(recSku as any);
-                            setOptimalRec(null);
-                            setTimeout(() => runRef.current(), 100);
-                          }}
-                        >
-                          Run Optimal Tool Parameters
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
 
               {/* Customer KPIs (single grid, auto-flows) */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -8735,7 +8607,7 @@ ${stabSection}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">No pre-drilled hole? Use helical interpolation entry in CAM</span> — ramp in a continuous helix to bore depth, then circular passes to size the wall. Set ramp feed to <strong>40–50% of Feed (IPM)</strong>. Ramp angle ≤2°; center-cutting geometry required.</p>
                         {(() => {
                           const D = form.tool_dia;
-                          const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : form.bore_dia;
+                          const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : (form as any).bore_dia;
                           if (!(D > 0) || !(boreDia > 0)) return (
                             <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> Enter tool and bore diameters above to see whether helical entry leaves a standing post.</p>
                           );
@@ -8763,7 +8635,7 @@ ${stabSection}
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entering solid stock (no pre-hole)?</span> Use a helical interpolation entry in CAM — ramp the tool in a continuous helix (circular XY + descending Z) to depth, then open to width with HEM passes. Set ramp feed to <strong>40–50% of the lateral feed</strong> shown in results. Ramp angle ≤2–3°; verify center-cutting geometry.</p>
+                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entry order of preference:</span> ① Pre-drilled hole (best — cleanest entry, zero edge shock) → ② Sweep-in / roll-in arc from outside stock → ③ Helical interpolation (circular XY + descending Z, ramp ≤2–3°, ramp feed 40–50% of lateral) → ④ Linear ramp at 2–5°. Never straight plunge into full-width material.</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
                         <p className="text-[10px] text-sky-200">• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
                       </>)}
@@ -9020,6 +8892,12 @@ ${stabSection}
                       <span className="text-[9px] text-zinc-500">★ = recommended</span>
                     </div>
 
+                    {(form.mode === "hem" || form.mode === "trochoidal") && (
+                      <div className="rounded-md bg-amber-950/40 border border-amber-600/40 px-2.5 py-1.5">
+                        <p className="text-[10px] text-amber-300"><span className="font-semibold">Pre-drilled hole is the preferred HEM start.</span> Drop the tool into an existing hole at your desired HEM DOC — no edge contact at entry, zero chip load spike, and no first-tooth wear or degradation. If a pre-hole isn't possible, use a sweep-in arc from outside stock.</p>
+                      </div>
+                    )}
+
                     {caution && <div className="grid grid-cols-2">{cautionBanner}</div>}
 
                     <div className="space-y-3 text-xs">
@@ -9078,17 +8956,17 @@ ${stabSection}
                         </div>
                       )}
 
-                      {/* Straight-in */}
+                      {/* Straight Plunge */}
                       {entryTypes.includes("straight") && (
                         <div>
                           <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight-In Entry</span>
-                            <span className="text-[9px] text-amber-600 ml-2">Not recommended</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Plunge</span>
+                            <span className="text-[9px] text-amber-600 ml-2">Rarely correct</span>
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div className="col-span-2"><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{em.straight_entry_ipm?.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}% until full engagement)</span></span></div>
                           </div>
-                          <p className="text-[10px] text-amber-600/80 mt-1">⚠ Full WOC engages instantly — maximum edge shock. Use only when part geometry prevents arc or ramp approach. Run at {feedPct}% feed minimum; increase to full only after tool is fully engaged.</p>
+                          <p className="text-[10px] text-amber-600/80 mt-1">⚠ Straight plunging is what a drill is made to do — not an endmill. Full axial load hits instantly, edge shock is severe, and the bottom cutting geometry on most endmills is not designed for it. This takes a huge toll on the tool and is rarely the right call. Use a ramp, helical entry, or pre-drilled hole instead.</p>
                         </div>
                       )}
 
@@ -9203,12 +9081,137 @@ ${stabSection}
         </CardContent>
       </Card>
 
+      {/* Optimal Tool Recommendation Card — between results and stability */}
+      {optimalLoading && (
+        <div className="mt-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
+          Finding optimal tool match…
+        </div>
+      )}
+      {!optimalLoading && optimalRec && (() => {
+        const rec = optimalRec;
+        const recSku = rec.recommended_sku;
+        const recCust = rec.recommended_result?.customer ?? {};
+        const recEng  = rec.recommended_result?.engineering ?? {};
+        const recStab = rec.recommended_result?.stability ?? {};
+        const curMrr     = customer?.mrr_in3_min ?? 0;
+        const recMrr     = recCust?.mrr_in3_min ?? 0;
+        const curFeed    = customer?.feed_ipm ?? 0;
+        const recFeed    = recCust?.feed_ipm ?? 0;
+        const curStabPct = result?.stability?.deflection_pct ?? null;
+        const recStabPct = recStab?.deflection_pct ?? null;
+        const curForce   = result?.engineering?.force_lbf ?? null;
+        const recForce   = recEng?.force_lbf ?? null;
+        const geomLabel: Record<string, string> = {
+          chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std"
+        };
+        const tags = [
+          recSku.geometry && recSku.geometry !== "standard" ? geomLabel[recSku.geometry] ?? recSku.geometry : null,
+          recSku.coating ?? null,
+          recSku.series ?? null,
+          recSku.variable_pitch && recSku.variable_helix ? "Var Pitch+Helix"
+            : recSku.variable_pitch ? "Var Pitch"
+            : recSku.variable_helix ? "Var Helix" : null,
+        ].filter(Boolean).join(" · ");
+        const geom = recSku.geometry ?? "standard";
+        const wocOk = geom === "truncated_rougher" ? (form.woc_pct ?? 0) >= 10
+                    : geom === "chipbreaker"       ? (form.woc_pct ?? 0) >= 8
+                    : true;
+        const cmpRows: { label: string; cur: string; opt: string; better: boolean }[] = [];
+        const meaningfulGain = (cur: number, opt: number, pct = 5) => Math.abs((opt - cur) / (cur || 1)) * 100 >= pct;
+        if (curStabPct != null && recStabPct != null)
+          cmpRows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct && meaningfulGain(curStabPct, recStabPct) });
+        if (curForce != null && recForce != null)
+          cmpRows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce && meaningfulGain(curForce, recForce) });
+        if (curMrr > 0 && recMrr > 0)
+          cmpRows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr && meaningfulGain(curMrr, recMrr) });
+        if (curFeed > 0 && recFeed > 0)
+          cmpRows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed && meaningfulGain(curFeed, recFeed) });
+        return (
+          <div className="mt-4 rounded-xl border border-emerald-600/50 bg-emerald-950/25 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-emerald-900/20 transition-colors"
+              onClick={() => setOptimalExpanded(x => !x)}
+            >
+              <span className="text-xs font-semibold text-emerald-300">
+                💡 This tool option might be worth looking at too: <span className="text-white">EDP# {recSku.edp}</span>
+                {tags ? <span className="ml-1.5 font-normal text-zinc-400">· {tags}</span> : null}
+              </span>
+              <span className="text-emerald-400 text-xs ml-2">{optimalExpanded ? "▲" : "▼"}</span>
+            </button>
+            {optimalExpanded && (
+              <div className="px-4 pb-3 space-y-2 border-t border-emerald-700/30">
+                {cmpRows.length > 0 && (
+                  <div className="rounded-lg overflow-hidden border border-zinc-700/50 text-xs mt-2">
+                    <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                      <span></span>
+                      <span className="text-center">Current</span>
+                      <span className="text-center text-emerald-400">Optimized</span>
+                    </div>
+                    {cmpRows.map((r) => (
+                      <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                        <span className="text-zinc-400">{r.label}</span>
+                        <span className="text-center text-zinc-300">{r.cur}</span>
+                        <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : "text-zinc-300"}`}>
+                          {r.opt}{r.better ? " ✓" : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {geom === "chipbreaker" && (
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate. MRR stays similar; the gain is stability and tool life.
+                  </p>
+                )}
+                {geom === "truncated_rougher" && (
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    VXR (truncated rougher) geometry reduces radial forces during heavy cuts, improving stability and allowing higher DOC/WOC without chatter.
+                  </p>
+                )}
+                {rec.rigidity_note && (
+                  <p className="text-[11px] text-amber-400 leading-relaxed">
+                    ⚠ {rec.rigidity_note}
+                  </p>
+                )}
+                {geom === "standard" && recSku.flutes > (form.flutes ?? 0) && form.mode !== "finish" && (
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    More flutes means a higher feed rate at the same chip load per tooth — directly increasing MRR with the same spindle speed.
+                  </p>
+                )}
+                {form.mode === "finish" && recSku.flutes > (form.flutes ?? 0) && (
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    More flutes reduce the chip load per tooth, lower cutting forces, and dampen chatter — all critical for surface finish quality. Run at full SFM, keep feed controlled. Flood coolant or mist for steel/stainless; air blast for aluminum to prevent chip recutting.
+                  </p>
+                )}
+                {!wocOk && (
+                  <div className="text-xs rounded px-2 py-1 bg-amber-900/40 border border-amber-600/40 text-amber-300">
+                    ⚠ {geom === "truncated_rougher" ? "VRX requires ≥10% WOC" : "CB requires ≥8% WOC"} — increase WOC after switching.
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
+                  onClick={() => {
+                    applySkuToForm(recSku as any);
+                    setOptimalRec(null);
+                    setTimeout(() => runRef.current(), 100);
+                  }}
+                >
+                  Run Optimal Tool Parameters
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only */}
       {operation === "milling" && (stabilityIndex || stability) && (
-      <div className="rounded-2xl border-2 border-zinc-600 overflow-hidden mt-5">
+      <div className="rounded-2xl border border-card-border overflow-hidden mt-5">
 
         {/* Section header */}
-        <div className="bg-zinc-800/80 border-b-2 border-zinc-600 px-4 py-2.5 flex items-center gap-2">
+        <div className="bg-zinc-800/80 border-b border-card-border px-4 py-2.5 flex items-center gap-2">
           <span className="text-sm font-bold text-zinc-200 tracking-wide">Configuration &amp; Stability Assessment</span>
         </div>
 
