@@ -380,7 +380,7 @@ export default function Mentor() {
   const mentor = useMentor();
 
 
-  const [isoCategory, setIsoCategory] = React.useState<IsoCategory>("P");
+  const [isoCategory, setIsoCategory] = React.useState<IsoCategory | "">("");
   const [matSearchInput, setMatSearchInput]   = React.useState("");
   const [matSearchLoading, setMatSearchLoading] = React.useState(false);
   const [matMatchResult, setMatMatchResult]   = React.useState<{ key: string; label: string; confidence: string; source: string; note: string | null } | null>(null);
@@ -1959,6 +1959,8 @@ export default function Mentor() {
     }
     // Pre-flight validation — show friendly inline warnings instead of a red crash
     const missing: string[] = [];
+    if (!isoCategory) missing.push("Material — select an ISO category and material");
+    else if (!form.material) missing.push("Material — select a specific material from the dropdown");
     if (!(form.machine_hp > 0)) missing.push("Machine HP");
     if (!(form.max_rpm > 0)) missing.push("Max RPM");
     if (!(form.tool_dia > 0)) missing.push("Tool Diameter");
