@@ -5665,6 +5665,8 @@ ${stabSection}
                             <line x1={bodyX1} y1={topY} x2={chamferX} y2={topY} stroke="#888" strokeWidth="1.5"/>
                             {/* Left end cap */}
                             <line x1={bodyX1} y1={topY} x2={bodyX1} y2={clY} stroke="#888" strokeWidth="1.5"/>
+                            {/* "Tool" label rotated inside body */}
+                            <text x={(bodyX1+chamferX)/2} y={(topY+clY)/2} fontSize="11" fill="#f97316" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" transform={`rotate(-90,${(bodyX1+chamferX)/2},${(topY+clY)/2})`} opacity="0.85">Tool</text>
                             {/* Shoulder line where body meets chamfer */}
                             <line x1={chamferX} y1={topY} x2={chamferX} y2={clY} stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
                             {/* Centerline — proper long-short-long drafting linetype */}
@@ -6309,8 +6311,8 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Standard WOC/DOC (hidden for surfacing mode) ─────────────────── */}
-          {form.mode !== "surfacing" && <div className="flex gap-3 items-start">
+          {/* ── Standard WOC/DOC (hidden for surfacing mode and chamfer_mill) ── */}
+          {form.mode !== "surfacing" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
