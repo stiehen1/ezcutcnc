@@ -1959,6 +1959,8 @@ export default function Mentor() {
     }
     // Pre-flight validation — show friendly inline warnings instead of a red crash
     const missing: string[] = [];
+    if (!isoCategory) missing.push("Material — select an ISO category and material");
+    else if (!form.material) missing.push("Material — select a specific material from the dropdown");
     if (!(form.machine_hp > 0)) missing.push("Machine HP");
     if (!(form.max_rpm > 0)) missing.push("Max RPM");
     if (!(form.tool_dia > 0)) missing.push("Tool Diameter");
