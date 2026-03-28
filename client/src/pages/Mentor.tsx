@@ -1162,7 +1162,27 @@ export default function Mentor() {
       if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Safe Lock shank — shrink fit set");
-      toast({ title: "Print uploaded — verify all dimensions", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + "Please verify all dimensions match your print before running.", duration: 8000 });
+      // Build list of which fields were populated
+      const filledFields: string[] = [];
+      if (e.tool_dia > 0) filledFields.push("Tool Dia");
+      if (e.flutes > 0) filledFields.push("Flutes");
+      if (e.loc > 0) filledFields.push("LOC");
+      if (e.lbs > 0) filledFields.push("LBS/TSC");
+      if (e.helix_angle > 0) filledFields.push("Helix");
+      if (e.corner_condition) filledFields.push("Corner");
+      if (e.corner_radius > 0) filledFields.push("Corner Radius");
+      if (e.shank_dia > 0) filledFields.push("Shank Dia");
+      if (e.coating) filledFields.push("Coating");
+      if (e.keyseat_arbor_dia > 0) filledFields.push("Arbor Dia");
+      if (e.dovetail_angle > 0) filledFields.push("Dovetail Angle");
+      if (e.chamfer_angle > 0) filledFields.push("Chamfer Angle");
+      if (e.chamfer_tip_dia > 0) filledFields.push("Tip Dia");
+      if (e.thread_tpi > 0) filledFields.push("TPI");
+      if (e.cutting_material) filledFields.push("Material");
+      const fieldSummary = filledFields.length
+        ? `${filledFields.length} field${filledFields.length > 1 ? "s" : ""} pre-filled: ${filledFields.join(", ")}.`
+        : "No fields could be read.";
+      toast({ title: "Print uploaded — please verify all dimensions", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + fieldSummary + " Verify each one matches your print before running.", duration: 10000 });
     } catch {
       toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
     }
