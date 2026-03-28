@@ -1461,9 +1461,11 @@ export default function Mentor() {
     if (mode === "hem" || mode === "trochoidal") {
       // WOC three-point targets by ISO category (shop-validated HEM ranges)
       const { wocMed: alWocMed } = getHemMed(iso, flutes); // aluminum keeps per-flute table
-      const isVxr = tool_series === "VXR4" || tool_series === "VXR5";
+      const isVxr  = tool_series === "VXR4" || tool_series === "VXR5";
+      const isQtr3 = /^QTR3/i.test(tool_series);
       const hemWoc =
         isVxr                ? { low: 10, med: 15, high: 18 } // VXR truncated rougher — high MRR
+      : isQtr3               ? { low: 7,  med: 9,  high: 10 } // QTR3 small-dia variable-helix
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
@@ -1489,13 +1491,15 @@ export default function Mentor() {
       };
     }
     if (mode === "traditional") {
+      const isQtr3 = /^QTR3/i.test(tool_series);
       const { wocMed, docMed } = getTradMed(iso, flutes);
-      const wocLow  = Math.max(10, Math.round(wocMed * 0.60));
-      const wocHigh = Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
+      const wocLow  = isQtr3 ? 12 : Math.max(10, Math.round(wocMed * 0.60));
+      const wocMedFinal = isQtr3 ? 14 : wocMed;
+      const wocHigh = isQtr3 ? 16 : Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
       return {
-        woc: { low: wocLow, med: wocMed, high: wocHigh },
+        woc: { low: wocLow, med: wocMedFinal, high: wocHigh },
         doc: { low: docLow, med: loc > 0 && dia > 0 ? Math.min(docMed, loc / dia) : docMed, high: Math.round(docHigh * 4) / 4 },
       };
     }
@@ -1829,8 +1833,8 @@ export default function Mentor() {
       tool_type: form_tool_type as any,
       corner_radius: crIn,
       geometry: sku.geometry ?? "standard",
-      variable_pitch: sku.variable_pitch ?? false,
-      variable_helix: sku.variable_helix ?? false,
+      variable_pitch: sku.variable_pitch != null ? sku.variable_pitch : ["QTR3","QTR3-RN"].includes((sku.series ?? "").toUpperCase()),
+      variable_helix: sku.variable_helix != null ? sku.variable_helix : ["QTR3","QTR3-RN"].includes((sku.series ?? "").toUpperCase()),
       shank_dia: Number(sku.shank_dia_in ?? 0),
       stickout: defaultStickout,
       tool_series: sku.series ?? "",
@@ -2173,7 +2177,7 @@ export default function Mentor() {
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>` : "";
     const straightRows = (em && entryTypes.includes("straight")) ? `
-        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight-In Entry</td></tr>
+        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight Plunge</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>` : "";
     const entrySection = (mil && em && (sweepRows || rampRows || helixRows || straightRows)) ? `
       <h3>Entry Moves</h3>
@@ -6475,7 +6479,7 @@ ${stabSection}
                   }}
                 />
                 <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(3))}xD` : ""}
+                  {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
                 </span>
               </div>
               {/* DOC Low/Med/High buttons */}
@@ -6496,7 +6500,7 @@ ${stabSection}
                         onClick={() => {
                           const rawInches = val * dia;
                           const clampedInches = form.loc > 0 ? Math.min(rawInches, form.loc) : rawInches;
-                          const clampedXd = clampedInches / dia;
+                          const clampedXd = Math.round((clampedInches / dia) * 1000) / 1000;
                           setForm((p) => ({ ...p, doc_xd: clampedXd }));
                           setDocText(clampedInches.toFixed(3));
                           setDocPreset(clampedXd < val - 0.001 ? null : key);
@@ -6727,7 +6731,7 @@ ${stabSection}
                   { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: form.tool_type !== "chamfer_mill" },
                   { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
                   { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" },
-                  { key: "straight", label: "Straight-In",     color: "text-amber-400 border-amber-500/60",  recommended: false },
+                  { key: "straight", label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",  recommended: false },
                 ].map(({ key, label, color, recommended }) => {
                   const checked = entryTypes.includes(key);
                   return (
@@ -8888,6 +8892,12 @@ ${stabSection}
                       <span className="text-[9px] text-zinc-500">★ = recommended</span>
                     </div>
 
+                    {(form.mode === "hem" || form.mode === "trochoidal") && (
+                      <div className="rounded-md bg-amber-950/40 border border-amber-600/40 px-2.5 py-1.5">
+                        <p className="text-[10px] text-amber-300"><span className="font-semibold">Pre-drilled hole is the preferred HEM start.</span> Drop the tool into an existing hole at your desired HEM DOC — no edge contact at entry, zero chip load spike, and no first-tooth wear or degradation. If a pre-hole isn't possible, use a sweep-in arc from outside stock.</p>
+                      </div>
+                    )}
+
                     {caution && <div className="grid grid-cols-2">{cautionBanner}</div>}
 
                     <div className="space-y-3 text-xs">
@@ -8946,17 +8956,17 @@ ${stabSection}
                         </div>
                       )}
 
-                      {/* Straight-in */}
+                      {/* Straight Plunge */}
                       {entryTypes.includes("straight") && (
                         <div>
                           <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight-In Entry</span>
-                            <span className="text-[9px] text-amber-600 ml-2">Not recommended</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Plunge</span>
+                            <span className="text-[9px] text-amber-600 ml-2">Rarely correct</span>
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div className="col-span-2"><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{em.straight_entry_ipm?.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}% until full engagement)</span></span></div>
                           </div>
-                          <p className="text-[10px] text-amber-600/80 mt-1">⚠ Full WOC engages instantly — maximum edge shock. Use only when part geometry prevents arc or ramp approach. Run at {feedPct}% feed minimum; increase to full only after tool is fully engaged.</p>
+                          <p className="text-[10px] text-amber-600/80 mt-1">⚠ Straight plunging is what a drill is made to do — not an endmill. Full axial load hits instantly, edge shock is severe, and the bottom cutting geometry on most endmills is not designed for it. This takes a huge toll on the tool and is rarely the right call. Use a ramp, helical entry, or pre-drilled hole instead.</p>
                         </div>
                       )}
 
