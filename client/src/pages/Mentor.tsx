@@ -9198,10 +9198,10 @@ ${stabSection}
 
       {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only */}
       {operation === "milling" && (stabilityIndex || stability) && (
-      <div className="rounded-2xl border-2 border-zinc-600 overflow-hidden mt-5">
+      <div className="rounded-2xl border border-card-border overflow-hidden mt-5">
 
         {/* Section header */}
-        <div className="bg-zinc-800/80 border-b-2 border-zinc-600 px-4 py-2.5 flex items-center gap-2">
+        <div className="bg-zinc-800/80 border-b border-card-border px-4 py-2.5 flex items-center gap-2">
           <span className="text-sm font-bold text-zinc-200 tracking-wide">Configuration &amp; Stability Assessment</span>
         </div>
 
