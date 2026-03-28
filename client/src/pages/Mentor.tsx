@@ -2528,8 +2528,8 @@ ${stabSection}
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }).from(cleanHtml as any, "string" as any).save();
+    // @ts-ignore — html2pdf types don't declare the (src, type) overload
+    }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
