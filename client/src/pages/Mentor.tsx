@@ -1162,7 +1162,7 @@ export default function Mentor() {
       if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Safe Lock shank — shrink fit set");
-      toast({ title: "Print read — verify all dimensions", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + "AI-assisted reads can miss or misread values — please check every field against your print before running.", duration: 8000 });
+      toast({ title: "Print uploaded — verify all dimensions", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + "Please verify all dimensions match your print before running.", duration: 8000 });
     } catch {
       toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
     }
@@ -3890,7 +3890,7 @@ ${stabSection}
           <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">⚠ Print read{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — verify every dimension matches your print before running</span>
+                <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
                 <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
@@ -4033,7 +4033,7 @@ ${stabSection}
             <div className={`rounded-lg border p-3 mb-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">⚠ Print read{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — verify every dimension matches your print before running</span>
+                  <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
                   <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                 </div>
               ) : (
@@ -5354,7 +5354,7 @@ ${stabSection}
               {pdfExtracted ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-amber-400 font-medium">⚠ Print read{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — verify every dimension matches your print before running</span>
+                    <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
                     <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
@@ -5978,7 +5978,7 @@ ${stabSection}
           )}
           {pdfExtracted && (
             <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
-              <span className="text-xs text-amber-400 font-medium">⚠ Print read{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — verify every dimension matches your print before running</span>
+              <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
               <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
@@ -6027,7 +6027,7 @@ ${stabSection}
           <div className={`mt-3 rounded-xl border-2 border-dashed px-4 py-3 ${pdfExtracted ? "border-amber-500 bg-amber-500/10" : "border-zinc-600"}`}>
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-amber-400 font-medium">⚠ Print read{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — verify every dimension matches your print before running</span>
+                <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
                 <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
