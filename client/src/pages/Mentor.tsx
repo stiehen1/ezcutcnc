@@ -5770,16 +5770,16 @@ ${stabSection}
                     inputMode="decimal"
                     className={`no-spinners ${!(form.chamfer_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                     placeholder={(() => {
-                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "face width (in)";
+                      if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return "chamfer length (in)";
                       const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                       const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                       const edgeLen = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
-                      if (!(edgeLen > 0)) return "face width (in)";
+                      if (!(edgeLen > 0)) return "chamfer length (in)";
                       // Sweet spot: middle 60% of edge for CMS, middle 80% for CMH
                       const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
                       const lo = edgeLen * skip;
                       const hi = edgeLen * (1 - skip);
-                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" face`;
+                      return `${lo.toFixed(3)}"–${hi.toFixed(3)}" preferred`;
                     })()}
                     value={chamferDepthText}
                     onChange={(e) => setChamferDepthText(e.target.value)}
@@ -5794,10 +5794,21 @@ ${stabSection}
                     }}
                   />
                   {(() => {
-                    if (!(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
+                    if (!(form.tool_dia > 0) || !(form.chamfer_angle > 0)) return null;
                     const halfRad = (form.chamfer_angle / 2) * (Math.PI / 180);
                     const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                     const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
+                    if (!(edgeLength > 0)) return null;
+                    const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
+                    const lo = edgeLength * skip;
+                    const hi = edgeLength * (1 - skip);
+                    if (!(form.chamfer_depth > 0)) {
+                      return (
+                        <p className="mt-1 text-xs text-zinc-500 leading-snug">
+                          Preferred saddle zone: <span className="text-zinc-400 font-mono">{lo.toFixed(3)}"–{hi.toFixed(3)}"</span> — keeps the cut centered on the edge, away from the tip and shoulder for best tool life and finish.
+                        </p>
+                      );
+                    }
                     const zDepth = form.chamfer_depth * Math.cos(halfRad);
                     if (form.chamfer_depth > edgeLength) {
                       return (
@@ -5809,6 +5820,9 @@ ${stabSection}
                     return (
                       <p className="mt-1 text-xs text-zinc-400">
                         Z depth to program in CAM: <span className="text-blue-400 font-mono font-semibold">{zDepth.toFixed(4)}"</span>
+                        {(form.chamfer_depth < lo || form.chamfer_depth > hi) && (
+                          <span className="ml-2 text-amber-400">⚠ outside preferred saddle zone ({lo.toFixed(3)}"–{hi.toFixed(3)}")</span>
+                        )}
                       </p>
                     );
                   })()}
