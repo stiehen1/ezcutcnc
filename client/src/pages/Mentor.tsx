@@ -1164,7 +1164,7 @@ export default function Mentor() {
       if (e._converted_from_mm) toastParts.push("Metric print — converted to inches");
       if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
-      else if (e.shank_type === "safe_lock") toastParts.push("Safe Lock shank — shrink fit set");
+      else if (e.shank_type === "safe_lock") toastParts.push("Haimer Safe-Lock shank — shrink fit holder set");
       // Build list of which fields were populated
       const filledFields: string[] = [];
       if (e.tool_dia > 0) filledFields.push("Tool Dia");
