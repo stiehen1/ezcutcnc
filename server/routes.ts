@@ -1647,20 +1647,7 @@ export async function registerRoutes(
         ].join("\n"),
       }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
 
-      // Notify sales
-      await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
-        to,
-        subject: `New Lead — ${operation ?? "unknown op"} · ${material ?? "unknown material"} — ${email}`,
-        text: [
-          `Email: ${email}`,
-          `Operation: ${operation ?? "—"}`,
-          `Material: ${material ?? "—"}`,
-          `Machine: ${machine_name ?? "—"}`,
-          "",
-          results_text ?? "(no results)",
-        ].join("\n"),
-      }).catch((e: any) => console.warn("[Results Email] Sales notify failed:", e?.message));
+      // Per-query sales notification removed — registration emails handle new user alerts
 
       return res.json({ ok: true });
     } catch (err: any) {
@@ -1708,11 +1695,39 @@ export async function registerRoutes(
       const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
       const geo = await geoFromIp(clientIp);
       const { pool } = await import("./db");
-      await pool.query(
+      const isNew = await pool.query(
         `INSERT INTO leads (email, operation, name, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT DO NOTHING RETURNING id`,
         [email.toLowerCase().trim(), "tool_request", name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
       );
+      // Send registration notification to Scott for new users only (not duplicates)
+      if (isNew.rowCount && isNew.rowCount > 0) {
+        const smtpUser = process.env.SMTP_USER || "";
+        const smtpPass = process.env.SMTP_PASS || "";
+        if (smtpUser && smtpPass) {
+          try {
+            const transporter = nodemailer.createTransport({
+              host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
+              port: parseInt(process.env.SMTP_PORT || "587", 10),
+              secure: parseInt(process.env.SMTP_PORT || "587", 10) === 465,
+              auth: { user: smtpUser, pass: smtpPass },
+            });
+            await transporter.sendMail({
+              from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+              to: "scott@corecutterusa.com",
+              subject: `New App Registration — ${name ?? email}`,
+              text: [
+                `Name:     ${name ?? "—"}`,
+                `Email:    ${email}`,
+                `Location: ${[geo.city, geo.region, geo.country].filter(Boolean).join(", ") || "Unknown"}`,
+                `IP:       ${clientIp}`,
+              ].join("\n"),
+            });
+          } catch (mailErr: any) {
+            console.warn("[Register] Notification email failed:", mailErr?.message);
+          }
+        }
+      }
       res.json({ ok: true });
     } catch (err: any) {
       console.warn("[Register]", err?.message);

@@ -127,7 +127,7 @@ const HELP_SECTIONS = [
   {
     title: "Tool Finder",
     icon: "🔍",
-    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the advisor. Each tool includes a downloadable STP file for direct use in your CAM system.",
+    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the mentor. Each tool includes a downloadable STP file for direct use in your CAM system.",
   },
   {
     title: "Calculators",
@@ -135,14 +135,14 @@ const HELP_SECTIONS = [
     body: "Standalone reference calculators — chip thinning, minimum chip thickness, arc entry, no-post bore sizing, and more. Static reference tools.",
   },
   {
-    title: "Milling & Chamfer Advisor",
+    title: "Milling & Chamfer Mentor",
     icon: "⚙️",
     body: "Speeds, feeds, and full stability analysis for standard Core Cutter end mills and chamfer mills. Enter your material, tool, machine, and cut parameters — the engine delivers RPM, feed, chip load, HP draw, and a complete stability audit including chatter risk analysis. Results can be exported as a formatted PDF report or a CAM setup sheet for notepad/CNC use — your email is required for all exports.",
   },
   {
-    title: "Specials Advisor (Dovetail, Keyseat, Thread Mill & more)",
+    title: "Specials Mentor (Dovetail, Keyseat, Thread Mill & more)",
     icon: "📐",
-    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the advisor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. PDF and CAM setup sheet exports are available here too — email required.",
+    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the mentor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. PDF and CAM setup sheet exports are available here too — email required.",
   },
   {
     title: "Toolbox",
@@ -164,7 +164,7 @@ function WelcomeModal() {
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="px-6 pt-6 pb-3 border-b border-zinc-800">
           <p className="text-base font-bold text-white">Welcome to CoreCutCNC</p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">Your physics-based advisor where our engine integrates Core Cutter tool geometry, coating behavior, and cutting data directly into the model — so every recommendation is tailored to the exact cutter you're running.</p>
+          <p className="text-[11px] text-zinc-400 mt-0.5">Your physics-based mentor where our engine integrates Core Cutter tool geometry, coating behavior, and cutting data directly into the model — so every recommendation is tailored to the exact cutter you're running.</p>
         </div>
         <div className="overflow-y-auto flex-1 px-6 py-4 flex flex-col gap-4">
           {HELP_SECTIONS.map(s => (
@@ -190,7 +190,7 @@ function WelcomeModal() {
 
 const OPERATION_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
   milling: {
-    title: "End Mill Advisor",
+    title: "End Mill Mentor",
     sections: [
       { heading: "1. Select Tool Type", body: "Under Operation / Process, select Endmill or Chamfer Mill — this sets the correct geometry model for your calculation." },
       { heading: "2. Select Your Process", body: "Then choose your operation — Milling, Drilling, Reaming, Thread Milling, Keyseat, or Dovetail. This sets the correct calculation model for your job." },
@@ -206,7 +206,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   feedmilling: {
-    title: "Chamfer Mill Advisor",
+    title: "Chamfer Mill Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose the material you're chamfering. SFM and chip load are calibrated per material for chamfer mill geometry. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Enter Tool Info (Specials & Standards)", body: "Enter your Core Cutter EDP # to auto-fill all tool geometry and unlock the calculator — or use Tool Finder to browse and hit Use Tool to transfer automatically. EDP # is required to run a calculation. Once entered, a STP file download for that exact tool is also available for direct use in your CAM system. This section also accommodates special chamfer mill prints from Core Cutter — upload your print to auto-fill dimensions and unlock the calculator for your custom tool." },
@@ -220,7 +220,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   drilling: {
-    title: "Drilling Advisor",
+    title: "Drilling Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose the ISO category and specific material you're cutting. The engine uses calibrated SFM and chip load values validated for each material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Hole Details", body: "Input your hole depth and hole type — through hole, blind, or counterbore. These drive cycle time, peck strategy, and chip evacuation recommendations." },
@@ -233,7 +233,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   reaming: {
-    title: "Reaming Advisor",
+    title: "Reaming Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — reaming SFM is significantly lower than drilling for the same material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Enter Tool Info (Specials Only)", body: "Upload your Core Cutter special reamer print — the app reads the drawing and auto-fills all tool geometry for you. No manual entry required." },
@@ -246,7 +246,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   threadmilling: {
-    title: "Thread Mill Advisor",
+    title: "Thread Mill Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — thread milling SFM and chip load are calibrated per material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Thread Details", body: "Enter the thread you need to cut — final major diameter, pitch diameter, thread depth, thread hand (RH or LH), and your G-code dialect (Fanuc/Haas or Siemens 840D). These drive the helical interpolation path geometry and the ready-to-use G-code output. Cut direction is automatically selected based on your material and hole type — top-down for most applications, bottom-up for tough materials (Inconel, titanium) and blind holes. You can override it if your specific setup requires." },
@@ -259,7 +259,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   keyseat: {
-    title: "Keyseat Cutter Advisor",
+    title: "Keyseat Cutter Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — keyseat cutters run at reduced SFM due to their side-cutting geometry and full-width engagement. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "Machining Strategy", body: "Keyseat cutters are force-dominated tools — your control knobs are chip thickness, tool deflection, and chip evacuation. NOT max RPM or SFM chasing.\n\n• Full slot engagement (180°) is fixed by tool geometry — no chip thinning benefit, high radial load\n• Never treat like an endmill — chip load must be derated 30–50% vs standard slotting IPT\n• Depth strategy: small tools (<3/8\") step down in multiple passes; medium tools can often go full depth with reduced feed; large tools (>3/4\") use a 2-pass approach — 60–70% depth first, then finish pass at full depth with lighter feed\n• Always climb mill — reduces rubbing, improves tool life, better chip evacuation direction\n• Entry: never straight plunge into full width — pre-drill or pre-mill relief if possible, otherwise arc/roll in\n• If it chatters: reduce stickout first, then reduce depth, then reduce feed — in that order" },
@@ -272,7 +272,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   surfacing: {
-    title: "3D Surface Contouring Advisor",
+    title: "3D Surface Contouring Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — surfacing SFM is based on the effective cutting diameter at the contact point, not the tool OD. Soft materials like aluminum allow very high SFM even at small D_eff; tough materials like stainless and titanium need conservative SFM to avoid edge burn at the contact zone. Also confirm your hardness if known — it adjusts SFM automatically." },
       { heading: "2. Tool Setup — Corner Condition", body: "Select Ball Nose or Bull Nose (corner radius) — square-corner endmills are not available in surfacing mode. For bull nose tools, enter the corner radius accurately — D_eff calculation depends on it when step-down (ap) is shallower than the CR." },
@@ -287,7 +287,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   feedmill: {
-    title: "High-Feed Mill Advisor",
+    title: "High-Feed Mill Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — high-feed mills are optimized for light DOC and high feed. They work across steel, stainless, titanium, Inconel, cast iron, and aluminum. Hardness limit is 52 HRC — above that expect rapid corner wear. Enter your actual hardness for the most accurate SFM derate." },
       { heading: "What Makes HFM Different", body: "This is a chip thinning machine, not a conventional rougher.\n\n• 20° lead angle creates extreme radial chip thinning — the programmed IPT is 2–3× the actual chip thickness\n• Forces are redirected axially (into the spindle), not radially — this is why HFM works on long-reach setups\n• WOC is your #1 control knob — target 6–12% of diameter. Sweet spot: 8–10%\n• DOC is typically 0.5–1.5×D (some setups 2×D) — the opposite of conventional logic\n• Low WOC + high feed + moderate DOC + constant-engagement path = maximum MRR with low chatter risk\n\nIf it sounds smooth and light — you're rubbing. If it feels aggressive — you're in the right zone. Never reduce feed as your first move. Adjust WOC first." },
@@ -300,7 +300,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   dovetail: {
-    title: "Dovetail Cutter Advisor",
+    title: "Dovetail Cutter Mentor",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — dovetail cutters run at reduced SFM due to their angled side-cutting geometry and interrupted engagement. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "Machining Strategy", body: "Dovetail cutters are finishing tools — not roughing tools. Zero forgiveness due to their necked geometry, small effective cutting diameter, and long moment arm.\n\n• Pre-machine the slot first with a square or bull nose endmill — leave 0.005\"–0.015\" radial stock per side and open the full axial depth\n• Enter laterally only — never plunge\n• Run the dovetail per side, climb cutting each wall separately\n• Radial engagement: 0.003\"–0.010\" per side maximum\n• Axial DOC: full depth is fine once the slot is roughed\n• Chip load: start at 30–50% of your standard endmill IPT — effective diameter is small and too much chip load causes instant failure\n• If it sounds wrong, it is wrong — dovetails don't forgive" },
@@ -316,7 +316,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
 
 const PAGE_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
   "/": {
-    title: "Milling & Chamfer Advisor",
+    title: "Milling & Chamfer Mentor",
     sections: [],  // replaced dynamically by operation
   },
   "/catalog": {
@@ -326,7 +326,7 @@ const PAGE_HELP: Record<string, { title: string; sections: { heading: string; bo
       { heading: "Tool Type", body: "Select Endmill or Chamfer Mill to narrow results to the correct tool family before applying further filters." },
       { heading: "Filters", body: "Drill-down fields allow you to select specific tool geometry — diameter, flutes, coating, corner condition and more — to filter out tools you don't need and zero in on exactly the right cutter." },
       { heading: "Part Feature Match", body: "Three powerful optional fields that match the tool directly to your part geometry — and can further restrict your filtered results:\n\n• **Final Axial Cut Depth** — ensures the LOC covers your required depth.\n• **Min. Part Radius (Wall to Wall)** — matches the corner radius to your inside wall.\n• **Max. Part Floor Radius (Floor to Wall)** — ensures the corner radius clears your floor blend.\n\nEnter your part dimensions and the finder returns only tools that fit — eliminating guesswork." },
-      { heading: "Use Tool", body: "Found the right cutter? Hit Use Tool on any result to instantly transfer all tool geometry to the Milling & Chamfer Advisor — no typing required." },
+      { heading: "Use Tool", body: "Found the right cutter? Hit Use Tool on any result to instantly transfer all tool geometry to the Milling & Chamfer Mentor — no typing required." },
       { heading: "STP File Downloads", body: "Every EDP has a downloadable STP file for direct use in your CAM system — find the tool and grab the file in one step." },
       { heading: "Not finding what you need?", body: "Use the 'Contact us' link at the bottom of the page — Core Cutter can quote a special to your print." },
     ],
@@ -335,15 +335,15 @@ const PAGE_HELP: Record<string, { title: string; sections: { heading: string; bo
     title: "Toolbox",
     sections: [
       { heading: "Sign In", body: "Enter your email address to receive a one-time code. No password needed — the code signs you in and keeps you logged in on this device." },
-      { heading: "Save a Setup", body: "After running a calculation in the Milling Advisor, click Save Setup. Give it a name or use the default. It saves your full input set." },
-      { heading: "Re-run a Setup", body: "Click Re-run this setup on any saved item to restore all inputs back into the Milling Advisor — ready to calculate or adjust." },
+      { heading: "Save a Setup", body: "After running a calculation in the Milling Mentor, click Save Setup. Give it a name or use the default. It saves your full input set." },
+      { heading: "Re-run a Setup", body: "Click Re-run this setup on any saved item to restore all inputs back into the Milling Mentor — ready to calculate or adjust." },
       { heading: "Save Your Machines", body: "Save your shop machines with spindle HP, taper, RPM, and toolholder info for quick recall on any future job." },
     ],
   },
   "/calculators": {
     title: "Calculators",
     sections: [
-      { heading: "Speed & Feed", body: "RPM ↔ SFM, Feed Rate, Chip Thinning, Feed from SFM, Engagement Angle, Min Chip Thickness. Use these to validate or fine-tune values from the advisor." },
+      { heading: "Speed & Feed", body: "RPM ↔ SFM, Feed Rate, Chip Thinning, Feed from SFM, Engagement Angle, Min Chip Thickness. Use these to validate or fine-tune values from the mentor." },
       { heading: "Surface Finish", body: "Cusp Height (ball end), Effective Diameter (ball end), Surface Finish from step-over, Ball Nose Velocity Adjustment. Useful for finishing pass planning." },
       { heading: "Arcs & Contours", body: "Feed Correction for Arc moves, Helix Entry sizing, No Middle Post bore calculator, Bolt Circle, Chord/Sagitta, Bore Enlargement, Corner Clearance, Entry Angle & Load Spike, Chamfer Mill geometry." },
       { heading: "Hole Making", body: "Tap Drill Size (inch & metric), Drill Point Length, Drilling Torque. Quick reference for any hole-making operation." },
@@ -359,7 +359,7 @@ function HelpButton() {
   const [overviewOpen, setOverviewOpen] = React.useState(false);
   const [location] = useLocation();
 
-  // On the main advisor page, use operation-specific tips
+  // On the main mentor page, use operation-specific tips
   let pageHelp = PAGE_HELP[location] ?? null;
   if (location === "/") {
     const op = localStorage.getItem("cc_operation") || "milling";

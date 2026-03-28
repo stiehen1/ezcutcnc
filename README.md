@@ -1,6 +1,6 @@
-# CoreCutCNC — Machining Advisor by Core Cutter LLC
+# CoreCutCNC — Machining Mentor by Core Cutter LLC
 
-A full-stack machining advisor for CNC shops and sales engineers. Calculates speeds, feeds, depths of cut, cutting forces, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, threadmilling, keyseat, and dovetail operations. Deployed at [corecutcnc.com](https://corecutcnc.com).
+A full-stack Machining Mentor for CNC shops and sales engineers. Calculates speeds, feeds, depths of cut, cutting forces, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, threadmilling, keyseat, and dovetail operations. Deployed at [corecutcnc.com](https://corecutcnc.com).
 
 Each operation includes a **Pro Tips panel** (how to use the app) and a collapsible **Machining Tips & Tricks accordion** (shop-floor best practices per operation type).
 
@@ -18,7 +18,7 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 8. [Material System](#material-system)
 9. [Key Physics Constants](#key-physics-constants)
 10. [Chamfer Mill Physics](#chamfer-mill-physics)
-11. [Stability Advisor](#stability-advisor)
+11. [Stability Mentor](#stability-mentor)
 12. [Toolholder Rigidity Hierarchy](#toolholder-rigidity-hierarchy)
 13. [Workholding Options](#workholding-options)
 14. [EDP Catalog Enrichment](#edp-catalog-enrichment)
@@ -49,7 +49,7 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 | Route | Page | Description |
 |---|---|---|
-| `/` | Mentor | Main machining advisor. Milling (endmill + chamfer mill), drilling, reaming, feed milling, threadmilling, keyseat, dovetail, 3D surface contouring. Also contains the ROI Calculator panel. |
+| `/` | Mentor | Main Machining Mentor. Milling (endmill + chamfer mill), drilling, reaming, feed milling, threadmilling, keyseat, dovetail, 3D surface contouring. Also contains the ROI Calculator panel. |
 | `/toolbox` | Toolbox | SKU catalog browser, EDP lookup, tool specifications, saved ROI comparisons with Load-back support |
 | `/calculators` | Calculators | Standalone shop calculators: Speeds & Feeds, Bolt Circle (with G-code output), Chamfer Mill, Entry Load Spike, and others |
 | `/admin` | Admin | Password-protected admin panel — allowlist management and domain blocklist for access control |
@@ -62,7 +62,7 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 corecuttertoolapp/
 ├── client/src/
 │   ├── pages/
-│   │   ├── Mentor.tsx          # Main advisor UI (~10,000+ lines)
+│   │   ├── Mentor.tsx          # Main mentor UI (~10,000+ lines)
 │   │   ├── Toolbox.tsx         # SKU catalog browser + saved ROI list
 │   │   ├── Calculators.tsx     # Standalone calculators
 │   │   └── Admin.tsx           # Admin access control panel
@@ -399,7 +399,7 @@ Series CMS (2/4 flute, 0° shear) and CMH (3/5 flute, 30° shear angle).
 
 ---
 
-## Stability Advisor
+## Stability Mentor
 
 ### Thresholds (Mentor.tsx)
 
@@ -458,7 +458,7 @@ Vise, 3-jaw chuck, collet fixture, angle plate, magnetic chuck, tombstone, palle
 
 ## EDP Catalog Enrichment
 
-Runs in `server/routes.ts` after the Python engine returns results and before Zod validation. Queries the SKU catalog to surface relevant tool suggestions in the stability advisor.
+Runs in `server/routes.ts` after the Python engine returns results and before Zod validation. Queries the SKU catalog to surface relevant tool suggestions in the Stability Mentor.
 
 - **Flute change suggestions** (`type=tool`): ILIKE match on `derivedBase%` (first-digit replacement, all coating variants)
 - **Diameter change suggestions** (`type=diameter`): full query — flutes + dia + corner + closest LOC subquery; returns all EDPs at that LOC
