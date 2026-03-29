@@ -316,6 +316,7 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Know when to back off HEM parameters.", body: "HEM breaks down when the tool is too long, the machine lacks rigidity, or workholding is weak. When the stability panel goes red, don't abandon HEM — reduce DOC first, then WOC, then feed until you're green. If you can't get green at productive parameters, switch to traditional roughing: wider WOC (30–50%), shallower DOC, slower feed. Short LOC, rigid setup, and high HP machines often favor traditional roughing on cycle time anyway." },
     { title: "Coolant by material.", body: "Steel/stainless — flood or mist; lubrication prevents BUE and galling. HRSA (Inconel, titanium) — never dry; these work-harden instantly from heat and will destroy a tool in seconds without coolant. Aluminum — flood or mist preferred, chip evacuation is priority #1. Cast iron — dry is often correct; coolant causes thermal cracking and smears graphite into the surface. Key rule: if you use coolant, flood it consistently — intermittent coolant causes thermal shock and cracks premium PVD coatings. Either fully wet or fully dry, never interrupted. Through-coolant tools are a major advantage in deep pockets. Sound is your chatter indicator; chip color is your heat indicator." },
     { title: "When can you run dry?", body: "Dry machining works when heat stays in the chip and the coating handles it. Best candidates: cast iron (dry preferred — see above). Aluminum always needs at least air blast — never truly dry; DLC coating (D-Max) handles flood, mist, or air blast equally well and prevents built-up edge in any condition, and high-SFM steel cuts with AlTiN/TiAlN coatings where the coating itself is the heat barrier. Note: thermal shock from flood coolant is significantly reduced in HEM because the tool spends most of its time out of the cut — the short arc of engagement means consistent cooling rather than violent hot/cold cycling. You cannot run dry in: HRSA (Inconel, titanium, cobalt alloys), stainless steel, any deep pocket or blind hole where chips can't escape, or any interrupted cut where the tool needs lubrication to prevent galling at re-entry. If chips are coming out discolored blue or black — you're dry when you shouldn't be." },
+    { title: "QTR3 series — universal high-performance HEM platform.", body: "The QTR3 / QTR3-RN is a 3-flute variable pitch + variable helix (40/41/42°) tool with a 1/4\" shank and 30° included neck transition — designed as a universal HEM workhorse across all ISO materials. The variable helix combination (±1.75× chatter limit) lets it push deeper than most small-diameter tools. P-Max (AlCrN) coating handles heat across ferrous, stainless, titanium, and non-ferrous. HEM WOC by material: P steel 8–12%, M stainless 6–10%, S Ti/HRSA 5–8%, N aluminum 10–20%, K cast iron 10–15%. The 1/4\" shank and 30° neck transition maintain stiffness through the reach range — available in 2×D through 5×D (necked). For long reach (>3×D): drop WOC 10–20%; at 4–5×D drop WOC 20–40% and DOC 10–20%. Core philosophy: run DOC to make money, manage WOC to stay alive." },
   ],
   traditional: [
     { title: "Slotting is the highest-load traditional condition — treat it that way.", body: "Full-width engagement means no chip thinning, high heat, and limited chip escape. Keep DOC conservative (0.5–1.0×D), reduce IPT to 50–70% of side-milling values. Only AL2/AL3 for non-ferrous and VST4 for ferrous/titanium are approved for full slotting. VST6 and VMF are never slotting tools." },
@@ -325,6 +326,7 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Stickout controls everything.", body: "Every extra inch of stickout multiplies deflection by L³. Traditional roughing generates higher radial forces than HEM so the impact is even greater. Fix stickout before any feeds/speeds adjustment — going from 3\" to 2\" stickout can double your achievable feed rate." },
     { title: "Traditional roughing still wins in the right setups.", body: "Short LOC, rigid setup, open geometry, high-HP machine, or simple CAM environment? Traditional roughing beats HEM on cycle time with less programming complexity. It struggles in deep cavities, long reach, hard materials, and low-rigidity setups — that's where you switch strategies." },
     { title: "Climb mill only — and listen to the cut.", body: "Conventional milling in traditional roughing increases tool pressure, heat, and surface roughness. Climb mill on every pass. The cut talks louder in traditional roughing than HEM — use sound as your primary sensor: smooth and consistent means you're in the zone; any pulsing or screaming means back off WOC first." },
+    { title: "QTR3 in traditional roughing — 3-flute chip evacuation lets you run bolder WOC than a 4F or 5F.", body: "The QTR3 / QTR3-RN's 3-flute design with variable pitch+helix (40/41/42°) gives it significantly better chip evacuation than 4-5 flute tools at the same diameter — that translates directly to allowable WOC. P steel: .0625–.125\" run 18–30% WOC; .1875–.250\" run 25–35% (50% valid at .250 in open/rigid setups). Stainless: 15–30%. Ti: 12–25%. Aluminum: 30–50%. Key insight: the 1/4\" shank + 30° neck transition means the necked reach versions hold stiffness better than most competitors' small-diameter tools — drop WOC ~20% per step of reach beyond 3×D, not DOC. Traditional roughing is not this tool's primary application (HEM is) — but it's fully capable, especially on less rigid machines where HEM WOC is too demanding." },
   ],
   finish: [
     { title: "Finishing is force management — not timid cutting.", body: "Target 1–5% WOC. This keeps cutting forces low, deflection minimal, and surface finish consistent. Most shops run finishing too slow and too light — that's the wrong direction. A high-performance finish pass runs fast, controlled, and consistent. Think of it as precision force control, not babying the tool." },
@@ -346,12 +348,16 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
   ],
   slot: [
     { title: "Core Cutter slotting is series-controlled — not every tool is approved.", body: "Non-ferrous: AL2, AL3, AL3-CB. Ferrous & titanium: VST4, VST4-CB, VST5/VST5-CB (≤0.5×D only). VST6, VMF, and all other series are hard-blocked for slotting. These geometries are built for high-efficiency peripheral cutting — not chip-packed full-width engagement. Using them in a true slot causes rapid failure." },
-    { title: "Chip breaker series (CB) is strongly preferred for slotting.", body: "Slots trap chips. CB geometry breaks chips into shorter pieces, improving evacuation in the most chip-congested milling condition. AL3-CB for non-ferrous, VST4-CB for ferrous/titanium, VST5-CB for limited ferrous slotting. When chip evacuation is the #1 failure mode — and in slotting it almost always is — CB tools remove that risk." },
+    { title: "Aluminum slotting tool selection — 2-flute is your insurance policy, 3-flute CB is your profit lever.", body: "2-flute (45° helix, AL2/AL3): evacuation king. Large flute valleys + aggressive chip lift = lowest packing risk. Best for full slotting, deep slots, poor evacuation, or any situation where chip control is uncertain. Start at 1.0×D DOC. 3-flute standard (37° helix): better core rigidity and higher feed potential, but less chip room. Less aggressive evacuation — needs air blast or coolant. Start at 0.75×D DOC. 3-flute chipbreaker (AL3-CB): breaks chips into shorter segments, recovers much of the DOC lost vs 2-flute. Start at 0.75–1.0×D DOC. Best when machine has good coolant/air and productivity matters. Slotting is an evacuation problem — 2-flute wins by keeping chips moving." },
+    { title: "Helix angle drives chip evacuation — 45° lifts, 37° stabilizes.", body: "Core Cutter 2-flute aluminum tools run 45° helix — the most aggressive chip-lift geometry available. Chips are pulled straight up and out of the slot. 3-flute aluminum tools run 37° helix — stronger core and more stable at higher feeds, but less evacuation drive. In a full slot (100% WOC), helix-driven evacuation is the difference between a clean cut and a packing failure. High helix gets the chips out — and slotting is all about chip evacuation." },
+    { title: "Coating choice changes how deep you can safely go in aluminum slotting.", body: "Uncoated: ultra-sharp edge, excellent chip flow, lowest cutting forces. Best for shallow slots, excellent air/coolant, lighter cuts. Risk: aluminum can weld to carbide in deep slots with poor evacuation. D-Max (DLC): dramatically reduces chip welding with an ultra-low friction surface — chips slide and release instead of sticking. Allows deeper DOC and higher feeds in full slotting. 2-flute uncoated: safe to ~0.75–1.0×D. 2-flute D-Max: push to 1.0–1.25×D. 3-flute CB D-Max: most productive aluminum slotting combination. Rule of thumb: uncoated cuts great — D-Max keeps it cutting." },
     { title: "Reduce feed to 50–75% of your side-milling IPT.", body: "Slotting does not benefit from radial chip thinning. At 100% engagement, chips are thicker at the same IPT than in side milling. Running standard profile chip loads in a full slot overloads the tool fast. Start at 50–70% of normal IPT and adjust up only after confirming stable load, sound, and chip shape." },
     { title: "Entry method is the fastest way to kill a good tool.", body: "Never straight plunge into solid material unless the tool is center-cutting and the depth is short. Use helical entry, linear ramp, pre-drill, or enter from an open edge. This reduces shock load at the core, avoids poor cutting conditions at center, and dramatically improves corner life on the first pass." },
-    { title: "Chip evacuation failure is the real slotting failure mode.", body: "Slotting failures look like speed and feed problems but are almost always chip evacuation failures. Signs: squealing after a few tenths of depth, recut marks in the slot bottom, heat discoloration, sudden corner breakdown. Fix: through-coolant first, then strong flood directed into the slot, air blast in aluminum." },
+    { title: "Chip evacuation failure is the real slotting failure mode.", body: "Slotting failures look like speed and feed problems but are almost always chip evacuation failures. Signs: squealing after a few tenths of depth, recut marks in the slot bottom, heat discoloration, sudden corner breakdown. Fix: through-coolant first, then strong flood directed into the slot, air blast in aluminum. Reduce DOC at first sign of chip packing — don't try to push through it." },
     { title: "Keep stickout at absolute minimum — slotting amplifies deflection from both walls.", body: "In a slot, both walls are engaged simultaneously and chips are trapped between them. Deflection is amplified compared to side milling. Use the most rigid holder available, minimize gage length, and avoid reduced neck tools unless reach genuinely requires it. Every extra inch of stickout is working against you." },
-    { title: "Ask whether slotting is even the right process.", body: "A high-performance endmill can physically cut a slot — that doesn't mean it should. Pre-drill then slot, open with trochoidal/adaptive then finish the walls, or use a smaller tool to rough and a larger one to finish. The smartest slotting move is often reducing how much true slotting you actually do." },
+    { title: "Ferrous & titanium slotting tool hierarchy — pick the right weapon.", body: "QTR3 (3-fl, variable helix): best chip valleys + harmonic disruption = deepest slotting capability. Steel 1.0–1.5×D, Ti 0.75–1.25×D. Use for deep slots, titanium, and less rigid setups. VST4-CB (4-fl chipbreaker): best balance of strength and evacuation. Steel 1.0–1.25×D, Ti 0.75–1.0×D — preferred general-purpose slotting tool. Chipbreaker must engage at least one full segment or it acts like a standard flute. VST4 standard: solid workhorse. Steel 0.75–1.0×D, Ti 0.5–0.75×D. VST5 (5-fl): chip space limited — hard cap 0.5×D steel / 0.4×D Ti. Use only for shallow slots on rigid machines." },
+    { title: "If it's unstable in a slot — raise the feed before dropping RPM.", body: "Rubbing kills tools faster than overload. In ferrous and titanium slotting, chatter and instability are often caused by chip load that's too light — the tool is rubbing, not cutting. Raise IPT first and listen for the chatter to break up. Only reduce RPM if the problem persists after increasing feed. In titanium especially: constant feed, no hesitation, never dwell in the cut." },
+    { title: "Ask whether slotting is even the right process.", body: "A high-performance endmill can physically cut a slot — that doesn't mean it should. Pre-drill then slot, open with trochoidal/adaptive then finish the walls, or use a smaller tool to rough and a larger one to finish. Even a 0.02–0.05\" radial relief pass before the full-width slot dramatically reduces heat, deflection, and chatter. The smartest slotting move is often reducing how much true slotting you actually do." },
   ],
   circ_interp: [
     { title: "Circular interpolation is a controlled low-engagement milling process — not drilling.", body: "Target 5–15% WOC. Ideal tool size is 65–75% of bore diameter — more clearance means better chip evacuation and lower engagement. VST4-CB and AL3-CB are preferred: chipbreaker geometry prevents chip packing in the closed bore, which is the #1 failure mode in circular interpolation." },
@@ -1478,7 +1484,7 @@ export default function Mentor() {
   }
 
   // Derive dynamic presets for the current mode/material/flutes
-  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number, tool_series = ""): {
+  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard"): {
     woc: { low: number; med: number; high: number };
     doc: { low: number; med: number; high: number };
   } {
@@ -1489,7 +1495,16 @@ export default function Mentor() {
       const isQtr3 = /^QTR3/i.test(tool_series);
       const hemWoc =
         isVxr                ? { low: 10, med: 15, high: 18 } // VXR truncated rougher — high MRR
-      : isQtr3               ? { low: 7,  med: 9,  high: 10 } // QTR3 small-dia variable-helix
+      // QTR3: 3-fl variable pitch+helix, P-Max, .0625–.250" — ISO-aware HEM WOC
+      // 3-flute chip evacuation + var helix allows higher WOC than typical 3-fl; small dia keeps ceiling lower than full-size tools
+      : isQtr3 ? (
+          iso === "N" ? { low: 10, med: 15, high: 20 }  // aluminum — tool rips, push hard
+        : iso === "S" ? { low: 5,  med: 7,  high: 8  }  // Ti/HRSA — heat-sensitive, tight radial
+        : iso === "H" ? { low: 4,  med: 5,  high: 7  }  // hardened — very conservative
+        : iso === "M" ? { low: 6,  med: 8,  high: 10 }  // stainless — keep chip thick, avoid work-hardening
+        : iso === "K" ? { low: 10, med: 13, high: 15 }  // cast iron — can push WOC, good evacuation
+        :               { low: 8,  med: 10, high: 12 }  // P steel — 3-fl + var helix supports 8–12%
+      )
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
@@ -1517,9 +1532,12 @@ export default function Mentor() {
     if (mode === "traditional") {
       const isQtr3 = /^QTR3/i.test(tool_series);
       const { wocMed, docMed } = getTradMed(iso, flutes);
-      const wocLow  = isQtr3 ? 12 : Math.max(10, Math.round(wocMed * 0.60));
-      const wocMedFinal = isQtr3 ? 14 : wocMed;
-      const wocHigh = isQtr3 ? 16 : Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
+      // QTR3 traditional WOC: ISO-aware. 3-fl chip evacuation + var pitch/helix allows higher WOC vs 4-5 fl tools of same dia.
+      // Small dia (.0625–.250) keeps ceiling below full-size tools but 3-flute buys meaningful room.
+      // Rule: "run higher WOC than a 4F of same size — but still scale down as diameter decreases"
+      const wocLow  = isQtr3 ? (iso === "N" ? 30 : iso === "S" ? 12 : iso === "H" ? 10 : iso === "M" ? 15 : iso === "K" ? 22 : 18) : Math.max(10, Math.round(wocMed * 0.60));
+      const wocMedFinal = isQtr3 ? (iso === "N" ? 40 : iso === "S" ? 18 : iso === "H" ? 15 : iso === "M" ? 22 : iso === "K" ? 32 : 25) : wocMed;
+      const wocHigh = isQtr3 ? (iso === "N" ? 50 : iso === "S" ? 25 : iso === "H" ? 22 : iso === "M" ? 30 : iso === "K" ? 42 : 35) : Math.min(50, Math.round(wocMed * 1.50));
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
       return {
@@ -1539,7 +1557,37 @@ export default function Mentor() {
       finish:     { low: 0.25, med: 1.0, high: loc > 0 && dia > 0 ? Math.round((loc / dia) * 100) / 100 : 2.0 },
       face:       { low: 0.03,med: 0.08, high: 0.15 },
       trochoidal: { low: 1.0, med: 1.5,  high: 2.0 },
-      slot:       { low: flutes === 5 ? 0.15 : 0.25, med: flutes === 5 ? 0.30 : 0.5, high: flutes === 5 ? 0.5 : 1.0 },
+      // Aluminum slotting DOC by flute count and helix
+      // 2-fl (45° helix): aggressive chip lift → deeper; 3-fl std (37°): more conservative; 3-fl CB: recovers depth via chip control
+      slot: iso === "N" && flutes <= 2
+        ? { low: 0.75, med: 1.0,   high: 1.25 }   // 2-fl / 45° helix — evacuation king
+        : iso === "N" && flutes === 3 && geometry === "chipbreaker"
+        ? { low: 0.75, med: 0.875, high: 1.0  }   // 3-fl CB — chip control recovers depth
+        : iso === "N" && flutes === 3
+        ? { low: 0.5,  med: 0.75,  high: 1.0  }   // 3-fl std / 37° helix — slightly conservative
+        // Ferrous & titanium slotting DOC by series/flute/geometry
+        // QTR3 (3-fl, var helix): deep slots, best chip valleys
+        : /^QTR3/i.test(tool_series)
+        ? (iso === "S"
+          ? { low: 0.75, med: 1.0,   high: 1.25 }   // Ti: 0.75–1.25×D
+          : { low: 1.0,  med: 1.25,  high: 1.5  })  // Steel: 1.0–1.5×D
+        // VST5 (5-fl): chip space limited — hard cap 0.5×D
+        : flutes >= 5
+        ? (iso === "S"
+          ? { low: 0.2,  med: 0.3,   high: 0.4  }   // Ti: 0.2–0.4×D
+          : { low: 0.3,  med: 0.4,   high: 0.5  })  // Steel: 0.3–0.5×D
+        // VST4-CB (4-fl chipbreaker): best balance — CB must engage
+        : flutes === 4 && geometry === "chipbreaker"
+        ? (iso === "S"
+          ? { low: 0.75, med: 0.875, high: 1.0  }   // Ti: 0.75–1.0×D
+          : { low: 1.0,  med: 1.125, high: 1.25 })  // Steel: 1.0–1.25×D
+        // VST4 standard (4-fl): solid workhorse
+        : flutes === 4
+        ? (iso === "S"
+          ? { low: 0.5,  med: 0.625, high: 0.75 }   // Ti: 0.5–0.75×D
+          : { low: 0.75, med: 0.875, high: 1.0  })  // Steel: 0.75–1.0×D
+        // Default ferrous (3-fl or other)
+        : { low: 0.75, med: 1.0, high: 1.25 },
       circ_interp:{ low: 0.25,med: 0.5,  high: 1.0 },
     };
     return {
@@ -1550,7 +1598,7 @@ export default function Mentor() {
 
   // Convenience: get presets for current form state
   const dynPresets = React.useMemo(() =>
-    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? ""),
+    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard"),
     [form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series] // eslint-disable-line
   );
 
@@ -1780,7 +1828,7 @@ export default function Mentor() {
   function computeOptimalCutParams(
     mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string, tool_series = ""
   ): { wocPct: number; docXd: number; wocKey: "low"|"med"|"high"|"optimal"; docKey: "low"|"med"|"high"|"optimal" } {
-    const presets = getDynamicPresets(mode, iso, flutes, dia, loc, tool_series);
+    const presets = getDynamicPresets(mode, iso, flutes, dia, loc, tool_series, "standard");
     const wp = presets.woc;
     const dp = presets.doc;
     // DOC optimal — HEM defaults to high (deep axial + light radial is the HEM philosophy);
@@ -2164,9 +2212,9 @@ export default function Mentor() {
       ${drill.peck_schedule?.length > 0 ? `
         <div style="margin:4px 0 6px;font-size:10px;">
           <strong>Pecking Optimizer</strong> <span style="color:#666;font-weight:normal">— decrease peck depth as hole deepens</span><br>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+          <div style="margin-top:4px;font-size:0;">
             ${drill.peck_schedule.map((q: number, i: number) =>
-              `<div style="border:1px solid #a5b4fc;border-radius:4px;padding:3px 8px;text-align:center;font-size:10px;">
+              `<div style="display:inline-block;border:1px solid #a5b4fc;border-radius:4px;padding:3px 8px;text-align:center;font-size:10px;margin:0 4px 4px 0;vertical-align:top;">
                 <div style="color:#6366f1;font-size:9px;">Peck ${i + 1}${i === drill.peck_schedule.length - 1 ? "+" : ""}</div>
                 <div style="font-weight:700;">${q.toFixed(4)}"</div>
               </div>`
@@ -2225,10 +2273,11 @@ export default function Mentor() {
     const pctBar = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
     const ticGauge = tic != null && form.mode !== "face" && form.mode !== "slot" ? `
       <div style="margin:8px 0 4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
-          <span style="font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
+          <span style="float:right;font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
         </div>
+        <div style="clear:both;"></div>
         <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#ef4444 0%,#ef4444 ${pctBar(1.0)},#eab308 ${pctBar(1.0)},#eab308 ${pctBar(1.5)},#22c55e ${pctBar(1.5)},#22c55e ${pctBar(2.5)},#f97316 ${pctBar(2.5)},#f97316 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
@@ -2260,10 +2309,11 @@ export default function Mentor() {
     const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
     const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? `
       <div style="margin:8px 0 4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Engagement Angle</span>
-          <span style="font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span>
+          <span style="float:right;font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span>
         </div>
+        <div style="clear:both;"></div>
         <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#22c55e 0%,#22c55e ${pctEng(90)},#eab308 ${pctEng(90)},#eab308 ${pctEng(180)},#f97316 ${pctEng(180)},#f97316 ${pctEng(270)},#ef4444 ${pctEng(270)},#ef4444 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctEng(printEngAngleDeg)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
@@ -2400,8 +2450,8 @@ export default function Mentor() {
 
       return `
       <div style="margin:14px 0;padding:10px 14px;border:2px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&#9733; Optimized EDP Match for This Setup</span>
+        <div style="margin-bottom:6px;">
+          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:inline-block;margin-right:6px;">&#9733; Optimized EDP Match for This Setup</span>
           <span style="font-size:12px;font-weight:700;color:#111;">EDP# ${recSku.edp}</span>
           ${tags ? `<span style="font-size:10px;color:#555;">&nbsp;·&nbsp;${tags}</span>` : ""}
         </div>
@@ -2430,23 +2480,24 @@ export default function Mentor() {
 <meta charset="utf-8">
 <title></title>
 <style>
-  @page { margin: 0; }
+  @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 24px 32px; }
-  .header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; gap: 12px; }
-  .header img { height: 44px; width: auto; justify-self: start; }
-  .header-center { text-align: center; color: #555; font-size: 10px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px 28px; }
+  .header { display: table; width: 100%; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; }
+  .header-logo { display: table-cell; vertical-align: middle; width: 33%; }
+  .header img { height: 40px; width: auto; display: block; }
+  .header-center { display: table-cell; vertical-align: middle; text-align: center; color: #555; font-size: 10px; width: 34%; }
   .header-center strong { font-size: 13px; color: #111; display: block; }
-  .header-contact { text-align: right; font-size: 10px; color: #555; line-height: 1.6; justify-self: end; }
+  .header-contact { display: table-cell; vertical-align: middle; text-align: right; font-size: 10px; color: #555; line-height: 1.6; width: 33%; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #e55a00; border-bottom: 1px solid #eee; padding-bottom: 4px; margin: 14px 0 8px; }
   h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 12px 0 6px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
   .lbl { color: #555; width: 45%; padding: 2px 0; }
   .val { font-weight: 600; padding: 2px 0; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
-  .kpi { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; }
-  .kpi-val { font-size: 14px; font-weight: 700; }
-  .kpi-lbl { font-size: 9px; color: #666; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi-grid { margin-bottom: 10px; font-size: 0; }
+  .kpi { display: inline-block; width: 24%; margin: 0 0.4% 6px 0; vertical-align: top; border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; font-size: 11px; }
+  .kpi-val { font-size: 14px; font-weight: 700; line-height: 1.2; }
+  .kpi-lbl { font-size: 9px; color: #666; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.3; }
   .verdict { padding: 6px 10px; border-radius: 4px; font-weight: 600; font-size: 11px; margin-bottom: 8px; }
   .verdict.green { background: #f0fdf4; color: #166534; }
   .verdict.yellow { background: #fefce8; color: #854d0e; }
@@ -2455,22 +2506,13 @@ export default function Mentor() {
   .suggestions li { margin-bottom: 3px; }
   .edp { color: #b45309; font-weight: 700; }
   .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
-  h2 { page-break-after: avoid; }
-  h3 { page-break-after: avoid; }
-  .kpi-grid { page-break-inside: avoid; }
-  .kpi { page-break-inside: avoid; }
-  table { page-break-inside: avoid; }
-  .verdict { page-break-inside: avoid; }
-  .suggestions { page-break-inside: avoid; }
-  .disclaimer { page-break-inside: avoid; }
-  tr { page-break-inside: avoid; }
-  @media print { body { padding: 12px 18px; } }
+  @media print { body { padding: 0; } }
 </style>
 </head>
 <body>
 <div class="header">
-  <div style="display:flex;align-items:center;gap:10px">
-    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter" style="height:40px;width:auto">
+  <div class="header-logo">
+    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter">
   </div>
   <div class="header-center">
     <strong>Produced with CoreCutCNC by Core Cutter LLC</strong>
@@ -2554,12 +2596,12 @@ ${stabSection}
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
     await html2pdf().set({
-      margin: [8, 8, 8, 8],
+      margin: [10, 10, 10, 10],
       filename: `CoreCutter_${edp}_${date}.pdf`,
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    // @ts-ignore — html2pdf types don't declare the (src, type) overload
+    // @ts-ignore — html2pdf types don't declare pagebreak or (src, type) overload
     }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
@@ -3290,7 +3332,7 @@ ${stabSection}
                   const dia = form.tool_dia || 0.5;
                   const cr = form.corner_radius || 0;
                   // Compute fresh presets for the NEW mode (dynPresets still has old mode at this point)
-                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "");
+                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
                   const wp = freshPresets.woc;
                   const dp = freshPresets.doc;
 
