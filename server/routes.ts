@@ -1701,7 +1701,7 @@ export async function registerRoutes(
       const { pool } = await import("./db");
       const isNew = await pool.query(
         `INSERT INTO leads (email, operation, name, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT DO NOTHING RETURNING id`,
+         ON CONFLICT (email) DO NOTHING RETURNING id`,
         [email.toLowerCase().trim(), "tool_request", name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
       );
       // Send registration notification to Scott for new users only (not duplicates)
