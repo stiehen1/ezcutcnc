@@ -2212,9 +2212,9 @@ export default function Mentor() {
       ${drill.peck_schedule?.length > 0 ? `
         <div style="margin:4px 0 6px;font-size:10px;">
           <strong>Pecking Optimizer</strong> <span style="color:#666;font-weight:normal">— decrease peck depth as hole deepens</span><br>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+          <div style="margin-top:4px;font-size:0;">
             ${drill.peck_schedule.map((q: number, i: number) =>
-              `<div style="border:1px solid #a5b4fc;border-radius:4px;padding:3px 8px;text-align:center;font-size:10px;">
+              `<div style="display:inline-block;border:1px solid #a5b4fc;border-radius:4px;padding:3px 8px;text-align:center;font-size:10px;margin:0 4px 4px 0;vertical-align:top;">
                 <div style="color:#6366f1;font-size:9px;">Peck ${i + 1}${i === drill.peck_schedule.length - 1 ? "+" : ""}</div>
                 <div style="font-weight:700;">${q.toFixed(4)}"</div>
               </div>`
@@ -2273,10 +2273,11 @@ export default function Mentor() {
     const pctBar = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
     const ticGauge = tic != null && form.mode !== "face" && form.mode !== "slot" ? `
       <div style="margin:8px 0 4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
-          <span style="font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
+          <span style="float:right;font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
         </div>
+        <div style="clear:both;"></div>
         <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#ef4444 0%,#ef4444 ${pctBar(1.0)},#eab308 ${pctBar(1.0)},#eab308 ${pctBar(1.5)},#22c55e ${pctBar(1.5)},#22c55e ${pctBar(2.5)},#f97316 ${pctBar(2.5)},#f97316 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
@@ -2308,10 +2309,11 @@ export default function Mentor() {
     const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
     const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? `
       <div style="margin:8px 0 4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="margin-bottom:4px;">
           <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Engagement Angle</span>
-          <span style="font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span>
+          <span style="float:right;font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span>
         </div>
+        <div style="clear:both;"></div>
         <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#22c55e 0%,#22c55e ${pctEng(90)},#eab308 ${pctEng(90)},#eab308 ${pctEng(180)},#f97316 ${pctEng(180)},#f97316 ${pctEng(270)},#ef4444 ${pctEng(270)},#ef4444 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctEng(printEngAngleDeg)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
@@ -2448,8 +2450,8 @@ export default function Mentor() {
 
       return `
       <div style="margin:14px 0;padding:10px 14px;border:2px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&#9733; Optimized EDP Match for This Setup</span>
+        <div style="margin-bottom:6px;">
+          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:inline-block;margin-right:6px;">&#9733; Optimized EDP Match for This Setup</span>
           <span style="font-size:12px;font-weight:700;color:#111;">EDP# ${recSku.edp}</span>
           ${tags ? `<span style="font-size:10px;color:#555;">&nbsp;·&nbsp;${tags}</span>` : ""}
         </div>
@@ -2478,23 +2480,24 @@ export default function Mentor() {
 <meta charset="utf-8">
 <title></title>
 <style>
-  @page { margin: 0; }
+  @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 24px 32px; }
-  .header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; gap: 12px; }
-  .header img { height: 44px; width: auto; justify-self: start; }
-  .header-center { text-align: center; color: #555; font-size: 10px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px 28px; }
+  .header { display: table; width: 100%; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; }
+  .header-logo { display: table-cell; vertical-align: middle; width: 33%; }
+  .header img { height: 40px; width: auto; display: block; }
+  .header-center { display: table-cell; vertical-align: middle; text-align: center; color: #555; font-size: 10px; width: 34%; }
   .header-center strong { font-size: 13px; color: #111; display: block; }
-  .header-contact { text-align: right; font-size: 10px; color: #555; line-height: 1.6; justify-self: end; }
+  .header-contact { display: table-cell; vertical-align: middle; text-align: right; font-size: 10px; color: #555; line-height: 1.6; width: 33%; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #e55a00; border-bottom: 1px solid #eee; padding-bottom: 4px; margin: 14px 0 8px; }
   h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 12px 0 6px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
   .lbl { color: #555; width: 45%; padding: 2px 0; }
   .val { font-weight: 600; padding: 2px 0; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
-  .kpi { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; }
-  .kpi-val { font-size: 14px; font-weight: 700; }
-  .kpi-lbl { font-size: 9px; color: #666; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi-grid { margin-bottom: 10px; font-size: 0; }
+  .kpi { display: inline-block; width: 24%; margin: 0 0.4% 6px 0; vertical-align: top; border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; font-size: 11px; }
+  .kpi-val { font-size: 14px; font-weight: 700; line-height: 1.2; }
+  .kpi-lbl { font-size: 9px; color: #666; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.3; }
   .verdict { padding: 6px 10px; border-radius: 4px; font-weight: 600; font-size: 11px; margin-bottom: 8px; }
   .verdict.green { background: #f0fdf4; color: #166534; }
   .verdict.yellow { background: #fefce8; color: #854d0e; }
@@ -2503,22 +2506,13 @@ export default function Mentor() {
   .suggestions li { margin-bottom: 3px; }
   .edp { color: #b45309; font-weight: 700; }
   .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
-  h2 { page-break-after: avoid; }
-  h3 { page-break-after: avoid; }
-  .kpi-grid { page-break-inside: avoid; }
-  .kpi { page-break-inside: avoid; }
-  table { page-break-inside: avoid; }
-  .verdict { page-break-inside: avoid; }
-  .suggestions { page-break-inside: avoid; }
-  .disclaimer { page-break-inside: avoid; }
-  tr { page-break-inside: avoid; }
-  @media print { body { padding: 12px 18px; } }
+  @media print { body { padding: 0; } }
 </style>
 </head>
 <body>
 <div class="header">
-  <div style="display:flex;align-items:center;gap:10px">
-    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter" style="height:40px;width:auto">
+  <div class="header-logo">
+    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter">
   </div>
   <div class="header-center">
     <strong>Produced with CoreCutCNC by Core Cutter LLC</strong>
@@ -2602,12 +2596,12 @@ ${stabSection}
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
     await html2pdf().set({
-      margin: [8, 8, 8, 8],
+      margin: [10, 10, 10, 10],
       filename: `CoreCutter_${edp}_${date}.pdf`,
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    // @ts-ignore — html2pdf types don't declare the (src, type) overload
+    // @ts-ignore — html2pdf types don't declare pagebreak or (src, type) overload
     }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
