@@ -346,10 +346,12 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
   ],
   slot: [
     { title: "Core Cutter slotting is series-controlled — not every tool is approved.", body: "Non-ferrous: AL2, AL3, AL3-CB. Ferrous & titanium: VST4, VST4-CB, VST5/VST5-CB (≤0.5×D only). VST6, VMF, and all other series are hard-blocked for slotting. These geometries are built for high-efficiency peripheral cutting — not chip-packed full-width engagement. Using them in a true slot causes rapid failure." },
-    { title: "Chip breaker series (CB) is strongly preferred for slotting.", body: "Slots trap chips. CB geometry breaks chips into shorter pieces, improving evacuation in the most chip-congested milling condition. AL3-CB for non-ferrous, VST4-CB for ferrous/titanium, VST5-CB for limited ferrous slotting. When chip evacuation is the #1 failure mode — and in slotting it almost always is — CB tools remove that risk." },
+    { title: "Aluminum slotting tool selection — 2-flute is your insurance policy, 3-flute CB is your profit lever.", body: "2-flute (45° helix, AL2/AL3): evacuation king. Large flute valleys + aggressive chip lift = lowest packing risk. Best for full slotting, deep slots, poor evacuation, or any situation where chip control is uncertain. Start at 1.0×D DOC. 3-flute standard (37° helix): better core rigidity and higher feed potential, but less chip room. Less aggressive evacuation — needs air blast or coolant. Start at 0.75×D DOC. 3-flute chipbreaker (AL3-CB): breaks chips into shorter segments, recovers much of the DOC lost vs 2-flute. Start at 0.75–1.0×D DOC. Best when machine has good coolant/air and productivity matters. Slotting is an evacuation problem — 2-flute wins by keeping chips moving." },
+    { title: "Helix angle drives chip evacuation — 45° lifts, 37° stabilizes.", body: "Core Cutter 2-flute aluminum tools run 45° helix — the most aggressive chip-lift geometry available. Chips are pulled straight up and out of the slot. 3-flute aluminum tools run 37° helix — stronger core and more stable at higher feeds, but less evacuation drive. In a full slot (100% WOC), helix-driven evacuation is the difference between a clean cut and a packing failure. High helix gets the chips out — and slotting is all about chip evacuation." },
+    { title: "Coating choice changes how deep you can safely go in aluminum slotting.", body: "Uncoated: ultra-sharp edge, excellent chip flow, lowest cutting forces. Best for shallow slots, excellent air/coolant, lighter cuts. Risk: aluminum can weld to carbide in deep slots with poor evacuation. D-Max (DLC): dramatically reduces chip welding with an ultra-low friction surface — chips slide and release instead of sticking. Allows deeper DOC and higher feeds in full slotting. 2-flute uncoated: safe to ~0.75–1.0×D. 2-flute D-Max: push to 1.0–1.25×D. 3-flute CB D-Max: most productive aluminum slotting combination. Rule of thumb: uncoated cuts great — D-Max keeps it cutting." },
     { title: "Reduce feed to 50–75% of your side-milling IPT.", body: "Slotting does not benefit from radial chip thinning. At 100% engagement, chips are thicker at the same IPT than in side milling. Running standard profile chip loads in a full slot overloads the tool fast. Start at 50–70% of normal IPT and adjust up only after confirming stable load, sound, and chip shape." },
     { title: "Entry method is the fastest way to kill a good tool.", body: "Never straight plunge into solid material unless the tool is center-cutting and the depth is short. Use helical entry, linear ramp, pre-drill, or enter from an open edge. This reduces shock load at the core, avoids poor cutting conditions at center, and dramatically improves corner life on the first pass." },
-    { title: "Chip evacuation failure is the real slotting failure mode.", body: "Slotting failures look like speed and feed problems but are almost always chip evacuation failures. Signs: squealing after a few tenths of depth, recut marks in the slot bottom, heat discoloration, sudden corner breakdown. Fix: through-coolant first, then strong flood directed into the slot, air blast in aluminum." },
+    { title: "Chip evacuation failure is the real slotting failure mode.", body: "Slotting failures look like speed and feed problems but are almost always chip evacuation failures. Signs: squealing after a few tenths of depth, recut marks in the slot bottom, heat discoloration, sudden corner breakdown. Fix: through-coolant first, then strong flood directed into the slot, air blast in aluminum. Reduce DOC at first sign of chip packing — don't try to push through it." },
     { title: "Keep stickout at absolute minimum — slotting amplifies deflection from both walls.", body: "In a slot, both walls are engaged simultaneously and chips are trapped between them. Deflection is amplified compared to side milling. Use the most rigid holder available, minimize gage length, and avoid reduced neck tools unless reach genuinely requires it. Every extra inch of stickout is working against you." },
     { title: "Ask whether slotting is even the right process.", body: "A high-performance endmill can physically cut a slot — that doesn't mean it should. Pre-drill then slot, open with trochoidal/adaptive then finish the walls, or use a smaller tool to rough and a larger one to finish. The smartest slotting move is often reducing how much true slotting you actually do." },
   ],
@@ -1478,7 +1480,7 @@ export default function Mentor() {
   }
 
   // Derive dynamic presets for the current mode/material/flutes
-  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number, tool_series = ""): {
+  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard"): {
     woc: { low: number; med: number; high: number };
     doc: { low: number; med: number; high: number };
   } {
@@ -1539,7 +1541,16 @@ export default function Mentor() {
       finish:     { low: 0.25, med: 1.0, high: loc > 0 && dia > 0 ? Math.round((loc / dia) * 100) / 100 : 2.0 },
       face:       { low: 0.03,med: 0.08, high: 0.15 },
       trochoidal: { low: 1.0, med: 1.5,  high: 2.0 },
-      slot:       { low: flutes === 5 ? 0.15 : 0.25, med: flutes === 5 ? 0.30 : 0.5, high: flutes === 5 ? 0.5 : 1.0 },
+      // Aluminum slotting DOC by flute count and helix
+      // 2-fl (45° helix): aggressive chip lift → deeper; 3-fl std (37°): more conservative; 3-fl CB: recovers depth via chip control
+      slot: iso === "N" && flutes <= 2
+        ? { low: 0.75, med: 1.0,   high: 1.25 }   // 2-fl / 45° helix — evacuation king
+        : iso === "N" && flutes === 3 && geometry === "chipbreaker"
+        ? { low: 0.75, med: 0.875, high: 1.0  }   // 3-fl CB — chip control recovers depth
+        : iso === "N" && flutes === 3
+        ? { low: 0.5,  med: 0.75,  high: 1.0  }   // 3-fl std / 37° helix — slightly conservative
+        : flutes === 5 ? { low: 0.15, med: 0.30, high: 0.5 }  // 5-fl ferrous
+        : { low: 0.25, med: 0.5, high: 1.0 },
       circ_interp:{ low: 0.25,med: 0.5,  high: 1.0 },
     };
     return {
@@ -1550,7 +1561,7 @@ export default function Mentor() {
 
   // Convenience: get presets for current form state
   const dynPresets = React.useMemo(() =>
-    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? ""),
+    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard"),
     [form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series] // eslint-disable-line
   );
 
@@ -1780,7 +1791,7 @@ export default function Mentor() {
   function computeOptimalCutParams(
     mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string, tool_series = ""
   ): { wocPct: number; docXd: number; wocKey: "low"|"med"|"high"|"optimal"; docKey: "low"|"med"|"high"|"optimal" } {
-    const presets = getDynamicPresets(mode, iso, flutes, dia, loc, tool_series);
+    const presets = getDynamicPresets(mode, iso, flutes, dia, loc, tool_series, "standard");
     const wp = presets.woc;
     const dp = presets.doc;
     // DOC optimal — HEM defaults to high (deep axial + light radial is the HEM philosophy);
@@ -3290,7 +3301,7 @@ ${stabSection}
                   const dia = form.tool_dia || 0.5;
                   const cr = form.corner_radius || 0;
                   // Compute fresh presets for the NEW mode (dynPresets still has old mode at this point)
-                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "");
+                  const freshPresets = getDynamicPresets(mode, isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
                   const wp = freshPresets.woc;
                   const dp = freshPresets.doc;
 
