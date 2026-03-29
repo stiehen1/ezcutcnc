@@ -353,7 +353,9 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Entry method is the fastest way to kill a good tool.", body: "Never straight plunge into solid material unless the tool is center-cutting and the depth is short. Use helical entry, linear ramp, pre-drill, or enter from an open edge. This reduces shock load at the core, avoids poor cutting conditions at center, and dramatically improves corner life on the first pass." },
     { title: "Chip evacuation failure is the real slotting failure mode.", body: "Slotting failures look like speed and feed problems but are almost always chip evacuation failures. Signs: squealing after a few tenths of depth, recut marks in the slot bottom, heat discoloration, sudden corner breakdown. Fix: through-coolant first, then strong flood directed into the slot, air blast in aluminum. Reduce DOC at first sign of chip packing — don't try to push through it." },
     { title: "Keep stickout at absolute minimum — slotting amplifies deflection from both walls.", body: "In a slot, both walls are engaged simultaneously and chips are trapped between them. Deflection is amplified compared to side milling. Use the most rigid holder available, minimize gage length, and avoid reduced neck tools unless reach genuinely requires it. Every extra inch of stickout is working against you." },
-    { title: "Ask whether slotting is even the right process.", body: "A high-performance endmill can physically cut a slot — that doesn't mean it should. Pre-drill then slot, open with trochoidal/adaptive then finish the walls, or use a smaller tool to rough and a larger one to finish. The smartest slotting move is often reducing how much true slotting you actually do." },
+    { title: "Ferrous & titanium slotting tool hierarchy — pick the right weapon.", body: "QTR3 (3-fl, variable helix): best chip valleys + harmonic disruption = deepest slotting capability. Steel 1.0–1.5×D, Ti 0.75–1.25×D. Use for deep slots, titanium, and less rigid setups. VST4-CB (4-fl chipbreaker): best balance of strength and evacuation. Steel 1.0–1.25×D, Ti 0.75–1.0×D — preferred general-purpose slotting tool. Chipbreaker must engage at least one full segment or it acts like a standard flute. VST4 standard: solid workhorse. Steel 0.75–1.0×D, Ti 0.5–0.75×D. VST5 (5-fl): chip space limited — hard cap 0.5×D steel / 0.4×D Ti. Use only for shallow slots on rigid machines." },
+    { title: "If it's unstable in a slot — raise the feed before dropping RPM.", body: "Rubbing kills tools faster than overload. In ferrous and titanium slotting, chatter and instability are often caused by chip load that's too light — the tool is rubbing, not cutting. Raise IPT first and listen for the chatter to break up. Only reduce RPM if the problem persists after increasing feed. In titanium especially: constant feed, no hesitation, never dwell in the cut." },
+    { title: "Ask whether slotting is even the right process.", body: "A high-performance endmill can physically cut a slot — that doesn't mean it should. Pre-drill then slot, open with trochoidal/adaptive then finish the walls, or use a smaller tool to rough and a larger one to finish. Even a 0.02–0.05\" radial relief pass before the full-width slot dramatically reduces heat, deflection, and chatter. The smartest slotting move is often reducing how much true slotting you actually do." },
   ],
   circ_interp: [
     { title: "Circular interpolation is a controlled low-engagement milling process — not drilling.", body: "Target 5–15% WOC. Ideal tool size is 65–75% of bore diameter — more clearance means better chip evacuation and lower engagement. VST4-CB and AL3-CB are preferred: chipbreaker geometry prevents chip packing in the closed bore, which is the #1 failure mode in circular interpolation." },
@@ -1549,8 +1551,29 @@ export default function Mentor() {
         ? { low: 0.75, med: 0.875, high: 1.0  }   // 3-fl CB — chip control recovers depth
         : iso === "N" && flutes === 3
         ? { low: 0.5,  med: 0.75,  high: 1.0  }   // 3-fl std / 37° helix — slightly conservative
-        : flutes === 5 ? { low: 0.15, med: 0.30, high: 0.5 }  // 5-fl ferrous
-        : { low: 0.25, med: 0.5, high: 1.0 },
+        // Ferrous & titanium slotting DOC by series/flute/geometry
+        // QTR3 (3-fl, var helix): deep slots, best chip valleys
+        : /^QTR3/i.test(tool_series)
+        ? (iso === "S"
+          ? { low: 0.75, med: 1.0,   high: 1.25 }   // Ti: 0.75–1.25×D
+          : { low: 1.0,  med: 1.25,  high: 1.5  })  // Steel: 1.0–1.5×D
+        // VST5 (5-fl): chip space limited — hard cap 0.5×D
+        : flutes >= 5
+        ? (iso === "S"
+          ? { low: 0.2,  med: 0.3,   high: 0.4  }   // Ti: 0.2–0.4×D
+          : { low: 0.3,  med: 0.4,   high: 0.5  })  // Steel: 0.3–0.5×D
+        // VST4-CB (4-fl chipbreaker): best balance — CB must engage
+        : flutes === 4 && geometry === "chipbreaker"
+        ? (iso === "S"
+          ? { low: 0.75, med: 0.875, high: 1.0  }   // Ti: 0.75–1.0×D
+          : { low: 1.0,  med: 1.125, high: 1.25 })  // Steel: 1.0–1.25×D
+        // VST4 standard (4-fl): solid workhorse
+        : flutes === 4
+        ? (iso === "S"
+          ? { low: 0.5,  med: 0.625, high: 0.75 }   // Ti: 0.5–0.75×D
+          : { low: 0.75, med: 0.875, high: 1.0  })  // Steel: 0.75–1.0×D
+        // Default ferrous (3-fl or other)
+        : { low: 0.75, med: 1.0, high: 1.25 },
       circ_interp:{ low: 0.25,med: 0.5,  high: 1.0 },
     };
     return {
