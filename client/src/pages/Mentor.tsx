@@ -1777,6 +1777,11 @@ export default function Mentor() {
     if (form.doc_xd) setDocText((form.doc_xd * form.tool_dia).toFixed(3));
   }, [form.tool_dia]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep stickout text display in sync whenever form.stickout is set programmatically
+  React.useEffect(() => {
+    if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3));
+  }, [form.stickout]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // When material (isoCategory) changes in HEM, reset WOC+DOC to optimal for new material
   // so stale values from a prior material don't carry over — but only if user was using a preset
   React.useEffect(() => {
