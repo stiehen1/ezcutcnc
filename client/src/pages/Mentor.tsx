@@ -989,7 +989,7 @@ export default function Mentor() {
           email: e, token: t,
           type: "result",
           title,
-          data: { inputs: form, customer: result?.customer, engineering: result?.engineering, tool_number: pdfToolNumber ?? undefined },
+          data: { inputs: form, customer: result?.customer, engineering: result?.engineering, tool_number: pdfToolNumber ?? undefined, operation, isoCategory, edpText, skuDescription, activeMachineId, activeMachineName },
         }),
       });
       if (r.status === 401) { setTbShowModal(true); return; }
@@ -1036,7 +1036,7 @@ export default function Mentor() {
         body: JSON.stringify({
           email: tbInputEmail.toLowerCase(), token: d.token,
           type: "result", title,
-          data: { inputs: form, customer: result?.customer, engineering: result?.engineering },
+          data: { inputs: form, customer: result?.customer, engineering: result?.engineering, operation, isoCategory, edpText, skuDescription, activeMachineId, activeMachineName },
         }),
       });
       setTbShowModal(false);
@@ -1382,8 +1382,25 @@ export default function Mentor() {
     const saved = localStorage.getItem("cc_restore_form");
     if (saved) {
       try {
-        const restored = JSON.parse(saved);
-        setForm(f => ({ ...f, ...restored }));
+        const data = JSON.parse(saved);
+        // Support both old format (data = form directly) and new format (data = { inputs, operation, ... })
+        const inputs = data.inputs ?? data;
+        setForm(f => ({ ...f, ...inputs }));
+        // Sync text display fields
+        if (inputs.tool_dia)      setToolDiaText(Number(inputs.tool_dia).toFixed(4));
+        if (inputs.woc_pct)       setWocText(String(inputs.woc_pct));
+        if (inputs.doc_xd)        setDocText(String(inputs.doc_xd));
+        if (inputs.loc)           setLocText(Number(inputs.loc).toFixed(3));
+        if (inputs.stickout)      setStickoutText(Number(inputs.stickout).toFixed(3));
+        if (inputs.lbs)           setLbsText(Number(inputs.lbs).toFixed(3));
+        if (inputs.corner_radius) setCrText(Number(inputs.corner_radius).toFixed(4));
+        // Restore separate states
+        if (data.operation)        setOperation(data.operation);
+        if (data.isoCategory)      setIsoCategory(data.isoCategory);
+        if (data.edpText)          { setEdpText(data.edpText); setSkuLocked(true); }
+        if (data.skuDescription)   setSkuDescription(data.skuDescription);
+        if (data.activeMachineId)  setActiveMachineId(data.activeMachineId);
+        if (data.activeMachineName) setActiveMachineName(data.activeMachineName);
         localStorage.removeItem("cc_restore_form");
       } catch {}
     }
