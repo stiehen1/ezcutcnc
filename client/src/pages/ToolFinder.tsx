@@ -29,6 +29,7 @@ type SkuRow = {
   chamfer_angle: number | null;
   tip_diameter: number | null;
   max_cutting_edge_length: number | null;
+  default_stickout_in?: number | null;
 };
 
 type Options = {
