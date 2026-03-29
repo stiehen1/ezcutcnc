@@ -648,7 +648,8 @@ export async function registerRoutes(
                s.corner_condition, s.coating, s.geometry,
                s.variable_pitch, s.variable_helix, s.helix,
                s.shank_dia_in, s.flute_wash, s.center_cutting,
-               s.chamfer_angle, s.tip_diameter, s.max_cutting_edge_length
+               s.chamfer_angle, s.tip_diameter, s.max_cutting_edge_length,
+               s.default_stickout_in::float AS default_stickout_in
         FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
         WHERE ${conditions.join(" AND ")}
         ORDER BY s.cutting_diameter_in, s.flutes, s.loc_in, s.edp
