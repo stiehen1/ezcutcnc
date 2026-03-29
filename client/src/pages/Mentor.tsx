@@ -316,6 +316,7 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Know when to back off HEM parameters.", body: "HEM breaks down when the tool is too long, the machine lacks rigidity, or workholding is weak. When the stability panel goes red, don't abandon HEM — reduce DOC first, then WOC, then feed until you're green. If you can't get green at productive parameters, switch to traditional roughing: wider WOC (30–50%), shallower DOC, slower feed. Short LOC, rigid setup, and high HP machines often favor traditional roughing on cycle time anyway." },
     { title: "Coolant by material.", body: "Steel/stainless — flood or mist; lubrication prevents BUE and galling. HRSA (Inconel, titanium) — never dry; these work-harden instantly from heat and will destroy a tool in seconds without coolant. Aluminum — flood or mist preferred, chip evacuation is priority #1. Cast iron — dry is often correct; coolant causes thermal cracking and smears graphite into the surface. Key rule: if you use coolant, flood it consistently — intermittent coolant causes thermal shock and cracks premium PVD coatings. Either fully wet or fully dry, never interrupted. Through-coolant tools are a major advantage in deep pockets. Sound is your chatter indicator; chip color is your heat indicator." },
     { title: "When can you run dry?", body: "Dry machining works when heat stays in the chip and the coating handles it. Best candidates: cast iron (dry preferred — see above). Aluminum always needs at least air blast — never truly dry; DLC coating (D-Max) handles flood, mist, or air blast equally well and prevents built-up edge in any condition, and high-SFM steel cuts with AlTiN/TiAlN coatings where the coating itself is the heat barrier. Note: thermal shock from flood coolant is significantly reduced in HEM because the tool spends most of its time out of the cut — the short arc of engagement means consistent cooling rather than violent hot/cold cycling. You cannot run dry in: HRSA (Inconel, titanium, cobalt alloys), stainless steel, any deep pocket or blind hole where chips can't escape, or any interrupted cut where the tool needs lubrication to prevent galling at re-entry. If chips are coming out discolored blue or black — you're dry when you shouldn't be." },
+    { title: "QTR3 series — universal high-performance HEM platform.", body: "The QTR3 / QTR3-RN is a 3-flute variable pitch + variable helix (40/41/42°) tool with a 1/4\" shank and 30° included neck transition — designed as a universal HEM workhorse across all ISO materials. The variable helix combination (±1.75× chatter limit) lets it push deeper than most small-diameter tools. P-Max (AlCrN) coating handles heat across ferrous, stainless, titanium, and non-ferrous. HEM WOC by material: P steel 8–12%, M stainless 6–10%, S Ti/HRSA 5–8%, N aluminum 10–20%, K cast iron 10–15%. The 1/4\" shank and 30° neck transition maintain stiffness through the reach range — available in 2×D through 5×D (necked). For long reach (>3×D): drop WOC 10–20%; at 4–5×D drop WOC 20–40% and DOC 10–20%. Core philosophy: run DOC to make money, manage WOC to stay alive." },
   ],
   traditional: [
     { title: "Slotting is the highest-load traditional condition — treat it that way.", body: "Full-width engagement means no chip thinning, high heat, and limited chip escape. Keep DOC conservative (0.5–1.0×D), reduce IPT to 50–70% of side-milling values. Only AL2/AL3 for non-ferrous and VST4 for ferrous/titanium are approved for full slotting. VST6 and VMF are never slotting tools." },
@@ -325,6 +326,7 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Stickout controls everything.", body: "Every extra inch of stickout multiplies deflection by L³. Traditional roughing generates higher radial forces than HEM so the impact is even greater. Fix stickout before any feeds/speeds adjustment — going from 3\" to 2\" stickout can double your achievable feed rate." },
     { title: "Traditional roughing still wins in the right setups.", body: "Short LOC, rigid setup, open geometry, high-HP machine, or simple CAM environment? Traditional roughing beats HEM on cycle time with less programming complexity. It struggles in deep cavities, long reach, hard materials, and low-rigidity setups — that's where you switch strategies." },
     { title: "Climb mill only — and listen to the cut.", body: "Conventional milling in traditional roughing increases tool pressure, heat, and surface roughness. Climb mill on every pass. The cut talks louder in traditional roughing than HEM — use sound as your primary sensor: smooth and consistent means you're in the zone; any pulsing or screaming means back off WOC first." },
+    { title: "QTR3 in traditional roughing — 3-flute chip evacuation lets you run bolder WOC than a 4F or 5F.", body: "The QTR3 / QTR3-RN's 3-flute design with variable pitch+helix (40/41/42°) gives it significantly better chip evacuation than 4-5 flute tools at the same diameter — that translates directly to allowable WOC. P steel: .0625–.125\" run 18–30% WOC; .1875–.250\" run 25–35% (50% valid at .250 in open/rigid setups). Stainless: 15–30%. Ti: 12–25%. Aluminum: 30–50%. Key insight: the 1/4\" shank + 30° neck transition means the necked reach versions hold stiffness better than most competitors' small-diameter tools — drop WOC ~20% per step of reach beyond 3×D, not DOC. Traditional roughing is not this tool's primary application (HEM is) — but it's fully capable, especially on less rigid machines where HEM WOC is too demanding." },
   ],
   finish: [
     { title: "Finishing is force management — not timid cutting.", body: "Target 1–5% WOC. This keeps cutting forces low, deflection minimal, and surface finish consistent. Most shops run finishing too slow and too light — that's the wrong direction. A high-performance finish pass runs fast, controlled, and consistent. Think of it as precision force control, not babying the tool." },
@@ -1493,7 +1495,16 @@ export default function Mentor() {
       const isQtr3 = /^QTR3/i.test(tool_series);
       const hemWoc =
         isVxr                ? { low: 10, med: 15, high: 18 } // VXR truncated rougher — high MRR
-      : isQtr3               ? { low: 7,  med: 9,  high: 10 } // QTR3 small-dia variable-helix
+      // QTR3: 3-fl variable pitch+helix, P-Max, .0625–.250" — ISO-aware HEM WOC
+      // 3-flute chip evacuation + var helix allows higher WOC than typical 3-fl; small dia keeps ceiling lower than full-size tools
+      : isQtr3 ? (
+          iso === "N" ? { low: 10, med: 15, high: 20 }  // aluminum — tool rips, push hard
+        : iso === "S" ? { low: 5,  med: 7,  high: 8  }  // Ti/HRSA — heat-sensitive, tight radial
+        : iso === "H" ? { low: 4,  med: 5,  high: 7  }  // hardened — very conservative
+        : iso === "M" ? { low: 6,  med: 8,  high: 10 }  // stainless — keep chip thick, avoid work-hardening
+        : iso === "K" ? { low: 10, med: 13, high: 15 }  // cast iron — can push WOC, good evacuation
+        :               { low: 8,  med: 10, high: 12 }  // P steel — 3-fl + var helix supports 8–12%
+      )
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
@@ -1521,9 +1532,12 @@ export default function Mentor() {
     if (mode === "traditional") {
       const isQtr3 = /^QTR3/i.test(tool_series);
       const { wocMed, docMed } = getTradMed(iso, flutes);
-      const wocLow  = isQtr3 ? 12 : Math.max(10, Math.round(wocMed * 0.60));
-      const wocMedFinal = isQtr3 ? 14 : wocMed;
-      const wocHigh = isQtr3 ? 16 : Math.min(50, Math.round(wocMed * 1.50));  // cap at 50% — Core Cutter standard
+      // QTR3 traditional WOC: ISO-aware. 3-fl chip evacuation + var pitch/helix allows higher WOC vs 4-5 fl tools of same dia.
+      // Small dia (.0625–.250) keeps ceiling below full-size tools but 3-flute buys meaningful room.
+      // Rule: "run higher WOC than a 4F of same size — but still scale down as diameter decreases"
+      const wocLow  = isQtr3 ? (iso === "N" ? 30 : iso === "S" ? 12 : iso === "H" ? 10 : iso === "M" ? 15 : iso === "K" ? 22 : 18) : Math.max(10, Math.round(wocMed * 0.60));
+      const wocMedFinal = isQtr3 ? (iso === "N" ? 40 : iso === "S" ? 18 : iso === "H" ? 15 : iso === "M" ? 22 : iso === "K" ? 32 : 25) : wocMed;
+      const wocHigh = isQtr3 ? (iso === "N" ? 50 : iso === "S" ? 25 : iso === "H" ? 22 : iso === "M" ? 30 : iso === "K" ? 42 : 35) : Math.min(50, Math.round(wocMed * 1.50));
       const docLow  = Math.round(docMed * 0.6 * 4) / 4;
       const docHigh = loc > 0 && dia > 0 ? Math.min(docMed * 1.5, loc / dia) : docMed * 1.5;
       return {
