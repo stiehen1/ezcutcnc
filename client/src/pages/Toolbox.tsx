@@ -317,7 +317,7 @@ export default function Toolbox() {
                       className="mt-3 text-xs text-indigo-400 hover:text-indigo-300"
                       onClick={() => {
                         if (item.data?.inputs) {
-                          localStorage.setItem("cc_restore_form", JSON.stringify(item.data.inputs));
+                          localStorage.setItem("cc_restore_form", JSON.stringify(item.data));
                         }
                         window.location.href = "/";
                       }}
