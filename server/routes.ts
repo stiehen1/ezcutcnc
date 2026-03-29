@@ -1034,6 +1034,7 @@ export async function registerRoutes(
            ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
            ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
            ${mode === "slot" && isoCategory === "N" ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)` : ""}
+           ${mode === "slot" && isoCategory !== "N" ? `AND s.flutes <= 5` : ""}
          ORDER BY s.edp`,
         [dia, current_edp]
       );
@@ -1119,10 +1120,13 @@ export async function registerRoutes(
         const geom      = (r.geometry ?? "standard").toLowerCase();
         // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper
         if (isSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
+        // Slotting: never go up in flutes — chip clearance gets worse, not better.
+        // Steel/stainless/tough slot: prefer dropping to 4-flute (or 4-fl chipbreaker).
+        // Aluminum slot: prefer dropping to 3-flute.
         const fluteMatch = rf === curFlutes
-          || ((stabOver || isCircInterp || isFinish) && rf === nextFlutes)
+          || (!isSlot && (stabOver || isCircInterp || isFinish) && rf === nextFlutes)
           || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
-          || (slotTough && rf === nextFlutes);
+          || (isSlot && !slotAlum && rf === prevFlutes && prevFlutes >= 4);
         return locMatch && fluteMatch;
       });
       let bestSku: any = null;
@@ -1130,11 +1134,11 @@ export async function registerRoutes(
       for (const row of sameLocCandidates) {
         let sc = scoreSku(row);
         const rf = Number(row.flutes);
-        if (stabOver && rf === nextFlutes)      sc += STAB_FLUTE_BONUS;
-        else if (isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
-        else if (isFinish  && rf === nextFlutes) sc += FINISH_FLUTE_BONUS;
+        if (!isSlot && stabOver && rf === nextFlutes)      sc += STAB_FLUTE_BONUS;
+        else if (!isSlot && isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
+        else if (!isSlot && isFinish  && rf === nextFlutes) sc += FINISH_FLUTE_BONUS;
         else if (slotAlum  && rf === prevFlutes) sc += 2;
-        else if (slotTough && rf === nextFlutes) sc += 1;
+        else if (isSlot && !slotAlum && rf === prevFlutes && prevFlutes >= 4) sc += 2; // steel/tough: prefer 4-fl for slotting
         if (sc > bestScore) { bestScore = sc; bestSku = row; }
       }
       if (bestSku && bestScore > curScore) {
