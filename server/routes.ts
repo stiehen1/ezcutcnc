@@ -296,7 +296,8 @@ export async function registerRoutes(
       if (!q) return res.json([]);
       const { pool } = await import("./db");
       const result = await pool.query(
-        `SELECT s.* FROM skus s
+        `SELECT s.*, s.default_stickout_in::float AS default_stickout_in
+         FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
          WHERE u.is_current = TRUE AND LOWER(s.edp) LIKE $1
          ORDER BY s.edp LIMIT 10`,
