@@ -6385,10 +6385,11 @@ ${stabSection}
                 const wp = WOC_PRESETS[form.mode];
                 const dia = form.tool_dia || 0.5;
                 const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                const _floor = (v: number) => geoMinWoc > 0 ? Math.max(geoMinWoc, v) : v;
                 const btns = [
-                  { key: "low" as const,  label: "Low",  val: geoMinWoc > 0 ? Math.max(geoMinWoc, wp.low) : wp.low },
-                  { key: "med" as const,  label: "Med",  val: wp.med },
-                  { key: "high" as const, label: "High", val: wp.high },
+                  { key: "low" as const,  label: "Low",  val: _floor(wp.low) },
+                  { key: "med" as const,  label: "Med",  val: _floor(wp.med) },
+                  { key: "high" as const, label: "High", val: _floor(wp.high) },
                 ];
                 return (
                   <div className="flex gap-1 mt-1">
@@ -6417,8 +6418,11 @@ ${stabSection}
               {/* WOC out-of-range note */}
               {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (() => {
                 const wp = WOC_PRESETS[form.mode];
-                if (form.woc_pct < wp.low) return <p className="text-[10px] text-amber-400 mt-1">⚠ Below {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — chip clearance may suffer</p>;
-                if (form.woc_pct > wp.high) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wp.low}–{wp.high}%) — consider reducing for stability</p>;
+                const geoMin = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                const wocLow  = geoMin > 0 ? Math.max(geoMin, wp.low)  : wp.low;
+                const wocHigh = geoMin > 0 ? Math.max(geoMin, wp.high) : wp.high;
+                if (form.woc_pct < wocLow)  return <p className="text-[10px] text-amber-400 mt-1">⚠ Below {form.mode === "hem" ? "HEM" : form.mode} range ({wocLow}–{wocHigh}%) — chip clearance may suffer</p>;
+                if (form.woc_pct > wocHigh) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wocLow}–{wocHigh}%) — consider reducing for stability</p>;
                 return null;
               })()}
               {/* Engagement physics mini-chart — not shown for face or circ_interp (3-phase cards replace this) */}
