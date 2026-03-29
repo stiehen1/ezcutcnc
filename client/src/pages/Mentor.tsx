@@ -1883,13 +1883,21 @@ export default function Mentor() {
     const corner_condition = isBall ? "ball" : crIn > 0 ? "corner_radius" : "square";
     const form_tool_type = isBall ? "ballnose" : isChamfer ? "chamfer_mill" : crIn > 0 ? "corner_radius" : "endmill";
 
-    // Default stickout: use hardcoded value from DB if present, otherwise calculate
+    // Default stickout: QTR3/QTR3-RN always use hardcoded DB value (no formula).
+    // Other series: use DB value if present, otherwise LOC + flute_wash + 0.33×D.
     const _dia = Number(sku.cutting_diameter_in);
     const _loc = Number(sku.loc_in);
     const _fw  = Number(sku.flute_wash ?? 0);
-    const defaultStickout = sku.default_stickout_in != null
-      ? Number(sku.default_stickout_in)
-      : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
+    const _isQtr3 = ["QTR3", "QTR3-RN"].includes((sku.series ?? "").toUpperCase());
+    const _dbStickout = sku.default_stickout_in != null ? Number(sku.default_stickout_in) : null;
+    const _hasDbStickout = _dbStickout != null;
+    // QTR3: always use DB value, never formula. Other series: DB value if present, else formula.
+    const defaultStickout: number | null = _hasDbStickout
+      ? _dbStickout
+      : _isQtr3
+        ? null   // QTR3 with missing DB value — leave blank rather than use formula
+        : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
+    const _stickoutVal: number = defaultStickout ?? 0;
 
     setEdpText(sku.EDP ?? (sku as any).edp ?? "");
     setSkuDescription([sku.description1, sku.description2].filter(Boolean).join(" — ") || sku.description || "");
@@ -1905,7 +1913,7 @@ export default function Mentor() {
     setDocPreset(null);
     setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
     setLocText(Number(sku.loc_in).toFixed(3));
-    setStickoutText(defaultStickout.toFixed(3));
+    setStickoutText(defaultStickout != null ? defaultStickout.toFixed(3) : "");
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
     if (isChamfer) {
@@ -1929,7 +1937,7 @@ export default function Mentor() {
       variable_pitch: sku.variable_pitch != null ? sku.variable_pitch : ["QTR3","QTR3-RN"].includes((sku.series ?? "").toUpperCase()),
       variable_helix: sku.variable_helix != null ? sku.variable_helix : ["QTR3","QTR3-RN"].includes((sku.series ?? "").toUpperCase()),
       shank_dia: Number(sku.shank_dia_in ?? 0),
-      stickout: defaultStickout,
+      stickout: _stickoutVal,
       tool_series: sku.series ?? "",
       helix_angle: Number(sku.helix ?? 0),
       coating: String(sku.coating ?? ""),
