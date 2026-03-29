@@ -127,6 +127,7 @@ type SkuRecord = {
   oal_in?: number;
   corner_condition?: string | number;  // "square" | "ball" | 0.030 (CR in inches)
   flute_wash?: number;
+  default_stickout_in?: number;
   coating?: string;
   // Flute character
   geometry?: "standard" | "chipbreaker" | "truncated_rougher";
@@ -1643,8 +1644,9 @@ export default function Mentor() {
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
   React.useEffect(() => {
-    setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
-  }, [form.tool_type]);
+    if (form.mode === "slot") setEntryTypes([]);
+    else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
+  }, [form.tool_type, form.mode]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
@@ -1864,11 +1866,13 @@ export default function Mentor() {
     const corner_condition = isBall ? "ball" : crIn > 0 ? "corner_radius" : "square";
     const form_tool_type = isBall ? "ballnose" : isChamfer ? "chamfer_mill" : crIn > 0 ? "corner_radius" : "endmill";
 
-    // Default stickout: LOC + flute_wash + 0.5×D — keeps flutes clear of the holder
+    // Default stickout: use hardcoded value from DB if present, otherwise calculate
     const _dia = Number(sku.cutting_diameter_in);
     const _loc = Number(sku.loc_in);
     const _fw  = Number(sku.flute_wash ?? 0);
-    const defaultStickout = Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
+    const defaultStickout = sku.default_stickout_in != null
+      ? Number(sku.default_stickout_in)
+      : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
 
     setEdpText(sku.EDP ?? (sku as any).edp ?? "");
     setSkuDescription([sku.description1, sku.description2].filter(Boolean).join(" — ") || sku.description || "");
