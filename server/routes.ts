@@ -754,12 +754,15 @@ export async function registerRoutes(
               const cr     = s.lookup_cr ?? 0;
               const inputHasCr = corner !== "square" && corner !== "ball" && cr > 0;
               const isRoughingGeom = payloadGeometry === "chipbreaker" || payloadGeometry === "truncated_rougher";
-              const crFilterS  = inputHasCr && !isRoughingGeom
+              const isDiameterSugg = s.type === "diameter";
+              // Diameter suggestions: relax CR filter to "any CR" — going to a larger tool,
+              // the exact CR size is secondary and shouldn't exclude the only available option.
+              const crFilterS  = inputHasCr && !isRoughingGeom && !isDiameterSugg
                 ? ` AND CASE WHEN s.corner_condition  ~ '^[0-9]' THEN s.corner_condition::numeric  ELSE 999 END <= ${cr}`
                 : inputHasCr
-                  ? ` AND LOWER(s.corner_condition)  NOT IN ('square','ball')`  // roughing: any CR ok, just not square
+                  ? ` AND LOWER(s.corner_condition)  NOT IN ('square','ball')`  // roughing or diameter: any CR ok
                   : "";
-              const crFilterS2 = inputHasCr && !isRoughingGeom
+              const crFilterS2 = inputHasCr && !isRoughingGeom && !isDiameterSugg
                 ? ` AND CASE WHEN s2.corner_condition ~ '^[0-9]' THEN s2.corner_condition::numeric ELSE 999 END <= ${cr}`
                 : inputHasCr
                   ? ` AND LOWER(s2.corner_condition) NOT IN ('square','ball')`
