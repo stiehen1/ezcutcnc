@@ -2516,7 +2516,8 @@ export default function Mentor() {
 <style>
   @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  /* !important on all colors — prevents app's dark Tailwind theme from bleeding in when html2pdf injects HTML into the DOM */
+  /* color-scheme: light forces light mode regardless of OS/browser dark mode setting — prevents Tailwind dark theme from bleeding in via html2canvas */
+  html { color-scheme: light !important; }
   body { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
   .header { display: table !important; width: 100% !important; border-bottom: 2px solid #e55a00 !important; padding-bottom: 12px !important; margin-bottom: 16px !important; }
   .header-logo { display: table-cell !important; vertical-align: middle !important; width: 33% !important; }
@@ -2629,24 +2630,13 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Extract <style> block and body content separately.
-    // html2pdf's from(string) injects content as a div in the live DOM — there is no real <body>
-    // element, so `body { }` CSS rules never match. We patch `body` → `.pdf-root, body` and wrap
-    // content in <div class="pdf-root"> so our styles win over Tailwind's dark theme.
-    const styleMatch = cleanHtml.match(/<style[^>]*>[\s\S]*?<\/style>/i);
-    const bodyMatch  = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const rawStyle   = styleMatch ? styleMatch[0] : "";
-    const bodyContent = bodyMatch ? bodyMatch[1] : cleanHtml;
-    // Make all `body` selectors also target the .pdf-root wrapper div
-    const patchedStyle = rawStyle.replace(/\bbody\b/g, ".pdf-root, body");
-    const pdfHtml = `${patchedStyle}
-<div class="pdf-root" style="background:#fff !important;color:#111 !important;font-family:Arial,sans-serif;font-size:11px;padding:20px 28px;">
-${bodyContent}
-</div>`;
-
+    // Pass the full HTML document string directly. html2pdf strips <html>/<head>/<body> tags
+    // when injecting via innerHTML but preserves <style> content and body children.
+    // "string" type is explicit so auto-detection never misclassifies.
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
+    // @ts-ignore — html2pdf types don't declare the (src, type) overload
     await html2pdf().set({
       margin: [8, 10, 8, 10],
       filename: `CoreCutter_${edp}_${date}.pdf`,
@@ -2661,7 +2651,7 @@ ${bodyContent}
         scrollY: 0,
       },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(pdfHtml).save();
+    }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
