@@ -2633,34 +2633,47 @@ ${stabSection}
     (window as any).open = origOpen;
     await new Promise(r => setTimeout(r, 800));
     if (!capturedHtml) return;
-    const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Render in an isolated iframe — the iframe gets its own document with no Tailwind CSS,
-    // so html2canvas captures with correct light-mode styles. We then pass the canvas to
-    // html2pdf via from(canvas,"canvas") so html2pdf handles proper page breaking.
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:816px;height:1px;border:none;visibility:hidden;";
-    document.body.appendChild(iframe);
+    // Open the same HTML in a real off-screen popup window.
+    // The popup gets its own document context — no Tailwind CSS loads inside it.
+    // html2canvas on popup.document.body uses popup.window.getComputedStyle() which reads
+    // only our PDF stylesheet. This is the same rendering path as Print PDF — always correct.
+    const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
+    const blob2 = new Blob([cleanHtml], { type: "text/html" });
+    const blobUrl = URL.createObjectURL(blob2);
+    const popup = window.open(blobUrl, "_blank",
+      "width=816,height=600,left=-9999,top=-9999,menubar=no,toolbar=no,status=no");
+    if (!popup) { URL.revokeObjectURL(blobUrl); return; }
 
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
 
     try {
-      await new Promise<void>((resolve) => {
-        iframe.onload = () => setTimeout(resolve, 600);
-        const iDoc = iframe.contentDocument!;
-        iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
+      // Wait for popup document to fully render
+      await new Promise<void>(resolve => {
+        const check = () => {
+          if (popup.document?.readyState === "complete") {
+            setTimeout(resolve, 500);
+          } else {
+            setTimeout(check, 50);
+          }
+        };
+        check();
       });
 
-      const iDoc = iframe.contentDocument!;
-      const contentH = Math.max(iDoc.body.scrollHeight, 800);
-      iframe.style.height = `${contentH}px`;
+      const pDoc = popup.document;
+      const pBody = pDoc.body;
+
+      // Expand popup to full content height so nothing clips
+      const contentH = Math.max(pBody.scrollHeight, pDoc.documentElement.scrollHeight, 800);
+      popup.resizeTo(816, contentH);
       await new Promise(r => setTimeout(r, 150));
 
-      // html2canvas on iframe body — ownerDocument is the iframe doc, so only our PDF CSS applies
+      // html2canvas on popup body — uses popup's getComputedStyle (our PDF CSS only)
       const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(iDoc.body, {
-        scale: 2,
+      const SCALE = 2;
+      const canvas = await html2canvas(pBody, {
+        scale: SCALE,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
@@ -2670,19 +2683,66 @@ ${stabSection}
         scrollY: 0,
       });
 
-      // Pass the canvas to html2pdf — it handles page slicing and page-break avoidance
-      const html2pdf = (await import("html2pdf.js")).default;
-      // @ts-ignore
-      await html2pdf().set({
-        margin: [8, 10, 8, 10],
-        filename: `CoreCutter_${edp}_${date}.pdf`,
-        image: { type: "jpeg", quality: 0.95 },
-        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-      // @ts-ignore
-      }).from(canvas, "canvas").save();
+      // Build PDF — letter size with margins
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+      const marginMm  = 10;
+      const pageWmm   = pdf.internal.pageSize.getWidth();
+      const pageHmm   = pdf.internal.pageSize.getHeight();
+      const printWmm  = pageWmm - 2 * marginMm;
+      const printHmm  = pageHmm - 2 * marginMm;
+      const pxPerMm   = canvas.width / printWmm;
+      const pageHpx   = printHmm * pxPerMm;
+
+      // Collect element bottom edges in canvas-pixel space for smart page breaks
+      const blockSel = "h2, h3, tr, .kpi-grid, .kpi, p, li, .verdict, .disclaimer, div[style]";
+      const boundaries = new Set<number>([0, canvas.height]);
+      (Array.from(pBody.querySelectorAll(blockSel)) as HTMLElement[]).forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.height > 2) {
+          boundaries.add(Math.round(r.top * SCALE));
+          boundaries.add(Math.round(r.bottom * SCALE));
+        }
+      });
+      const sorted = Array.from(boundaries).sort((a, b) => a - b);
+
+      // Slice canvas at natural element boundaries (never cut through an element)
+      let topPx = 0;
+      let first = true;
+      while (topPx < canvas.height) {
+        const idealBottom = topPx + pageHpx;
+        if (idealBottom >= canvas.height) {
+          // Last page — take whatever remains
+          const h = canvas.height - topPx;
+          const pc = document.createElement("canvas");
+          pc.width = canvas.width; pc.height = h;
+          pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, h, 0, 0, canvas.width, h);
+          if (!first) pdf.addPage();
+          pdf.addImage(pc.toDataURL("image/jpeg", 0.95), "JPEG", marginMm, marginMm, printWmm, h / pxPerMm);
+          break;
+        }
+        // Find the largest element boundary that fits within this page (at least 50% of page height)
+        let breakPx = Math.round(idealBottom);
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          if (sorted[i] <= idealBottom && sorted[i] >= topPx + pageHpx * 0.5) {
+            breakPx = sorted[i];
+            break;
+          }
+        }
+        const sliceH = breakPx - topPx;
+        const pc = document.createElement("canvas");
+        pc.width = canvas.width; pc.height = sliceH;
+        pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (!first) pdf.addPage();
+        pdf.addImage(pc.toDataURL("image/jpeg", 0.95), "JPEG", marginMm, marginMm, printWmm, sliceH / pxPerMm);
+        topPx = breakPx;
+        first = false;
+      }
+
+      pdf.save(`CoreCutter_${edp}_${date}.pdf`);
     } finally {
-      document.body.removeChild(iframe);
+      popup.close();
+      URL.revokeObjectURL(blobUrl);
     }
   };
   const engineering = result?.engineering ?? null;
