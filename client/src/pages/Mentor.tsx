@@ -2629,40 +2629,39 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Render in a hidden iframe — fully isolated DOM so app Tailwind CSS cannot bleed in.
-    // from(string) injects HTML into the live app DOM where stylesheets override print styles.
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1024px;height:1400px;border:none;visibility:hidden;";
-    document.body.appendChild(iframe);
-    await new Promise<void>((resolve) => {
-      iframe.onload = () => setTimeout(resolve, 600); // wait for images inside iframe
-      const iDoc = iframe.contentDocument ?? iframe.contentWindow!.document;
-      iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
-    });
+    // Extract <style> block and body content separately.
+    // html2pdf's from(string) injects content as a div in the live DOM — there is no real <body>
+    // element, so `body { }` CSS rules never match. We patch `body` → `.pdf-root, body` and wrap
+    // content in <div class="pdf-root"> so our styles win over Tailwind's dark theme.
+    const styleMatch = cleanHtml.match(/<style[^>]*>[\s\S]*?<\/style>/i);
+    const bodyMatch  = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const rawStyle   = styleMatch ? styleMatch[0] : "";
+    const bodyContent = bodyMatch ? bodyMatch[1] : cleanHtml;
+    // Make all `body` selectors also target the .pdf-root wrapper div
+    const patchedStyle = rawStyle.replace(/\bbody\b/g, ".pdf-root, body");
+    const pdfHtml = `${patchedStyle}
+<div class="pdf-root" style="background:#fff !important;color:#111 !important;font-family:Arial,sans-serif;font-size:11px;padding:20px 28px;">
+${bodyContent}
+</div>`;
 
-    const iframeBody = (iframe.contentDocument ?? iframe.contentWindow!.document).body;
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    try {
-      await html2pdf().set({
-        margin: [8, 10, 8, 10],
-        filename: `CoreCutter_${edp}_${date}.pdf`,
-        image: { type: "png" },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          windowWidth: 1024,
-          scrollX: 0,
-          scrollY: 0,
-        },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-      }).from(iframeBody).save();
-    } finally {
-      document.body.removeChild(iframe);
-    }
+    await html2pdf().set({
+      margin: [8, 10, 8, 10],
+      filename: `CoreCutter_${edp}_${date}.pdf`,
+      image: { type: "png" },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: 1024,
+        scrollX: 0,
+        scrollY: 0,
+      },
+      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    }).from(pdfHtml).save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
