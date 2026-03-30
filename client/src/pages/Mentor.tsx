@@ -2628,11 +2628,18 @@ ${stabSection}
     (window as any).open = origOpen;
     await new Promise(r => setTimeout(r, 800));
     if (!capturedHtml) return;
-    const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
+    const noScript = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Pass the full HTML document string directly. html2pdf strips <html>/<head>/<body> tags
-    // when injecting via innerHTML but preserves <style> content and body children.
-    // "string" type is explicit so auto-detection never misclassifies.
+    // html2pdf's from(string) injects via innerHTML into a <div>. The browser HTML5 parser
+    // silently drops <html>/<head>/<body> tags (invalid inside a div), which means any <style>
+    // inside <head> never gets created as a DOM node and our CSS never applies — Tailwind dark
+    // mode bleeds in. Fix: hoist <style> blocks to appear BEFORE the body content so they land
+    // as direct children of the container div and are guaranteed to apply.
+    const styleBlocks = (noScript.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []).join("\n");
+    const bodyMatch = noScript.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = bodyMatch ? bodyMatch[1] : noScript;
+    const pdfHtml = styleBlocks + "\n" + bodyContent;
+
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
@@ -2640,9 +2647,9 @@ ${stabSection}
     await html2pdf().set({
       margin: [8, 10, 8, 10],
       filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "png" },
+      image: { type: "jpeg", quality: 0.92 },
       html2canvas: {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
@@ -2651,7 +2658,7 @@ ${stabSection}
         scrollY: 0,
       },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(cleanHtml, "string").save();
+    }).from(pdfHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
