@@ -2517,8 +2517,11 @@ export default function Mentor() {
   @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* color-scheme: light forces light mode regardless of OS/browser dark mode setting — prevents Tailwind dark theme from bleeding in via html2canvas */
-  html { color-scheme: light !important; }
+  html, body { color-scheme: light !important; background: #fff !important; }
   body { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
+  /* .pdf-doc mirrors body styles — html2pdf strips <body> tag when injecting via innerHTML,
+     so this wrapper div carries the light-mode styles regardless of host page dark mode */
+  .pdf-doc { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
   .header { display: table !important; width: 100% !important; border-bottom: 2px solid #e55a00 !important; padding-bottom: 12px !important; margin-bottom: 16px !important; }
   .header-logo { display: table-cell !important; vertical-align: middle !important; width: 33% !important; }
   .header img { height: 40px !important; width: auto !important; display: block !important; }
@@ -2546,6 +2549,7 @@ export default function Mentor() {
 </style>
 </head>
 <body>
+<div class="pdf-doc">
 <div class="header">
   <div class="header-logo">
     <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter" height="40" style="height:40px;width:auto;display:block;max-height:40px;">
@@ -2601,6 +2605,7 @@ ${stabSection}
   ════════════════════════════════════════<br>
   <strong>© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.</strong> &nbsp;|&nbsp; CoreCutCNC &nbsp;|&nbsp; corecutcnc.com
 </div>
+</div><!-- end .pdf-doc -->
 <script>window.onload = function() { window.print(); };<\/script>
 </body>
 </html>`;
@@ -2628,37 +2633,106 @@ ${stabSection}
     (window as any).open = origOpen;
     await new Promise(r => setTimeout(r, 800));
     if (!capturedHtml) return;
-    const noScript = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // html2pdf's from(string) injects via innerHTML into a <div>. The browser HTML5 parser
-    // silently drops <html>/<head>/<body> tags (invalid inside a div), which means any <style>
-    // inside <head> never gets created as a DOM node and our CSS never applies — Tailwind dark
-    // mode bleeds in. Fix: hoist <style> blocks to appear BEFORE the body content so they land
-    // as direct children of the container div and are guaranteed to apply.
-    const styleBlocks = (noScript.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []).join("\n");
-    const bodyMatch = noScript.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : noScript;
-    const pdfHtml = styleBlocks + "\n" + bodyContent;
+    // Render in a hidden iframe — isolated document context, no Tailwind CSS loads inside it.
+    // No flash: iframe is invisible. Element positions use offsetTop (absolute doc coords).
+    const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;height:1px;border:none;visibility:hidden;";
+    document.body.appendChild(iframe);
 
-    const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    // @ts-ignore — html2pdf types don't declare the (src, type) overload
-    await html2pdf().set({
-      margin: [8, 10, 8, 10],
-      filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "jpeg", quality: 0.92 },
-      html2canvas: {
-        scale: 1.5,
+
+    try {
+      // Write full HTML — real <head>/<style>/<body> in the iframe's own document
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => setTimeout(resolve, 600);
+        const iDoc = iframe.contentDocument!;
+        iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
+      });
+
+      const iDoc = iframe.contentDocument!;
+      const iBody = iDoc.body;
+
+      // Expand iframe to full content height so html2canvas captures everything unclipped
+      const contentH = Math.max(iBody.scrollHeight, iDoc.documentElement.scrollHeight, 800);
+      iframe.style.height = `${contentH}px`;
+      await new Promise(r => setTimeout(r, 150));
+
+      const SCALE = 2;
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(iBody, {
+        scale: SCALE,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
-        windowWidth: 1024,
+        windowWidth: 816,
+        width: 816,
+        height: contentH,
         scrollX: 0,
         scrollY: 0,
-      },
-      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(pdfHtml, "string").save();
+      });
+
+      // Letter page metrics
+      const { jsPDF } = await import("jspdf");
+      const pdf       = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+      const marginMm  = 10;
+      const pageWmm   = pdf.internal.pageSize.getWidth();
+      const pageHmm   = pdf.internal.pageSize.getHeight();
+      const printWmm  = pageWmm - 2 * marginMm;
+      const printHmm  = pageHmm - 2 * marginMm;
+      const pxPerMm   = canvas.width / printWmm;  // canvas px per mm
+      const pageHpx   = printHmm * pxPerMm;       // page height in canvas px
+
+      // Collect absolute element boundaries using offsetTop (not getBoundingClientRect which
+      // is viewport-relative and wrong for elements below the iframe's visible area)
+      const getDocTop = (el: HTMLElement): number => {
+        let top = 0;
+        let cur: HTMLElement | null = el;
+        while (cur && cur !== iBody) { top += cur.offsetTop; cur = cur.offsetParent as HTMLElement | null; }
+        return top;
+      };
+      const breakSel = "h2, h3, .kpi-grid, .verdict, .disclaimer, tr, li, p";
+      const boundaries = new Set<number>([0, canvas.height]);
+      (Array.from(iBody.querySelectorAll(breakSel)) as HTMLElement[]).forEach(el => {
+        const top = getDocTop(el) * SCALE;
+        const bot = top + el.offsetHeight * SCALE;
+        if (el.offsetHeight > 2) { boundaries.add(Math.round(top)); boundaries.add(Math.round(bot)); }
+      });
+      const sorted = Array.from(boundaries).sort((a, b) => a - b);
+
+      // Slice canvas at element boundaries — never cut through a block
+      let topPx = 0; let first = true;
+      while (topPx < canvas.height) {
+        const idealBot = topPx + pageHpx;
+        if (idealBot >= canvas.height) {
+          const h = canvas.height - topPx;
+          const pc = document.createElement("canvas");
+          pc.width = canvas.width; pc.height = h;
+          pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, h, 0, 0, canvas.width, h);
+          if (!first) pdf.addPage();
+          pdf.addImage(pc.toDataURL("image/jpeg", 0.95), "JPEG", marginMm, marginMm, printWmm, h / pxPerMm);
+          break;
+        }
+        // Best boundary: largest value ≤ idealBot and ≥ 50% down the page
+        let breakPx = Math.round(idealBot);
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          if (sorted[i] <= idealBot && sorted[i] >= topPx + pageHpx * 0.5) { breakPx = sorted[i]; break; }
+        }
+        const sliceH = breakPx - topPx;
+        const pc = document.createElement("canvas");
+        pc.width = canvas.width; pc.height = sliceH;
+        pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (!first) pdf.addPage();
+        pdf.addImage(pc.toDataURL("image/jpeg", 0.95), "JPEG", marginMm, marginMm, printWmm, sliceH / pxPerMm);
+        topPx = breakPx; first = false;
+      }
+
+      pdf.save(`CoreCutter_${edp}_${date}.pdf`);
+    } finally {
+      document.body.removeChild(iframe);
+    }
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
@@ -6957,17 +7031,10 @@ ${stabSection}
                 </button>
                 <button
                   type="button"
-                  onClick={() => printSummary()}
+                  onClick={() => requireEmail("print")}
                   className="text-[10px] font-semibold px-2 py-1 rounded border border-orange-500/60 text-orange-400 hover:bg-orange-500/15 transition-colors leading-tight whitespace-nowrap"
                 >
-                  Print PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => requireEmail("pdf")}
-                  className="text-[10px] font-semibold px-2 py-1 rounded border border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/15 transition-colors leading-tight whitespace-nowrap"
-                >
-                  ⬇ PDF
+                  Print / Save PDF
                 </button>
               </div>
             )}
