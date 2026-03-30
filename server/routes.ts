@@ -712,6 +712,33 @@ export async function registerRoutes(
           : ``;
         // BLK suffix = unfinished blanks (no neck ground yet) — never suggest these
         const noBLK = `AND s.edp NOT ILIKE '%-BLK'`;
+        // Material → ISO column map for diameter suggestions (filter out wrong-material tools)
+        const MATERIAL_ISO: Record<string, string> = {
+          aluminum_wrought: "iso_n", aluminum_wrought_hs: "iso_n", aluminum_cast: "iso_n", non_ferrous: "iso_n",
+          steel_alloy: "iso_p", steel_mild: "iso_p", steel_free: "iso_p",
+          tool_steel_p20: "iso_p", tool_steel_a2: "iso_p", tool_steel_h13: "iso_p",
+          tool_steel_s7: "iso_p", tool_steel_d2: "iso_p", cpm_10v: "iso_p",
+          stainless_304: "iso_m", stainless_316: "iso_m", stainless_fm: "iso_m",
+          stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
+          stainless_440c: "iso_m", stainless_ph: "iso_m", stainless_duplex: "iso_m",
+          stainless_superduplex: "iso_m",
+          cast_iron_gray: "iso_k", cast_iron_ductile: "iso_k", cast_iron_cgi: "iso_k",
+          cast_iron_malleable: "iso_k",
+          titanium_64: "iso_s", titanium_cp: "iso_s", hiTemp_fe: "iso_s", hiTemp_co: "iso_s",
+          monel_k500: "iso_s", inconel_625: "iso_s", inconel_718: "iso_s",
+          hastelloy_x: "iso_s", waspaloy: "iso_s", mp35n: "iso_s",
+          hardened_lt55: "iso_h", hardened_gt55: "iso_h",
+          armor_ar400: "iso_h", armor_ar500: "iso_h",
+        };
+        const payloadMaterial = String((parsed.data as any).material ?? "");
+        const matIsoCol = MATERIAL_ISO[payloadMaterial] ?? null;
+        // QTR3/QTR3-RN are universal (all materials) — always include them even in material-filtered queries
+        const matClause = matIsoCol
+          ? `AND (s.${matIsoCol} = TRUE OR UPPER(s.series) IN ('QTR3','QTR3-RN'))`
+          : "";
+        const matClause2 = matIsoCol
+          ? `AND (s2.${matIsoCol} = TRUE OR UPPER(s2.series) IN ('QTR3','QTR3-RN'))`
+          : "";
         for (const s of stability.suggestions) {
           const lookupFlutes = s.suggested_flutes ?? s.lookup_flutes;
         if ((s.type === "tool" || s.type === "diameter" || s.type === "shorter_loc") && lookupFlutes && s.lookup_dia) {
@@ -820,9 +847,11 @@ export async function registerRoutes(
                          AND COALESCE(s2.loc_in, 0) >= $4
                          ${cbClause.replace(/\bs\./g, "s2.")}
                          ${noBLK.replace(/\bs\./g, "s2.")}
+                         ${matClause2}
                      )
                      ${cbClause}
                      ${noBLK}
+                     ${matClause}
                    ORDER BY s.edp`,
                   [flutes, dia, cornerStr, loc]
                 );
@@ -848,11 +877,13 @@ export async function registerRoutes(
                            ${cbClause.replace(/\bs\./g, "s2.")}
                            ${noBLK.replace(/\bs\./g, "s2.")}
                            ${crFilterS2}
+                           ${matClause2}
                        )
                        AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
                        ${cbClause}
                        ${noBLK}
                        ${crFilterS}
+                       ${matClause}
                      ORDER BY s.edp`,
                     [flutes, dia, loc]
                   );
@@ -871,6 +902,7 @@ export async function registerRoutes(
                          ${cbClause}
                          ${noBLK}
                          ${crFilterS}
+                         ${matClause}
                          AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                            SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                            FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -881,6 +913,7 @@ export async function registerRoutes(
                              ${cbClause.replace(/\bs\./g, "s2.")}
                              ${noBLK.replace(/\bs\./g, "s2.")}
                              ${crFilterS2}
+                             ${matClause2}
                          )
                        ORDER BY s.edp`,
                       [flutes, dia, loc]

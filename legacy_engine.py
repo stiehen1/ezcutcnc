@@ -5029,8 +5029,12 @@ def run(payload=None):
     # ── HARDWARE / SETUP IMPROVEMENTS ─────────────────────────────────────────
 
     # 1) Reduce stickout — free, biggest mechanical gain (L³)
+    # Skip for QTR3/QTR3-RN: stickout is fixed by the hardcoded DB value (1/4" shank forces a set geometry)
+    _fixed_stickout_series = {"QTR3", "QTR3-RN"}
+    _tool_series_upper = str(data.get("tool_series", "") or "").upper()
+    _stickout_is_fixed = _tool_series_upper in _fixed_stickout_series
     _seen_stickout = set()
-    if _so > 0:
+    if _so > 0 and not _stickout_is_fixed:
         for frac in (0.70, 0.80):
             _ln = round(max(_so * frac, _min_so), 3)
             if _ln >= _so - 1e-4:
