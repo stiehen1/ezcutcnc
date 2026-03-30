@@ -2516,31 +2516,32 @@ export default function Mentor() {
 <style>
   @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px 28px; }
-  .header { display: table; width: 100%; border-bottom: 2px solid #e55a00; padding-bottom: 12px; margin-bottom: 16px; }
-  .header-logo { display: table-cell; vertical-align: middle; width: 33%; }
-  .header img { height: 40px; width: auto; display: block; }
-  .header-center { display: table-cell; vertical-align: middle; text-align: center; color: #555; font-size: 10px; width: 34%; }
-  .header-center strong { font-size: 13px; color: #111; display: block; }
-  .header-contact { display: table-cell; vertical-align: middle; text-align: right; font-size: 10px; color: #555; line-height: 1.6; width: 33%; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #e55a00; border-bottom: 1px solid #eee; padding-bottom: 4px; margin: 14px 0 8px; }
-  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 12px 0 6px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-  .lbl { color: #555; width: 45%; padding: 2px 0; }
-  .val { font-weight: 600; padding: 2px 0; }
-  .kpi-grid { margin-bottom: 10px; font-size: 0; }
-  .kpi { display: inline-block; width: 24%; margin: 0 0.4% 6px 0; vertical-align: top; border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; font-size: 11px; }
-  .kpi-val { font-size: 14px; font-weight: 700; line-height: 1.2; }
-  .kpi-lbl { font-size: 9px; color: #666; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.3; }
-  .verdict { padding: 6px 10px; border-radius: 4px; font-weight: 600; font-size: 11px; margin-bottom: 8px; }
-  .verdict.green { background: #f0fdf4; color: #166534; }
-  .verdict.yellow { background: #fefce8; color: #854d0e; }
-  .verdict.red { background: #fef2f2; color: #991b1b; }
-  .suggestions { padding-left: 18px; }
-  .suggestions li { margin-bottom: 3px; }
-  .edp { color: #b45309; font-weight: 700; }
-  .disclaimer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 9px; color: #888; line-height: 1.5; }
-  @media print { body { padding: 0; } }
+  /* !important on all colors — prevents app's dark Tailwind theme from bleeding in when html2pdf injects HTML into the DOM */
+  body { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
+  .header { display: table !important; width: 100% !important; border-bottom: 2px solid #e55a00 !important; padding-bottom: 12px !important; margin-bottom: 16px !important; }
+  .header-logo { display: table-cell !important; vertical-align: middle !important; width: 33% !important; }
+  .header img { height: 40px !important; width: auto !important; display: block !important; }
+  .header-center { display: table-cell !important; vertical-align: middle !important; text-align: center !important; color: #555 !important; font-size: 10px !important; width: 34% !important; }
+  .header-center strong { font-size: 13px !important; color: #111 !important; display: block !important; }
+  .header-contact { display: table-cell !important; vertical-align: middle !important; text-align: right !important; font-size: 10px !important; color: #555 !important; line-height: 1.6 !important; width: 33% !important; }
+  h2 { font-size: 13px !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; color: #e55a00 !important; border-bottom: 1px solid #eee !important; padding-bottom: 4px !important; margin: 14px 0 8px !important; }
+  h3 { font-size: 11px !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; color: #555 !important; margin: 12px 0 6px !important; }
+  table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 8px !important; }
+  .lbl { color: #555 !important; width: 45% !important; padding: 2px 0 !important; }
+  .val { font-weight: 600 !important; padding: 2px 0 !important; color: #111 !important; }
+  .kpi-grid { margin-bottom: 10px !important; font-size: 0 !important; }
+  .kpi { display: inline-block !important; width: 24% !important; margin: 0 0.4% 6px 0 !important; vertical-align: top !important; border: 1px solid #ddd !important; border-radius: 6px !important; padding: 6px 8px !important; font-size: 11px !important; color: #111 !important; }
+  .kpi-val { font-size: 14px !important; font-weight: 700 !important; line-height: 1.2 !important; color: #111 !important; }
+  .kpi-lbl { font-size: 9px !important; color: #666 !important; margin-top: 3px !important; text-transform: uppercase !important; letter-spacing: 0.04em !important; line-height: 1.3 !important; }
+  .verdict { padding: 6px 10px !important; border-radius: 4px !important; font-weight: 600 !important; font-size: 11px !important; margin-bottom: 8px !important; }
+  .verdict.green { background: #f0fdf4 !important; color: #166534 !important; }
+  .verdict.yellow { background: #fefce8 !important; color: #854d0e !important; }
+  .verdict.red { background: #fef2f2 !important; color: #991b1b !important; }
+  .suggestions { padding-left: 18px !important; }
+  .suggestions li { margin-bottom: 3px !important; color: #111 !important; }
+  .edp { color: #b45309 !important; font-weight: 700 !important; }
+  .disclaimer { margin-top: 20px !important; border-top: 1px solid #ddd !important; padding-top: 10px !important; font-size: 9px !important; color: #888 !important; line-height: 1.5 !important; }
+  @media print { body { padding: 0 !important; } }
 </style>
 </head>
 <body>
