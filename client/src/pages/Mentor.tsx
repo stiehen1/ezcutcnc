@@ -2630,41 +2630,73 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Render in an isolated iframe using document.write() so <head>/<style>/<body> are parsed
-    // as a real document — no Tailwind CSS loads inside it, zero dark-mode bleed possible.
-    // html2canvas can capture same-origin iframe elements directly.
+    // Strategy: render the PDF HTML in a hidden same-origin iframe via document.write().
+    // The iframe gets its OWN document — no Tailwind CSS ever loads inside it, zero dark bleed.
+    // We call html2canvas directly on the iframe body (never touching the main document),
+    // then slice the canvas into letter-size pages and write to jsPDF manually.
+    // html2pdf().from(element) is intentionally avoided — it moves the element into the main
+    // document DOM before rendering, which re-applies Tailwind dark styles.
     const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:816px;height:1200px;border:none;visibility:hidden;";
+    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:816px;height:1px;border:none;visibility:hidden;";
     document.body.appendChild(iframe);
 
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
 
     try {
+      // Write full HTML document — real <head>/<style>/<body> parsed properly
       await new Promise<void>((resolve) => {
-        iframe.onload = () => setTimeout(resolve, 800);
+        iframe.onload = () => setTimeout(resolve, 600);
         const iDoc = iframe.contentDocument!;
         iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
       });
 
-      // html2canvas on a same-origin iframe body uses the iframe's own document/styles —
-      // no Tailwind CSS present, no dark-mode bleed. html2pdf handles page breaks properly.
-      const iframeBody = iframe.contentDocument!.body;
-      const html2pdf = (await import("html2pdf.js")).default;
-      await html2pdf().set({
-        margin: [8, 10, 8, 10],
-        filename: `CoreCutter_${edp}_${date}.pdf`,
-        image: { type: "png" },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          windowWidth: 816,
-        },
-        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-      }).from(iframeBody).save();
+      // Expand iframe to full content height so html2canvas captures everything
+      const iDoc = iframe.contentDocument!;
+      const contentH = Math.max(iDoc.body.scrollHeight, 800);
+      iframe.style.height = `${contentH}px`;
+      await new Promise(r => setTimeout(r, 150));
+
+      // Capture iframe body — ownerDocument is the iframe's doc, so html2canvas
+      // computes styles from the iframe's own stylesheets (our PDF CSS, not Tailwind)
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(iDoc.body, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: 816,
+        width: 816,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      // Slice canvas into letter-size pages
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+      const marginMm  = 8;
+      const pageWmm   = pdf.internal.pageSize.getWidth();
+      const pageHmm   = pdf.internal.pageSize.getHeight();
+      const printWmm  = pageWmm - 2 * marginMm;
+      const printHmm  = pageHmm - 2 * marginMm;
+      const pxPerMm   = canvas.width / printWmm;
+      const pageHpx   = Math.round(printHmm * pxPerMm);
+
+      let topPx = 0;
+      let first = true;
+      while (topPx < canvas.height) {
+        const sliceHpx = Math.min(pageHpx, canvas.height - topPx);
+        const pc = document.createElement("canvas");
+        pc.width  = canvas.width;
+        pc.height = sliceHpx;
+        pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, sliceHpx, 0, 0, canvas.width, sliceHpx);
+        if (!first) pdf.addPage();
+        pdf.addImage(pc.toDataURL("image/png"), "PNG", marginMm, marginMm, printWmm, sliceHpx / pxPerMm);
+        topPx += sliceHpx;
+        first = false;
+      }
+
+      pdf.save(`CoreCutter_${edp}_${date}.pdf`);
     } finally {
       document.body.removeChild(iframe);
     }
