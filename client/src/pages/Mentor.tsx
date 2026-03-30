@@ -2635,26 +2635,55 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // from(cleanHtml, "string") injects via innerHTML — <body> tag is stripped, but the
-    // .pdf-doc wrapper div carries all the body styles so dark-mode never bleeds in.
-    const html2pdf = (await import("html2pdf.js")).default;
+    // Render in an isolated iframe — the iframe gets its own document with no Tailwind CSS,
+    // so html2canvas captures with correct light-mode styles. We then pass the canvas to
+    // html2pdf via from(canvas,"canvas") so html2pdf handles proper page breaking.
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:816px;height:1px;border:none;visibility:hidden;";
+    document.body.appendChild(iframe);
+
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    // @ts-ignore
-    await html2pdf().set({
-      margin: [8, 10, 8, 10],
-      filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "jpeg", quality: 0.95 },
-      html2canvas: {
+
+    try {
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => setTimeout(resolve, 600);
+        const iDoc = iframe.contentDocument!;
+        iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
+      });
+
+      const iDoc = iframe.contentDocument!;
+      const contentH = Math.max(iDoc.body.scrollHeight, 800);
+      iframe.style.height = `${contentH}px`;
+      await new Promise(r => setTimeout(r, 150));
+
+      // html2canvas on iframe body — ownerDocument is the iframe doc, so only our PDF CSS applies
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(iDoc.body, {
         scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
-        windowWidth: 1024,
-      },
-      pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(cleanHtml, "string").save();
+        windowWidth: 816,
+        width: 816,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      // Pass the canvas to html2pdf — it handles page slicing and page-break avoidance
+      const html2pdf = (await import("html2pdf.js")).default;
+      // @ts-ignore
+      await html2pdf().set({
+        margin: [8, 10, 8, 10],
+        filename: `CoreCutter_${edp}_${date}.pdf`,
+        image: { type: "jpeg", quality: 0.95 },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+      // @ts-ignore
+      }).from(canvas, "canvas").save();
+    } finally {
+      document.body.removeChild(iframe);
+    }
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
