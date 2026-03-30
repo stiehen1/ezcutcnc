@@ -2516,7 +2516,8 @@ export default function Mentor() {
 <style>
   @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  /* !important on all colors — prevents app's dark Tailwind theme from bleeding in when html2pdf injects HTML into the DOM */
+  /* color-scheme: light forces light mode regardless of OS/browser dark mode setting — prevents Tailwind dark theme from bleeding in via html2canvas */
+  html { color-scheme: light !important; }
   body { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
   .header { display: table !important; width: 100% !important; border-bottom: 2px solid #e55a00 !important; padding-bottom: 12px !important; margin-bottom: 16px !important; }
   .header-logo { display: table-cell !important; vertical-align: middle !important; width: 33% !important; }
@@ -2629,40 +2630,28 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Render in a hidden iframe — fully isolated DOM so app Tailwind CSS cannot bleed in.
-    // from(string) injects HTML into the live app DOM where stylesheets override print styles.
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1024px;height:1400px;border:none;visibility:hidden;";
-    document.body.appendChild(iframe);
-    await new Promise<void>((resolve) => {
-      iframe.onload = () => setTimeout(resolve, 600); // wait for images inside iframe
-      const iDoc = iframe.contentDocument ?? iframe.contentWindow!.document;
-      iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
-    });
-
-    const iframeBody = (iframe.contentDocument ?? iframe.contentWindow!.document).body;
+    // Pass the full HTML document string directly. html2pdf strips <html>/<head>/<body> tags
+    // when injecting via innerHTML but preserves <style> content and body children.
+    // "string" type is explicit so auto-detection never misclassifies.
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    try {
-      await html2pdf().set({
-        margin: [8, 10, 8, 10],
-        filename: `CoreCutter_${edp}_${date}.pdf`,
-        image: { type: "png" },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          windowWidth: 1024,
-          scrollX: 0,
-          scrollY: 0,
-        },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-      }).from(iframeBody).save();
-    } finally {
-      document.body.removeChild(iframe);
-    }
+    // @ts-ignore — html2pdf types don't declare the (src, type) overload
+    await html2pdf().set({
+      margin: [8, 10, 8, 10],
+      filename: `CoreCutter_${edp}_${date}.pdf`,
+      image: { type: "png" },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: 1024,
+        scrollX: 0,
+        scrollY: 0,
+      },
+      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
