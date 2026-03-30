@@ -2642,7 +2642,7 @@ ${stabSection}
     const blob2 = new Blob([cleanHtml], { type: "text/html" });
     const blobUrl = URL.createObjectURL(blob2);
     const popup = window.open(blobUrl, "_blank",
-      "width=816,height=600,left=-9999,top=-9999,menubar=no,toolbar=no,status=no");
+      `width=816,height=1200,left=${window.screen.width + 100},top=0,menubar=no,toolbar=no,status=no,scrollbars=no`);
     if (!popup) { URL.revokeObjectURL(blobUrl); return; }
 
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
@@ -2694,14 +2694,23 @@ ${stabSection}
       const pxPerMm   = canvas.width / printWmm;
       const pageHpx   = printHmm * pxPerMm;
 
-      // Collect element bottom edges in canvas-pixel space for smart page breaks
-      const blockSel = "h2, h3, tr, .kpi-grid, .kpi, p, li, .verdict, .disclaimer, div[style]";
+      // Collect element edges in canvas-pixel space for smart page breaks.
+      // Use offsetTop walking up offsetParent chain — getBoundingClientRect() is
+      // viewport-relative and gives wrong values for elements below the fold.
+      const getAbsTop = (el: HTMLElement): number => {
+        let top = 0;
+        let cur: HTMLElement | null = el;
+        while (cur && cur !== pBody) { top += cur.offsetTop; cur = cur.offsetParent as HTMLElement | null; }
+        return top;
+      };
+      const blockSel = "h2, h3, tr, .kpi-grid, .kpi, p, li, .verdict, .disclaimer";
       const boundaries = new Set<number>([0, canvas.height]);
       (Array.from(pBody.querySelectorAll(blockSel)) as HTMLElement[]).forEach(el => {
-        const r = el.getBoundingClientRect();
-        if (r.height > 2) {
-          boundaries.add(Math.round(r.top * SCALE));
-          boundaries.add(Math.round(r.bottom * SCALE));
+        const top = getAbsTop(el);
+        const h   = el.offsetHeight;
+        if (h > 2) {
+          boundaries.add(Math.round(top * SCALE));
+          boundaries.add(Math.round((top + h) * SCALE));
         }
       });
       const sorted = Array.from(boundaries).sort((a, b) => a - b);
