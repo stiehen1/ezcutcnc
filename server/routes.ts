@@ -987,7 +987,7 @@ export async function registerRoutes(
           }
           // Same-diameter flute-count suggestions with no catalog match are special orders
           if (s.type === "tool" && !s.suggested_edp) {
-            s.detail = (s.detail ?? "") + " — available as a special";
+            s.label = (s.label ?? "") + " — available as a special";
           }
         }
 
