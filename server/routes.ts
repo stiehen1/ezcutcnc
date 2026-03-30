@@ -952,6 +952,10 @@ export async function registerRoutes(
               } // end non-diameter branch
             } catch (_) { /* catalog unavailable — skip enrichment */ }
           }
+          // Same-diameter flute-count suggestions with no catalog match are special orders
+          if (s.type === "tool" && !s.suggested_edp) {
+            s.detail = (s.detail ?? "") + " — available as a special";
+          }
         }
 
         // Post-enrichment: flag suggested EDPs whose LOC is shorter than input tool LOC.
