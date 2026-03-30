@@ -7031,17 +7031,10 @@ ${stabSection}
                 </button>
                 <button
                   type="button"
-                  onClick={() => printSummary()}
+                  onClick={() => requireEmail("print")}
                   className="text-[10px] font-semibold px-2 py-1 rounded border border-orange-500/60 text-orange-400 hover:bg-orange-500/15 transition-colors leading-tight whitespace-nowrap"
                 >
-                  Print PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => requireEmail("pdf")}
-                  className="text-[10px] font-semibold px-2 py-1 rounded border border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/15 transition-colors leading-tight whitespace-nowrap"
-                >
-                  ⬇ PDF
+                  Print / Save PDF
                 </button>
               </div>
             )}
