@@ -381,14 +381,14 @@ const QP_MATERIALS = [
 ];
 
 const QP_OPERATIONS = [
-  { value: "hem",         label: "HEM Roughing",             desc: "High-efficiency, low-WOC deep passes",      geo: "chipbreaker", toolType: "endmill" },
-  { value: "trochoidal",  label: "Trochoidal",               desc: "Constant engagement, curved toolpath",      geo: "chipbreaker", toolType: "endmill" },
-  { value: "traditional", label: "Conventional Roughing",    desc: "Standard full-width roughing",              geo: "standard",    toolType: "endmill" },
-  { value: "finish",      label: "Finishing / Semi-finish",  desc: "Light cuts, tight tolerances",              geo: "standard",    toolType: "endmill" },
-  { value: "face",        label: "Planar Milling (Facing)",  desc: "Wide shallow passes across flat surfaces",  geo: "standard",    toolType: "endmill" },
-  { value: "slot",        label: "Slotting — Traditional",                 desc: "Full-width slot or keyway",                 geo: "standard",    toolType: "endmill" },
-  { value: "circ_interp", label: "Circular Interpolation",  desc: "Helical or circular bore entry",            geo: "standard",    toolType: "endmill" },
-  { value: "chamfer",     label: "Chamfering / Deburring",   desc: "Edge break and chamfer",                    geo: null,          toolType: "chamfer_mill" },
+  { value: "hem",         label: "Roughing — HEM",                        desc: "High-efficiency / Trochoidal / Dynamic / Adaptive — low-WOC deep passes", geo: "chipbreaker", toolType: "endmill" },
+  { value: "traditional", label: "Roughing — Traditional",                desc: "Standard side milling and full-width roughing",                           geo: "standard",    toolType: "endmill" },
+  { value: "finish",      label: "Finishing",                             desc: "Light cuts, tight tolerances, high surface quality",                      geo: "standard",    toolType: "endmill" },
+  { value: "face",        label: "Facing (Planar Milling)",               desc: "Wide shallow passes across flat surfaces",                                geo: "standard",    toolType: "endmill" },
+  { value: "slot",        label: "Slotting",                              desc: "Full-width slot or keyway",                                               geo: "standard",    toolType: "endmill" },
+  { value: "circ_interp", label: "Circular Interpolation",                desc: "Helical or circular bore interpolation",                                  geo: "standard",    toolType: "endmill" },
+  { value: "surfacing",   label: "3D Surface Contouring",                 desc: "Ball nose / bull nose — scallop and flow-line finishing",                 geo: "standard",    toolType: "endmill" },
+  { value: "chamfer",     label: "Chamfering / Deburring",                desc: "Edge break and chamfer",                                                  geo: null,          toolType: "chamfer_mill" },
 ];
 
 const QP_DIAMETERS: { label: string; min: number; max: number; pick: number }[] = [
