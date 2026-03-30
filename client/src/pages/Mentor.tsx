@@ -2628,12 +2628,7 @@ ${stabSection}
     (window as any).open = origOpen;
     await new Promise(r => setTimeout(r, 800));
     if (!capturedHtml) return;
-    const noScript = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
-
-    const styleBlocks = (noScript.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []).join("\n");
-    const bodyMatch = noScript.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : noScript;
-    const pdfHtml = styleBlocks + "\n" + bodyContent;
+    const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
@@ -2651,22 +2646,22 @@ ${stabSection}
         windowWidth: 1024,
         scrollX: 0,
         scrollY: 0,
-        // index.css defines dark as :root default (--foreground: gray, --background: near-black).
-        // Override those variables on the cloned document root before html2canvas renders.
+        // index.css sets dark as :root default (--foreground: gray, --background: near-black).
+        // Override those CSS variables on the cloned doc root before html2canvas renders.
         onclone: (clonedDoc: Document) => {
           const root = clonedDoc.documentElement;
-          root.style.setProperty("--background",        "0 0% 100%");
-          root.style.setProperty("--foreground",        "0 0% 7%");
-          root.style.setProperty("--card",              "0 0% 100%");
-          root.style.setProperty("--card-foreground",   "0 0% 7%");
-          root.style.setProperty("--muted-foreground",  "0 0% 35%");
-          root.style.setProperty("--border",            "0 0% 85%");
-          root.style.setProperty("--input",             "0 0% 85%");
-          root.style.setProperty("color-scheme",        "light");
+          root.style.setProperty("--background",       "0 0% 100%");
+          root.style.setProperty("--foreground",       "0 0% 7%");
+          root.style.setProperty("--card",             "0 0% 100%");
+          root.style.setProperty("--card-foreground",  "0 0% 7%");
+          root.style.setProperty("--muted-foreground", "0 0% 35%");
+          root.style.setProperty("--border",           "0 0% 85%");
+          root.style.setProperty("--input",            "0 0% 85%");
+          root.style.setProperty("color-scheme",       "light");
         },
       },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(pdfHtml, "string").save();
+    }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
