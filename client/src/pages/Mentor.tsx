@@ -2615,7 +2615,8 @@ ${stabSection}
   const downloadPDF = async () => {
     if (!result) return;
     trackPdfExport(form.mode);
-    // Capture the HTML by temporarily patching window.open
+
+    // Capture HTML via window.open intercept
     let capturedHtml = "";
     const origOpen = window.open.bind(window);
     (window as any).open = (url: string) => {
@@ -2624,28 +2625,44 @@ ${stabSection}
     };
     printSummary();
     (window as any).open = origOpen;
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 800));
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
+
+    // Render in a hidden iframe — fully isolated DOM so app Tailwind CSS cannot bleed in.
+    // from(string) injects HTML into the live app DOM where stylesheets override print styles.
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1024px;height:1400px;border:none;visibility:hidden;";
+    document.body.appendChild(iframe);
+    await new Promise<void>((resolve) => {
+      iframe.onload = () => setTimeout(resolve, 600); // wait for images inside iframe
+      const iDoc = iframe.contentDocument ?? iframe.contentWindow!.document;
+      iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
+    });
+
+    const iframeBody = (iframe.contentDocument ?? iframe.contentWindow!.document).body;
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    await html2pdf().set({
-      margin: [8, 10, 8, 10],
-      filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "png" },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        windowWidth: 1024,   // render at desktop width — prevents KPI columns collapsing
-        scrollX: 0,
-        scrollY: 0,
-      },
-      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    // @ts-ignore — html2pdf types don't declare pagebreak or (src, type) overload
-    }).from(cleanHtml, "string").save();
+    try {
+      await html2pdf().set({
+        margin: [8, 10, 8, 10],
+        filename: `CoreCutter_${edp}_${date}.pdf`,
+        image: { type: "png" },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          windowWidth: 1024,
+          scrollX: 0,
+          scrollY: 0,
+        },
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+      }).from(iframeBody).save();
+    } finally {
+      document.body.removeChild(iframe);
+    }
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
