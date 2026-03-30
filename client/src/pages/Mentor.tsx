@@ -2630,11 +2630,13 @@ ${stabSection}
     if (!capturedHtml) return;
     const noScript = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // html2pdf's from(string) injects via innerHTML into a <div>. The browser HTML5 parser
-    // silently drops <html>/<head>/<body> tags (invalid inside a div), which means any <style>
-    // inside <head> never gets created as a DOM node and our CSS never applies — Tailwind dark
-    // mode bleeds in. Fix: hoist <style> blocks to appear BEFORE the body content so they land
-    // as direct children of the container div and are guaranteed to apply.
+    // Tailwind uses darkMode: ["class"] — dark mode is controlled by a .dark class on <html>.
+    // When html2pdf injects content into the live DOM, dark-mode CSS variables are active and
+    // bleed into the rendered output. Temporarily remove .dark before capturing, then restore.
+    const htmlEl = document.documentElement;
+    const wasDark = htmlEl.classList.contains("dark");
+    if (wasDark) htmlEl.classList.remove("dark");
+
     const styleBlocks = (noScript.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []).join("\n");
     const bodyMatch = noScript.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyContent = bodyMatch ? bodyMatch[1] : noScript;
@@ -2643,22 +2645,26 @@ ${stabSection}
     const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    // @ts-ignore — html2pdf types don't declare the (src, type) overload
-    await html2pdf().set({
-      margin: [8, 10, 8, 10],
-      filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "jpeg", quality: 0.92 },
-      html2canvas: {
-        scale: 1.5,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        windowWidth: 1024,
-        scrollX: 0,
-        scrollY: 0,
-      },
-      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(pdfHtml, "string").save();
+    try {
+      // @ts-ignore — html2pdf types don't declare the (src, type) overload
+      await html2pdf().set({
+        margin: [8, 10, 8, 10],
+        filename: `CoreCutter_${edp}_${date}.pdf`,
+        image: { type: "jpeg", quality: 0.92 },
+        html2canvas: {
+          scale: 1.5,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          windowWidth: 1024,
+          scrollX: 0,
+          scrollY: 0,
+        },
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+      }).from(pdfHtml, "string").save();
+    } finally {
+      if (wasDark) htmlEl.classList.add("dark");
+    }
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
