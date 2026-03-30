@@ -2630,38 +2630,69 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    const html2pdf = (await import("html2pdf.js")).default;
+    // Render in an isolated iframe using document.write() so <head>/<style>/<body> are parsed
+    // as a real document — no Tailwind CSS loads inside it, zero dark-mode bleed possible.
+    // html2canvas can capture same-origin iframe elements directly.
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:816px;height:1200px;border:none;visibility:hidden;";
+    document.body.appendChild(iframe);
+
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-    // @ts-ignore — html2pdf types don't declare the (src, type) overload
-    await html2pdf().set({
-      margin: [8, 10, 8, 10],
-      filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "jpeg", quality: 0.92 },
-      html2canvas: {
+
+    try {
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => setTimeout(resolve, 800);
+        const iDoc = iframe.contentDocument!;
+        iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
+      });
+
+      const iDoc = iframe.contentDocument!;
+      // Expand iframe to full content height so nothing clips
+      const fullH = Math.max(iDoc.body.scrollHeight, iDoc.documentElement.scrollHeight, 1200);
+      iframe.style.height = `${fullH}px`;
+      await new Promise(r => setTimeout(r, 100));
+
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(iDoc.body, {
         scale: 1.5,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
-        windowWidth: 1024,
-        scrollX: 0,
-        scrollY: 0,
-        // index.css sets dark as :root default (--foreground: gray, --background: near-black).
-        // Override those CSS variables on the cloned doc root before html2canvas renders.
-        onclone: (clonedDoc: Document) => {
-          const root = clonedDoc.documentElement;
-          root.style.setProperty("--background",       "0 0% 100%");
-          root.style.setProperty("--foreground",       "0 0% 7%");
-          root.style.setProperty("--card",             "0 0% 100%");
-          root.style.setProperty("--card-foreground",  "0 0% 7%");
-          root.style.setProperty("--muted-foreground", "0 0% 35%");
-          root.style.setProperty("--border",           "0 0% 85%");
-          root.style.setProperty("--input",            "0 0% 85%");
-          root.style.setProperty("color-scheme",       "light");
-        },
-      },
-      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-    }).from(cleanHtml, "string").save();
+        windowWidth: 816,
+        width: 816,
+        height: iDoc.body.scrollHeight,
+      });
+
+      // Slice canvas into letter-size pages and build PDF manually
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+      const margin = 8;
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const printW = pageW - 2 * margin;
+      const printH = pageH - 2 * margin;
+      const px2mm = printW / canvas.width;
+      const pageHeightPx = Math.round(printH / px2mm);
+
+      let offsetY = 0;
+      let firstPage = true;
+      while (offsetY < canvas.height) {
+        const sliceH = Math.min(pageHeightPx, canvas.height - offsetY);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceH;
+        pageCanvas.getContext("2d")!.drawImage(canvas, 0, offsetY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (!firstPage) pdf.addPage();
+        pdf.addImage(pageCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceH * px2mm);
+        offsetY += sliceH;
+        firstPage = false;
+      }
+
+      pdf.save(`CoreCutter_${edp}_${date}.pdf`);
+    } finally {
+      document.body.removeChild(iframe);
+    }
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
