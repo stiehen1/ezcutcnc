@@ -2647,49 +2647,24 @@ ${stabSection}
         iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
       });
 
-      const iDoc = iframe.contentDocument!;
-      // Expand iframe to full content height so nothing clips
-      const fullH = Math.max(iDoc.body.scrollHeight, iDoc.documentElement.scrollHeight, 1200);
-      iframe.style.height = `${fullH}px`;
-      await new Promise(r => setTimeout(r, 100));
-
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(iDoc.body, {
-        scale: 1.5,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        windowWidth: 816,
-        width: 816,
-        height: iDoc.body.scrollHeight,
-      });
-
-      // Slice canvas into letter-size pages and build PDF manually
-      const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
-      const margin = 8;
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const printW = pageW - 2 * margin;
-      const printH = pageH - 2 * margin;
-      const px2mm = printW / canvas.width;
-      const pageHeightPx = Math.round(printH / px2mm);
-
-      let offsetY = 0;
-      let firstPage = true;
-      while (offsetY < canvas.height) {
-        const sliceH = Math.min(pageHeightPx, canvas.height - offsetY);
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceH;
-        pageCanvas.getContext("2d")!.drawImage(canvas, 0, offsetY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-        if (!firstPage) pdf.addPage();
-        pdf.addImage(pageCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceH * px2mm);
-        offsetY += sliceH;
-        firstPage = false;
-      }
-
-      pdf.save(`CoreCutter_${edp}_${date}.pdf`);
+      // html2canvas on a same-origin iframe body uses the iframe's own document/styles —
+      // no Tailwind CSS present, no dark-mode bleed. html2pdf handles page breaks properly.
+      const iframeBody = iframe.contentDocument!.body;
+      const html2pdf = (await import("html2pdf.js")).default;
+      await html2pdf().set({
+        margin: [8, 10, 8, 10],
+        filename: `CoreCutter_${edp}_${date}.pdf`,
+        image: { type: "png" },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          windowWidth: 816,
+        },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+      }).from(iframeBody).save();
     } finally {
       document.body.removeChild(iframe);
     }
