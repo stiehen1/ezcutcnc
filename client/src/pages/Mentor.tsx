@@ -2546,7 +2546,7 @@ export default function Mentor() {
 <body>
 <div class="header">
   <div class="header-logo">
-    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter">
+    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter" height="40" style="height:40px;width:auto;display:block;max-height:40px;">
   </div>
   <div class="header-center">
     <strong>Produced with CoreCutCNC by Core Cutter LLC</strong>
@@ -2630,10 +2630,18 @@ ${stabSection}
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
     await html2pdf().set({
-      margin: [10, 10, 10, 10],
+      margin: [8, 10, 8, 10],
       filename: `CoreCutter_${edp}_${date}.pdf`,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
+      image: { type: "png" },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: 1024,   // render at desktop width — prevents KPI columns collapsing
+        scrollX: 0,
+        scrollY: 0,
+      },
       jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
     // @ts-ignore — html2pdf types don't declare pagebreak or (src, type) overload
     }).from(cleanHtml, "string").save();
