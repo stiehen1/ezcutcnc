@@ -2546,7 +2546,7 @@ export default function Mentor() {
 <body>
 <div class="header">
   <div class="header-logo">
-    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter">
+    <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter" height="40" style="height:40px;width:auto;display:block;max-height:40px;">
   </div>
   <div class="header-center">
     <strong>Produced with CoreCutCNC by Core Cutter LLC</strong>
