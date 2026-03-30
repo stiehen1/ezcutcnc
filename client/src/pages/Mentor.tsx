@@ -2517,8 +2517,11 @@ export default function Mentor() {
   @page { margin: 12mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* color-scheme: light forces light mode regardless of OS/browser dark mode setting — prevents Tailwind dark theme from bleeding in via html2canvas */
-  html { color-scheme: light !important; }
+  html, body { color-scheme: light !important; background: #fff !important; }
   body { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
+  /* .pdf-doc mirrors body styles — html2pdf strips <body> tag when injecting via innerHTML,
+     so this wrapper div carries the light-mode styles regardless of host page dark mode */
+  .pdf-doc { font-family: Arial, sans-serif !important; font-size: 11px !important; color: #111 !important; background: #fff !important; padding: 20px 28px !important; }
   .header { display: table !important; width: 100% !important; border-bottom: 2px solid #e55a00 !important; padding-bottom: 12px !important; margin-bottom: 16px !important; }
   .header-logo { display: table-cell !important; vertical-align: middle !important; width: 33% !important; }
   .header img { height: 40px !important; width: auto !important; display: block !important; }
@@ -2546,6 +2549,7 @@ export default function Mentor() {
 </style>
 </head>
 <body>
+<div class="pdf-doc">
 <div class="header">
   <div class="header-logo">
     <img src="${window.location.origin}/CCLogo-long-whiteback TRANSPARENT.png" alt="Core Cutter" height="40" style="height:40px;width:auto;display:block;max-height:40px;">
@@ -2601,6 +2605,7 @@ ${stabSection}
   ════════════════════════════════════════<br>
   <strong>© ${new Date().getFullYear()} Core Cutter LLC. All Rights Reserved.</strong> &nbsp;|&nbsp; CoreCutCNC &nbsp;|&nbsp; corecutcnc.com
 </div>
+</div><!-- end .pdf-doc -->
 <script>window.onload = function() { window.print(); };<\/script>
 </body>
 </html>`;
@@ -2630,76 +2635,26 @@ ${stabSection}
     if (!capturedHtml) return;
     const cleanHtml = capturedHtml.replace(/<script[\s\S]*?<\/script>/gi, "");
 
-    // Strategy: render the PDF HTML in a hidden same-origin iframe via document.write().
-    // The iframe gets its OWN document — no Tailwind CSS ever loads inside it, zero dark bleed.
-    // We call html2canvas directly on the iframe body (never touching the main document),
-    // then slice the canvas into letter-size pages and write to jsPDF manually.
-    // html2pdf().from(element) is intentionally avoided — it moves the element into the main
-    // document DOM before rendering, which re-applies Tailwind dark styles.
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:816px;height:1px;border:none;visibility:hidden;";
-    document.body.appendChild(iframe);
-
+    // from(cleanHtml, "string") injects via innerHTML — <body> tag is stripped, but the
+    // .pdf-doc wrapper div carries all the body styles so dark-mode never bleeds in.
+    const html2pdf = (await import("html2pdf.js")).default;
     const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
     const date = new Date().toISOString().slice(0, 10);
-
-    try {
-      // Write full HTML document — real <head>/<style>/<body> parsed properly
-      await new Promise<void>((resolve) => {
-        iframe.onload = () => setTimeout(resolve, 600);
-        const iDoc = iframe.contentDocument!;
-        iDoc.open(); iDoc.write(cleanHtml); iDoc.close();
-      });
-
-      // Expand iframe to full content height so html2canvas captures everything
-      const iDoc = iframe.contentDocument!;
-      const contentH = Math.max(iDoc.body.scrollHeight, 800);
-      iframe.style.height = `${contentH}px`;
-      await new Promise(r => setTimeout(r, 150));
-
-      // Capture iframe body — ownerDocument is the iframe's doc, so html2canvas
-      // computes styles from the iframe's own stylesheets (our PDF CSS, not Tailwind)
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(iDoc.body, {
+    // @ts-ignore
+    await html2pdf().set({
+      margin: [8, 10, 8, 10],
+      filename: `CoreCutter_${edp}_${date}.pdf`,
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: {
         scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
-        windowWidth: 816,
-        width: 816,
-        scrollX: 0,
-        scrollY: 0,
-      });
-
-      // Slice canvas into letter-size pages
-      const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
-      const marginMm  = 8;
-      const pageWmm   = pdf.internal.pageSize.getWidth();
-      const pageHmm   = pdf.internal.pageSize.getHeight();
-      const printWmm  = pageWmm - 2 * marginMm;
-      const printHmm  = pageHmm - 2 * marginMm;
-      const pxPerMm   = canvas.width / printWmm;
-      const pageHpx   = Math.round(printHmm * pxPerMm);
-
-      let topPx = 0;
-      let first = true;
-      while (topPx < canvas.height) {
-        const sliceHpx = Math.min(pageHpx, canvas.height - topPx);
-        const pc = document.createElement("canvas");
-        pc.width  = canvas.width;
-        pc.height = sliceHpx;
-        pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, sliceHpx, 0, 0, canvas.width, sliceHpx);
-        if (!first) pdf.addPage();
-        pdf.addImage(pc.toDataURL("image/png"), "PNG", marginMm, marginMm, printWmm, sliceHpx / pxPerMm);
-        topPx += sliceHpx;
-        first = false;
-      }
-
-      pdf.save(`CoreCutter_${edp}_${date}.pdf`);
-    } finally {
-      document.body.removeChild(iframe);
-    }
+        windowWidth: 1024,
+      },
+      pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+      jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    }).from(cleanHtml, "string").save();
   };
   const engineering = result?.engineering ?? null;
   const stability = result?.stability ?? null;
