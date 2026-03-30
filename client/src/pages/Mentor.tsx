@@ -2504,7 +2504,7 @@ export default function Mentor() {
       ${stab.suggestions?.filter((s: any) => s.type !== "info").length > 0 ? `
         <ol class="suggestions">
           ${stab.suggestions.filter((s: any) => s.type !== "info").map((s: any) =>
-            `<li><strong>${s.label}</strong>${s.detail ? ` — ${s.detail}` : ""}${s.suggested_edps?.length ? ` <span class="edp">EDP# ${s.suggested_edps.join(", ")}</span>` : ""}</li>`
+            `<li><strong>${s.label}</strong>${s.detail ? ` — ${s.detail}` : ""}${s.suggested_edps?.length ? ` <span class="edp">EDP# ${s.suggested_edps.join(", ")}${s.suggested_cr_note ? ` (${s.suggested_cr_note})` : ""}</span>` : ""}</li>`
           ).join("")}
         </ol>` : ""}` : "";
 
@@ -9483,6 +9483,9 @@ ${stabSection}
                                         }}
                                       >{edp}</button>
                                     ))}
+                                    {s.suggested_cr_note && (
+                                      <span className="text-zinc-400">({s.suggested_cr_note})</span>
+                                    )}
                                   </span>
                                 );
                               })()}

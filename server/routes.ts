@@ -754,12 +754,15 @@ export async function registerRoutes(
               const cr     = s.lookup_cr ?? 0;
               const inputHasCr = corner !== "square" && corner !== "ball" && cr > 0;
               const isRoughingGeom = payloadGeometry === "chipbreaker" || payloadGeometry === "truncated_rougher";
-              const crFilterS  = inputHasCr && !isRoughingGeom
+              const isDiameterSugg = s.type === "diameter";
+              // Diameter suggestions: relax CR filter to "any CR" — going to a larger tool,
+              // the exact CR size is secondary and shouldn't exclude the only available option.
+              const crFilterS  = inputHasCr && !isRoughingGeom && !isDiameterSugg
                 ? ` AND CASE WHEN s.corner_condition  ~ '^[0-9]' THEN s.corner_condition::numeric  ELSE 999 END <= ${cr}`
                 : inputHasCr
-                  ? ` AND LOWER(s.corner_condition)  NOT IN ('square','ball')`  // roughing: any CR ok, just not square
+                  ? ` AND LOWER(s.corner_condition)  NOT IN ('square','ball')`  // roughing or diameter: any CR ok
                   : "";
-              const crFilterS2 = inputHasCr && !isRoughingGeom
+              const crFilterS2 = inputHasCr && !isRoughingGeom && !isDiameterSugg
                 ? ` AND CASE WHEN s2.corner_condition ~ '^[0-9]' THEN s2.corner_condition::numeric ELSE 999 END <= ${cr}`
                 : inputHasCr
                   ? ` AND LOWER(s2.corner_condition) NOT IN ('square','ball')`
@@ -829,9 +832,22 @@ export async function registerRoutes(
               // is shorter than the job needs (e.g. 606711 LOC=0.9375" < 1.0" DOC wins over
               // 606111 LOC=1.25" when using closest-LOC logic — wrong choice).
               if (s.type === "diameter") {
+                // Helper: attach CR note if suggested tool has a different CR than input
+                const attachDiaCrNote = (rows: any[]) => {
+                  if (!rows.length) return;
+                  s.suggested_edps = rows.map((r: any) => r.edp);
+                  s.suggested_edp  = s.suggested_edps[0];
+                  // Check if the suggested CR differs from input CR
+                  const suggestedCr = rows[0].corner_condition ?? "";
+                  const suggestedCrNum = parseFloat(suggestedCr);
+                  const inputCrNum = cr;  // input corner radius in inches
+                  if (inputHasCr && !isNaN(suggestedCrNum) && Math.abs(suggestedCrNum - inputCrNum) > 0.0005) {
+                    s.suggested_cr_note = `${suggestedCrNum.toFixed(3)}" CR`;
+                  }
+                };
                 // Primary: matching corner, tools at the minimum sufficient LOC only (all coating variants)
                 const qd1 = await pool.query(
-                  `SELECT s.edp FROM skus s
+                  `SELECT s.edp, s.corner_condition FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND s.flutes = $1
@@ -856,12 +872,11 @@ export async function registerRoutes(
                   [flutes, dia, cornerStr, loc]
                 );
                 if (qd1.rows.length > 0) {
-                  s.suggested_edps = qd1.rows.map((r: any) => r.edp);
-                  s.suggested_edp  = s.suggested_edps[0];
+                  attachDiaCrNote(qd1.rows);
                 } else {
                   // Fallback: ignore corner, tools at minimum sufficient LOC only
                   const qd2 = await pool.query(
-                    `SELECT s.edp FROM skus s
+                    `SELECT s.edp, s.corner_condition FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND s.flutes = $1
@@ -888,12 +903,11 @@ export async function registerRoutes(
                     [flutes, dia, loc]
                   );
                   if (qd2.rows.length > 0) {
-                    s.suggested_edps = qd2.rows.map((r: any) => r.edp);
-                    s.suggested_edp  = s.suggested_edps[0];
+                    attachDiaCrNote(qd2.rows);
                   } else {
                     // Last resort: closest LOC regardless of length
                     const qd3 = await pool.query(
-                      `SELECT s.edp FROM skus s
+                      `SELECT s.edp, s.corner_condition FROM skus s
                        JOIN sku_uploads u ON s.upload_id = u.id
                        WHERE u.is_current = TRUE
                          AND s.flutes = $1
@@ -919,8 +933,7 @@ export async function registerRoutes(
                       [flutes, dia, loc]
                     );
                     if (qd3.rows.length > 0) {
-                      s.suggested_edps = qd3.rows.map((r: any) => r.edp);
-                      s.suggested_edp  = s.suggested_edps[0];
+                      attachDiaCrNote(qd3.rows);
                     }
                   }
                 }
