@@ -487,6 +487,8 @@ export default function Mentor() {
     if (!Number.isFinite(ccP) || ccP <= 0) missing.push("CC Tool Price");
     if (!Number.isFinite(cP) || cP <= 0) missing.push("Incumbent Tool Price");
     if (!Number.isFinite(annualVol) || annualVol <= 0) missing.push(roiLifeMode === "cut_time" ? "Annual Cutting Hours" : roiLifeMode === "linear_in" ? "Annual Linear Inches" : "Annual Volume");
+    if (!roiUserType) missing.push("Customer Type (End User or Distributor)");
+    if (roiUserType === "distributor" && !roiDistributorCode) missing.push("Authorized Distributor Name");
     setRoiMissingFields(missing);
     if (missing.length > 0) return;
     // Reconditioning: lifecycle units compound same as parts (substitute minutes or inches)
@@ -508,7 +510,13 @@ export default function Mentor() {
     const compMachineCost = compChangeCost;
     const ccTotalCost = ccToolCost + ccChangeCost;
     const compTotalCost = compToolCost + compChangeCost;
-    const savingsPerPart = compTotalCost - ccTotalCost; // $/unit
+    const toolingSavingsPerPart = compTotalCost - ccTotalCost; // $/unit — tooling cost delta only
+    // MRR → machine time savings per part (only when material volume per part is provided)
+    const matVol = parseFloat(roiMatVolPerPart);
+    const mrrTimeSavingsPerPart = (ccMrr > 0 && compMrr > 0 && Number.isFinite(matVol) && matVol > 0 && rate > 0)
+      ? (matVol / compMrr - matVol / ccMrr) * (rate / 60)
+      : 0;
+    const savingsPerPart = toolingSavingsPerPart + mrrTimeSavingsPerPart;
     // Annual: cut_time mode annualVol is hours → ×60 to get minutes
     const annualUnits = roiLifeMode === "cut_time" ? annualVol * 60 : annualVol;
     // Extra itemized savings
@@ -521,34 +529,86 @@ export default function Mentor() {
     const savingsPct = compTotalCost > 0 ? (savingsPerPart / compTotalCost) * 100 : 0;
     const timeSavingsPct = 0;
     const mrrGainPct = (compMrr > 0 && ccMrr > 0) ? ((ccMrr - compMrr) / compMrr) * 100 : 0;
+    // Breakeven: minimum CC tool life (native units) at which total cost = competitor total cost
+    // ccTotalCost(N) = (reconLifecycleCost + changeTimeCost) / N  →  N = (reconLifecycleCost + changeTimeCost) / compTotalCost
+    // Only meaningful when savingsPerPart < 0 and compTotalCost > 0
+    const changeTimeCost = changeTime > 0 && rate > 0 ? changeTime * (rate / 60) : 0;
+    const breakevenN = (savingsPerPart < 0 && compTotalCost > 0)
+      ? (reconLifecycleCost + changeTimeCost) / compTotalCost
+      : null;
     setRoiMissingFields([]);
-    setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct, mrrGainPct, reconSavingsPerPart, reconGrinds: grinds, oneTimeSavings });
-    // Save to DB on every calculate (upsert — won't bloat the table)
-    if (erEmail) {
+    setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct, mrrGainPct, reconSavingsPerPart, reconGrinds: grinds, oneTimeSavings, mrrTimeSavingsPerPart, breakevenN });
+    // Save to DB on every calculate — requires a name to save
+    if (erEmail && roiName.trim()) {
       fetch("/api/roi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "calculate",
-          userEmail: erEmail, userName: localStorage.getItem("cc_user_name") || "",
-          material: form.material, operation, toolDia: form.tool_dia,
+          roiSessionId,
+          // Rep (logged-in user)
+          userEmail: erEmail,
+          userName: localStorage.getItem("cc_user_name") || "",
+          userType: roiUserType,
+          repId: roiRepVerified ? (roiRepVerified as any).repId : null,
+          repName: roiRepVerified ? (roiRepVerified as any).name : null,
+          distributorName: roiDistributorName,
+          distributorCode: roiDistributorCode,
+          // End-user / customer (the shop being tested)
+          endUserName: roiEndUserName,
+          endUserEmail: roiEndUserEmail,
+          endUserCompany: roiEndUserCompany,
+          // Context
+          material: form.material,
+          hardness: form.hardness_value ? `${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : "",
+          operation,
+          toolDia: form.tool_dia,
           feedIpm: (mentor.data as any)?.customer?.feed_ipm ?? 0,
-          ccEdp: edpText || "", ccToolPrice: ccP, ccPartsPer: ccN, ccMrr: parseFloat(roiCcMrr) || 0,
-          compEdp: roiCompEdp, compBrand: roiCompBrand, compPrice: cP, compPartsPer: cN, compMrr: parseFloat(roiCompMrr) || 0,
-          lifeMode: roiLifeMode, annualVolume: annualVol,
+          machineName: activeMachineName || "",
+          // CC tool geometry (from calc form + SKU)
+          ccEdp: edpText || "",
+          ccToolPrice: ccP,
+          ccPartsPer: ccN,
+          ccMrr: parseFloat(roiCcMrr) || 0,
+          ccNumFlutes: form.flutes || null,
+          ccLoc: form.loc || null,
+          ccOal: null, // OAL not tracked in form state
+          ccCoating: form.coating || "",
+          ccCornerType: form.corner_condition || "",
+          ccSfm: (mentor.data as any)?.customer?.sfm ?? null,
+          ccRpms: (mentor.data as any)?.customer?.rpm ?? null,
+          ccIpt: (mentor.data as any)?.customer?.ipt ?? null,
+          ccRadialDoc: form.woc_pct ? (form.woc_pct / 100) * form.tool_dia : null,
+          ccAxialDoc: form.doc_xd ? form.doc_xd * form.tool_dia : null,
+          ccToolLifeMinutes: (mentor.data as any)?.engineering?.tool_life_min ?? null,
+          // Comp tool
+          compEdp: roiCompEdp,
+          compBrand: roiCompBrand,
+          compPrice: cP,
+          compPartsPer: cN,
+          compMrr: parseFloat(roiCompMrr) || 0,
+          compTimeInCut: roiLifeMode === "cut_time" ? cN : null,
+          // ROI results
+          lifeMode: roiLifeMode,
+          annualVolume: annualVol,
           savingsPerPart, monthlySavings, annualSavings, savingsPct, mrrGainPct,
+          mrrTimeSavingsPerPart, matVolPerPart: parseFloat(roiMatVolPerPart) || null,
+          breakevenN: breakevenN ?? null,
           reconGrinds: grinds, reconSavingsPerPart, oneTimeSavings, roiName,
         }),
       }).catch(() => {}); // fire-and-forget
     }
     // Auto-save draft to localStorage
     localStorage.setItem("roi_draft", JSON.stringify({
-      lifeMode: roiLifeMode, roiName,
+      lifeMode: roiLifeMode, roiName, roiSessionId,
+      endUserName: roiEndUserName, endUserEmail: roiEndUserEmail, endUserCompany: roiEndUserCompany,
+      userType: roiUserType, distributorName: roiDistributorName, distributorCode: roiDistributorCode,
       ccPrice: roiCcPrice, ccParts: roiCcParts, ccTime: roiCcTime, ccMrr: roiCcMrr,
       ccCutTime: roiCcCutTime, ccLinIn: roiCcLinIn,
       reconEnabled: roiReconEnabled, reconGrinds: roiReconGrinds, reconRetention: roiReconRetention,
       compBrand: roiCompBrand, compEdp: roiCompEdp, compPrice: roiCompPrice, compParts: roiCompParts, compTime: roiCompTime, compMrr: roiCompMrr,
       compCutTime: roiCompCutTime, compLinIn: roiCompLinIn, linInPerPart: roiLinInPerPart,
+      matVolPerPart: roiMatVolPerPart,
       shopRate: roiShopRate, annualVol: roiAnnualVol, extraSavings: roiExtraSavings,
       result: { ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost,
         savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct, mrrGainPct, reconSavingsPerPart, reconGrinds: grinds },
@@ -565,6 +625,7 @@ export default function Mentor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "email",
+          roiSessionId,
           userEmail: erEmail,
           userName: localStorage.getItem("cc_user_name") || "",
           material: form.material,
@@ -1418,6 +1479,13 @@ export default function Mentor() {
       if (d.ccMrr) setRoiCcMrr(d.ccMrr);
       if (d.lifeMode) setRoiLifeMode(d.lifeMode);
       if (d.roiName) setRoiName(d.roiName);
+      if (d.roiSessionId) setRoiSessionId(d.roiSessionId);
+      if (d.endUserName) setRoiEndUserName(d.endUserName);
+      if (d.endUserEmail) setRoiEndUserEmail(d.endUserEmail);
+      if (d.endUserCompany) setRoiEndUserCompany(d.endUserCompany);
+      if (d.userType === "end_user" || d.userType === "distributor") setRoiUserType(d.userType);
+      if (d.distributorName) { setRoiDistributorName(d.distributorName); setRoiDistributorQuery(d.distributorName); }
+      if (d.distributorCode) setRoiDistributorCode(d.distributorCode);
       if (d.reconEnabled != null) setRoiReconEnabled(d.reconEnabled);
       if (d.reconGrinds) setRoiReconGrinds(d.reconGrinds);
       if (d.reconRetention) setRoiReconRetention(d.reconRetention);
@@ -1432,10 +1500,11 @@ export default function Mentor() {
       if (d.compCutTime) setRoiCompCutTime(d.compCutTime);
       if (d.compLinIn) setRoiCompLinIn(d.compLinIn);
       if (d.linInPerPart) setRoiLinInPerPart(d.linInPerPart);
+      if (d.matVolPerPart) setRoiMatVolPerPart(d.matVolPerPart);
       if (d.shopRate) setRoiShopRate(d.shopRate);
       if (d.annualVol) setRoiAnnualVol(d.annualVol);
       if (d.extraSavings) setRoiExtraSavings(d.extraSavings);
-      if (d.result) setRoiResult(d.result);
+      if (d.result) setRoiResult({ mrrTimeSavingsPerPart: 0, breakevenN: null, ...d.result });
       setRoiDraftLoaded(true);
       // If navigated back via resume, open the panel
       if (localStorage.getItem("roi_resume")) {
@@ -1680,15 +1749,28 @@ export default function Mentor() {
 
   // ── ROI Calculator state ───────────────────────────────────────────────────
   const [showRoi, setShowRoi] = React.useState(false);
+  const [roiRepVerified, setRoiRepVerified] = React.useState<{ name: string; repId: string } | null | false>(null); // null=unchecked, false=not authorized
   const [roiCcPrice, setRoiCcPrice] = React.useState("");
   const [roiCcParts, setRoiCcParts] = React.useState("");
   const [roiCcTime, setRoiCcTime] = React.useState("");
   const [roiCcMrr, setRoiCcMrr] = React.useState("");   // auto-filled from calc
+  const [roiMatVolPerPart, setRoiMatVolPerPart] = React.useState(""); // in³/part — optional MRR→time savings
   const [roiReconEnabled, setRoiReconEnabled] = React.useState(false);
   const [roiReconGrinds, setRoiReconGrinds] = React.useState("3");
   const [roiReconRetention, setRoiReconRetention] = React.useState("90"); // % tool life retained per regrind
   const [roiMissingFields, setRoiMissingFields] = React.useState<string[]>([]);
   const [roiName, setRoiName] = React.useState("");
+  const [roiSessionId, setRoiSessionId] = React.useState(() => crypto.randomUUID());
+  // End-user / customer info (the shop being tested — distinct from the rep's login)
+  const [roiEndUserName, setRoiEndUserName] = React.useState("");
+  const [roiEndUserEmail, setRoiEndUserEmail] = React.useState("");
+  const [roiEndUserCompany, setRoiEndUserCompany] = React.useState("");
+  const [roiUserType, setRoiUserType] = React.useState<"distributor" | "end_user" | "">();
+  const [roiDistributorName, setRoiDistributorName] = React.useState("");
+  const [roiDistributorCode, setRoiDistributorCode] = React.useState("");
+  const [roiDistributorQuery, setRoiDistributorQuery] = React.useState("");
+  const [roiDistributorResults, setRoiDistributorResults] = React.useState<{ name: string; code: string }[]>([]);
+  const [roiDistributorOpen, setRoiDistributorOpen] = React.useState(false);
   const [roiCompBrand, setRoiCompBrand] = React.useState("");
   const [roiCompEdp, setRoiCompEdp] = React.useState("");
   const [roiCompPrice, setRoiCompPrice] = React.useState("");
@@ -1706,7 +1788,18 @@ export default function Mentor() {
     savingsPerPart: number; monthlySavings: number; annualSavings: number;
     savingsPct: number; timeSavingsPct: number; mrrGainPct: number;
     reconSavingsPerPart: number; reconGrinds: number; oneTimeSavings: number;
+    mrrTimeSavingsPerPart: number;
+    breakevenN: number | null; // null = not applicable
   } | null>(null);
+  // Verify rep authorization when ROI panel opens
+  React.useEffect(() => {
+    if (!showRoi || !erEmail || roiRepVerified !== null) return;
+    fetch(`/api/sales-rep/verify?email=${encodeURIComponent(erEmail)}`)
+      .then(r => r.json())
+      .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : false))
+      .catch(() => setRoiRepVerified(false));
+  }, [showRoi, erEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [roiSaving, setRoiSaving] = React.useState(false);
   const [roiEmailSent, setRoiEmailSent] = React.useState(false);
   const [roiPrinting, setRoiPrinting] = React.useState(false);
@@ -1720,11 +1813,13 @@ export default function Mentor() {
   const [roiCompLinIn, setRoiCompLinIn] = React.useState("");
   const [roiLinInPerPart, setRoiLinInPerPart] = React.useState("");
 
-  // Auto-populate CC MRR from current calc result
+  // Auto-populate CC MRR and tool life from current calc result
   React.useEffect(() => {
     if (!mentor.data?.customer) return;
     const mrr = (mentor.data.customer as any).mrr_in3_min ?? 0;
     if (mrr > 0) setRoiCcMrr(mrr.toFixed(3));
+    const life = (mentor.data as any)?.engineering?.tool_life_min ?? 0;
+    if (life > 0) setRoiCcCutTime(String(Math.round(life)));
   }, [mentor.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
@@ -9624,11 +9719,128 @@ ${stabSection}
 
           {showRoi && (
             <div className="px-4 pb-4 space-y-4">
+
+              {/* Rep authorization gate */}
+              {roiRepVerified === null && (
+                <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/40 px-4 py-6 text-center text-xs text-zinc-500">
+                  Verifying access…
+                </div>
+              )}
+
+              {roiRepVerified === false && (
+                <div className="rounded-lg bg-red-950/40 border border-red-700/50 px-4 py-5 text-center space-y-2">
+                  <div className="text-red-400 font-semibold text-sm">ROI Access Restricted</div>
+                  <p className="text-xs text-zinc-400">Your email is not on the authorized sales team list.</p>
+                  <p className="text-xs text-zinc-600">Contact Core Cutter to request access.</p>
+                </div>
+              )}
+
+              {roiRepVerified && (
+              <>
               {roiDraftLoaded && !mentor.data && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
                 </div>
               )}
+              {/* End-user / customer info */}
+              <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-zinc-400 font-semibold">Customer Info <span className="text-zinc-600 font-normal">— whose shop is this test for?</span></p>
+                  <div className={`flex items-center gap-1 rounded-md border overflow-hidden text-[10px] font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-700"}`}>
+                    <button type="button"
+                      onClick={() => setRoiUserType("end_user")}
+                      className={`px-2 py-0.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"}`}>
+                      End User
+                    </button>
+                    <button type="button"
+                      onClick={() => setRoiUserType("distributor")}
+                      className={`px-2 py-0.5 transition-colors ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"}`}>
+                      Distributor
+                    </button>
+                  </div>
+                </div>
+                {/* Distributor autocomplete — only shown when Distributor is selected */}
+                {roiUserType === "distributor" && (
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500 font-semibold">
+                      Authorized Distributor <span className="text-red-400">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        className={`h-7 text-xs pr-6 ${roiDistributorCode ? "border-green-700/60" : roiDistributorQuery.length > 1 ? "border-amber-700/60" : ""}`}
+                        placeholder="Start typing distributor name…"
+                        value={roiDistributorQuery}
+                        onChange={e => {
+                          const q = e.target.value;
+                          setRoiDistributorQuery(q);
+                          setRoiDistributorName("");
+                          setRoiDistributorCode("");
+                          setRoiDistributorOpen(true);
+                          if (q.length >= 2) {
+                            fetch(`/api/distributors/search?q=${encodeURIComponent(q)}`)
+                              .then(r => r.json())
+                              .then(data => setRoiDistributorResults(data))
+                              .catch(() => {});
+                          } else {
+                            setRoiDistributorResults([]);
+                          }
+                        }}
+                        onFocus={() => { if (roiDistributorQuery.length >= 2) setRoiDistributorOpen(true); }}
+                        onBlur={() => setTimeout(() => setRoiDistributorOpen(false), 150)}
+                      />
+                      {roiDistributorCode && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">✓</span>
+                      )}
+                      {roiDistributorOpen && roiDistributorResults.length > 0 && (
+                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-zinc-600 bg-zinc-900 shadow-lg overflow-hidden">
+                          {roiDistributorResults.map(d => (
+                            <button
+                              key={d.code}
+                              type="button"
+                              className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 transition-colors"
+                              onMouseDown={() => {
+                                setRoiDistributorName(d.name);
+                                setRoiDistributorCode(d.code);
+                                setRoiDistributorQuery(d.name);
+                                setRoiDistributorOpen(false);
+                                setRoiDistributorResults([]);
+                              }}
+                            >
+                              {d.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {roiDistributorOpen && roiDistributorQuery.length >= 2 && roiDistributorResults.length === 0 && (
+                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
+                          No authorized distributors found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* End-user contact fields */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500">Contact Name</Label>
+                    <Input type="text" className="h-7 text-xs" placeholder="e.g. John Smith"
+                      value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-zinc-500">{roiUserType === "distributor" ? "End Customer Company" : "Company"}</Label>
+                    <Input type="text" className="h-7 text-xs" placeholder="e.g. Acme Machining"
+                      value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-zinc-500">Email</Label>
+                  <Input type="email" className="h-7 text-xs" placeholder="e.g. john@acmemachining.com"
+                    value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
+                </div>
+              </div>
+
               {/* Tool Life Metric selector */}
               <div className="flex items-center gap-3">
                 <Label className="text-xs text-zinc-400 whitespace-nowrap shrink-0">ROI Measurements</Label>
@@ -9685,7 +9897,12 @@ ${stabSection}
                   {roiLifeMode === "cut_time" && (
                     <div className="space-y-1.5">
                       <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
-                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
+                      <div className="relative">
+                        <Input type="number" className="no-spinners h-7 text-xs pr-10" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
+                        {(mentor.data as any)?.engineering?.tool_life_min > 0 && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -9931,6 +10148,22 @@ ${stabSection}
                       onChange={e => setRoiCompMrr(e.target.value)}
                     />
                   </div>
+                  {/* Material volume per part — unlocks cycle-time savings */}
+                  {(parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0) && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">
+                        Material Removed per Part (in³) <span className="text-zinc-600">— optional</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        className="no-spinners h-7 text-xs"
+                        placeholder="e.g. 2.5"
+                        value={roiMatVolPerPart}
+                        onChange={e => setRoiMatVolPerPart(e.target.value)}
+                      />
+                      <p className="text-[10px] text-zinc-600">WOC × DOC × pass length. Used to convert MRR gain into $/part machine time savings.</p>
+                    </div>
+                  )}
                   {/* Annual volume */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-zinc-400">
@@ -9974,6 +10207,29 @@ ${stabSection}
                 </div>
               )}
 
+              {/* ROI name — required to save to DB */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-zinc-300 font-semibold">ROI Name <span className="text-red-400">*</span></Label>
+                  <span className="text-[10px] text-zinc-600">required to save — each unique test needs its own name</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. Acme Corp – 6061 AL – Test 1"
+                  value={roiName}
+                  onChange={e => {
+                    setRoiName(e.target.value);
+                    // New name = new session so it saves as a separate row
+                    setRoiSessionId(crypto.randomUUID());
+                    setRoiResult(null);
+                  }}
+                  className={`w-full rounded-lg bg-zinc-900 border text-zinc-200 text-xs px-3 py-1.5 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 ${!roiName.trim() ? "border-red-700/60" : "border-zinc-700"}`}
+                />
+                {!roiName.trim() && (
+                  <p className="text-[10px] text-red-400">Name this ROI before calculating — it won't save to the database without one.</p>
+                )}
+              </div>
+
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -9982,22 +10238,19 @@ ${stabSection}
                 >
                   Calculate ROI
                 </button>
-                <input
-                  type="text"
-                  placeholder="ROI name (e.g. Acme Corp – 6061 AL)"
-                  value={roiName}
-                  onChange={e => setRoiName(e.target.value)}
-                  className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-                />
               </div>
 
               {/* Results */}
               {roiResult && (
                 <div className="space-y-3 pt-1">
                   {/* Hero savings */}
-                  <div className="rounded-lg border border-green-600/50 bg-green-950/40 px-4 py-3 text-center">
-                    <div className="text-3xl font-bold text-green-400">${roiResult.annualSavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                    <div className="text-xs text-green-600 mt-0.5">total annual savings</div>
+                  <div className={`rounded-lg border px-4 py-3 text-center ${roiResult.annualSavings < 0 ? "border-red-600/50 bg-red-950/40" : "border-green-600/50 bg-green-950/40"}`}>
+                    <div className={`text-3xl font-bold ${roiResult.annualSavings < 0 ? "text-red-400" : "text-green-400"}`}>
+                      {roiResult.annualSavings < 0 ? "-" : ""}${Math.abs(roiResult.annualSavings).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    <div className={`text-xs mt-0.5 ${roiResult.annualSavings < 0 ? "text-red-600" : "text-green-600"}`}>
+                      {roiResult.annualSavings < 0 ? "CC costs more annually" : "total annual savings"}
+                    </div>
                     <div className="text-xs text-zinc-500 mt-0.5">${roiResult.savingsPerPart.toFixed(4)}/{roiLifeMode === "cut_time" ? "min" : roiLifeMode === "linear_in" ? "inch" : "part"} · ${roiResult.monthlySavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo</div>
                     <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
                       {roiResult.timeSavingsPct > 0 && (
@@ -10012,6 +10265,55 @@ ${stabSection}
                       )}
                     </div>
                   </div>
+
+                  {/* MRR cycle-time contribution */}
+                  {roiResult.mrrTimeSavingsPerPart > 0 && (
+                    <div className="rounded-lg border border-blue-700/30 bg-blue-950/20 px-3 py-2 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-blue-300 font-semibold">Faster cycle time</span>
+                        <span className="text-zinc-500 ml-1.5">({roiResult.mrrGainPct.toFixed(1)}% more MRR)</span>
+                        <p className="text-zinc-500 text-[10px] mt-0.5">Machine time saved per part × shop rate</p>
+                      </div>
+                      <span className="text-blue-300 font-bold shrink-0 ml-3">
+                        +${(roiResult.mrrTimeSavingsPerPart * (roiLifeMode === "cut_time" ? parseFloat(roiAnnualVol) * 60 : parseFloat(roiAnnualVol))).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Breakeven callout — only shown when CC is currently more expensive */}
+                  {roiResult.breakevenN !== null && (
+                    <div className="rounded-lg border border-red-700/50 bg-red-950/30 px-3 py-2.5 text-xs">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-red-400 font-semibold text-sm">CC is currently more expensive</span>
+                      </div>
+                      <p className="text-zinc-400 mb-2">To break even with their tool, Core Cutter needs to reach:</p>
+                      <div className="rounded bg-zinc-900/60 border border-zinc-700/40 px-3 py-2 flex items-baseline gap-2">
+                        <span className="text-white font-bold text-lg">
+                          {roiLifeMode === "cut_time"
+                            ? `${Math.ceil(roiResult.breakevenN)} min`
+                            : roiLifeMode === "linear_in"
+                            ? `${Math.ceil(roiResult.breakevenN).toLocaleString()} in`
+                            : `${Math.ceil(roiResult.breakevenN)} parts`}
+                        </span>
+                        <span className="text-zinc-500">
+                          per tool
+                          {roiLifeMode === "cut_time" && ` (${(roiResult.breakevenN / 60).toFixed(1)} hrs)`}
+                        </span>
+                        {(() => {
+                          const current = roiLifeMode === "cut_time" ? parseFloat(roiCcCutTime)
+                            : roiLifeMode === "linear_in" ? parseFloat(roiCcLinIn)
+                            : parseFloat(roiCcParts);
+                          const gap = Math.ceil(roiResult.breakevenN!) - current;
+                          return gap > 0 ? (
+                            <span className="ml-auto text-amber-400 font-semibold">
+                              +{roiLifeMode === "cut_time" ? `${gap} min` : roiLifeMode === "linear_in" ? `${gap.toLocaleString()} in` : `${gap} parts`} needed
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+                      <p className="text-zinc-600 text-[10px] mt-1.5">Adjust tool price or test for higher tool life to close this gap.</p>
+                    </div>
+                  )}
 
                   {/* Reconditioning contribution */}
                   {roiResult.reconGrinds > 0 && roiResult.reconSavingsPerPart > 0 && (
@@ -10074,6 +10376,16 @@ ${stabSection}
                             <td className="px-3 py-1.5 text-right text-zinc-300">{parseFloat(roiCompMrr) > 0 ? parseFloat(roiCompMrr).toFixed(3) : "—"}</td>
                           </tr>
                         )}
+                        {roiResult.mrrTimeSavingsPerPart > 0 && (
+                          <tr className="border-t border-zinc-700/40 bg-blue-950/10">
+                            <td className="px-3 py-1.5 text-zinc-400">
+                              Cycle Time Savings / Part
+                              <span className="block text-[9px] text-blue-400">from MRR gain × shop rate</span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-blue-300 font-semibold">${roiResult.mrrTimeSavingsPerPart.toFixed(4)}</td>
+                            <td className="px-3 py-1.5 text-right text-zinc-500">—</td>
+                          </tr>
+                        )}
                         <tr className="border-t border-zinc-700/40">
                           <td className="px-3 py-1.5 text-zinc-400">
                             {roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}
@@ -10117,6 +10429,8 @@ ${stabSection}
                     </button>
                   </div>
                 </div>
+              )}
+              </>
               )}
             </div>
           )}
