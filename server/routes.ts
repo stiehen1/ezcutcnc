@@ -2550,6 +2550,25 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/roi/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { email } = req.query as { email?: string };
+      if (!email) return res.status(400).json({ error: "email required" });
+      const { pool } = await import("./db");
+      // Only delete rows belonging to the requesting user
+      const result = await pool.query(
+        `DELETE FROM roi_comparisons WHERE id = $1 AND LOWER(user_email) = LOWER($2)`,
+        [id, email]
+      );
+      if (result.rowCount === 0) return res.status(404).json({ error: "Not found or not authorized" });
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[ROI DELETE] Error:", e?.message);
+      return res.status(500).json({ error: "Failed to delete ROI." });
+    }
+  });
+
 
   // Seed data — wrapped in try/catch so a Neon cold-start ECONNRESET doesn't crash the server
   let snippets: Awaited<ReturnType<typeof storage.getSnippets>> = [];

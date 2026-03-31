@@ -430,6 +430,19 @@ export default function Toolbox() {
                         >
                           Rerun →
                         </button>
+                        <button
+                          type="button"
+                          onClick={async e => {
+                            e.stopPropagation();
+                            if (!confirm("Delete this ROI? This cannot be undone.")) return;
+                            const userEmail = localStorage.getItem("er_email") || "";
+                            await fetch(`/api/roi/${roi.id}?email=${encodeURIComponent(userEmail)}`, { method: "DELETE" });
+                            setRoiItems(prev => prev.filter((r: any) => r.id !== roi.id));
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-red-900/40 hover:bg-red-800/60 text-red-400 font-medium transition-colors"
+                        >
+                          Delete
+                        </button>
                         <span className="text-muted-foreground text-sm">{roiExpanded === roi.id ? "▲" : "▼"}</span>
                       </div>
                     </div>
