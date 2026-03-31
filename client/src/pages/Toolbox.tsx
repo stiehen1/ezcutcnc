@@ -387,17 +387,39 @@ export default function Toolbox() {
                           type="button"
                           onClick={e => {
                             e.stopPropagation();
-                            // Build a draft object from DB row so Mentor.tsx can restore it
-                            const draft = {
+                            // Build a full draft object from DB row so Mentor.tsx restores everything
+                            const draft: Record<string, unknown> = {
                               roiName: roi.roi_name || "",
+                              roiSessionId: roi.roi_session_id || undefined,
+                              lifeMode: roi.life_mode || "parts",
+                              // CC tool
+                              ccPrice: String(roi.cc_tool_price ?? ""),
+                              ccParts: String(roi.cc_parts_per_tool ?? ""),
+                              ccCutTime: String(roi.cc_time_in_cut ?? ""),
+                              ccMrr: String(roi.cc_mrr ?? ""),
+                              // Reco (recon)
+                              reconEnabled: !!roi.recon_enabled,
+                              reconGrinds: String(roi.recon_grinds ?? ""),
+                              reconRetention: String(roi.recon_retention ?? ""),
+                              // Comp tool
                               compBrand: roi.comp_brand || "",
                               compEdp: roi.comp_edp || "",
                               compPrice: String(roi.comp_price ?? ""),
                               compParts: String(roi.comp_parts_per_tool ?? ""),
                               compTime: String(roi.comp_time_in_cut ?? ""),
                               compMrr: String(roi.comp_mrr ?? ""),
+                              compCutTime: String(roi.comp_time_in_cut ?? ""),
+                              // Context
                               shopRate: String(roi.shop_rate ?? ""),
                               annualVol: String(roi.annual_volume ?? ""),
+                              matVolPerPart: String(roi.mat_vol_per_part ?? ""),
+                              // Customer info
+                              userType: roi.user_type || "",
+                              distributorName: roi.distributor_name || "",
+                              distributorCode: roi.distributor_code || "",
+                              endUserName: roi.end_user_name || "",
+                              endUserEmail: roi.end_user_email || "",
+                              endUserCompany: roi.end_user_company || "",
                               _roiLoadedId: roi.id,
                             };
                             localStorage.setItem("roi_draft", JSON.stringify(draft));
@@ -406,7 +428,7 @@ export default function Toolbox() {
                           }}
                           className="text-[11px] px-2 py-1 rounded-md bg-green-800/50 hover:bg-green-700/60 text-green-300 font-medium transition-colors"
                         >
-                          Load
+                          Rerun →
                         </button>
                         <span className="text-muted-foreground text-sm">{roiExpanded === roi.id ? "▲" : "▼"}</span>
                       </div>
