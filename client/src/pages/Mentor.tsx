@@ -9832,25 +9832,31 @@ ${stabSection}
                   </div>
                 )}
 
-                {/* Customer contact fields */}
-                <p className="text-[10px] text-zinc-500 pt-1">
-                  {roiUserType === "distributor" ? "Distributor contact & end customer details:" : "Customer contact details:"}
-                </p>
+                {/* Contact fields — labels change based on toggle */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">Their Contact Name</Label>
-                    <Input type="text" className="h-7 text-xs" placeholder="e.g. John Smith"
+                    <Label className="text-[10px] text-zinc-500">
+                      {roiUserType === "distributor" ? "Distributor Contact Name" : "End User Contact Name"}
+                    </Label>
+                    <Input type="text" className="h-7 text-xs"
+                      placeholder={roiUserType === "distributor" ? "e.g. Jane Doe (rep at distributor)" : "e.g. John Smith (machinist/buyer)"}
                       value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">{roiUserType === "distributor" ? "End Customer Company" : "Company"}</Label>
-                    <Input type="text" className="h-7 text-xs" placeholder="e.g. Acme Machining"
+                    <Label className="text-[10px] text-zinc-500">
+                      {roiUserType === "distributor" ? "Distributor Company Name" : "End User Company Name"}
+                    </Label>
+                    <Input type="text" className="h-7 text-xs"
+                      placeholder={roiUserType === "distributor" ? "e.g. DXP - Chicago" : "e.g. Acme Machining"}
                       value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">Their Email</Label>
-                  <Input type="email" className="h-7 text-xs" placeholder="e.g. john@acmemachining.com"
+                  <Label className="text-[10px] text-zinc-500">
+                    {roiUserType === "distributor" ? "Distributor Contact Email" : "End User Contact Email"}
+                  </Label>
+                  <Input type="email" className="h-7 text-xs"
+                    placeholder={roiUserType === "distributor" ? "e.g. jane@dxpchicago.com" : "e.g. john@acmemachining.com"}
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
               </div>
