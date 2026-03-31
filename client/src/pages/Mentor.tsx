@@ -9737,6 +9737,11 @@ ${stabSection}
 
               {roiRepVerified && (
               <>
+              {/* Rep identity banner */}
+              <div className="text-[10px] text-zinc-500">
+                Test recorded by: <span className="text-zinc-300 font-semibold">{(roiRepVerified as any).name}</span> <span className="text-zinc-600">({erEmail})</span>
+              </div>
+
               {roiDraftLoaded && !mentor.data && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
