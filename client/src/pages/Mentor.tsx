@@ -9744,20 +9744,26 @@ ${stabSection}
               )}
               {/* End-user / customer info */}
               <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-zinc-400 font-semibold">Customer Info <span className="text-zinc-600 font-normal">— whose shop is this test for?</span></p>
-                  <div className={`flex items-center gap-1 rounded-md border overflow-hidden text-[10px] font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-700"}`}>
+                {/* Who is this ROI for — label + toggle together */}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-zinc-300 font-semibold">Who is this ROI for? <span className="text-red-400">*</span></p>
+                  <div className={`flex rounded-md border overflow-hidden text-xs font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-600"}`}>
                     <button type="button"
                       onClick={() => setRoiUserType("end_user")}
-                      className={`px-2 py-0.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"}`}>
-                      End User
+                      className={`flex-1 py-1.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
+                      Direct End User
+                      <span className="block text-[9px] font-normal opacity-70">shop buying direct from CC</span>
                     </button>
                     <button type="button"
                       onClick={() => setRoiUserType("distributor")}
-                      className={`px-2 py-0.5 transition-colors ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"}`}>
+                      className={`flex-1 py-1.5 transition-colors border-l border-zinc-600 ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
                       Distributor
+                      <span className="block text-[9px] font-normal opacity-70">selling CC through distribution</span>
                     </button>
                   </div>
+                  {!roiUserType && (
+                    <p className="text-[10px] text-red-400">Select one before calculating.</p>
+                  )}
                 </div>
                 {/* Distributor autocomplete — only shown when Distributor is selected */}
                 {roiUserType === "distributor" && (
@@ -9821,10 +9827,13 @@ ${stabSection}
                   </div>
                 )}
 
-                {/* End-user contact fields */}
+                {/* Customer contact fields */}
+                <p className="text-[10px] text-zinc-500 pt-1">
+                  {roiUserType === "distributor" ? "Distributor contact & end customer details:" : "Customer contact details:"}
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">Contact Name</Label>
+                    <Label className="text-[10px] text-zinc-500">Their Contact Name</Label>
                     <Input type="text" className="h-7 text-xs" placeholder="e.g. John Smith"
                       value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
                   </div>
@@ -9835,7 +9844,7 @@ ${stabSection}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">Email</Label>
+                  <Label className="text-[10px] text-zinc-500">Their Email</Label>
                   <Input type="email" className="h-7 text-xs" placeholder="e.g. john@acmemachining.com"
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
