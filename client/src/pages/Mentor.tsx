@@ -1829,6 +1829,20 @@ export default function Mentor() {
       .catch(() => setRoiRepVerified(false));
   }, [showRoi, erEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Cross-device session recovery: when panel opens with a named ROI, check if DB has a session for
+  // this rep+name and use it — so recalculating on a new device updates the same row, not a new one.
+  const [roiSessionRecovered, setRoiSessionRecovered] = React.useState(false);
+  React.useEffect(() => {
+    if (!showRoi || !erEmail || !roiName || roiSessionRecovered) return;
+    setRoiSessionRecovered(true);
+    fetch(`/api/roi/session?email=${encodeURIComponent(erEmail)}&name=${encodeURIComponent(roiName)}`)
+      .then(r => r.json())
+      .then((d: { sessionId: string | null }) => {
+        if (d.sessionId) setRoiSessionId(d.sessionId);
+      })
+      .catch(() => {/* keep local session id */});
+  }, [showRoi, erEmail, roiName]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [roiSaving, setRoiSaving] = React.useState(false);
   const [roiEmailSent, setRoiEmailSent] = React.useState(false);
   const [roiPrinting, setRoiPrinting] = React.useState(false);
@@ -10268,6 +10282,7 @@ ${stabSection}
                     setRoiName(e.target.value);
                     // New name = new session so it saves as a separate row
                     setRoiSessionId(crypto.randomUUID());
+                    setRoiSessionRecovered(false); // allow recovery lookup for the new name
                     setRoiResult(null);
                   }}
                   className={`w-full rounded-lg bg-zinc-900 border text-zinc-200 text-xs px-3 py-1.5 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 ${!roiName.trim() ? "border-red-700/60" : "border-zinc-700"}`}

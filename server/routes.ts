@@ -2512,6 +2512,28 @@ export async function registerRoutes(
     return res.json(matches);
   });
 
+  // Cross-device session recovery: return existing roi_session_id for a rep+name combo
+  app.get("/api/roi/session", async (req, res) => {
+    try {
+      const { email, name } = req.query as { email?: string; name?: string };
+      if (!email || !name) return res.json({ sessionId: null });
+      const { pool } = await import("./db");
+      const result = await pool.query(
+        `SELECT roi_session_id FROM roi_comparisons
+         WHERE LOWER(user_email) = LOWER($1) AND LOWER(roi_name) = LOWER($2)
+         AND roi_session_id IS NOT NULL
+         ORDER BY updated_at DESC NULLS LAST, created_at DESC
+         LIMIT 1`,
+        [email, name]
+      );
+      const sessionId = result.rows[0]?.roi_session_id ?? null;
+      return res.json({ sessionId });
+    } catch (e: any) {
+      console.error("[ROI SESSION] Error:", e?.message);
+      return res.status(500).json({ sessionId: null });
+    }
+  });
+
   app.get("/api/roi", async (req, res) => {
     try {
       const { email } = req.query as { email?: string };
