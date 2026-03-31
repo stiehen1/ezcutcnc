@@ -2512,6 +2512,28 @@ export async function registerRoutes(
     return res.json(matches);
   });
 
+  // Cross-device session recovery: return existing roi_session_id for a rep+name combo
+  app.get("/api/roi/session", async (req, res) => {
+    try {
+      const { email, name } = req.query as { email?: string; name?: string };
+      if (!email || !name) return res.json({ sessionId: null });
+      const { pool } = await import("./db");
+      const result = await pool.query(
+        `SELECT roi_session_id FROM roi_comparisons
+         WHERE LOWER(user_email) = LOWER($1) AND LOWER(roi_name) = LOWER($2)
+         AND roi_session_id IS NOT NULL
+         ORDER BY updated_at DESC NULLS LAST, created_at DESC
+         LIMIT 1`,
+        [email, name]
+      );
+      const sessionId = result.rows[0]?.roi_session_id ?? null;
+      return res.json({ sessionId });
+    } catch (e: any) {
+      console.error("[ROI SESSION] Error:", e?.message);
+      return res.status(500).json({ sessionId: null });
+    }
+  });
+
   app.get("/api/roi", async (req, res) => {
     try {
       const { email } = req.query as { email?: string };
@@ -2525,6 +2547,25 @@ export async function registerRoutes(
     } catch (e: any) {
       console.error("[ROI GET] Error:", e?.message);
       return res.status(500).json({ error: "Failed to load ROI history." });
+    }
+  });
+
+  app.delete("/api/roi/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { email } = req.query as { email?: string };
+      if (!email) return res.status(400).json({ error: "email required" });
+      const { pool } = await import("./db");
+      // Only delete rows belonging to the requesting user
+      const result = await pool.query(
+        `DELETE FROM roi_comparisons WHERE id = $1 AND LOWER(user_email) = LOWER($2)`,
+        [id, email]
+      );
+      if (result.rowCount === 0) return res.status(404).json({ error: "Not found or not authorized" });
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[ROI DELETE] Error:", e?.message);
+      return res.status(500).json({ error: "Failed to delete ROI." });
     }
   });
 

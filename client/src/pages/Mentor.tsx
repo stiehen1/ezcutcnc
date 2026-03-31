@@ -626,23 +626,49 @@ export default function Mentor() {
         body: JSON.stringify({
           action: "email",
           roiSessionId,
+          // Rep
           userEmail: erEmail,
           userName: localStorage.getItem("cc_user_name") || "",
+          userType: roiUserType,
+          repId: roiRepVerified ? (roiRepVerified as any).repId : null,
+          repName: roiRepVerified ? (roiRepVerified as any).name : null,
+          // Distributor / end user
+          distributorName: roiDistributorName,
+          distributorCode: roiDistributorCode,
+          endUserName: roiEndUserName,
+          endUserEmail: roiEndUserEmail,
+          endUserCompany: roiEndUserCompany,
+          // Context
           material: form.material,
+          hardness: form.hardness_value ? `${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : "",
           operation,
           toolDia: form.tool_dia,
-          feedIpm: result?.customer?.feed_ipm ?? 0,
+          feedIpm: (mentor.data as any)?.customer?.feed_ipm ?? 0,
+          machineName: activeMachineName || "",
+          // CC tool
           ccEdp: edpText || "",
           ccToolPrice: parseFloat(roiCcPrice),
           ccPartsPer: parseFloat(roiCcParts),
-          ccTimeInCut: parseFloat(roiCcTime),
           ccMrr: parseFloat(roiCcMrr) || 0,
+          ccNumFlutes: form.flutes || null,
+          ccLoc: form.loc || null,
+          ccCoating: form.coating || "",
+          ccCornerType: form.corner_condition || "",
+          ccSfm: (mentor.data as any)?.customer?.sfm ?? null,
+          ccRpms: (mentor.data as any)?.customer?.rpm ?? null,
+          ccIpt: (mentor.data as any)?.customer?.ipt ?? null,
+          ccRadialDoc: form.woc_pct ? (form.woc_pct / 100) * form.tool_dia : null,
+          ccAxialDoc: form.doc_xd ? form.doc_xd * form.tool_dia : null,
+          ccToolLifeMinutes: (mentor.data as any)?.engineering?.tool_life_min ?? null,
+          // Comp tool
           compEdp: roiCompEdp,
           compBrand: roiCompBrand,
           compPrice: parseFloat(roiCompPrice),
           compPartsPer: parseFloat(roiCompParts),
-          compTimeInCut: parseFloat(roiCompTime),
           compMrr: parseFloat(roiCompMrr) || 0,
+          compTimeInCut: roiLifeMode === "cut_time" ? parseFloat(roiCompCutTime) : null,
+          // ROI results
+          lifeMode: roiLifeMode,
           shopRate: parseFloat(roiShopRate),
           annualVolume: parseFloat(roiAnnualVol),
           savingsPerPart: roiResult.savingsPerPart,
@@ -650,6 +676,9 @@ export default function Mentor() {
           annualSavings: roiResult.annualSavings,
           savingsPct: roiResult.savingsPct,
           mrrGainPct: roiResult.mrrGainPct,
+          mrrTimeSavingsPerPart: roiResult.mrrTimeSavingsPerPart,
+          matVolPerPart: parseFloat(roiMatVolPerPart) || null,
+          breakevenN: roiResult.breakevenN ?? null,
           reconGrinds: roiResult.reconGrinds,
           reconSavingsPerPart: roiResult.reconSavingsPerPart,
           oneTimeSavings: roiResult.oneTimeSavings,
@@ -1799,6 +1828,20 @@ export default function Mentor() {
       .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : false))
       .catch(() => setRoiRepVerified(false));
   }, [showRoi, erEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-device session recovery: when panel opens with a named ROI, check if DB has a session for
+  // this rep+name and use it — so recalculating on a new device updates the same row, not a new one.
+  const [roiSessionRecovered, setRoiSessionRecovered] = React.useState(false);
+  React.useEffect(() => {
+    if (!showRoi || !erEmail || !roiName || roiSessionRecovered) return;
+    setRoiSessionRecovered(true);
+    fetch(`/api/roi/session?email=${encodeURIComponent(erEmail)}&name=${encodeURIComponent(roiName)}`)
+      .then(r => r.json())
+      .then((d: { sessionId: string | null }) => {
+        if (d.sessionId) setRoiSessionId(d.sessionId);
+      })
+      .catch(() => {/* keep local session id */});
+  }, [showRoi, erEmail, roiName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [roiSaving, setRoiSaving] = React.useState(false);
   const [roiEmailSent, setRoiEmailSent] = React.useState(false);
@@ -9756,14 +9799,12 @@ ${stabSection}
                     <button type="button"
                       onClick={() => setRoiUserType("end_user")}
                       className={`flex-1 py-1.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
-                      Direct End User
-                      <span className="block text-[9px] font-normal opacity-70">shop buying direct from CC</span>
+                      End User
                     </button>
                     <button type="button"
                       onClick={() => setRoiUserType("distributor")}
                       className={`flex-1 py-1.5 transition-colors border-l border-zinc-600 ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
                       Distributor
-                      <span className="block text-[9px] font-normal opacity-70">selling CC through distribution</span>
                     </button>
                   </div>
                   {!roiUserType && (
@@ -10241,6 +10282,7 @@ ${stabSection}
                     setRoiName(e.target.value);
                     // New name = new session so it saves as a separate row
                     setRoiSessionId(crypto.randomUUID());
+                    setRoiSessionRecovered(false); // allow recovery lookup for the new name
                     setRoiResult(null);
                   }}
                   className={`w-full rounded-lg bg-zinc-900 border text-zinc-200 text-xs px-3 py-1.5 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 ${!roiName.trim() ? "border-red-700/60" : "border-zinc-700"}`}
