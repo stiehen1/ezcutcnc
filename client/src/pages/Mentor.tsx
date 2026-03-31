@@ -9756,14 +9756,12 @@ ${stabSection}
                     <button type="button"
                       onClick={() => setRoiUserType("end_user")}
                       className={`flex-1 py-1.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
-                      Direct End User
-                      <span className="block text-[9px] font-normal opacity-70">shop buying direct from CC</span>
+                      End User
                     </button>
                     <button type="button"
                       onClick={() => setRoiUserType("distributor")}
                       className={`flex-1 py-1.5 transition-colors border-l border-zinc-600 ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
                       Distributor
-                      <span className="block text-[9px] font-normal opacity-70">selling CC through distribution</span>
                     </button>
                   </div>
                   {!roiUserType && (
