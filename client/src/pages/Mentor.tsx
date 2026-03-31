@@ -9737,6 +9737,11 @@ ${stabSection}
 
               {roiRepVerified && (
               <>
+              {/* Rep identity banner */}
+              <div className="text-[10px] text-zinc-500">
+                Test recorded by: <span className="text-zinc-300 font-semibold">{(roiRepVerified as any).name}</span> <span className="text-zinc-600">({erEmail})</span>
+              </div>
+
               {roiDraftLoaded && !mentor.data && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
@@ -9744,20 +9749,26 @@ ${stabSection}
               )}
               {/* End-user / customer info */}
               <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-zinc-400 font-semibold">Customer Info <span className="text-zinc-600 font-normal">— whose shop is this test for?</span></p>
-                  <div className={`flex items-center gap-1 rounded-md border overflow-hidden text-[10px] font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-700"}`}>
+                {/* Who is this ROI for — label + toggle together */}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-zinc-300 font-semibold">Who is this ROI for? <span className="text-red-400">*</span></p>
+                  <div className={`flex rounded-md border overflow-hidden text-xs font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-600"}`}>
                     <button type="button"
                       onClick={() => setRoiUserType("end_user")}
-                      className={`px-2 py-0.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"}`}>
-                      End User
+                      className={`flex-1 py-1.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
+                      Direct End User
+                      <span className="block text-[9px] font-normal opacity-70">shop buying direct from CC</span>
                     </button>
                     <button type="button"
                       onClick={() => setRoiUserType("distributor")}
-                      className={`px-2 py-0.5 transition-colors ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"}`}>
+                      className={`flex-1 py-1.5 transition-colors border-l border-zinc-600 ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
                       Distributor
+                      <span className="block text-[9px] font-normal opacity-70">selling CC through distribution</span>
                     </button>
                   </div>
+                  {!roiUserType && (
+                    <p className="text-[10px] text-red-400">Select one before calculating.</p>
+                  )}
                 </div>
                 {/* Distributor autocomplete — only shown when Distributor is selected */}
                 {roiUserType === "distributor" && (
@@ -9821,22 +9832,31 @@ ${stabSection}
                   </div>
                 )}
 
-                {/* End-user contact fields */}
+                {/* Contact fields — labels change based on toggle */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">Contact Name</Label>
-                    <Input type="text" className="h-7 text-xs" placeholder="e.g. John Smith"
+                    <Label className="text-[10px] text-zinc-500">
+                      {roiUserType === "distributor" ? "Distributor Contact Name" : "End User Contact Name"}
+                    </Label>
+                    <Input type="text" className="h-7 text-xs"
+                      placeholder={roiUserType === "distributor" ? "e.g. Jane Doe (rep at distributor)" : "e.g. John Smith (machinist/buyer)"}
                       value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">{roiUserType === "distributor" ? "End Customer Company" : "Company"}</Label>
-                    <Input type="text" className="h-7 text-xs" placeholder="e.g. Acme Machining"
+                    <Label className="text-[10px] text-zinc-500">
+                      {roiUserType === "distributor" ? "Distributor Company Name" : "End User Company Name"}
+                    </Label>
+                    <Input type="text" className="h-7 text-xs"
+                      placeholder={roiUserType === "distributor" ? "e.g. DXP - Chicago" : "e.g. Acme Machining"}
                       value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">Email</Label>
-                  <Input type="email" className="h-7 text-xs" placeholder="e.g. john@acmemachining.com"
+                  <Label className="text-[10px] text-zinc-500">
+                    {roiUserType === "distributor" ? "Distributor Contact Email" : "End User Contact Email"}
+                  </Label>
+                  <Input type="email" className="h-7 text-xs"
+                    placeholder={roiUserType === "distributor" ? "e.g. jane@dxpchicago.com" : "e.g. john@acmemachining.com"}
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
               </div>
