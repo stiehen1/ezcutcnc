@@ -111,12 +111,65 @@ export async function registerRoutes(
     console.log("[DB] roi_comparisons table ready");
   } catch (e: any) { console.warn("[DB] roi_comparisons migration failed:", e?.message); }
 
-  // Add roi_name and comp_brand columns if missing
+  // Migrate roi_comparisons to full sales-app-compatible schema
   try {
     const { pool } = await import("./db");
-    await pool.query(`ALTER TABLE roi_comparisons ADD COLUMN IF NOT EXISTS roi_name TEXT`);
-    await pool.query(`ALTER TABLE roi_comparisons ADD COLUMN IF NOT EXISTS comp_brand TEXT`);
-  } catch (e: any) { console.warn("[DB] roi_comparisons alter failed:", e?.message); }
+    const cols = [
+      // existing stragglers
+      "roi_name TEXT", "comp_brand TEXT",
+      "roi_session_id TEXT UNIQUE",
+      "user_type TEXT",
+      "rep_id TEXT",
+      "rep_name TEXT",
+      "distributor_name TEXT",
+      "distributor_code TEXT",
+      "end_user_name TEXT",
+      "end_user_email TEXT",
+      "end_user_company TEXT",
+      // new columns aligned to sales app schema
+      "company TEXT",
+      "postal TEXT",
+      "phone TEXT",
+      "hardness TEXT",
+      "life_mode TEXT",
+      "breakeven_n FLOAT",
+      "mrr_time_savings_per_part FLOAT",
+      "mat_vol_per_part FLOAT",
+      "machine_name TEXT",
+      "synced_to_sales_app BOOLEAN DEFAULT FALSE",
+      "updated_at TIMESTAMPTZ",
+      // CC tool geometry
+      "cc_num_flutes INT",
+      "cc_length_of_cut FLOAT",
+      "cc_overall_length FLOAT",
+      "cc_coating TEXT",
+      "cc_corner_type TEXT",
+      "cc_sfm FLOAT",
+      "cc_rpms FLOAT",
+      "cc_ipt FLOAT",
+      "cc_radial_doc FLOAT",
+      "cc_axial_doc FLOAT",
+      "cc_cycle_time FLOAT",
+      "cc_tool_life_minutes FLOAT",
+      // Comp tool geometry
+      "comp_num_flutes INT",
+      "comp_length_of_cut FLOAT",
+      "comp_overall_length FLOAT",
+      "comp_coating TEXT",
+      "comp_corner_type TEXT",
+      "comp_sfm FLOAT",
+      "comp_rpms FLOAT",
+      "comp_ipt FLOAT",
+      "comp_radial_doc FLOAT",
+      "comp_axial_doc FLOAT",
+      "comp_cycle_time FLOAT",
+      "comp_tool_life_minutes FLOAT",
+    ];
+    for (const col of cols) {
+      const colName = col.split(" ")[0];
+      await pool.query(`ALTER TABLE roi_comparisons ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
+    }
+  } catch (e: any) { console.warn("[DB] roi_comparisons migration failed:", e?.message); }
 
   // ── Toolbox tables ────────────────────────────────────────────────────────
   try {
@@ -2001,71 +2054,163 @@ export async function registerRoutes(
   app.post("/api/roi", async (req, res) => {
     try {
       const {
-        action,
-        userEmail, userName, material, operation, toolDia, feedIpm,
+        action, roiSessionId,
+        userEmail, userName, userType,
+        repId, repName,
+        distributorName, distributorCode,
+        endUserName, endUserEmail, endUserCompany,
+        company, phone,
+        material, hardness, operation, toolDia, feedIpm, machineName,
         ccEdp, ccToolPrice, ccPartsPer, ccTimeInCut, ccMrr,
+        ccNumFlutes, ccLoc, ccOal, ccCoating, ccCornerType,
+        ccSfm, ccRpms, ccIpt, ccRadialDoc, ccAxialDoc, ccCycleTime, ccToolLifeMinutes,
         compEdp, compBrand, compPrice, compPartsPer, compTimeInCut, compMrr,
-        shopRate, annualVolume,
+        compNumFlutes, compLoc, compOal, compCoating, compCornerType,
+        compSfm, compRpms, compIpt, compRadialDoc, compAxialDoc, compCycleTime, compToolLifeMinutes,
+        shopRate, annualVolume, lifeMode,
         savingsPerPart, monthlySavings, annualSavings, savingsPct, mrrGainPct,
+        mrrTimeSavingsPerPart, matVolPerPart, breakevenN,
         reconGrinds, reconSavingsPerPart, oneTimeSavings, roiName,
       } = (req.body ?? {}) as {
         action?: string;
-        userEmail?: string; userName?: string; material?: string; operation?: string;
-        toolDia?: number; feedIpm?: number; ccEdp?: string; ccToolPrice?: number;
-        ccPartsPer?: number; ccTimeInCut?: number; ccMrr?: number;
+        roiSessionId?: string;
+        userEmail?: string; userName?: string; userType?: string;
+        repId?: string; repName?: string;
+        distributorName?: string; distributorCode?: string;
+        endUserName?: string; endUserEmail?: string; endUserCompany?: string;
+        company?: string; phone?: string;
+        material?: string; hardness?: string; operation?: string;
+        toolDia?: number; feedIpm?: number; machineName?: string;
+        // CC tool
+        ccEdp?: string; ccToolPrice?: number; ccPartsPer?: number; ccTimeInCut?: number; ccMrr?: number;
+        ccNumFlutes?: number; ccLoc?: number; ccOal?: number; ccCoating?: string; ccCornerType?: string;
+        ccSfm?: number; ccRpms?: number; ccIpt?: number; ccRadialDoc?: number; ccAxialDoc?: number;
+        ccCycleTime?: number; ccToolLifeMinutes?: number;
+        // Comp tool
         compEdp?: string; compBrand?: string; compPrice?: number; compPartsPer?: number; compTimeInCut?: number; compMrr?: number;
-        shopRate?: number; annualVolume?: number;
+        compNumFlutes?: number; compLoc?: number; compOal?: number; compCoating?: string; compCornerType?: string;
+        compSfm?: number; compRpms?: number; compIpt?: number; compRadialDoc?: number; compAxialDoc?: number;
+        compCycleTime?: number; compToolLifeMinutes?: number;
+        // ROI results
+        shopRate?: number; annualVolume?: number; lifeMode?: string;
         savingsPerPart?: number; monthlySavings?: number; annualSavings?: number; savingsPct?: number; mrrGainPct?: number;
+        mrrTimeSavingsPerPart?: number; matVolPerPart?: number; breakevenN?: number | null;
         reconGrinds?: number; reconSavingsPerPart?: number; oneTimeSavings?: number; roiName?: string;
       };
 
       const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
       const geo = await geoFromIp(clientIp);
 
-      // Upsert into DB — one row per (email + CC EDP + material), updated on every Calculate click
+      // Upsert into DB — one row per roi_session_id (name-scoped, new name = new row)
       try {
         const { pool } = await import("./db");
         const isEmail = action === "email";
         await pool.query(
           `INSERT INTO roi_comparisons (
-            user_email, user_name, material, operation, tool_dia, feed_ipm,
+            roi_session_id,
+            user_email, user_name, user_type,
+            rep_id, rep_name,
+            distributor_name, distributor_code,
+            end_user_name, end_user_email, end_user_company,
+            company, phone, material, hardness, operation,
+            tool_dia, feed_ipm, machine_name,
             cc_edp, cc_tool_price, cc_parts_per_tool, cc_time_in_cut, cc_mrr,
+            cc_num_flutes, cc_length_of_cut, cc_overall_length, cc_coating, cc_corner_type,
+            cc_sfm, cc_rpms, cc_ipt, cc_radial_doc, cc_axial_doc, cc_cycle_time, cc_tool_life_minutes,
             comp_edp, comp_brand, comp_price, comp_parts_per_tool, comp_time_in_cut, comp_mrr,
-            shop_rate, annual_volume, monthly_volume,
+            comp_num_flutes, comp_length_of_cut, comp_overall_length, comp_coating, comp_corner_type,
+            comp_sfm, comp_rpms, comp_ipt, comp_radial_doc, comp_axial_doc, comp_cycle_time, comp_tool_life_minutes,
+            shop_rate, annual_volume, monthly_volume, life_mode,
             savings_per_part, monthly_savings, annual_savings, savings_pct, mrr_gain_pct,
+            mrr_time_savings_per_part, mat_vol_per_part, breakeven_n,
             recon_grinds, recon_savings_per_part, one_time_savings,
             roi_name,
             city, region, country, ip, updated_at,
             emailed_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,
-                    $20,$21,$22,$23,$24,$25,$26,$27,$28,
-                    $29,$30,$31,$32,now(),
-                    ${isEmail ? "now()" : "NULL"})
-          ON CONFLICT (user_email, cc_edp, material)
-          WHERE user_email IS NOT NULL AND cc_edp IS NOT NULL AND material IS NOT NULL
+          ) VALUES (
+            $1,
+            $2,$3,$4,
+            $5,$6,
+            $7,$8,
+            $9,$10,$11,
+            $12,$13,$14,$15,$16,
+            $17,$18,$19,
+            $20,$21,$22,$23,$24,
+            $25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,
+            $37,$38,$39,$40,$41,$42,
+            $43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,
+            $55,$56,$56,$57,
+            $58,$59,$60,$61,$62,
+            $63,$64,$65,
+            $66,$67,$68,
+            $69,
+            $70,$71,$72,$73,now(),
+            ${isEmail ? "now()" : "NULL"})
+          ON CONFLICT (roi_session_id)
+          WHERE roi_session_id IS NOT NULL
           DO UPDATE SET
             user_name = EXCLUDED.user_name,
+            user_type = EXCLUDED.user_type,
+            rep_id = EXCLUDED.rep_id,
+            rep_name = EXCLUDED.rep_name,
+            distributor_name = EXCLUDED.distributor_name,
+            distributor_code = EXCLUDED.distributor_code,
+            end_user_name = EXCLUDED.end_user_name,
+            end_user_email = EXCLUDED.end_user_email,
+            end_user_company = EXCLUDED.end_user_company,
+            company = EXCLUDED.company,
+            phone = EXCLUDED.phone,
+            hardness = EXCLUDED.hardness,
             operation = EXCLUDED.operation,
             tool_dia = EXCLUDED.tool_dia,
             feed_ipm = EXCLUDED.feed_ipm,
+            machine_name = EXCLUDED.machine_name,
             cc_tool_price = EXCLUDED.cc_tool_price,
             cc_parts_per_tool = EXCLUDED.cc_parts_per_tool,
             cc_time_in_cut = EXCLUDED.cc_time_in_cut,
             cc_mrr = EXCLUDED.cc_mrr,
+            cc_num_flutes = EXCLUDED.cc_num_flutes,
+            cc_length_of_cut = EXCLUDED.cc_length_of_cut,
+            cc_overall_length = EXCLUDED.cc_overall_length,
+            cc_coating = EXCLUDED.cc_coating,
+            cc_corner_type = EXCLUDED.cc_corner_type,
+            cc_sfm = EXCLUDED.cc_sfm,
+            cc_rpms = EXCLUDED.cc_rpms,
+            cc_ipt = EXCLUDED.cc_ipt,
+            cc_radial_doc = EXCLUDED.cc_radial_doc,
+            cc_axial_doc = EXCLUDED.cc_axial_doc,
+            cc_cycle_time = EXCLUDED.cc_cycle_time,
+            cc_tool_life_minutes = EXCLUDED.cc_tool_life_minutes,
             comp_edp = EXCLUDED.comp_edp,
             comp_brand = EXCLUDED.comp_brand,
             comp_price = EXCLUDED.comp_price,
             comp_parts_per_tool = EXCLUDED.comp_parts_per_tool,
             comp_time_in_cut = EXCLUDED.comp_time_in_cut,
             comp_mrr = EXCLUDED.comp_mrr,
+            comp_num_flutes = EXCLUDED.comp_num_flutes,
+            comp_length_of_cut = EXCLUDED.comp_length_of_cut,
+            comp_overall_length = EXCLUDED.comp_overall_length,
+            comp_coating = EXCLUDED.comp_coating,
+            comp_corner_type = EXCLUDED.comp_corner_type,
+            comp_sfm = EXCLUDED.comp_sfm,
+            comp_rpms = EXCLUDED.comp_rpms,
+            comp_ipt = EXCLUDED.comp_ipt,
+            comp_radial_doc = EXCLUDED.comp_radial_doc,
+            comp_axial_doc = EXCLUDED.comp_axial_doc,
+            comp_cycle_time = EXCLUDED.comp_cycle_time,
+            comp_tool_life_minutes = EXCLUDED.comp_tool_life_minutes,
             shop_rate = EXCLUDED.shop_rate,
             annual_volume = EXCLUDED.annual_volume,
             monthly_volume = EXCLUDED.annual_volume,
+            life_mode = EXCLUDED.life_mode,
             savings_per_part = EXCLUDED.savings_per_part,
             monthly_savings = EXCLUDED.monthly_savings,
             annual_savings = EXCLUDED.annual_savings,
             savings_pct = EXCLUDED.savings_pct,
             mrr_gain_pct = EXCLUDED.mrr_gain_pct,
+            mrr_time_savings_per_part = EXCLUDED.mrr_time_savings_per_part,
+            mat_vol_per_part = EXCLUDED.mat_vol_per_part,
+            breakeven_n = EXCLUDED.breakeven_n,
             recon_grinds = EXCLUDED.recon_grinds,
             recon_savings_per_part = EXCLUDED.recon_savings_per_part,
             one_time_savings = EXCLUDED.one_time_savings,
@@ -2074,17 +2219,38 @@ export async function registerRoutes(
             region = EXCLUDED.region,
             country = EXCLUDED.country,
             ip = EXCLUDED.ip,
-            updated_at = now()
+            updated_at = now(),
+            synced_to_sales_app = FALSE
             ${isEmail ? ", emailed_at = COALESCE(roi_comparisons.emailed_at, now())" : ""}`,
           [
-            userEmail || null, userName || null, material || null, operation || null,
-            toolDia ?? null, feedIpm ?? null,
+            // $1: session
+            roiSessionId || null,
+            // $2–$19: user + context
+            userEmail || null, userName || null, userType || null,
+            repId || null, repName || null,
+            distributorName || null, distributorCode || null,
+            endUserName || null, endUserEmail || null, endUserCompany || null,
+            company || null, phone || null, material || null, hardness || null, operation || null,
+            toolDia ?? null, feedIpm ?? null, machineName || null,
+            // $16–$32: CC tool
             ccEdp || null, ccToolPrice ?? null, ccPartsPer ?? null, ccTimeInCut ?? null, ccMrr ?? null,
+            ccNumFlutes ?? null, ccLoc ?? null, ccOal ?? null, ccCoating || null, ccCornerType || null,
+            ccSfm ?? null, ccRpms ?? null, ccIpt ?? null, ccRadialDoc ?? null, ccAxialDoc ?? null,
+            ccCycleTime ?? null, ccToolLifeMinutes ?? null,
+            // $33–$50: comp tool
             compEdp || null, compBrand || null, compPrice ?? null, compPartsPer ?? null, compTimeInCut ?? null, compMrr ?? null,
-            shopRate ?? null, annualVolume ?? null,
+            compNumFlutes ?? null, compLoc ?? null, compOal ?? null, compCoating || null, compCornerType || null,
+            compSfm ?? null, compRpms ?? null, compIpt ?? null, compRadialDoc ?? null, compAxialDoc ?? null,
+            compCycleTime ?? null, compToolLifeMinutes ?? null,
+            // $47–$49: volume + life mode
+            shopRate ?? null, annualVolume ?? null, lifeMode || null,
+            // $50–$60: ROI results
             savingsPerPart ?? null, monthlySavings ?? null, annualSavings ?? null, savingsPct ?? null, mrrGainPct ?? null,
+            mrrTimeSavingsPerPart ?? null, matVolPerPart ?? null, breakevenN ?? null,
             reconGrinds ?? null, reconSavingsPerPart ?? null, oneTimeSavings ?? null,
+            // $61: roi name
             roiName || null,
+            // $62–$65: geo
             geo.city, geo.region, geo.country, clientIp,
           ]
         );
@@ -2240,6 +2406,110 @@ export async function registerRoutes(
       console.error("[ROI] Error:", e?.message);
       return res.status(500).json({ error: "Failed to save ROI comparison." });
     }
+  });
+
+  // ── Distributor search — partial name match, never returns full list ─────────
+  const DISTRIBUTORS: { name: string; code: string }[] = [
+    { name: "A&M Industrial", code: "AMINDUSTRI_4twr" },
+    { name: "AFI", code: "AFI_4tvj" },
+    { name: "AZ Tools", code: "AZTOOLS_4u46" },
+    { name: "American Tools & Metals", code: "AMERICANTO_4txq" },
+    { name: "Bald Eagle Tool Supply", code: "BETS" },
+    { name: "BlackHawk - O'Fallon (MO)", code: "BLACKHAWKO_4xbd" },
+    { name: "BlackHawk - SPX Flow", code: "BLACKHAWKS_4u2m" },
+    { name: "BlackHawk Industrial - AXIS", code: "BLACKHAWKI_4tww" },
+    { name: "Butler Bros", code: "BUTLERBROS_4tvx" },
+    { name: "C&B Supply, Inc.", code: "CBSUPPLYIN_4u1z" },
+    { name: "Cline Tool", code: "CLINETOOL_4txf" },
+    { name: "DB Industrial Supply", code: "DBINDUSTRI_4tuv" },
+    { name: "DGI Supply - IMI Site Spec", code: "DGISUPPLYI_4u1h" },
+    { name: "DGI Supply - San Leandro", code: "DGISUPPLYS_4tvq" },
+    { name: "DGI Supply - Site Spec APEX", code: "DGISUPPLYS_4u4l" },
+    { name: "DXP - Chicago", code: "DXPCHICAGO_4txn" },
+    { name: "DXP - Kenneth Crosby - Axis Site Specific", code: "DXPKENNETH_4u26" },
+    { name: "DXP-WI", code: "DXPWI_4u3z" },
+    { name: "DXP/ASI", code: "DXPASI_4tvz" },
+    { name: "Dolen Tool Sales", code: "DOLENTOOLS_4tuk" },
+    { name: "Dykehouse Co.", code: "DYKEHOUSEC_4tv4" },
+    { name: "Eisenking Products, Inc.", code: "EISENKINGP_4txa" },
+    { name: "Element Machine Tools", code: "ELEMENTMAC_NEW" },
+    { name: "Everett J. Prescott, Inc.", code: "EVERETTJPR_4xb4" },
+    { name: "Ewie Co.", code: "EWIECO_4u2w" },
+    { name: "Extreme Tooling, LLC", code: "EXTREMETOO_4u3q" },
+    { name: "Fournier & Assoc LLC", code: "FOURNIERAS_4u4q" },
+    { name: "Gordon Industrial", code: "GORDONINDU_4two" },
+    { name: "Hill Industrial Tools", code: "HILLINDUST_4twf" },
+    { name: "ITS - Inactive Account", code: "ITSINACTIV_4xbi" },
+    { name: "ITS - Industrial Tooling & Supply", code: "ITSINDUSTR_4tx6" },
+    { name: "Iwen Tool Supply Company", code: "IWENTOOLSU_4tw7" },
+    { name: "JAC Industrial Tool & Supply", code: "JACINDUSTR_4u10" },
+    { name: "JFG Enterprises", code: "JFGENTERPR_4u0g" },
+    { name: "Keyline Cutting Tools", code: "KEYLINECUT_4tvc" },
+    { name: "LNR Tool & Supply", code: "LNRTOOLSUP_4tx3" },
+    { name: "Lloyd Gage & Tool", code: "LLOYDGAGET_4txj" },
+    { name: "M&H Supply", code: "MHSUPPLY_4u0p" },
+    { name: "Mackintosh Tool Company", code: "MACKINTOSH_4tw3" },
+    { name: "Martin Supply", code: "MARTINSUPP_4twk" },
+    { name: "Next Industries, Inc.", code: "NEXTINDUST_4u42" },
+    { name: "OneSource", code: "ONESOURCE_4u0x" },
+    { name: "PM Industrial Supply", code: "PMINDUSTRI_4u2r" },
+    { name: "PT Solutions (Chicago)", code: "PTSOLUTION_4u3h" },
+    { name: "PT Solutions (Four State)", code: "PTSOLUTION_4u30" },
+    { name: "PT Solutions (MI)", code: "PTSOLUTION_4xbp" },
+    { name: "PT Solutions (VA)", code: "PTSOLUTION_4xav" },
+    { name: "PT Solutions - Site Specific (FM Industries)", code: "PTSOLUTION_4xah" },
+    { name: "Production Machine & Tool", code: "PRODUCTION_4u0a" },
+    { name: "Quality Tooling Inc.", code: "QUALITYTOO_4u0l" },
+    { name: "R.S. Hughes Co., Inc.", code: "RSHUGHESCO_4u0t" },
+    { name: "Ramstar Carbide", code: "RAMSTARCAR_NEW" },
+    { name: "S&D Industrial Tool Supply", code: "SDINDUSTRI_4u3b" },
+    { name: "Shively Bros.", code: "SHIVELYBRO_4u4b" },
+    { name: "Spyder Tool", code: "SPYDERTOOL_4u1a" },
+    { name: "Techni-Tool Inc.", code: "TECHNITOOL_4u3u" },
+    { name: "Tensile Mill CNC", code: "TENSILEMIL_4u1v" },
+    { name: "Tip Top Sales", code: "TIPTOPSALE_4u1l" },
+    { name: "Tool Technology Distributors Inc.", code: "TOOLTECHNO_4xaq" },
+    { name: "US Tool Group - GE Rutland", code: "USTOOLGROU_4u4h" },
+    { name: "Valley Tool & Supply Co.", code: "VALLEYTOOL_4twz" },
+  ];
+
+  // ── Authorized sales reps — server-side only, never exposed in bulk ─────────
+  const SALES_REPS: { id: string; name: string; email: string }[] = [
+    { id: "2c7b3424-7467-41dd-bee8-bf65e029b601", name: "Adam Estes",      email: "adam@corecutterusa.com" },
+    { id: "a9f0b0d8-e1a1-420b-9847-d8e5683be970", name: "Brian Beachy",    email: "brian@ipstooling.com" },
+    { id: "a09ca13c-63c3-4610-a642-d4be1b7c7bca", name: "Bryce Wright",    email: "bryce@cmscustomerservice.com" },
+    { id: "6cd48a49-120e-47e7-b5c8-c547a1b3dcfb", name: "Chris Roberts",   email: "chris@cmscustomerservice.com" },
+    { id: "9fe57cb9-9fc2-40d6-a24d-735c8455a3d9", name: "Chris Sellers",   email: "chris@motorcityim.com" },
+    { id: "4d82e71a-45dd-44a2-b07b-ef599d29552e", name: "Corey Cranford",  email: "cctechforceta@yahoo.com" },
+    { id: "3e63b231-0f5f-42c1-9b6a-1017fbf6f041", name: "Dan Schaefer",    email: "iptsfm@yahoo.com" },
+    { id: "76199582-bb22-4dca-96e2-8caea2e97241", name: "James Graham",     email: "james@corecutterusa.com" },
+    { id: "8f7531ec-8243-4d9d-beaa-c0802f2f7f6f", name: "Jeff Richmond",   email: "jeff@ipstooling.com" },
+    { id: "da9f3c02-c0c0-4988-8567-36449fe214ac", name: "Joe Ziegler",      email: "joe@cmscustomerservice.com" },
+    { id: "2a727a76-2e4a-43c3-9981-16029b21758c", name: "Kerry Cranford",   email: "kcranford54@yahoo.com" },
+    { id: "4928eca4-058a-4e21-b4e2-48e37635acd6", name: "Lindsey Mattson", email: "lindsey@corecutterusa.com" },
+    { id: "2326689b-ef3d-4bf2-9eb9-ee165fee3fb8", name: "Rick Woods",      email: "rick.woods.ets@outlook.com" },
+    { id: "9d2edf2d-cc59-4e30-90a2-33d9be4da989", name: "Ryan Monahan",    email: "ryan@rpmsales-inc.com" },
+    { id: "b5736dbc-0f97-4213-9ba9-cef5baca90e5", name: "Sarah Bean",      email: "sarah@corecutterusa.com" },
+    { id: "6426cf0a-2935-4098-985c-a7de074e5542", name: "Scott Tiehen",    email: "scott@corecutterusa.com" },
+  ];
+
+  // Returns { authorized: true, name, repId } or { authorized: false }
+  app.get("/api/sales-rep/verify", (req, res) => {
+    const email = ((req.query.email as string) || "").trim().toLowerCase();
+    if (!email) return res.json({ authorized: false });
+    const rep = SALES_REPS.find(r => r.email.toLowerCase() === email);
+    if (!rep) return res.json({ authorized: false });
+    return res.json({ authorized: true, name: rep.name, repId: rep.id });
+  });
+
+  app.get("/api/distributors/search", (req, res) => {
+    const q = ((req.query.q as string) || "").trim().toLowerCase();
+    if (q.length < 2) return res.json([]);
+    const matches = DISTRIBUTORS
+      .filter(d => d.name.toLowerCase().includes(q))
+      .slice(0, 8)
+      .map(d => ({ name: d.name, code: d.code }));
+    return res.json(matches);
   });
 
   app.get("/api/roi", async (req, res) => {
