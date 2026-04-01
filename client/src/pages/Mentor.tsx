@@ -9352,7 +9352,7 @@ ${stabSection}
                         return (
                           <div>
                             <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Entry ★</span>
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Entry</span>
                               <span className="text-[9px] text-amber-600 ml-2">Tool enters from outside stock edge</span>
                             </div>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
