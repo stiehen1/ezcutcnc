@@ -5563,7 +5563,15 @@ ${stabSection}
 
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
-              <FieldLabel hint="Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid: Between Centers → Rigid Fixture → Tombstone → Collet Chuck → 4-Jaw Chuck → 5th-Axis Vise → Dovetail → Trunnion 4th (axis locked) → Face Plate → Vise (baseline) → 3-Jaw Chuck → Toe Clamps → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead.">Workholding</FieldLabel>
+              <FieldLabel hint={
+                (form.machine_type === "lathe" || form.machine_type === "mill_turn")
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for turning: Between Centers → Collet Chuck → 4-Jaw Chuck → 3-Jaw Chuck → Face Plate → Soft Jaws."
+                  : form.machine_type === "hmc"
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
+                  : form.machine_type === "5axis"
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Rigid Fixture → 5th-Axis Vise → Dovetail → Vise → Soft Jaws."
+                  : /* vmc default */ "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for VMC: Rigid Fixture → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Toe Clamps → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
+              }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
                   (form.machine_type === "lathe" || form.machine_type === "mill_turn")
@@ -5604,7 +5612,24 @@ ${stabSection}
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
                       { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                     ] as const)
-                ).map(({ key, label }) => (
+                ).map(({ key, label }) => {
+                  const WH_TOOLTIPS: Record<string, string> = {
+                    rigid_fixture:   "Dedicated fixture bolted solid to the table — custom jig, tooling plate with dowel pins, or zero-point pallet. No movable jaw compliance. Highest milling rigidity.",
+                    tombstone:       "Vertical tombstone mounted to HMC pallet. Multiple faces allow multi-part or multi-op setups. Rigidity depends on how well the part is fixtured to the tombstone face.",
+                    dovetail:        "Dovetail-clamped workholding (e.g. Lang, Pierson, Orange Vise). Part has a matching dovetail ground in — allows 5-sided access with excellent grip and repeatability.",
+                    vise:            "Standard precision vise (Kurt, Chick, etc.). Movable jaw introduces a small amount of compliance — baseline milling rigidity.",
+                    soft_jaws:       "Machinable aluminum or steel jaws bored to match the part profile. Good for odd shapes or second ops but jaw compliance is higher than a solid fixture.",
+                    toe_clamps:      "Strap clamps or toe clamps holding the part directly to the table. Convenient but lowest rigidity — part can rock if clamps are not perfectly torqued.",
+                    trunnion_4th:    "Rotary 4th-axis trunnion with the axis fully locked for this cut. If the axis is live (contouring), select Vise or Rigid Fixture instead.",
+                    "3_jaw_chuck":   "3-jaw scroll chuck — fast to load, self-centering. Slightly less rigid than 4-jaw due to scroll mechanism compliance.",
+                    "4_jaw_chuck":   "4-jaw independent chuck — each jaw adjusts separately for precise centering. More rigid than 3-jaw; better for heavy interrupted cuts.",
+                    collet_chuck:    "Collet chuck (5C, A2-5, etc.). Full circumferential grip with minimal compliance — most rigid turning workholding short of between centers.",
+                    between_centers: "Part supported at both ends between a drive center and a live tailstock center. Eliminates overhang — highest rigidity for turning long shafts.",
+                    face_plate:      "Part bolted directly to a face plate mounted on the spindle. Used for large or irregular parts that won't fit in a chuck.",
+                    "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts.",
+                  };
+                  const tooltip = WH_TOOLTIPS[key];
+                  const btn = (
                   <button
                     key={key}
                     type="button"
@@ -5618,7 +5643,16 @@ ${stabSection}
                   >
                     {label}
                   </button>
-                ))}
+                  );
+                  return tooltip ? (
+                    <TooltipProvider key={key} delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{tooltip}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : btn;
+                })}
               </div>
             </div>
           </div>
