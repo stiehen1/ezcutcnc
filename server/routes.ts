@@ -1165,7 +1165,7 @@ export async function registerRoutes(
       const curLbs = Number(payload.lbs ?? 0);
       // LBS/necked tool: only consider peers with sufficient reach (lbs_in >= curLbs)
       const lbsPeerClause = curLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${curLbs}` : "";
-      console.log(`[OptimalTool] edp=${current_edp} lbs=${curLbs} lbsClause=${lbsPeerClause || "(none)"} peers=${peers.rows.length}`);
+      console.log(`[OptimalTool] edp=${current_edp} lbs=${curLbs} lbsClause=${lbsPeerClause || "(none)"}`);
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -1182,6 +1182,7 @@ export async function registerRoutes(
          ORDER BY s.edp`,
         [dia, current_edp]
       );
+      console.log(`[OptimalTool] peers=${peers.rows.length}`);
       if (peers.rows.length === 0) return res.json({ found: false });
 
       // Scoring helpers
