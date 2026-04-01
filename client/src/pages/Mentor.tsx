@@ -9497,9 +9497,18 @@ ${stabSection}
               className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-emerald-900/20 transition-colors"
               onClick={() => setOptimalExpanded(x => !x)}
             >
-              <span className="text-xs font-semibold text-emerald-300">
+              <span className="text-xs font-semibold text-emerald-300 leading-snug">
                 💡 This tool option might be worth looking at too: <span className="text-white">EDP# {recSku.edp}</span>
                 {tags ? <span className="ml-1.5 font-normal text-zinc-400">· {tags}</span> : null}
+                <span className="ml-1.5 font-normal text-zinc-500">
+                  · {recSku.flutes}fl
+                  {recSku.loc_in != null ? ` · LOC ${Number(recSku.loc_in).toFixed(4)}"` : ""}
+                  {recSku.lbs_in != null && Number(recSku.lbs_in) > 0 ? ` · LBS ${Number(recSku.lbs_in).toFixed(3)}"` : ""}
+                  {recSku.oal_in != null ? ` · OAL ${Number(recSku.oal_in).toFixed(3)}"` : ""}
+                  {recSku.corner_condition != null && recSku.corner_condition !== "square" && recSku.corner_condition !== "ball"
+                    ? ` · CR .${String(Math.round(Number(recSku.corner_condition) * 1000)).padStart(3, "0")}"`
+                    : recSku.corner_condition === "ball" ? " · Ball" : ""}
+                </span>
               </span>
               <span className="text-emerald-400 text-xs ml-2">{optimalExpanded ? "▲" : "▼"}</span>
             </button>

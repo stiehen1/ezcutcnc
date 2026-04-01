@@ -1080,6 +1080,37 @@ export async function registerRoutes(
                 if (q3.rows.length > 0) {
                   s.suggested_edps = q3.rows.map((r: any) => r.edp);
                   s.suggested_edp  = s.suggested_edps[0];
+                } else if (lookupLbs > 0) {
+                  // Final fallback: no tool meets lbs >= lookupLbs — use highest available LBS
+                  // (user may have manually entered a larger LBS than any stocked tool)
+                  const q4 = await pool.query(
+                    `SELECT s.edp FROM skus s
+                     JOIN sku_uploads u ON s.upload_id = u.id
+                     WHERE u.is_current = TRUE
+                       AND s.flutes = $1
+                       AND ABS(s.cutting_diameter_in - $2) < 0.001
+                       AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+                       AND COALESCE(s.lbs_in, 0) > 0
+                       ${cbClause}
+                       ${noBLK}
+                       AND COALESCE(s.lbs_in, 0) = (
+                         SELECT MAX(COALESCE(s2.lbs_in, 0))
+                         FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                         WHERE u2.is_current = TRUE
+                           AND s2.flutes = $1
+                           AND ABS(s2.cutting_diameter_in - $2) < 0.001
+                           AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
+                           AND COALESCE(s2.lbs_in, 0) > 0
+                           ${cbClause.replace(/\bs\./g, "s2.")}
+                           ${noBLK.replace(/\bs\./g, "s2.")}
+                       )
+                     ORDER BY s.edp`,
+                    [flutes, dia]
+                  );
+                  if (q4.rows.length > 0) {
+                    s.suggested_edps = q4.rows.map((r: any) => r.edp);
+                    s.suggested_edp  = s.suggested_edps[0];
+                  }
                 }
               }
               } // end non-diameter branch
@@ -1165,6 +1196,7 @@ export async function registerRoutes(
       const curLbs = Number(payload.lbs ?? 0);
       // LBS/necked tool: only consider peers with sufficient reach (lbs_in >= curLbs)
       const lbsPeerClause = curLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${curLbs}` : "";
+      console.log(`[OptimalTool] edp=${current_edp} lbs=${curLbs} lbsClause=${lbsPeerClause || "(none)"}`);
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -1181,6 +1213,7 @@ export async function registerRoutes(
          ORDER BY s.edp`,
         [dia, current_edp]
       );
+      console.log(`[OptimalTool] peers=${peers.rows.length}`);
       if (peers.rows.length === 0) return res.json({ found: false });
 
       // Scoring helpers
@@ -1243,6 +1276,7 @@ export async function registerRoutes(
       );
       const curSku   = curResult.rows[0];
       const curScore = curSku ? scoreSku(curSku) : 0;
+      console.log(`[OptimalTool] curSkuFound=${!!curSku} curCorner=${String(curSku?.corner_condition ?? "MISSING")} curLbs=${curLbs}`);
 
       // When setup is already deflecting, flute count upgrade is as important as coating/geometry.
       // Merge same-flute and next-flute candidates into one pool and apply a stability bonus
@@ -1257,17 +1291,27 @@ export async function registerRoutes(
       // ── Priority 1: Same LOC — same flutes OR flute-count shift based on mode/material ──
       const nextFlutes = curFlutes + 1;
       const prevFlutes = curFlutes - 1;
+      // Corner condition of current tool — recommendations must never change the corner.
+      // "square" stays square; CR tools stay at same CR; ball stays ball.
+      const curCorner = String(curSku?.corner_condition ?? "square").toLowerCase();
+      const cornerMatch = (r: any): boolean => {
+        const rc = String(r.corner_condition ?? "square").toLowerCase();
+        return rc === curCorner;
+      };
       const sameLocCandidates = peers.rows.filter((r: any) => {
         const locMatch  = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
         const rf        = Number(r.flutes);
         const geom      = (r.geometry ?? "standard").toLowerCase();
         // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper
         if (isSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
+        // Never recommend a different corner condition than what the current tool has
+        if (!cornerMatch(r)) return false;
         // Slotting: never go up in flutes — chip clearance gets worse, not better.
         // Steel/stainless/tough slot: prefer dropping to 4-flute (or 4-fl chipbreaker).
         // Aluminum slot: prefer dropping to 3-flute.
         const fluteMatch = rf === curFlutes
           || (!isSlot && (stabOver || isCircInterp || isFinish) && rf === nextFlutes)
+          || (isSlot && stabOver && rf === nextFlutes && nextFlutes <= 5) // slot + deflecting: allow 4→5fl only
           || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
           || (isSlot && !slotAlum && rf === prevFlutes && prevFlutes >= 4);
         return locMatch && fluteMatch;
@@ -1277,7 +1321,7 @@ export async function registerRoutes(
       for (const row of sameLocCandidates) {
         let sc = scoreSku(row);
         const rf = Number(row.flutes);
-        if (!isSlot && stabOver && rf === nextFlutes)      sc += STAB_FLUTE_BONUS;
+        if (stabOver && rf === nextFlutes && (!isSlot || nextFlutes <= 5)) sc += STAB_FLUTE_BONUS;
         else if (!isSlot && isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
         else if (!isSlot && isFinish  && rf === nextFlutes) sc += FINISH_FLUTE_BONUS;
         else if (slotAlum  && rf === prevFlutes) sc += 2;
@@ -1287,8 +1331,9 @@ export async function registerRoutes(
       if (bestSku && bestScore > curScore) {
         // Found a same-LOC upgrade (coating, geometry, or flute count when deflecting)
       } else {
+        bestSku = null; bestScore = -1; // clear — tie or loss doesn't count as upgrade
         // ── Priority 1.5: Next diameter up, same series ───────────────────────
-        const curSeries = (curSku?.tool_series ?? "").toLowerCase();
+        const curSeries = (curSku?.series ?? "").toLowerCase();
         const STD_DIAMETERS = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.5625, 0.625, 0.6875, 0.750, 0.875, 1.000, 1.25, 1.5];
         const nextDia = STD_DIAMETERS.find(d => d > dia + 0.001) ?? null;
         if (curSeries && nextDia) {
@@ -1313,7 +1358,7 @@ export async function registerRoutes(
         if (!bestSku) {
           // ── Priority 2: Same LOC, next flute count up (non-deflecting path) ──
           const sameLocNextFlute = peers.rows.filter((r: any) =>
-            Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes
+            Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes && cornerMatch(r)
           );
           bestSku = null; bestScore = -1;
           for (const row of sameLocNextFlute) {
@@ -1327,13 +1372,14 @@ export async function registerRoutes(
       }
 
       // No recommendation found
+      console.log(`[OptimalTool] bestSku=${bestSku?.edp ?? "none"} bestScore=${bestScore} curScore=${curScore}`);
       if (!bestSku) return res.json({ found: false });
 
       // ── VXR rigidity gate ─────────────────────────────────────────────────
       // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces.
       // If VXR is blocked, fall back to best non-VXR peer rather than returning nothing.
       const sameLocSameFlute = peers.rows.filter((r: any) =>
-        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes
+        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes && cornerMatch(r)
       );
       const isVxr = /^vxr/i.test(bestSku.series ?? "");
       let vxrRigidityNote: string | null = null;
