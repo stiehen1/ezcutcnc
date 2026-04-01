@@ -3131,7 +3131,7 @@ def run_feedmill(payload: dict) -> dict:
             "deflection_in":         round(deflection, 5),
             "chip_thickness_in":     round(ipt_base, 6),
             "chatter_index":         round(stability_pct / 100.0, 3),
-            "teeth_in_cut":          round(flutes * (woc_pct / 100.0), 2),
+            "teeth_in_cut":          round(max(0.1, (math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0)))) / (2.0 * math.pi)) * flutes), 2),
             "tool_life_min":         round(tool_life_min, 1),
             "force_lbf":             round(total_force, 2),
             "radial_force_lbf":      round(radial_force, 2),
