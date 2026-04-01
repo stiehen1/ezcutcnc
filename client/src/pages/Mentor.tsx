@@ -3366,7 +3366,7 @@ ${stabSection}
   // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
   const ALL_OPS = ["toolfinder","feedmilling","toolbox","milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"] as const;
   const OP_LABELS: Record<string, string> = {
-    toolfinder: "Tool Finder", feedmilling: "Calculators", toolbox: "Toolbox",
+    toolfinder: "Tool Finder", feedmilling: "Misc Calculators", toolbox: "Toolbox",
     milling: "Milling", drilling: "Drilling", reaming: "Reaming", threadmilling: "Thread Milling",
     keyseat: "Keyseat", dovetail: "Dovetail", feedmill: "Feed Mill",
   };
@@ -3424,7 +3424,7 @@ ${stabSection}
       {operation === "toolbox" && (
         <div>
           <SharedTabBar />
-          <Toolbox />
+          <Toolbox onBack={() => setOperation("milling")} />
         </div>
       )}
       {operation !== "feedmilling" && operation !== "toolfinder" && operation !== "toolbox" && <div className="grid grid-cols-1 md:grid-cols-2 md:gap-5 gap-4 items-start">
@@ -3466,7 +3466,7 @@ ${stabSection}
             <div className="flex gap-2">
               {([
                 { op: "toolfinder",  label: "Tool Finder", icon: "🔍" },
-                { op: "feedmilling", label: "Calculators",  icon: "⊞" },
+                { op: "feedmilling", label: "Misc Calculators",  icon: "⊞" },
                 { op: "toolbox",     label: "Toolbox",      icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 90 90" fill="none"><g transform="translate(0 0)"><path d="M87.67 90H2.33c-.552 0-1-.447-1-1V52.941c0-.553.448-1 1-1h85.34c.553 0 1 .447 1 1V89c0 .553-.447 1-1 1zM3.33 88h83.34V53.941H3.33V88z" fill="currentColor"/><path d="M24.877 69.574h-10.04c-.552 0-1-.447-1-1V52.941c0-.553.448-1 1-1h10.04c.552 0 1 .447 1 1v15.633c0 .553-.447 1-1 1zm-9.04-2h8.04V53.941h-8.04V67.574zM75.163 69.574h-10.04c-.553 0-1-.447-1-1V52.941c0-.553.447-1 1-1h10.04c.553 0 1 .447 1 1v15.633c0 .553-.447 1-1 1zm-9.04-2h8.04V53.941h-8.04V67.574zM31.074 53.941h-9.796c-.552 0-1-.447-1-1v-11.75c0-.552.448-1 1-1h9.796c.552 0 1 .448 1 1v11.75c0 .553-.448 1-1 1zm-8.796-2h7.796v-9.75h-7.796V51.941zM49.255 53.941h-7.732c-.552 0-1-.447-1-1V37.752c-3.723-1.843-6.092-5.627-6.092-9.821 0-4.166 2.32-7.917 6.055-9.791.308-.156.678-.14.974.043.295.182.475.504.475.851v6.658c0 1.905 1.55 3.455 3.455 3.455s3.455-1.55 3.455-3.455v-6.658c0-.347.18-.669.475-.851.297-.182.664-.199.974-.043 3.735 1.874 6.056 5.625 6.056 9.791 0 4.193-2.37 7.978-6.093 9.821v15.189c0 .553-.447 1-1 1zm-6.733-2h5.732V37.11c0-.402.241-.765.611-.921 3.33-1.404 5.481-4.646 5.481-8.258 0-2.828-1.31-5.423-3.504-7.099v4.859c0 3.008-2.447 5.455-5.455 5.455s-5.455-2.447-5.455-5.455v-4.859c-2.194 1.676-3.503 4.271-3.503 7.099 0 3.613 2.151 6.854 5.481 8.258.371.156.611.519.611.921V51.941z" fill="currentColor"/><path d="M87.67 51.941H2.33c-.552 0-1-.447-1-1v-8.75c0-.552.448-1 1-1h85.34c.553 0 1 .448 1 1v8.75c0 .553-.447 1-1 1zm-84.34-2h83.34v-6.75H3.33v6.75z" fill="currentColor"/></g></svg> },
               ] as const).map(({ op, label, icon }) => {
                 const active = (operation as string) === op;
