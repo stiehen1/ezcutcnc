@@ -1165,7 +1165,7 @@ export async function registerRoutes(
       const curLbs = Number(payload.lbs ?? 0);
       // LBS/necked tool: only consider peers with sufficient reach (lbs_in >= curLbs)
       const lbsPeerClause = curLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${curLbs}` : "";
-      console.log(`[OptimalTool] edp=${current_edp} lbs=${curLbs} lbsClause=${lbsPeerClause || "(none)"}`);
+      console.log(`[OptimalTool] edp=${current_edp} lbs=${curLbs} lbsClause=${lbsPeerClause || "(none)"} peers=${peers.rows.length}`);
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -1244,6 +1244,7 @@ export async function registerRoutes(
       );
       const curSku   = curResult.rows[0];
       const curScore = curSku ? scoreSku(curSku) : 0;
+      console.log(`[OptimalTool] curSkuFound=${!!curSku} curCorner=${String(curSku?.corner_condition ?? "MISSING")} curLbs=${curLbs}`);
 
       // When setup is already deflecting, flute count upgrade is as important as coating/geometry.
       // Merge same-flute and next-flute candidates into one pool and apply a stability bonus
@@ -1337,6 +1338,7 @@ export async function registerRoutes(
       }
 
       // No recommendation found
+      console.log(`[OptimalTool] bestSku=${bestSku?.edp ?? "none"} bestScore=${bestScore} curScore=${curScore}`);
       if (!bestSku) return res.json({ found: false });
 
       // ── VXR rigidity gate ─────────────────────────────────────────────────
