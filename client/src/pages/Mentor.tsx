@@ -6626,8 +6626,8 @@ ${stabSection}
                 />
                 <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{form.woc_pct ? `${form.woc_pct.toFixed(1)}%` : ""}</span>
               </div>
-              {/* WOC Low/Med/High buttons */}
-              {WOC_PRESETS[form.mode] && (() => {
+              {/* WOC Low/Med/High buttons — hidden in slot mode (WOC is always 100%) */}
+              {WOC_PRESETS[form.mode] && form.mode !== "slot" && (() => {
                 const wp = WOC_PRESETS[form.mode];
                 const dia = form.tool_dia || 0.5;
                 const btns = [
@@ -6660,7 +6660,7 @@ ${stabSection}
                 );
               })()}
               {/* WOC out-of-range note */}
-              {WOC_PRESETS[form.mode] && form.woc_pct > 0 && (() => {
+              {WOC_PRESETS[form.mode] && form.mode !== "slot" && form.woc_pct > 0 && (() => {
                 const wp = WOC_PRESETS[form.mode];
                 const geoMin = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
                 const wocLow  = geoMin > 0 ? Math.max(geoMin, wp.low)  : wp.low;
