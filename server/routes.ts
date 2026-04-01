@@ -1162,6 +1162,9 @@ export async function registerRoutes(
       // For surfacing: restrict to ball-nose and corner-radius (bull-nose) tools only
       const isSurfacing = mode === "surfacing";
       const curLoc = Number(payload.loc ?? 0);
+      const curLbs = Number(payload.lbs ?? 0);
+      // LBS/necked tool: only consider peers with sufficient reach (lbs_in >= curLbs)
+      const lbsPeerClause = curLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${curLbs}` : "";
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -1170,6 +1173,7 @@ export async function registerRoutes(
            AND LOWER(s.edp) != LOWER($2)
            AND s.edp NOT ILIKE '%-BLK'
            AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+           ${lbsPeerClause}
            ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
            ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
            ${mode === "slot" && isoCategory === "N" ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)` : ""}
@@ -1368,12 +1372,22 @@ export async function registerRoutes(
       // Build modified payload with recommended SKU geometry
       const crNum  = Number(bestSku.corner_condition);
       const isBall = String(bestSku.corner_condition ?? "").toLowerCase() === "ball";
+      const recFlutes = Number(bestSku.flutes);
+      // Slotting DOC cap by flute count — 5-fl max 0.5×D, 4-fl and below max 1.0×D
+      // When recommending a higher flute count in slot mode, pull DOC down to the new tool's limit.
+      const recDocXd = (() => {
+        if (mode !== "slot") return docXd;
+        const slotDocCap = recFlutes >= 5 ? 0.5 : 1.0;
+        return Math.min(docXd, slotDocCap);
+      })();
       const modPayload = {
         ...payload,
         edp:             bestSku.edp,
         tool_dia:        Number(bestSku.cutting_diameter_in),
-        flutes:          Number(bestSku.flutes),
+        flutes:          recFlutes,
         loc:             Number(bestSku.loc_in),
+        lbs:             bestSku.lbs_in != null ? Number(bestSku.lbs_in) : 0,
+        doc_xd:          recDocXd,
         geometry:        bestSku.geometry ?? "standard",
         variable_pitch:  !!bestSku.variable_pitch,
         variable_helix:  !!bestSku.variable_helix,
@@ -1754,11 +1768,9 @@ export async function registerRoutes(
         console.warn("[Results Email] DB insert failed:", dbErr?.message);
       }
 
-      // Skip sales notification for internal staff — they're testing, not leads
+      // Internal staff get the results email but skip the sales lead notification
       const isStaff = typeof email === "string" && (email.endsWith("@corecutterusa.com") || email.endsWith("@corecutter.com"));
-      if (isStaff) return res.json({ ok: true });
 
-      const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
       const smtpUser = process.env.SMTP_USER || "";
       const smtpPass = process.env.SMTP_PASS || "";
       const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
@@ -1774,7 +1786,7 @@ export async function registerRoutes(
         auth: { user: smtpUser, pass: smtpPass },
       });
 
-      // Send results to user
+      // Send results to user (including internal staff)
       await transporter.sendMail({
         from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to: email,
@@ -1791,6 +1803,8 @@ export async function registerRoutes(
       }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
 
       // Per-query sales notification removed — registration emails handle new user alerts
+      // (also skip for internal staff — they're testing, not leads)
+      if (isStaff) return res.json({ ok: true });
 
       return res.json({ ok: true });
     } catch (err: any) {
