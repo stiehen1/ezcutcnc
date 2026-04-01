@@ -1050,6 +1050,7 @@ export async function registerRoutes(
                 s.suggested_edp  = s.suggested_edps[0];
               } else {
                 // Fallback: ignore corner, just match flutes + dia + closest LOC
+                // Still enforce LBS requirement so we don't return a short-reach tool for an LBS job
                 const q3 = await pool.query(
                   `SELECT s.edp FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
@@ -1060,6 +1061,7 @@ export async function registerRoutes(
                      ${cbClause}
                      ${noBLK}
                      ${crFilterS}
+                     ${lbsClause}
                      AND ABS(COALESCE(s.loc_in, 0) - $3) = (
                        SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -1070,6 +1072,7 @@ export async function registerRoutes(
                          ${cbClause.replace(/\bs\./g, "s2.")}
                          ${noBLK.replace(/\bs\./g, "s2.")}
                          ${crFilterS2}
+                         ${lbsClause2}
                      )
                    ORDER BY s.edp`,
                   [flutes, dia, loc]
