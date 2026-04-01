@@ -603,7 +603,7 @@ export async function registerRoutes(
   app.get("/api/tools/search", async (req, res) => {
     try {
       const { pool } = await import("./db");
-      const { tool_type, material, flutes, diameter, dia_min, dia_max, min_loc, loc, lbs_exclude, corner, coating, center_cutting, geometry, required_chamfer_length, chamfer_lengths, chamfer_angle, tip_diameter, axial_depth, part_corner_radius, max_floor_radius, max_flutes, min_flutes, series } = req.query;
+      const { tool_type, material, flutes, diameter, dia_min, dia_max, min_loc, loc, lbs_exclude, corner, coating, center_cutting, geometry, required_chamfer_length, chamfer_lengths, chamfer_angle, tip_diameter, axial_depth, part_corner_radius, max_floor_radius, max_flutes, min_flutes, series, flute5_max_loc } = req.query;
 
       const conditions: string[] = ["u.is_current = TRUE"];
       const params: any[] = [];
@@ -710,6 +710,10 @@ export async function registerRoutes(
       if (min_flutes) {
         const mf = parseInt(String(min_flutes));
         if (!isNaN(mf)) { conditions.push(`s.flutes >= $${p++}`); params.push(mf); }
+      }
+      if (flute5_max_loc) {
+        const maxLoc = parseFloat(String(flute5_max_loc));
+        if (!isNaN(maxLoc)) { conditions.push(`(s.flutes <> 5 OR s.loc_in <= $${p++})`); params.push(maxLoc); }
       }
 
       const sql = `

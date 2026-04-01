@@ -404,7 +404,7 @@ const QP_DOCS = [
 ];
 
 function QuickPick({ onApply, onOperationPick, onClear, applied, summary }: {
-  onApply: (mat: string, toolType: string, geo: string | null, diaRange: { min: number; max: number }, minLoc: number | null, summary: string[], mode: string, minLbs?: number | null) => void;
+  onApply: (mat: string, toolType: string, geo: string | null, diaRange: { min: number; max: number }, minLoc: number | null, summary: string[], mode: string, minLbs?: number | null, docXd?: number | null) => void;
   onOperationPick: (toolType: string) => void;
   onClear: () => void;
   applied: boolean;
@@ -437,7 +437,7 @@ function QuickPick({ onApply, onOperationPick, onClear, applied, summary }: {
       `Cut Dia (${d.label.trim().replace(/[()]/g, "").replace(/\s+/g, " ").trim()})`,
       ...(depthLabel ? [`Cut Depth (${depthLabel.trim()})`] : []),
     ];
-    onApply(mat, op.toolType, geo, { min: d.min, max: d.max }, minLoc, summary, op.value, minLbs);
+    onApply(mat, op.toolType, geo, { min: d.min, max: d.max }, minLoc, summary, op.value, minLbs, docXd);
     setOpen(false);
     reset();
   }
@@ -671,7 +671,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       setTfContactStatus("idle");
     }
   }
-  const [qpTip, setQpTip] = React.useState<{ summary: string[]; geo: string | null; mode: string; isoMat: string } | null>(null);
+  const [qpTip, setQpTip] = React.useState<{ summary: string[]; geo: string | null; mode: string; isoMat: string; docXd: number | null } | null>(null);
   const [qpDiaRange, setQpDiaRange] = React.useState<{ min: number; max: number } | null>(null);
   const [qpMinLoc,   setQpMinLoc]   = React.useState<number | null>(null);
 
@@ -756,14 +756,20 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     const isHardened = mat === "h";
     const isFerrous = mat && mat !== "n";
     if (mode === "slot") {
+      const docXd = qpTip?.docXd ?? null;
       if (isAlum) {
         // Non-ferrous slotting: 2–3 flute only for chip evacuation
         p.set("min_flutes", "2");
         p.set("max_flutes", "3");
+      } else if (docXd !== null && docXd > 1.5) {
+        // Deep ferrous slotting (> 1.5×D): 4-flute only — 5-flute chips pack at depth
+        p.set("min_flutes", "4");
+        p.set("max_flutes", "4");
       } else {
-        // Ferrous slotting: 4–5 flute
+        // Ferrous slotting shallow/standard: 4–5 flute; 5-flute capped at 0.625" LOC
         p.set("min_flutes", "4");
         p.set("max_flutes", "5");
+        p.set("flute5_max_loc", "0.625");
       }
     } else if (isHardened) {
       // Hardened ≥50 HRC — 6+ flutes required for all non-slot operations
@@ -846,6 +852,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     summary: string[],
     mode: string,
     minLbs?: number | null,
+    docXd?: number | null,
   ) {
     // Update visible filter state so the filter panel reflects what was picked
     setMaterial(mat);
@@ -867,7 +874,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       truncated_rougher: "Truncated Rougher (VXR)",
       standard: "Standard",
     };
-    setQpTip({ summary, geo: geo ? (GEO_LABELS[geo] ?? geo) : null, mode, isoMat: mat });
+    setQpTip({ summary, geo: geo ? (GEO_LABELS[geo] ?? geo) : null, mode, isoMat: mat, docXd: docXd ?? null });
 
     // Run search directly with the known params (avoids waiting for state to settle)
     setSearching(true);
@@ -894,6 +901,21 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       else { p.set("dia_min", String(diaRange.min)); p.set("dia_max", String(diaRange.max)); }
       if (minLoc != null) p.set("min_loc", String(minLoc));
       if (minLbs != null) p.set("lbs", String(minLbs));
+      // Apply flute constraints for this mode/material directly (qpTip state not yet settled)
+      if (mode === "slot") {
+        const isAlumQp = mat === "n";
+        if (isAlumQp) { p.set("min_flutes", "2"); p.set("max_flutes", "3"); }
+        else if (docXd != null && docXd > 1.5) { p.set("min_flutes", "4"); p.set("max_flutes", "4"); }
+        else { p.set("min_flutes", "4"); p.set("max_flutes", "5"); p.set("flute5_max_loc", "0.625"); }
+      } else if (mat === "h") {
+        p.set("min_flutes", "6");
+      } else if (mode === "hem") {
+        if (mat === "n") { p.set("min_flutes", "3"); p.set("max_flutes", "3"); }
+        else if (mat && mat !== "n") p.set("min_flutes", "5");
+      } else if (mode === "traditional") {
+        if (mat === "n") { p.set("min_flutes", "2"); p.set("max_flutes", "3"); }
+        else if (mat && mat !== "n") { p.set("min_flutes", "4"); p.set("max_flutes", "5"); }
+      }
       const r = await fetch(`/api/tools/search?${p}`);
       const data = await r.json();
       if (!r.ok) setSearchErr(data.message ?? "Search failed");
