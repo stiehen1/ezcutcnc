@@ -1768,11 +1768,9 @@ export async function registerRoutes(
         console.warn("[Results Email] DB insert failed:", dbErr?.message);
       }
 
-      // Skip sales notification for internal staff — they're testing, not leads
+      // Internal staff get the results email but skip the sales lead notification
       const isStaff = typeof email === "string" && (email.endsWith("@corecutterusa.com") || email.endsWith("@corecutter.com"));
-      if (isStaff) return res.json({ ok: true });
 
-      const to = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
       const smtpUser = process.env.SMTP_USER || "";
       const smtpPass = process.env.SMTP_PASS || "";
       const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
@@ -1788,7 +1786,7 @@ export async function registerRoutes(
         auth: { user: smtpUser, pass: smtpPass },
       });
 
-      // Send results to user
+      // Send results to user (including internal staff)
       await transporter.sendMail({
         from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
         to: email,
@@ -1805,6 +1803,8 @@ export async function registerRoutes(
       }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
 
       // Per-query sales notification removed — registration emails handle new user alerts
+      // (also skip for internal staff — they're testing, not leads)
+      if (isStaff) return res.json({ ok: true });
 
       return res.json({ ok: true });
     } catch (err: any) {
