@@ -1162,6 +1162,9 @@ export async function registerRoutes(
       // For surfacing: restrict to ball-nose and corner-radius (bull-nose) tools only
       const isSurfacing = mode === "surfacing";
       const curLoc = Number(payload.loc ?? 0);
+      const curLbs = Number(payload.lbs ?? 0);
+      // LBS/necked tool: only consider peers with sufficient reach (lbs_in >= curLbs)
+      const lbsPeerClause = curLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${curLbs}` : "";
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -1170,6 +1173,7 @@ export async function registerRoutes(
            AND LOWER(s.edp) != LOWER($2)
            AND s.edp NOT ILIKE '%-BLK'
            AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+           ${lbsPeerClause}
            ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
            ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
            ${mode === "slot" && isoCategory === "N" ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)` : ""}
@@ -1374,6 +1378,7 @@ export async function registerRoutes(
         tool_dia:        Number(bestSku.cutting_diameter_in),
         flutes:          Number(bestSku.flutes),
         loc:             Number(bestSku.loc_in),
+        lbs:             bestSku.lbs_in != null ? Number(bestSku.lbs_in) : 0,
         geometry:        bestSku.geometry ?? "standard",
         variable_pitch:  !!bestSku.variable_pitch,
         variable_helix:  !!bestSku.variable_helix,
