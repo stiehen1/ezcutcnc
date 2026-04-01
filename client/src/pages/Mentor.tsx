@@ -1621,7 +1621,7 @@ export default function Mentor() {
         :               { low: 8,  med: 10, high: 12 }  // P steel — 3-fl + var helix supports 8–12%
       )
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
-      : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
+      : iso === "S" ? (geometry === "chipbreaker" ? { low: 8, med: 10, high: 12 } : { low: 3, med: 5, high: 8 })   // superalloys / Inconel — CB needs ≥8% to engage
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
       : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
       : flutes >= 7  ? { low: 6, med: 8, high: 10 } // P / M / K — 7–8 flutes
