@@ -2529,8 +2529,8 @@ export default function Mentor() {
         ${kpiBox("Torque (in-lbf)", eng.torque_in_lbf != null ? eng.torque_in_lbf.toFixed(1) : null)}
         ${kpiBox("Deflection (in)", eng.deflection_in != null ? eng.deflection_in.toFixed(6) : null)}
         ${kpiBox("Chip Thick (in)", eng.chip_thickness_in != null ? eng.chip_thickness_in.toFixed(6) : null)}
-        ${form.mode !== "face" ? kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null) : ""}
-        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
+        ${form.mode !== "face" && form.mode !== "slot" ? kpiBox("Teeth in Cut", tic != null ? tic.toFixed(2) : null) : ""}
+        ${printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" && form.mode !== "slot" ? kpiBox("Eng Angle (°)", printEngAngleDeg.toFixed(1)) : ""}
       </div>
       ${ticGauge}
       ${engAngleGauge}
@@ -6713,8 +6713,8 @@ ${stabSection}
                 if (form.woc_pct > wocHigh) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wocLow}–{wocHigh}%) — consider reducing for stability</p>;
                 return null;
               })()}
-              {/* Engagement physics mini-chart — not shown for face or circ_interp (3-phase cards replace this) */}
-              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "circ_interp" && (() => {
+              {/* Engagement physics mini-chart — not shown for face, circ_interp, or slot (always 180°) */}
+              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "circ_interp" && form.mode !== "slot" && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 // Engine uses 2×acos(...) — full included arc entry-to-exit
@@ -6758,8 +6758,8 @@ ${stabSection}
                         <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
                       </div>
                     </div>
-                    {/* Teeth in Cut */}
-                    {(() => {
+                    {/* Teeth in Cut — hidden for slot (all flutes engaged, obvious) */}
+                    {form.mode !== "slot" && (() => {
                       const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
                       return (
                         <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
@@ -8840,7 +8840,7 @@ ${stabSection}
                     />
                     <Kpi label={UL("Deflection (in)", "Deflection (mm)")} hint="Estimated tool tip deflection under radial cutting force, modeled as a cantilever beam. Excessive deflection causes dimensional error, chatter, and poor surface finish. The stability limit is shown in the Stability Check section." value={UC(engineering?.deflection_in, 25.4, metric ? 4 : 6)} />
                     <Kpi label={UL("Chip Thick (in)", "Chip Thick (mm)")} hint="Effective chip thickness after radial chip thinning (RCTF). At low WOC, the actual chip is thinner than the programmed FPT — the engine boosts feed to compensate. Must exceed the minimum chip thickness to avoid rubbing." value={UC(engineering?.chip_thickness_in, 25.4, metric ? 4 : 6)} />
-                    {form.mode !== "face" && <Kpi
+                    {form.mode !== "face" && form.mode !== "slot" && <Kpi
                       label="Tooth Engagement"
                       hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
                       value={
@@ -9182,8 +9182,8 @@ ${stabSection}
                 );
               })()}
 
-              {/* Engagement Angle Advisory — hidden for circ_interp and face */}
-              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && form.mode !== "face" && (() => {
+              {/* Engagement Angle Advisory — hidden for circ_interp, face, and slot (always 180°) */}
+              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && form.mode !== "face" && form.mode !== "slot" && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
