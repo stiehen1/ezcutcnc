@@ -2030,15 +2030,20 @@ export default function Mentor() {
     const _dia = Number(sku.cutting_diameter_in);
     const _loc = Number(sku.loc_in);
     const _fw  = Number(sku.flute_wash ?? 0);
+    const _lbs = Number(sku.lbs_in ?? 0);
+    const _hasLbs = _lbs > 0;
     const _isQtr3 = ["QTR3", "QTR3-RN"].includes((sku.series ?? "").toUpperCase());
     const _dbStickout = sku.default_stickout_in != null ? Number(sku.default_stickout_in) : null;
     const _hasDbStickout = _dbStickout != null;
+    // LBS (necked) tools: stickout = LBS + 0.7×D
     // QTR3: always use DB value, never formula. Other series: DB value if present, else formula.
     const defaultStickout: number | null = _hasDbStickout
       ? _dbStickout
-      : _isQtr3
-        ? null   // QTR3 with missing DB value — leave blank rather than use formula
-        : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
+      : _hasLbs
+        ? Math.ceil((_lbs + 0.7 * _dia) * 200) / 200
+        : _isQtr3
+          ? null   // QTR3 with missing DB value — leave blank rather than use formula
+          : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
     const _stickoutVal: number = defaultStickout ?? 0;
 
     setEdpText(sku.EDP ?? (sku as any).edp ?? "");
