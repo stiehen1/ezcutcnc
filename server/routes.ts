@@ -1372,13 +1372,22 @@ export async function registerRoutes(
       // Build modified payload with recommended SKU geometry
       const crNum  = Number(bestSku.corner_condition);
       const isBall = String(bestSku.corner_condition ?? "").toLowerCase() === "ball";
+      const recFlutes = Number(bestSku.flutes);
+      // Slotting DOC cap by flute count — 5-fl max 0.5×D, 4-fl and below max 1.0×D
+      // When recommending a higher flute count in slot mode, pull DOC down to the new tool's limit.
+      const recDocXd = (() => {
+        if (mode !== "slot") return docXd;
+        const slotDocCap = recFlutes >= 5 ? 0.5 : 1.0;
+        return Math.min(docXd, slotDocCap);
+      })();
       const modPayload = {
         ...payload,
         edp:             bestSku.edp,
         tool_dia:        Number(bestSku.cutting_diameter_in),
-        flutes:          Number(bestSku.flutes),
+        flutes:          recFlutes,
         loc:             Number(bestSku.loc_in),
         lbs:             bestSku.lbs_in != null ? Number(bestSku.lbs_in) : 0,
+        doc_xd:          recDocXd,
         geometry:        bestSku.geometry ?? "standard",
         variable_pitch:  !!bestSku.variable_pitch,
         variable_helix:  !!bestSku.variable_helix,
