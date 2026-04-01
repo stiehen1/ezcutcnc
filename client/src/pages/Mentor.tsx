@@ -8839,14 +8839,15 @@ ${stabSection}
                       }
                     />
                     <Kpi label={UL("Deflection (in)", "Deflection (mm)")} hint="Estimated tool tip deflection under radial cutting force, modeled as a cantilever beam. Excessive deflection causes dimensional error, chatter, and poor surface finish. The stability limit is shown in the Stability Check section." value={UC(engineering?.deflection_in, 25.4, metric ? 4 : 6)} />
-                    <Kpi label={UL("Chip Thick (in)", "Chip Thick (mm)")} hint="Effective chip thickness after radial chip thinning (RCTF). At low WOC, the actual chip is thinner than the programmed FPT — the engine boosts feed to compensate. Must exceed the minimum chip thickness to avoid rubbing." value={UC(engineering?.chip_thickness_in, 25.4, metric ? 4 : 6)} />
-                    {form.mode !== "face" && form.mode !== "slot" && <Kpi
-                      label="Tooth Engagement"
-                      hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
-                      value={
-                        engineering?.teeth_in_cut != null ? (
+                    {form.mode !== "face" && form.mode !== "slot" && form.woc_pct > 0 && form.flutes > 0 && (() => {
+                      const _arg = Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100));
+                      const _tic = Math.max(0.1, (2 * Math.acos(_arg) / (2 * Math.PI)) * form.flutes);
+                      return <Kpi
+                        label="Tooth Engagement"
+                        hint="Average number of cutting teeth simultaneously in contact with the workpiece. Derived from WOC engagement arc and flute count. The helix wrap shows how many degrees the flute spirals over the DOC. Continuous means at least one tooth is always cutting — smoother force, better surface finish."
+                        value={
                           <div className="leading-snug">
-                            <div>{fmtNum(engineering.teeth_in_cut, 2)} teeth</div>
+                            <div>{fmtNum(_tic, 2)} teeth</div>
                             {engineering?.helix_wrap_deg != null && (
                               <div className="text-xs font-normal text-muted-foreground mt-0.5">
                                 {fmtNum(engineering.helix_wrap_deg, 0)}° helix wrap
@@ -8856,9 +8857,9 @@ ${stabSection}
                               </div>
                             )}
                           </div>
-                        ) : "—"
-                      }
-                    />}
+                        }
+                      />;
+                    })()}
                     <Kpi label="Chatter" hint="Chatter index — a relative indicator combining deflection, RPM, and workholding compliance. Lower is better. This is an internal diagnostic value; use the Rigidity & Chatter Audit section for actionable guidance." value={fmtNum(engineering?.chatter_index, 3)} />
                   </div>
                 </>
@@ -9119,18 +9120,22 @@ ${stabSection}
               })()}
 
               {/* Tooth Engagement Advisory — hidden for slotting and face only */}
-              {engineering?.teeth_in_cut != null && form.mode !== "slot" && form.mode !== "face" && (() => {
-                const tic = engineering.teeth_in_cut;
+              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "slot" && form.mode !== "face" && (() => {
+                const _wocFrac = form.woc_pct / 100;
+                const _arg = Math.max(-1, Math.min(1, 1 - 2 * _wocFrac));
+                const tic = Math.max(0.1, (2 * Math.acos(_arg) / (2 * Math.PI)) * form.flutes);
                 const low = 1.0, sweetLo = 1.5, sweetHi = 2.5, high = 3.0;
                 const zone = tic < low ? "low" : tic <= sweetHi ? tic >= sweetLo ? "sweet" : "ok" : "high";
                 const maxDisplay = 4.0;
                 const pct = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
+                // Next available flute count — skip 8 (not offered)
+                const nextFl = (n: number) => n >= 7 ? 9 : n + 1;
                 const tipsByOp: Record<string, { low: string; ok: string; high: string }> = {
-                  hem:       { low: `Increase WOC% (try 6–10%)${form.flutes < 5 ? " or add flutes (5–7 fl recommended for HEM)" : form.flutes < 7 ? ` or try ${form.flutes + 1}–7 flutes` : ""}`, ok: `Try pushing WOC% up slightly${form.flutes < 7 ? ` or adding a flute (try ${form.flutes + 1} fl)` : ""} to reach 1.5–2.5 teeth engaged`, high: `Reduce WOC%${form.flutes > 4 ? ` or drop to ${form.flutes - 1} flutes` : ""}` },
+                  hem:       { low: `${form.woc_pct < 6 ? "Increase WOC% (try 6–10%)" : form.woc_pct < 10 ? "Push WOC% higher (try 8–12%)" : ""}${form.flutes < 5 ? `${form.woc_pct < 10 ? " or a" : "A"}dd flutes (5–7 fl recommended for HEM)` : form.flutes < 7 ? `${form.woc_pct < 10 ? " or try" : "Try"} ${nextFl(form.flutes)}–7 flutes` : form.flutes === 7 ? `${form.woc_pct < 10 ? " or try" : "Try"} 9 flutes` : ""}`.trim(), ok: `Try pushing WOC% up slightly${form.flutes < 9 ? ` or try ${nextFl(form.flutes)} flutes` : ""} to reach 1.5–2.5 teeth engaged`, high: `Reduce WOC%${form.flutes > 4 ? ` or drop to ${form.flutes - 1} flutes` : ""}` },
                   slot:      { low: "Slotting uses 2 teeth naturally at 4fl — check flute count", ok: "Increase flute count to reach the sweet spot", high: "Reduce flutes for slotting — 4fl is standard" },
                   finish:    { low: "Light WOC is normal for finishing — this is expected", ok: "Finishing WOC is fine — consider a light WOC increase if surface finish allows", high: "Reduce WOC% for finishing passes" },
                   circ_interp: { low: "Light wall stock is normal for bore finishing — use a heavier roughing pass first", ok: "Good engagement for bore work — consistent wall removal", high: "Reduce WOC% (wall stock) to avoid deflection and size error in the bore" },
-                  default:   { low: "Increase WOC% or add a flute to get more teeth engaged", ok: `Bump WOC% slightly${form.flutes < 7 ? ` or try ${form.flutes + 1} flutes` : ""} to enter the Sweet Spot (1.5–2.5 teeth)`, high: "Reduce WOC% or use fewer flutes" },
+                  default:   { low: `Increase WOC% or try ${nextFl(form.flutes)} flutes to get more teeth engaged`, ok: `Bump WOC% slightly${form.flutes < 9 ? ` or try ${nextFl(form.flutes)} flutes` : ""} to enter the Sweet Spot (1.5–2.5 teeth)`, high: "Reduce WOC% or use fewer flutes" },
                 };
                 const tips = tipsByOp[form.mode ?? ""] ?? tipsByOp.default;
                 return (
