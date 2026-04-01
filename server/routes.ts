@@ -830,6 +830,10 @@ export async function registerRoutes(
               const corner = (s.lookup_corner ?? "").toLowerCase();
               const cr     = s.lookup_cr ?? 0;
               const inputHasCr = corner !== "square" && corner !== "ball" && cr > 0;
+              // LBS/necked tool: require suggested tool to have lbs_in >= lookup_lbs (sufficient reach)
+              const lookupLbs = s.lookup_lbs ? parseFloat(String(s.lookup_lbs)) : 0;
+              const lbsClause = lookupLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${lookupLbs}` : "";
+              const lbsClause2 = lookupLbs > 0 ? ` AND COALESCE(s2.lbs_in, 0) >= ${lookupLbs}` : "";
               const isRoughingGeom = payloadGeometry === "chipbreaker" || payloadGeometry === "truncated_rougher";
               const isDiameterSugg = s.type === "diameter";
               // Diameter suggestions: relax CR filter to "any CR" — going to a larger tool,
@@ -857,6 +861,7 @@ export async function registerRoutes(
                    ${cbClause}
                    ${noBLK}
                    ${crFilterS}
+                   ${lbsClause}
                    ORDER BY
                      CASE WHEN LOWER(COALESCE(s.geometry, 'standard')) = $2 THEN 0 ELSE 1 END,
                      s.edp`,
@@ -1025,6 +1030,7 @@ export async function registerRoutes(
                    AND LOWER(s.corner_condition) = LOWER($3)
                    ${cbClause}
                    ${noBLK}
+                   ${lbsClause}
                    AND ABS(COALESCE(s.loc_in, 0) - $4) = (
                      SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $4))
                      FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
@@ -1034,6 +1040,7 @@ export async function registerRoutes(
                        AND LOWER(s2.corner_condition) = LOWER($3)
                        ${cbClause.replace(/\bs\./g, "s2.")}
                        ${noBLK.replace(/\bs\./g, "s2.")}
+                       ${lbsClause2}
                    )
                  ORDER BY s.edp`,
                 [flutes, dia, cornerStr, loc]

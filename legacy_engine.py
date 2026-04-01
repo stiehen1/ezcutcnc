@@ -4954,8 +4954,8 @@ def run(payload=None):
     if _lbs > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
-            "label": f'Neck reach (LBS) = {_lbs:.3f}"',
-            "detail": f"Stickout cannot go below {_lbs:.3f}\" — tool geometry limit",
+            "label": f'Minimum stickout = {_min_so:.3f}" (LBS + LOC clearance)',
+            "detail": f"Necked tool — stickout floor is {_min_so:.3f}\". Suggestions below respect this limit.",
         })
 
     _doc_now = float(state.get("doc", 0) or 0)
@@ -5034,7 +5034,8 @@ def run(payload=None):
     _tool_series_upper = str(data.get("tool_series", "") or "").upper()
     _stickout_is_fixed = _tool_series_upper in _fixed_stickout_series
     _seen_stickout = set()
-    if _so > 0 and not _stickout_is_fixed:
+    _at_lbs_floor = _lbs > 0 and _so <= _min_so + 0.05  # already at or within 0.05" of LBS floor
+    if _so > 0 and not _stickout_is_fixed and not _at_lbs_floor:
         for frac in (0.70, 0.80):
             _ln = round(max(_so * frac, _min_so), 3)
             if _ln >= _so - 1e-4:
@@ -5057,8 +5058,9 @@ def run(payload=None):
 
     # 1b) Shorter-LOC same tool — when actual DOC < tool LOC, a shorter tool shortens the
     #     cantilever directly (L³ law), same as stickout but at the tool level.
+    #     Skip for LBS/necked tools: the neck reach (LBS) drives stickout, not LOC.
     #     Only fires when there's meaningful LOC headroom (>0.1") above the DOC.
-    if _doc_now > 0 and _loc_now > 0 and _defl > _dlim:
+    if _doc_now > 0 and _loc_now > 0 and _defl > _dlim and _lbs == 0:
         _min_loc_needed = _doc_now + _d * 0.33   # DOC + holder-clearance buffer
         _loc_headroom   = _loc_now - _min_loc_needed
         if _loc_headroom > 0.10:                  # at least 0.1" shorter than current LOC
@@ -5198,16 +5200,13 @@ def run(payload=None):
             _hem_dia = round(_slot_width * 0.75 * 16) / 16  # round to nearest 1/16"
             if _hem_dia <= 0:
                 _hem_dia = _slot_width * 0.75
-            # Flute recommendation by material group
+            # Flute recommendation by material group — max 6-flute (7-flute not offered in necked/LBS versions)
             _mat_grp_hem = get_material_group(str(data.get("material", "") or ""))
             if _mat_grp_hem in ("Aluminum", "aluminum_wrought", "aluminum_wrought_hs", "aluminum_cast", "Non-Ferrous"):
                 _hem_flutes = "3 or 5-flute"
-            elif _mat_grp_hem in ("Inconel", "Titanium", "Stainless",
-                                   "stainless_austenitic", "stainless_ph", "inconel_718",
-                                   "titanium_64", "hiTemp_fe", "hiTemp_co"):
-                _hem_flutes = "7-flute"
             else:
-                _hem_flutes = "5 or 7-flute"
+                _hem_flutes = "5 or 6-flute"
+            _lbs_note = f" Use a reduced-neck (RN) version if reach > 1.5×D." if _lbs > 0 else ""
             _hw_suggestions.append({
                 "type": "woc",
                 "label": f"Switch to HEM / trochoidal — use {_hem_dia:.4f}\" {_hem_flutes} tool",
@@ -5215,7 +5214,7 @@ def run(payload=None):
                     f"Since our slot width is {_d:.4f}\", we'll need a smaller tool — "
                     f"use a {_hem_dia:.4f}\" {_hem_flutes} tool on a trochoidal path at 5–10% WOC. "
                     f"The smaller diameter reduces stiffness — the extra flutes offset that. "
-                    f"Higher SFM and far lower radial force; net MRR is often equal or better."
+                    f"Higher SFM and far lower radial force; net MRR is often equal or better.{_lbs_note}"
                 ),
             })
         else:
@@ -5250,7 +5249,7 @@ def run(payload=None):
             _defl_short_pct = round(_defl_short / _dlim * 100, 1) if _dlim > 0 else 0
             _hw_suggestions.append({
                 "type": "holder",
-                "label": f'Use shorter extension holder ({_hgl_short:.2f}" gage vs current {_hgl:.2f}")',
+                "label": f'Use shorter gage length holder ({_hgl_short:.2f}" gage vs current {_hgl:.2f}")',
                 "detail": f"Shorter nose projection — est. deflection drops to {_defl_short_pct}% of limit",
             })
 
@@ -5305,7 +5304,9 @@ def run(payload=None):
     _is_aluminum_grp = material_group in ("Aluminum",)
     _is_steel_grp = material_group in ("Steel",)
     # Next 1-2 available flute counts above current from catalog
-    _next_flutes = [f for f in _avail_flutes if f > _cur_flutes][:2]
+    # LBS/necked tools: cap at 6-flute — 7-flute not offered in reduced-neck versions
+    _max_flute_cap = 6 if _lbs > 0 else 99
+    _next_flutes = [f for f in _avail_flutes if f > _cur_flutes and f <= _max_flute_cap][:2]
     for _nf in _next_flutes:
         if _nf > max(_avail_flutes):
             break
@@ -5337,13 +5338,15 @@ def run(payload=None):
                 _fl_note = f" — side mill max {_nf_max_woc:.0f}% WOC"
         else:
             _fl_note = f" — max {_nf_max_woc:.0f}% WOC for chip clearance"
+        _lbs_label_note = f" (use RN — need ≥{_lbs:.3f}\" reach)" if _lbs > 0 else ""
         _hw_suggestions.append({
             "type": "tool",
-            "label": f"Use {_nf}-flute tool (same diameter)",
+            "label": f"Use {_nf}-flute tool (same diameter){_lbs_label_note}",
             "detail": f"~{_fl_pct_gain}% stiffer core — est. deflection drops to {_defl_fl_pct}% of limit{_fl_note}",
             "suggested_flutes": _nf,
             "lookup_dia": _d,
             "lookup_loc": float(data.get("loc", 0) or 0),
+            "lookup_lbs": _lbs if _lbs > 0 else None,
             "lookup_series": data.get("tool_series", ""),
             "lookup_corner": data.get("corner_condition", ""),
             "lookup_cr": float(data.get("corner_radius", 0) or 0),
@@ -5351,9 +5354,11 @@ def run(payload=None):
         })
 
     # 8) Diameter step-up (D⁴ law)
+    # Skip for slotting — slot width is fixed; a larger tool can't fit in the same slot
     _common = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5, 2.0]
     _next_d = next((s for s in _common if s > _d + 1e-4), None)
-    if _next_d:
+    _woc_now_diam = float(data.get("woc_pct", 0) or 0)
+    if _next_d and _woc_now_diam < 90.0:
         _d_gain = round((_next_d / _d) ** 4, 1)
         _hw_suggestions.append({
             "type": "diameter",
