@@ -1758,7 +1758,7 @@ export default function Mentor() {
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
   React.useEffect(() => {
-    if (form.mode === "slot") setEntryTypes([]);
+    if (form.mode === "slot") setEntryTypes(["slot_straight"]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
   }, [form.tool_type, form.mode]);
   const [holderGageText, setHolderGageText] = React.useState("");
@@ -2430,11 +2430,17 @@ export default function Mentor() {
     const straightRows = (em && entryTypes.includes("straight")) ? `
         <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight Plunge</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>` : "";
-    const entrySection = (mil && em && (sweepRows || rampRows || helixRows || straightRows)) ? `
+    const slotStraightFeed = result?.milling?.feed_ipm ?? 0;
+    const slotEntryIpm = slotStraightFeed * 0.50;
+    const slotStraightRows = (entryTypes.includes("slot_straight") && slotStraightFeed > 0) ? `
+        <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f59e0b;border-bottom:1px solid #f59e0b40;">Straight Entry (Outside Edge)</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Entry Feed</td><td style="font-weight:600;color:#f59e0b;">${slotEntryIpm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(50% — shock load at first engagement)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (once engaged)</td><td style="font-weight:600;">${slotStraightFeed.toFixed(1)} IPM</td></tr>` : "";
+    const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows) ? `
       <h3>Entry Moves</h3>
       ${emCaution ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:${emCaution === "high_hardness" ? "#450a0a" : "#451a03"};color:${emCaution === "high_hardness" ? "#fca5a5" : "#fcd34d"};">⚠ ${emCaution === "high_hardness" ? `Hard material (≥55 HRC): entry feed reduced to ${emFeedPct}% — do not skip arc lead-in.` : `Medium-hard material: entry feed reduced to ${emFeedPct}% of full feed.`}</p>` : ""}
       <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
-        ${sweepRows}${rampRows}${helixRows}${straightRows}
+        ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}
       </table>` : "";
 
     const tic = eng?.teeth_in_cut ?? null;
@@ -7072,11 +7078,13 @@ ${stabSection}
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
                 {[
-                  { key: "sweep",    label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",  recommended: form.tool_type !== "chamfer_mill" },
-                  { key: "ramp",     label: "Ramp",            color: "text-indigo-300 border-indigo-500/60", recommended: false },
-                  { key: "helical",  label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" },
-                  { key: "straight", label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",  recommended: false },
-                ].map(({ key, label, color, recommended }) => {
+                  { key: "sweep",        label: "Sweep / Roll-in",        color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill", slotOnly: false, hideInSlot: true },
+                  { key: "ramp",         label: "Ramp",                   color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: true },
+                  { key: "helical",      label: "Helical",                 color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: true },
+                  { key: "straight",     label: "Straight Plunge",         color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true },
+                  { key: "slot_straight",label: "Straight Entry",          color: "text-amber-400 border-amber-500/60",   recommended: form.mode === "slot",              slotOnly: true,  hideInSlot: false },
+                ].filter(({ slotOnly, hideInSlot }) => form.mode === "slot" ? !hideInSlot : !slotOnly)
+                .map(({ key, label, color, recommended }) => {
                   const checked = entryTypes.includes(key);
                   return (
                     <button
