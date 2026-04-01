@@ -1758,7 +1758,7 @@ export default function Mentor() {
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
   React.useEffect(() => {
-    if (form.mode === "slot") setEntryTypes(["slot_straight"]);
+    if (form.mode === "slot") setEntryTypes([]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
   }, [form.tool_type, form.mode]);
   const [holderGageText, setHolderGageText] = React.useState("");
@@ -7092,7 +7092,7 @@ ${stabSection}
                   { key: "ramp",         label: "Ramp",                   color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false },
                   { key: "helical",      label: "Helical",                 color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false },
                   { key: "straight",     label: "Straight Plunge",         color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true },
-                  { key: "slot_straight",label: "Straight Entry",          color: "text-amber-400 border-amber-500/60",   recommended: form.mode === "slot",              slotOnly: true,  hideInSlot: false },
+                  { key: "slot_straight",label: "Straight Entry",          color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false },
                 ].filter(({ slotOnly, hideInSlot }) => form.mode === "slot" ? !hideInSlot : !slotOnly)
                 .map(({ key, label, color, recommended }) => {
                   const checked = entryTypes.includes(key);
@@ -9352,7 +9352,7 @@ ${stabSection}
                         return (
                           <div>
                             <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Entry ★</span>
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Entry</span>
                               <span className="text-[9px] text-amber-600 ml-2">Tool enters from outside stock edge</span>
                             </div>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
