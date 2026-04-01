@@ -6741,33 +6741,51 @@ ${stabSection}
                 return (
                   <div className="mt-2 flex gap-1.5">
                     {/* Engagement Angle */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
-                      title={`Arc of tool in contact with material. At ${form.woc_pct.toFixed(1)}% WOC the tool engages ${engAngleDeg.toFixed(1)}° of its 360° rotation. Higher angle = more heat and cutting force per revolution.`}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Eng. Angle</div>
-                      <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
-                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: arcColor }} />
-                      </div>
-                    </div>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}>
+                            <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Eng. Angle</div>
+                            <div className="text-sm font-bold leading-tight" style={{ color: arcColor }}>{engAngleDeg.toFixed(1)}°</div>
+                            <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                              <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: arcColor }} />
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{`Arc of tool in contact with material. At ${form.woc_pct.toFixed(1)}% WOC the tool engages ${engAngleDeg.toFixed(1)}° of its 360° rotation. Higher angle = more heat and cutting force per revolution.`}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     {/* Chip Thinning */}
-                    <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
-                      title={`Chip thinning factor — at low WOC the chip formed is thinner than your programmed FPT. ${chipThinPct}% means the actual chip is only ${chipThinPct}% as thick as programmed. The engine compensates automatically by boosting feed. Below 30% risks rubbing instead of cutting.`}>
-                      <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Chip Thin</div>
-                      <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
-                      <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
-                      </div>
-                    </div>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}>
+                            <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Chip Thin</div>
+                            <div className="text-sm font-bold leading-tight" style={{ color: chipColor }}>{chipThinPct}%</div>
+                            <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                              <div className="h-full rounded-full" style={{ width: `${chipThinPct}%`, background: chipColor }} />
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{`Chip thinning factor — at low WOC the chip formed is thinner than your programmed FPT. ${chipThinPct}% means the actual chip is only ${chipThinPct}% as thick as programmed. The engine compensates automatically by boosting feed. Below 30% risks rubbing instead of cutting.`}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     {/* Teeth in Cut — hidden for slot (all flutes engaged, obvious) */}
                     {form.mode !== "slot" && (() => {
                       const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
                       return (
-                        <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}
-                          title={`Average number of flutes simultaneously cutting. Sweet spot is 1.5–2.5 teeth — enough for smooth cutting without heat buildup. Too low = interrupted, chattery cut. Too high = heat and tool wear.`}>
-                          <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Teeth in Cut</div>
-                          <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
-                          <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
-                        </div>
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex-1 rounded-md px-2 pt-1.5 pb-2 cursor-help" style={cardStyle}>
+                                <div className="text-[9px] uppercase tracking-widest mb-1" style={{ ...labelStyle, minHeight: "2.2em" }}>Teeth in Cut</div>
+                                <div className="text-sm font-bold leading-tight" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
+                                <div className="mt-1.5 text-[9px]" style={labelStyle}>of {form.flutes} flutes</div>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-72 text-xs">Average number of flutes simultaneously cutting. Sweet spot is 1.5–2.5 teeth — enough for smooth cutting without heat buildup. Too low = interrupted, chattery cut. Too high = heat and tool wear.</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       );
                     })()}
                   </div>
@@ -7122,26 +7140,32 @@ ${stabSection}
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
                 {[
-                  { key: "sweep",        label: "Sweep / Roll-in",        color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot", slotOnly: false, hideInSlot: true },
-                  { key: "ramp",         label: "Ramp",                   color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false },
-                  { key: "helical",      label: "Helical",                 color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false },
-                  { key: "straight",     label: "Straight Plunge",         color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true },
-                  { key: "slot_straight",label: "Straight Entry",          color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false },
+                  { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot", slotOnly: false, hideInSlot: true,  tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
+                  { key: "ramp",         label: "Ramp",             color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, tooltip: "Linear ramp at 2–5° angle — tool descends while moving laterally. Simpler than helical, supported by all CAM systems. Engagement builds faster than a sweep-in, so use a reduced entry feed (40–50% of full feed). Good fallback when helical clearance is tight." },
+                  { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
+                  { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
+                  { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
                 ].filter(({ slotOnly, hideInSlot }) => form.mode === "slot" ? !hideInSlot : !slotOnly)
-                .map(({ key, label, color, recommended }) => {
+                .map(({ key, label, color, recommended, tooltip }) => {
                   const checked = entryTypes.includes(key);
                   return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== key) : [...p, key])}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
-                    >
-                      <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 ${checked ? "bg-current border-current" : "border-zinc-600"}`}>
-                        {checked && <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 10 10" fill="currentColor"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
-                      </span>
-                      {label}{recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
-                    </button>
+                    <TooltipProvider key={key} delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== key) : [...p, key])}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 ${checked ? "bg-current border-current" : "border-zinc-600"}`}>
+                              {checked && <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 10 10" fill="currentColor"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                            </span>
+                            {label}{recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{tooltip}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   );
                 })}
               </div>
