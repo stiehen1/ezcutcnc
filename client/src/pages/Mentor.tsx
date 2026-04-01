@@ -1758,7 +1758,7 @@ export default function Mentor() {
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
   React.useEffect(() => {
-    if (form.mode === "slot") setEntryTypes(["ramp", "helical", "slot_straight"]);
+    if (form.mode === "slot") setEntryTypes([]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
   }, [form.tool_type, form.mode]);
   const [holderGageText, setHolderGageText] = React.useState("");
