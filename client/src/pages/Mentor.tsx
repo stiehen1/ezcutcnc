@@ -731,13 +731,11 @@ export default function Mentor() {
   /* Hero row */
   .hero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
   .hero-box { border-radius: 10px; padding: 16px; text-align: center; }
-  .hero-box.primary { background: #fff7ed; border: 2px solid #ea580c; }
-  .hero-box.secondary { background: #f0fdf4; border: 1.5px solid #16a34a; }
-  .hero-box.tertiary { background: #eff6ff; border: 1.5px solid #2563eb; }
+  .hero-box.positive { background: #f0fdf4; border: 2px solid #16a34a; }
+  .hero-box.negative { background: #fef2f2; border: 2px solid #dc2626; }
   .hero-num { font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
-  .hero-box.primary .hero-num { color: #ea580c; }
-  .hero-box.secondary .hero-num { color: #16a34a; }
-  .hero-box.tertiary .hero-num { color: #2563eb; }
+  .hero-box.positive .hero-num { color: #16a34a; }
+  .hero-box.negative .hero-num { color: #dc2626; }
   .hero-label { font-size: 11px; color: #666; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
 
   /* Badges */
@@ -762,7 +760,8 @@ export default function Mentor() {
   .cmp-table td.comp-val { text-align: right; color: #555; }
   .cmp-table tr.total-row td { background: #f9fafb; font-weight: 700; border-top: 2px solid #e5e7eb; }
   .cmp-table tr.total-row td.cc-val { color: #ea580c; }
-  .cmp-table tr.savings-row td { background: #f0fdf4; color: #16a34a; font-weight: 700; border-top: 2px solid #86efac; }
+  .cmp-table tr.savings-row.positive td { background: #f0fdf4; color: #16a34a; font-weight: 700; border-top: 2px solid #86efac; }
+  .cmp-table tr.savings-row.negative td { background: #fef2f2; color: #dc2626; font-weight: 700; border-top: 2px solid #fca5a5; }
   .cmp-table tr.mrr-row td { background: #eff6ff; }
   .cmp-table tr.mrr-row td.cc-val { color: #2563eb; }
 
@@ -805,17 +804,17 @@ export default function Mentor() {
 
   <!-- Hero numbers -->
   <div class="hero">
-    <div class="hero-box primary">
-      <div class="hero-num">$${fmtI(roiResult.annualSavings)}</div>
-      <div class="hero-label">Annual Savings</div>
+    <div class="hero-box ${roiResult.annualSavings >= 0 ? "positive" : "negative"}">
+      <div class="hero-num">${roiResult.annualSavings < 0 ? "-" : ""}$${fmtI(Math.abs(roiResult.annualSavings))}</div>
+      <div class="hero-label">${roiResult.annualSavings < 0 ? "Annual Cost Increase" : "Annual Savings"}</div>
     </div>
-    <div class="hero-box secondary">
-      <div class="hero-num">$${fmtI(roiResult.monthlySavings)}</div>
-      <div class="hero-label">Monthly Savings</div>
+    <div class="hero-box ${roiResult.monthlySavings >= 0 ? "positive" : "negative"}">
+      <div class="hero-num">${roiResult.monthlySavings < 0 ? "-" : ""}$${fmtI(Math.abs(roiResult.monthlySavings))}</div>
+      <div class="hero-label">${roiResult.monthlySavings < 0 ? "Monthly Cost Increase" : "Monthly Savings"}</div>
     </div>
-    <div class="hero-box secondary">
-      <div class="hero-num">${roiResult.savingsPct.toFixed(1)}%</div>
-      <div class="hero-label">Cost Reduction</div>
+    <div class="hero-box ${roiResult.savingsPct >= 0 ? "positive" : "negative"}">
+      <div class="hero-num">${roiResult.savingsPct < 0 ? "-" : ""}${Math.abs(roiResult.savingsPct).toFixed(1)}%</div>
+      <div class="hero-label">${roiResult.savingsPct < 0 ? "Cost Increase" : "Cost Reduction"}</div>
     </div>
   </div>
 
@@ -844,7 +843,7 @@ export default function Mentor() {
       <tr><td>${roiLifeMode === "cut_time" ? "Cut Time per Tool (min)" : roiLifeMode === "linear_in" ? "Linear Inches per Tool" : `Parts per Tool${roiReconEnabled ? " (lifecycle)" : ""}`}</td><td class="cc-val">${roiLifeMode === "cut_time" ? roiCcCutTime : roiLifeMode === "linear_in" ? roiCcLinIn : roiReconEnabled ? Math.round((() => { const g = parseInt(roiReconGrinds)||0; const r = (parseFloat(roiReconRetention)||90)/100; let t = parseFloat(roiCcParts); for(let i=1;i<=g;i++) t+=parseFloat(roiCcParts)*Math.pow(r,i); return t; })()) : roiCcParts}</td><td class="comp-val">${roiLifeMode === "cut_time" ? roiCompCutTime : roiLifeMode === "linear_in" ? roiCompLinIn : roiCompParts}</td></tr>
       <tr><td>${roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccToolCost)}</td><td class="comp-val">$${fmtC(roiResult.compToolCost)}</td></tr>
       <tr class="total-row"><td>${roiLifeMode === "cut_time" ? "Total Cost / Min" : roiLifeMode === "linear_in" ? "Total Cost / Inch" : "Total Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccTotalCost)}</td><td class="comp-val">$${fmtC(roiResult.compTotalCost)}</td></tr>
-      <tr class="savings-row"><td colspan="3" style="text-align:center">$${fmtD(roiResult.savingsPerPart)} saved per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"} &nbsp;·&nbsp; ${roiResult.savingsPct.toFixed(1)}% cost reduction</td></tr>
+      <tr class="savings-row ${roiResult.savingsPerPart >= 0 ? "positive" : "negative"}"><td colspan="3" style="text-align:center">${roiResult.savingsPerPart < 0 ? "-" : ""}$${fmtD(Math.abs(roiResult.savingsPerPart))} ${roiResult.savingsPerPart < 0 ? "more" : "saved"} per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"} &nbsp;·&nbsp; ${roiResult.savingsPct < 0 ? "-" : ""}${Math.abs(roiResult.savingsPct).toFixed(1)}% ${roiResult.savingsPct < 0 ? "cost increase" : "cost reduction"}</td></tr>
     </tbody>
   </table>
 
@@ -885,9 +884,10 @@ export default function Mentor() {
   </div>
 
 </div>
-<script>window.onload = () => window.print();</script>
 </body></html>`);
     w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 600);
   }
 
   // ── Email gate (lock all outputs behind email) ─────────────────────────
@@ -3366,7 +3366,7 @@ ${stabSection}
   // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
   const ALL_OPS = ["toolfinder","feedmilling","toolbox","milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"] as const;
   const OP_LABELS: Record<string, string> = {
-    toolfinder: "Tool Finder", feedmilling: "Calculators", toolbox: "Toolbox",
+    toolfinder: "Tool Finder", feedmilling: "Misc Calculators", toolbox: "Toolbox",
     milling: "Milling", drilling: "Drilling", reaming: "Reaming", threadmilling: "Thread Milling",
     keyseat: "Keyseat", dovetail: "Dovetail", feedmill: "Feed Mill",
   };
@@ -3424,7 +3424,7 @@ ${stabSection}
       {operation === "toolbox" && (
         <div>
           <SharedTabBar />
-          <Toolbox />
+          <Toolbox onBack={() => setOperation("milling")} />
         </div>
       )}
       {operation !== "feedmilling" && operation !== "toolfinder" && operation !== "toolbox" && <div className="grid grid-cols-1 md:grid-cols-2 md:gap-5 gap-4 items-start">
@@ -3466,7 +3466,7 @@ ${stabSection}
             <div className="flex gap-2">
               {([
                 { op: "toolfinder",  label: "Tool Finder", icon: "🔍" },
-                { op: "feedmilling", label: "Calculators",  icon: "⊞" },
+                { op: "feedmilling", label: "Misc Calculators",  icon: "⊞" },
                 { op: "toolbox",     label: "Toolbox",      icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 90 90" fill="none"><g transform="translate(0 0)"><path d="M87.67 90H2.33c-.552 0-1-.447-1-1V52.941c0-.553.448-1 1-1h85.34c.553 0 1 .447 1 1V89c0 .553-.447 1-1 1zM3.33 88h83.34V53.941H3.33V88z" fill="currentColor"/><path d="M24.877 69.574h-10.04c-.552 0-1-.447-1-1V52.941c0-.553.448-1 1-1h10.04c.552 0 1 .447 1 1v15.633c0 .553-.447 1-1 1zm-9.04-2h8.04V53.941h-8.04V67.574zM75.163 69.574h-10.04c-.553 0-1-.447-1-1V52.941c0-.553.447-1 1-1h10.04c.553 0 1 .447 1 1v15.633c0 .553-.447 1-1 1zm-9.04-2h8.04V53.941h-8.04V67.574zM31.074 53.941h-9.796c-.552 0-1-.447-1-1v-11.75c0-.552.448-1 1-1h9.796c.552 0 1 .448 1 1v11.75c0 .553-.448 1-1 1zm-8.796-2h7.796v-9.75h-7.796V51.941zM49.255 53.941h-7.732c-.552 0-1-.447-1-1V37.752c-3.723-1.843-6.092-5.627-6.092-9.821 0-4.166 2.32-7.917 6.055-9.791.308-.156.678-.14.974.043.295.182.475.504.475.851v6.658c0 1.905 1.55 3.455 3.455 3.455s3.455-1.55 3.455-3.455v-6.658c0-.347.18-.669.475-.851.297-.182.664-.199.974-.043 3.735 1.874 6.056 5.625 6.056 9.791 0 4.193-2.37 7.978-6.093 9.821v15.189c0 .553-.447 1-1 1zm-6.733-2h5.732V37.11c0-.402.241-.765.611-.921 3.33-1.404 5.481-4.646 5.481-8.258 0-2.828-1.31-5.423-3.504-7.099v4.859c0 3.008-2.447 5.455-5.455 5.455s-5.455-2.447-5.455-5.455v-4.859c-2.194 1.676-3.503 4.271-3.503 7.099 0 3.613 2.151 6.854 5.481 8.258.371.156.611.519.611.921V51.941z" fill="currentColor"/><path d="M87.67 51.941H2.33c-.552 0-1-.447-1-1v-8.75c0-.552.448-1 1-1h85.34c.553 0 1 .448 1 1v8.75c0 .553-.447 1-1 1zm-84.34-2h83.34v-6.75H3.33v6.75z" fill="currentColor"/></g></svg> },
               ] as const).map(({ op, label, icon }) => {
                 const active = (operation as string) === op;
@@ -9960,9 +9960,13 @@ ${stabSection}
                       <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
                       <div className="relative">
                         <Input type="number" className="no-spinners h-7 text-xs pr-10" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
-                        {(mentor.data as any)?.engineering?.tool_life_min > 0 && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>
-                        )}
+                        {(mentor.data as any)?.engineering?.tool_life_min > 0 && (() => {
+                          const autoVal = String(Math.round((mentor.data as any).engineering.tool_life_min));
+                          const isOverridden = roiCcCutTime !== autoVal;
+                          return isOverridden
+                            ? <button type="button" onClick={() => setRoiCcCutTime(autoVal)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-amber-400 font-semibold hover:text-green-400 transition-colors" title="Reset to auto value">↺ auto</button>
+                            : <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>;
+                        })()}
                       </div>
                     </div>
                   )}
@@ -9986,9 +9990,13 @@ ${stabSection}
                         value={roiCcMrr}
                         onChange={e => setRoiCcMrr(e.target.value)}
                       />
-                      {result?.customer?.mrr_in3_min > 0 && (
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>
-                      )}
+                      {result?.customer?.mrr_in3_min > 0 && (() => {
+                        const autoVal = (result.customer.mrr_in3_min as number).toFixed(3);
+                        const isOverridden = roiCcMrr !== autoVal;
+                        return isOverridden
+                          ? <button type="button" onClick={() => setRoiCcMrr(autoVal)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-amber-400 font-semibold hover:text-green-400 transition-colors" title="Reset to auto value">↺ auto</button>
+                          : <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>;
+                      })()}
                     </div>
                   </div>
 
@@ -10064,7 +10072,7 @@ ${stabSection}
                         })()}
                       </div>
                     ) : (
-                      <p className="text-[10px] text-zinc-600 pl-1">Up to 5 regrinds at 50% of new price</p>
+                      <p className="text-[10px] text-zinc-600 pl-1">Up to 3-5 regrinds at approximately half the cost of a new tool</p>
                     )}
                   </div>
 

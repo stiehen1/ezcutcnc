@@ -10,7 +10,7 @@ type ToolboxItem = {
   created_at: string;
 };
 
-export default function Toolbox() {
+export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   const [, navigate] = useLocation();
   const [email, setEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [token, setToken] = React.useState(() => localStorage.getItem("tb_token") || "");
@@ -136,7 +136,10 @@ export default function Toolbox() {
       {/* Header */}
       <div className="border-b border-border px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">← Back to Calculator</Link>
+          {onBack
+            ? <button onClick={onBack} className="text-muted-foreground hover:text-foreground text-sm">← Back to Calculator</button>
+            : <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">← Back to Calculator</Link>
+          }
         </div>
         <div className="flex items-center gap-2">
           <img src="/COREcutCNC_long_dark_logo.png" alt="CoreCutCNC" className="h-12 w-auto" style={{ mixBlendMode: "screen" }} />
