@@ -756,7 +756,15 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     const isHardened = mat === "h";
     const isFerrous = mat && mat !== "n";
     if (mode === "slot") {
-      p.set("max_flutes", "4");
+      if (isAlum) {
+        // Non-ferrous slotting: 2–3 flute only for chip evacuation
+        p.set("min_flutes", "2");
+        p.set("max_flutes", "3");
+      } else {
+        // Ferrous slotting: 4–5 flute
+        p.set("min_flutes", "4");
+        p.set("max_flutes", "5");
+      }
     } else if (isHardened) {
       // Hardened ≥50 HRC — 6+ flutes required for all non-slot operations
       p.set("min_flutes", "6");
