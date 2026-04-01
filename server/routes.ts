@@ -17,8 +17,25 @@ function resolvePython(): string {
   const cwd = process.cwd();
   const replitPath = path.join(cwd, ".pythonlibs", "bin", "python3");
   if (fs.existsSync(replitPath)) return replitPath;
-  // Fall back to system Python (Windows: python, Unix: python3)
-  return process.platform === "win32" ? "python" : "python3";
+  if (process.platform === "win32") {
+    // Check known local install paths before falling back to "python", which may
+    // be the Windows Store stub (App Execution Alias) rather than a real install.
+    const localApp = process.env.LOCALAPPDATA || "";
+    const candidates = [
+      path.join(localApp, "Python", "bin", "python.exe"),
+      path.join(localApp, "Programs", "Python", "Python313", "python.exe"),
+      path.join(localApp, "Programs", "Python", "Python312", "python.exe"),
+      path.join(localApp, "Programs", "Python", "Python311", "python.exe"),
+      "C:\\Python313\\python.exe",
+      "C:\\Python312\\python.exe",
+      "C:\\Python311\\python.exe",
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+    return "python";
+  }
+  return "python3";
 }
 
 function runMentorBridge(payload: unknown): Promise<unknown> {
