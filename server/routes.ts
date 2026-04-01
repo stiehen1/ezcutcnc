@@ -1311,6 +1311,7 @@ export async function registerRoutes(
         // Aluminum slot: prefer dropping to 3-flute.
         const fluteMatch = rf === curFlutes
           || (!isSlot && (stabOver || isCircInterp || isFinish) && rf === nextFlutes)
+          || (isSlot && stabOver && rf === nextFlutes && nextFlutes <= 5) // slot + deflecting: allow 4→5fl only
           || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
           || (isSlot && !slotAlum && rf === prevFlutes && prevFlutes >= 4);
         return locMatch && fluteMatch;
@@ -1320,7 +1321,7 @@ export async function registerRoutes(
       for (const row of sameLocCandidates) {
         let sc = scoreSku(row);
         const rf = Number(row.flutes);
-        if (!isSlot && stabOver && rf === nextFlutes)      sc += STAB_FLUTE_BONUS;
+        if (stabOver && rf === nextFlutes && (!isSlot || nextFlutes <= 5)) sc += STAB_FLUTE_BONUS;
         else if (!isSlot && isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
         else if (!isSlot && isFinish  && rf === nextFlutes) sc += FINISH_FLUTE_BONUS;
         else if (slotAlum  && rf === prevFlutes) sc += 2;
