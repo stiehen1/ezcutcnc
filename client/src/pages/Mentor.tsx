@@ -2067,13 +2067,23 @@ export default function Mentor() {
       setChamferTipDiaText(sku.tip_diameter ? Number(sku.tip_diameter).toFixed(4) : "");
       setChamferDepthText("");
     }
+    // In slot mode, pre-fill WOC=100% and DOC=med immediately on SKU select
+    const _isSlotMode = (form.mode as string) === "slot";
+    const _slotDia = Number(sku.cutting_diameter_in);
+    const _slotDocMed = sku.flutes === 5 ? 0.30 : 0.5;
+    if (_isSlotMode) {
+      setWocText(_slotDia.toFixed(4));
+      setWocPreset("med");
+      setDocText((_slotDocMed * _slotDia).toFixed(3));
+      setDocPreset("med");
+    }
     setForm((p) => ({
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
-      tool_dia: Number(sku.cutting_diameter_in),
-      // WOC/DOC left blank — user sets via Optimal button after completing setup.
-      woc_pct: 0,
-      doc_xd: 0,
+      tool_dia: _slotDia,
+      // Slot mode: pre-fill WOC/DOC; otherwise leave blank for user to set.
+      woc_pct: _isSlotMode ? 100 : 0,
+      doc_xd: _isSlotMode ? _slotDocMed : 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -9333,6 +9343,25 @@ ${stabSection}
                           <p className="text-[10px] text-amber-600/80 mt-1">⚠ Straight plunging is what a drill is made to do — not an endmill. Full axial load hits instantly, edge shock is severe, and the bottom cutting geometry on most endmills is not designed for it. This takes a huge toll on the tool and is rarely the right call. Use a ramp, helical entry, or pre-drilled hole instead.</p>
                         </div>
                       )}
+
+                      {/* Straight Entry — traditional slotting from outside stock */}
+                      {entryTypes.includes("slot_straight") && (() => {
+                        const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
+                        const entryFeed = fullFeed * 0.50;
+                        return (
+                          <div>
+                            <div className="border-b border-amber-500/30 pb-1 mb-1.5">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Entry ★</span>
+                              <span className="text-[9px] text-amber-600 ml-2">Tool enters from outside stock edge</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                              <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{entryFeed.toFixed(1)} IPM <span className="text-zinc-500">(50% until engaged)</span></span></div>
+                              <div><span className="text-zinc-500">Full Slot Feed</span><span className="ml-2 font-medium text-white">{fullFeed.toFixed(1)} IPM</span></div>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-1">Approach from outside the workpiece edge — tool enters air before engaging material. Ramp to full feed once the tool is fully engaged in the slot.</p>
+                          </div>
+                        );
+                      })()}
 
                       {entryTypes.length === 0 && (
                         <p className="text-xs text-zinc-500 italic">No entry types selected — check at least one above.</p>
