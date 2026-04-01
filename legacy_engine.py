@@ -5373,8 +5373,37 @@ def run(payload=None):
             "lookup_edp": str(data.get("edp", "") or ""),
         })
 
-    # Merge: immediate fixes first (change at the control), hardware/setup changes second
-    _stab_suggestions = _stab_suggestions + _imm_suggestions + _hw_suggestions
+    # Merge: prioritize high-impact, easy-to-act-on suggestions — cap at 6 actionable steps.
+    # Order: feed → doc → woc → stickout → holder → tool (flute/neck)
+    # Lower-value suggestions (shorter_loc, diameter) only fill remaining slots.
+    # Info/FYI notes (type="info") always appended after the cap — not counted.
+    # LBS note (_stab_suggestions) always prepended — not counted toward cap.
+    _MAX_SUGGESTIONS = 6
+    _PRIORITY_TYPES = ["feed", "doc", "woc", "stickout", "holder", "tool"]
+    _FILLER_TYPES   = ["shorter_loc", "diameter"]
+
+    _all_actionable = _imm_suggestions + _hw_suggestions
+    _info_notes   = [s for s in _all_actionable if s.get("type") == "info"]
+    _actionable   = [s for s in _all_actionable if s.get("type") != "info"]
+
+    _ordered = []
+    for _ptype in _PRIORITY_TYPES:
+        for _s in _actionable:
+            if _s.get("type") == _ptype and _s not in _ordered:
+                _ordered.append(_s)
+                break  # one per priority type to keep list tight
+
+    # Fill remaining slots with filler types if under cap
+    if len(_ordered) < _MAX_SUGGESTIONS:
+        for _ftype in _FILLER_TYPES:
+            for _s in _actionable:
+                if _s.get("type") == _ftype and _s not in _ordered:
+                    _ordered.append(_s)
+                    break
+            if len(_ordered) >= _MAX_SUGGESTIONS:
+                break
+
+    _stab_suggestions = _stab_suggestions + _ordered[:_MAX_SUGGESTIONS] + _info_notes
 
     _stability = {
         "stickout_in": _so,
