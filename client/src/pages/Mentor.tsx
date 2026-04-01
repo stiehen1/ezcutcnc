@@ -5339,28 +5339,28 @@ ${stabSection}
 
             {/* Toolholder */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-emerald-500 p-3 space-y-1.5">
-              <FieldLabel hint="Toolholder type affects runout and rigidity. Shrink fit and HP Collet (SK/FX-style) have the lowest runout. HP Collet uses a shallow taper angle with a precision bearing nut for superior grip vs standard ER.">Tool Holder</FieldLabel>
+              <FieldLabel hint="Toolholder rigidity affects deflection, runout, and chatter. Buttons are ordered most rigid to least rigid (left to right). Hover each holder for details.">Tool Holder</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
                   (form.machine_type === "lathe" || form.machine_type === "mill_turn")
                   ? ([
-                      { key: "er_collet",  label: "ER Collet",  hint: "Standard ER collet — most common live tooling holder. 3–5 µm runout. Versatile across drills, end mills, and taps." },
-                      { key: "hp_collet",  label: "HP Collet",  hint: "SK/FX-style precision bearing nut collet — better clamping and runout than standard ER. Good upgrade for live tool stations." },
-                      { key: "weldon",     label: "Weldon",     hint: "Side-lock set screw on a flat — positive mechanical lock, prevents pullout under heavy radial load on live tool turrets." },
-                      { key: "hydraulic",  label: "Hydraulic",  hint: "Oil-membrane clamping — excellent vibration damping and 1–2 µm runout. Available on premium live tool heads." },
-                      { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
                       { key: "capto",      label: "Capto",      hint: "Sandvik Capto polygon taper — designed for turning/milling centres. Exceptional rigidity and fast changeover on live tool turrets." },
+                      { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
+                      { key: "hydraulic",  label: "Hydraulic",  hint: "Oil-membrane clamping — excellent vibration damping and 1–2 µm runout. Available on premium live tool heads." },
+                      { key: "weldon",     label: "Weldon",     hint: "Side-lock set screw on a flat — positive mechanical lock, prevents pullout under heavy radial load on live tool turrets." },
+                      { key: "hp_collet",  label: "HP Collet",  hint: "SK/FX-style precision bearing nut collet — better clamping and runout than standard ER. Good upgrade for live tool stations." },
+                      { key: "er_collet",  label: "ER Collet",  hint: "Standard ER collet — most common live tooling holder. 3–5 µm runout. Versatile across drills, end mills, and taps." },
                     ] as const)
                   : ([
-                      { key: "er_collet",       label: "ER Collet",       hint: "Standard ER collet — versatile and widely available. 3–5 µm runout. Good for general use; upgrade for precision or HEM work." },
-                      { key: "hp_collet",       label: "HP Collet",       hint: "SK/FX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer FX)" },
-                      { key: "weldon",          label: "Weldon",          hint: "Side-lock set screw on a flat ground into the shank — positive mechanical lock, prevents pullout under heavy load. Larger tools (≥1\") often use double Weldon flats." },
+                      { key: "capto",           label: "Capto",           hint: "Polygon taper with face contact — exceptional rigidity and repeatability. Common on turning/milling centres." },
+                      { key: "shrink_fit",      label: "Shrink Fit",      hint: "Thermally shrunk onto shank — <1 µm runout, maximum grip and rigidity. Best for high-speed and heavy roughing." },
+                      { key: "press_fit",       label: "Press-Fit",       hint: "Lobed press-fit interface — full bore contact with self-centering geometry under load. High rigidity and excellent runout. Requires dedicated press tooling to assemble." },
+                      { key: "hydraulic",       label: "Hydraulic",       hint: "Oil-membrane clamping — full circumferential contact, excellent vibration damping, 1–2 µm runout. Great for finishing and long-reach applications." },
                       { key: "shell_mill_arbor",label: "Shell Mill Arbor",hint: "Face contact + drive keys + center bolt — used for indexable face mills and shell mills. Rigid face interface; swap insert bodies without re-indicating." },
                       { key: "milling_chuck",   label: "Milling Chuck",   hint: "Full-bore mechanical chuck — high clamping torque, good radial stiffness. Well suited for heavy interrupted cuts and roughing." },
-                      { key: "hydraulic",       label: "Hydraulic",       hint: "Oil-membrane clamping — full circumferential contact, excellent vibration damping, 1–2 µm runout. Great for finishing and long-reach applications." },
-                      { key: "press_fit",       label: "Press-Fit",       hint: "Lobed press-fit interface — full bore contact with self-centering geometry under load. High rigidity and excellent runout. Requires dedicated press tooling to assemble." },
-                      { key: "shrink_fit",      label: "Shrink Fit",      hint: "Thermally shrunk onto shank — <1 µm runout, maximum grip and rigidity. Best for high-speed and heavy roughing." },
-                      { key: "capto",           label: "Capto",           hint: "Polygon taper with face contact — exceptional rigidity and repeatability. Common on turning/milling centres." },
+                      { key: "weldon",          label: "Weldon",          hint: "Side-lock set screw on a flat ground into the shank — positive mechanical lock, prevents pullout under heavy load. Larger tools (≥1\") often use double Weldon flats." },
+                      { key: "hp_collet",       label: "HP Collet",       hint: "SK/FX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer FX)" },
+                      { key: "er_collet",       label: "ER Collet",       hint: "Standard ER collet — versatile and widely available. 3–5 µm runout. Good for general use; upgrade for precision or HEM work." },
                     ] as const)
                 ).map(({ key, label, hint }) => (
                   <Tooltip key={key}>
@@ -5576,10 +5576,10 @@ ${stabSection}
                 {(
                   (form.machine_type === "lathe" || form.machine_type === "mill_turn")
                   ? ([
-                      { key: "3_jaw_chuck",     label: "3-Jaw Chuck"      },
-                      { key: "4_jaw_chuck",     label: "4-Jaw Chuck"      },
-                      { key: "collet_chuck",    label: "Collet Chuck"     },
                       { key: "between_centers", label: "Between Centers"  },
+                      { key: "collet_chuck",    label: "Collet Chuck"     },
+                      { key: "4_jaw_chuck",     label: "4-Jaw Chuck"      },
+                      { key: "3_jaw_chuck",     label: "3-Jaw Chuck"      },
                       { key: "face_plate",      label: "Face Plate"       },
                       { key: "soft_jaws",       label: "Soft Jaws"        },
                     ] as const)
@@ -5588,11 +5588,11 @@ ${stabSection}
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
                       { key: "tombstone",     label: "Tombstone"        },
                       { key: "dovetail",      label: "Dovetail"         },
+                      { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                       { key: "vise",          label: "Vise"             },
-                      { key: "soft_jaws",     label: "Soft Jaws"        },
                       { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
-                      { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
+                      { key: "soft_jaws",     label: "Soft Jaws"        },
                     ] as const)
                   : form.machine_type === "5axis"
                   ? ([
@@ -5605,12 +5605,12 @@ ${stabSection}
                   : /* vmc default */ ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
                       { key: "dovetail",      label: "Dovetail"         },
+                      { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                       { key: "vise",          label: "Vise"             },
-                      { key: "toe_clamps",    label: "Toe Clamps"       },
-                      { key: "soft_jaws",     label: "Soft Jaws"        },
                       { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
-                      { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
+                      { key: "toe_clamps",    label: "Toe Clamps"       },
+                      { key: "soft_jaws",     label: "Soft Jaws"        },
                     ] as const)
                 ).map(({ key, label }) => {
                   const WH_TOOLTIPS: Record<string, string> = {
