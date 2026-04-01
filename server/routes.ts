@@ -1330,8 +1330,9 @@ export async function registerRoutes(
       if (bestSku && bestScore > curScore) {
         // Found a same-LOC upgrade (coating, geometry, or flute count when deflecting)
       } else {
+        bestSku = null; bestScore = -1; // clear — tie or loss doesn't count as upgrade
         // ── Priority 1.5: Next diameter up, same series ───────────────────────
-        const curSeries = (curSku?.tool_series ?? "").toLowerCase();
+        const curSeries = (curSku?.series ?? "").toLowerCase();
         const STD_DIAMETERS = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.5625, 0.625, 0.6875, 0.750, 0.875, 1.000, 1.25, 1.5];
         const nextDia = STD_DIAMETERS.find(d => d > dia + 0.001) ?? null;
         if (curSeries && nextDia) {
