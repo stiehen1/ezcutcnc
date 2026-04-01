@@ -9348,6 +9348,7 @@ ${stabSection}
                       {entryTypes.includes("slot_straight") && (() => {
                         const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
                         const entryFeed = fullFeed * 0.50;
+                        const docIn = result?.milling?.doc_in ?? (form.doc_xd > 0 && form.tool_dia > 0 ? form.doc_xd * form.tool_dia : null);
                         return (
                           <div>
                             <div className="border-b border-amber-500/30 pb-1 mb-1.5">
@@ -9355,8 +9356,14 @@ ${stabSection}
                               <span className="text-[9px] text-amber-600 ml-2">Tool enters from outside stock edge</span>
                             </div>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                              <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{entryFeed.toFixed(1)} IPM <span className="text-zinc-500">(50% until engaged)</span></span></div>
-                              <div><span className="text-zinc-500">Full Slot Feed</span><span className="ml-2 font-medium text-white">{fullFeed.toFixed(1)} IPM</span></div>
+                              <div className="flex flex-col">
+                                <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{entryFeed.toFixed(1)} IPM</span></div>
+                                <div className="text-[10px] text-zinc-500">(50% until fully engaged)</div>
+                              </div>
+                              <div className="flex flex-col">
+                                <div><span className="text-zinc-500">Full Slot Feed</span><span className="ml-2 font-medium text-white">{fullFeed.toFixed(1)} IPM</span></div>
+                                {docIn != null && <div className="text-[10px] text-zinc-500">at {docIn.toFixed(4)}" DOC</div>}
+                              </div>
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Approach from outside the workpiece edge — tool enters air before engaging material. Ramp to full feed once the tool is fully engaged in the slot.</p>
                           </div>

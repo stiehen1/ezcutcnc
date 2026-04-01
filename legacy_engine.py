@@ -5197,9 +5197,20 @@ def run(payload=None):
             # HEM requires a SMALLER tool so it can trochoidal-path inside the slot.
             # Recommend 0.75× slot width, and more flutes to offset the smaller dia stiffness loss.
             _slot_width = _d  # slot width = current tool dia (100% WOC)
-            _hem_dia = round(_slot_width * 0.75 * 16) / 16  # round to nearest 1/16"
-            if _hem_dia <= 0:
-                _hem_dia = _slot_width * 0.75
+            # Snap to nearest standard catalog diameter strictly below slot width
+            _hem_target = _slot_width * 0.75
+            # Standard catalog diameters — only recommend sizes we actually stock
+            _std_dias = [0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5]
+            # Candidates must be strictly smaller than slot width to leave room for trochoidal looping.
+            # A tool that is only 1/16" smaller than the slot (e.g. 0.625" in 0.75" slot) leaves only
+            # 0.0625" per wall — path geometry gets fussy and a finishing pass is always required.
+            # Drop any candidate where slot clearance per wall < 10% of slot width.
+            _candidates = [s for s in _std_dias if (_slot_width - s) / _slot_width >= 0.10 - 1e-6 and s < _slot_width - 1e-6]
+            _hem_dia = min(_candidates, key=lambda s: abs(s - _hem_target)) if _candidates else _slot_width * 0.75
+            # Wall clearance per side with chosen tool (for detail text)
+            _wall_clearance = (_slot_width - _hem_dia) / 2
+            _woc_min = round(_hem_dia * 0.05, 4)
+            _woc_max = round(_hem_dia * 0.10, 4)
             # Flute recommendation by material group — max 6-flute (7-flute not offered in necked/LBS versions)
             _mat_grp_hem = get_material_group(str(data.get("material", "") or ""))
             if _mat_grp_hem in ("Aluminum", "aluminum_wrought", "aluminum_wrought_hs", "aluminum_cast", "Non-Ferrous"):
@@ -5211,10 +5222,11 @@ def run(payload=None):
                 "type": "woc",
                 "label": f"Switch to HEM / trochoidal — use {_hem_dia:.4f}\" {_hem_flutes} tool",
                 "detail": (
-                    f"Since our slot width is {_d:.4f}\", we'll need a smaller tool — "
-                    f"use a {_hem_dia:.4f}\" {_hem_flutes} tool on a trochoidal path at 5–10% WOC. "
-                    f"The smaller diameter reduces stiffness — the extra flutes offset that. "
-                    f"Higher SFM and far lower radial force; net MRR is often equal or better.{_lbs_note}"
+                    f"Slot width is {_slot_width:.4f}\". A {_hem_dia:.4f}\" tool leaves {_wall_clearance:.4f}\" per wall — "
+                    f"enough room for clean trochoidal looping at {_woc_min:.4f}\"–{_woc_max:.4f}\" WOC (5–10% of tool dia). "
+                    f"The next size up would leave under 10% wall clearance per side, making path geometry tight and a finish pass mandatory. "
+                    f"The smaller dia costs some stiffness — {_hem_flutes} offsets that with more core and higher SFM. "
+                    f"Net MRR is often equal or better.{_lbs_note}"
                 ),
             })
         else:
