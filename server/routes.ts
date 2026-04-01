@@ -1080,6 +1080,37 @@ export async function registerRoutes(
                 if (q3.rows.length > 0) {
                   s.suggested_edps = q3.rows.map((r: any) => r.edp);
                   s.suggested_edp  = s.suggested_edps[0];
+                } else if (lookupLbs > 0) {
+                  // Final fallback: no tool meets lbs >= lookupLbs — use highest available LBS
+                  // (user may have manually entered a larger LBS than any stocked tool)
+                  const q4 = await pool.query(
+                    `SELECT s.edp FROM skus s
+                     JOIN sku_uploads u ON s.upload_id = u.id
+                     WHERE u.is_current = TRUE
+                       AND s.flutes = $1
+                       AND ABS(s.cutting_diameter_in - $2) < 0.001
+                       AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+                       AND COALESCE(s.lbs_in, 0) > 0
+                       ${cbClause}
+                       ${noBLK}
+                       AND COALESCE(s.lbs_in, 0) = (
+                         SELECT MAX(COALESCE(s2.lbs_in, 0))
+                         FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
+                         WHERE u2.is_current = TRUE
+                           AND s2.flutes = $1
+                           AND ABS(s2.cutting_diameter_in - $2) < 0.001
+                           AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
+                           AND COALESCE(s2.lbs_in, 0) > 0
+                           ${cbClause.replace(/\bs\./g, "s2.")}
+                           ${noBLK.replace(/\bs\./g, "s2.")}
+                       )
+                     ORDER BY s.edp`,
+                    [flutes, dia]
+                  );
+                  if (q4.rows.length > 0) {
+                    s.suggested_edps = q4.rows.map((r: any) => r.edp);
+                    s.suggested_edp  = s.suggested_edps[0];
+                  }
                 }
               }
               } // end non-diameter branch
