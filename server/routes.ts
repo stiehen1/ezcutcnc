@@ -1853,7 +1853,6 @@ export async function registerRoutes(
                 `Name:     ${name ?? "—"}`,
                 `Email:    ${email}`,
                 `Location: ${[geo.city, geo.region, geo.country].filter(Boolean).join(", ") || "Unknown"}`,
-                `IP:       ${clientIp}`,
               ].join("\n"),
             });
           } catch (mailErr: any) {
