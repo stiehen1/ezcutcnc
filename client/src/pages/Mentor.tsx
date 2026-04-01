@@ -884,10 +884,9 @@ export default function Mentor() {
   </div>
 
 </div>
+<script>setTimeout(function(){window.focus();window.print();},800);</script>
 </body></html>`);
     w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 600);
   }
 
   // ── Email gate (lock all outputs behind email) ─────────────────────────
