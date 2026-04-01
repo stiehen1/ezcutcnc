@@ -8597,7 +8597,7 @@ ${stabSection}
                   const actualChip = customer.adj_fpt * ctf;
                   return (
                     <Kpi
-                      label={UL("Actual Chip (in)", "Actual Chip (mm)")}
+                      label={UL("Actual Chip Thick (in)", "Actual Chip Thick (mm)")}
                       hint="Actual chip thickness formed at the cutting edge — programmed Adj FPT × radial chip thinning factor. This is what the tool actually sees. Target: 20–30% of edge radius minimum to avoid rubbing."
                       value={
                         <>
