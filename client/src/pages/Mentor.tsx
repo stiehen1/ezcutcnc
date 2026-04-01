@@ -6572,11 +6572,8 @@ ${stabSection}
                       const wp = WOC_PRESETS[form.mode];
                       if (!wp) return;
                       const dia = form.tool_dia || 0.5;
-                      const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
                       // WOC Optimal = Med for HEM (shop-set targets already in wp.med per material)
-                      // For other modes apply chipbreaker/rougher geometry floor
                       let optPct = wp.med;
-                      optPct = Math.min(100, Math.max(geoFloor, optPct));
                       setForm((p) => ({ ...p, woc_pct: optPct }));
                       setWocText(((optPct / 100) * dia).toFixed(4));
                       const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
@@ -6617,12 +6614,10 @@ ${stabSection}
               {WOC_PRESETS[form.mode] && (() => {
                 const wp = WOC_PRESETS[form.mode];
                 const dia = form.tool_dia || 0.5;
-                const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
-                const _floor = (v: number) => geoMinWoc > 0 ? Math.max(geoMinWoc, v) : v;
                 const btns = [
-                  { key: "low" as const,  label: "Low",  val: _floor(wp.low) },
-                  { key: "med" as const,  label: "Med",  val: _floor(wp.med) },
-                  { key: "high" as const, label: "High", val: _floor(wp.high) },
+                  { key: "low" as const,  label: "Low",  val: wp.low },
+                  { key: "med" as const,  label: "Med",  val: wp.med },
+                  { key: "high" as const, label: "High", val: wp.high },
                 ];
                 return (
                   <div className="flex gap-1 mt-1">
