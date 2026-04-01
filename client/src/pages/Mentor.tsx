@@ -2356,6 +2356,7 @@ export default function Mentor() {
         ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox("Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
+        ${mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
         ${form.mode === "surfacing" && mil.d_eff_in != null ? kpiBox("D_eff (in)", `${mil.d_eff_in.toFixed(4)}" (${((mil.d_eff_in / (form.tool_dia || 0.5)) * 100).toFixed(0)}% of Ø)`) : ""}
         ${form.mode === "surfacing" && mil.scallop_height_in != null ? kpiBox("Scallop Height", `${mil.scallop_height_in.toFixed(6)}" / ${(mil.scallop_height_in * 25400).toFixed(0)} µm`) : ""}
         ${kpiBox(form.mode === "face" ? "Step-Over (in)" : form.mode === "surfacing" ? "Stepover ae (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
@@ -3197,6 +3198,10 @@ ${stabSection}
       if (cust.adj_fpt != null && cust.fpt != null && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005) {
         lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
         lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
+        if (form.woc_pct > 0) {
+          const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100))));
+          lines.push(L("Act. Chip Thick", `${(cust.adj_fpt * ctf).toFixed(5)}"`));
+        }
       }
       if (eng?.chip_thickness_in != null) {
         const ct = eng.chip_thickness_in;
