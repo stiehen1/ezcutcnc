@@ -1621,7 +1621,7 @@ export default function Mentor() {
         :               { low: 8,  med: 10, high: 12 }  // P steel — 3-fl + var helix supports 8–12%
       )
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
-      : iso === "S" ? { low: 3, med: 5, high: 8 }   // superalloys / Inconel — tight radial
+      : iso === "S" ? (geometry === "chipbreaker" ? { low: 8, med: 10, high: 12 } : { low: 3, med: 5, high: 8 })   // superalloys / Inconel — CB needs ≥8% to engage
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
       : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
       : flutes >= 7  ? { low: 6, med: 8, high: 10 } // P / M / K — 7–8 flutes
@@ -2356,6 +2356,7 @@ export default function Mentor() {
         ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox("Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
+        ${mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
         ${form.mode === "surfacing" && mil.d_eff_in != null ? kpiBox("D_eff (in)", `${mil.d_eff_in.toFixed(4)}" (${((mil.d_eff_in / (form.tool_dia || 0.5)) * 100).toFixed(0)}% of Ø)`) : ""}
         ${form.mode === "surfacing" && mil.scallop_height_in != null ? kpiBox("Scallop Height", `${mil.scallop_height_in.toFixed(6)}" / ${(mil.scallop_height_in * 25400).toFixed(0)} µm`) : ""}
         ${kpiBox(form.mode === "face" ? "Step-Over (in)" : form.mode === "surfacing" ? "Stepover ae (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
@@ -3197,6 +3198,10 @@ ${stabSection}
       if (cust.adj_fpt != null && cust.fpt != null && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005) {
         lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
         lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
+        if (form.woc_pct > 0) {
+          const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100))));
+          lines.push(L("Act. Chip Thick", `${(cust.adj_fpt * ctf).toFixed(5)}"`));
+        }
       }
       if (eng?.chip_thickness_in != null) {
         const ct = eng.chip_thickness_in;
@@ -6572,11 +6577,8 @@ ${stabSection}
                       const wp = WOC_PRESETS[form.mode];
                       if (!wp) return;
                       const dia = form.tool_dia || 0.5;
-                      const geoFloor = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
                       // WOC Optimal = Med for HEM (shop-set targets already in wp.med per material)
-                      // For other modes apply chipbreaker/rougher geometry floor
                       let optPct = wp.med;
-                      optPct = Math.min(100, Math.max(geoFloor, optPct));
                       setForm((p) => ({ ...p, woc_pct: optPct }));
                       setWocText(((optPct / 100) * dia).toFixed(4));
                       const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
@@ -6617,12 +6619,10 @@ ${stabSection}
               {WOC_PRESETS[form.mode] && (() => {
                 const wp = WOC_PRESETS[form.mode];
                 const dia = form.tool_dia || 0.5;
-                const geoMinWoc = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
-                const _floor = (v: number) => geoMinWoc > 0 ? Math.max(geoMinWoc, v) : v;
                 const btns = [
-                  { key: "low" as const,  label: "Low",  val: _floor(wp.low) },
-                  { key: "med" as const,  label: "Med",  val: _floor(wp.med) },
-                  { key: "high" as const, label: "High", val: _floor(wp.high) },
+                  { key: "low" as const,  label: "Low",  val: wp.low },
+                  { key: "med" as const,  label: "Med",  val: wp.med },
+                  { key: "high" as const, label: "High", val: wp.high },
                 ];
                 return (
                   <div className="flex gap-1 mt-1">
@@ -8596,6 +8596,25 @@ ${stabSection}
                     }
                   />
                 ) : null}
+                {customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
+                  const wocFrac = form.woc_pct / 100;
+                  const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocFrac))));
+                  const actualChip = customer.adj_fpt * ctf;
+                  return (
+                    <Kpi
+                      label={UL("Act. Chip Thick (in)", "Act. Chip Thick (mm)")}
+                      hint="Actual chip thickness formed at the cutting edge — programmed Adj FPT × radial chip thinning factor. This is what the tool actually sees. Target: 20–30% of edge radius minimum to avoid rubbing."
+                      value={
+                        <>
+                          {UC(actualChip, 25.4, metric ? 4 : 5)}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            ({fmtNum((actualChip / customer.diameter) * 100, 2)}%×D)
+                          </span>
+                        </>
+                      }
+                    />
+                  );
+                })() : null}
 
                 {form.mode === "surfacing" && customer.d_eff_in != null && (
                   <Kpi
