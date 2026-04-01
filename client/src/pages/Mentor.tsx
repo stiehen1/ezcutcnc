@@ -8591,6 +8591,25 @@ ${stabSection}
                     }
                   />
                 ) : null}
+                {customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
+                  const wocFrac = form.woc_pct / 100;
+                  const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocFrac))));
+                  const actualChip = customer.adj_fpt * ctf;
+                  return (
+                    <Kpi
+                      label={UL("Actual Chip (in)", "Actual Chip (mm)")}
+                      hint="Actual chip thickness formed at the cutting edge — programmed Adj FPT × radial chip thinning factor. This is what the tool actually sees. Target: 20–30% of edge radius minimum to avoid rubbing."
+                      value={
+                        <>
+                          {UC(actualChip, 25.4, metric ? 4 : 5)}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            ({fmtNum((actualChip / customer.diameter) * 100, 2)}%×D)
+                          </span>
+                        </>
+                      }
+                    />
+                  );
+                })() : null}
 
                 {form.mode === "surfacing" && customer.d_eff_in != null && (
                   <Kpi
