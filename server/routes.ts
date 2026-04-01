@@ -711,7 +711,10 @@ export async function registerRoutes(
         const mf = parseInt(String(min_flutes));
         if (!isNaN(mf)) { conditions.push(`s.flutes >= $${p++}`); params.push(mf); }
       }
-      if (flute5_max_loc) {
+      if (flute5_max_loc === "shortest") {
+        // 5-flute slotting: only show shortest LOC per diameter (max slot depth = 0.5×D)
+        conditions.push(`(s.flutes <> 5 OR s.loc_in = (SELECT MIN(s2.loc_in) FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id WHERE u2.is_current = TRUE AND s2.flutes = 5 AND s2.cutting_diameter_in = s.cutting_diameter_in AND s2.series = s.series))`);
+      } else if (flute5_max_loc) {
         const maxLoc = parseFloat(String(flute5_max_loc));
         if (!isNaN(maxLoc)) { conditions.push(`(s.flutes <> 5 OR s.loc_in <= $${p++})`); params.push(maxLoc); }
       }

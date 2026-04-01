@@ -769,7 +769,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
         // Ferrous slotting shallow/standard: 4–5 flute; 5-flute capped at 0.625" LOC
         p.set("min_flutes", "4");
         p.set("max_flutes", "5");
-        p.set("flute5_max_loc", "0.625");
+        p.set("flute5_max_loc", "shortest");
       }
     } else if (isHardened) {
       // Hardened ≥50 HRC — 6+ flutes required for all non-slot operations
@@ -906,7 +906,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
         const isAlumQp = mat === "n";
         if (isAlumQp) { p.set("min_flutes", "2"); p.set("max_flutes", "3"); }
         else if (docXd != null && docXd > 1.5) { p.set("min_flutes", "4"); p.set("max_flutes", "4"); }
-        else { p.set("min_flutes", "4"); p.set("max_flutes", "5"); p.set("flute5_max_loc", "0.625"); }
+        else { p.set("min_flutes", "4"); p.set("max_flutes", "5"); p.set("flute5_max_loc", "shortest"); }
       } else if (mat === "h") {
         p.set("min_flutes", "6");
       } else if (mode === "hem") {
