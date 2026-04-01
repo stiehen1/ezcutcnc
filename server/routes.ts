@@ -1258,12 +1258,21 @@ export async function registerRoutes(
       // ── Priority 1: Same LOC — same flutes OR flute-count shift based on mode/material ──
       const nextFlutes = curFlutes + 1;
       const prevFlutes = curFlutes - 1;
+      // Corner condition of current tool — recommendations must never change the corner.
+      // "square" stays square; CR tools stay at same CR; ball stays ball.
+      const curCorner = String(curSku?.corner_condition ?? "square").toLowerCase();
+      const cornerMatch = (r: any): boolean => {
+        const rc = String(r.corner_condition ?? "square").toLowerCase();
+        return rc === curCorner;
+      };
       const sameLocCandidates = peers.rows.filter((r: any) => {
         const locMatch  = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
         const rf        = Number(r.flutes);
         const geom      = (r.geometry ?? "standard").toLowerCase();
         // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper
         if (isSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
+        // Never recommend a different corner condition than what the current tool has
+        if (!cornerMatch(r)) return false;
         // Slotting: never go up in flutes — chip clearance gets worse, not better.
         // Steel/stainless/tough slot: prefer dropping to 4-flute (or 4-fl chipbreaker).
         // Aluminum slot: prefer dropping to 3-flute.
@@ -1314,7 +1323,7 @@ export async function registerRoutes(
         if (!bestSku) {
           // ── Priority 2: Same LOC, next flute count up (non-deflecting path) ──
           const sameLocNextFlute = peers.rows.filter((r: any) =>
-            Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes
+            Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === nextFlutes && cornerMatch(r)
           );
           bestSku = null; bestScore = -1;
           for (const row of sameLocNextFlute) {
@@ -1334,7 +1343,7 @@ export async function registerRoutes(
       // VXR4/VXR5 are aggressive roughers — suppress if setup can't handle the forces.
       // If VXR is blocked, fall back to best non-VXR peer rather than returning nothing.
       const sameLocSameFlute = peers.rows.filter((r: any) =>
-        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes
+        Math.abs(Number(r.loc_in) - curLoc) < 0.001 && Number(r.flutes) === curFlutes && cornerMatch(r)
       );
       const isVxr = /^vxr/i.test(bestSku.series ?? "");
       let vxrRigidityNote: string | null = null;
