@@ -7078,9 +7078,9 @@ ${stabSection}
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
                 {[
-                  { key: "sweep",        label: "Sweep / Roll-in",        color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill", slotOnly: false, hideInSlot: true },
-                  { key: "ramp",         label: "Ramp",                   color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: true },
-                  { key: "helical",      label: "Helical",                 color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: true },
+                  { key: "sweep",        label: "Sweep / Roll-in",        color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot", slotOnly: false, hideInSlot: true },
+                  { key: "ramp",         label: "Ramp",                   color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false },
+                  { key: "helical",      label: "Helical",                 color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false },
                   { key: "straight",     label: "Straight Plunge",         color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true },
                   { key: "slot_straight",label: "Straight Entry",          color: "text-amber-400 border-amber-500/60",   recommended: form.mode === "slot",              slotOnly: true,  hideInSlot: false },
                 ].filter(({ slotOnly, hideInSlot }) => form.mode === "slot" ? !hideInSlot : !slotOnly)
