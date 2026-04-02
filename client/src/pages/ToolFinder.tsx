@@ -398,9 +398,9 @@ const QP_DIAMETERS: { label: string; min: number; max: number; pick: number }[] 
 ];
 
 const QP_DOCS = [
-  { label: "Shallow  (< 0.5×D)", desc: "Finishing, spring passes, skim cuts",      docXd: 0.4 },
-  { label: "Standard (0.5–1.5×D)", desc: "General roughing and semi-finishing",    docXd: 1.0 },
-  { label: "Deep     (> 1.5×D)", desc: "HEM/trochoidal roughing · Slotting requires reduced neck tool", docXd: 2.0 },
+  { label: "Shallow  (≤ 0.5×D)", desc: "Finishing passes, spring cuts, skim cuts — tool LOC is not the limit here, your cut depth is light", docXd: 0.4 },
+  { label: "Standard (0.5–1.5×D)", desc: "General roughing and semi-finishing — most endmills cover this range",                             docXd: 1.0 },
+  { label: "Deep     (> 1.5×D)", desc: "HEM / trochoidal roughing at full LOC depth — needs longer LOC tool; slotting needs reduced neck",   docXd: 2.0 },
 ];
 
 function QuickPick({ onApply, onOperationPick, onClear, applied, summary }: {
@@ -580,7 +580,8 @@ function QuickPick({ onApply, onOperationPick, onClear, applied, summary }: {
           {/* Step 3 — Depth of Cut */}
           {step === 3 && dia && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold">How deep are you cutting?</p>
+              <p className="text-sm font-semibold">How deep are you cutting into the part?</p>
+              <p className="text-xs text-muted-foreground -mt-1">This is your axial depth of cut (DOC), not the tool's LOC. All Core Cutter endmills have at least 1.25×D LOC — any depth range works.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {QP_DOCS.map(d => (
                   <button
@@ -1402,15 +1403,13 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
             <span>🔍</span>
             {searching ? "Searching…" : hasFilter ? "Search Tools" : "Select Filters to Search"}
           </button>
-          {(results !== null || hasFilter) && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="rounded-lg border px-4 py-3 text-sm font-semibold text-muted-foreground hover:bg-accent transition-colors"
-            >
-              Clear
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={clearAll}
+            className="rounded-lg border px-4 py-3 text-sm font-semibold text-muted-foreground hover:bg-accent transition-colors"
+          >
+            Clear All
+          </button>
         </div>
       </div>
 
@@ -1650,7 +1649,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       <td className="px-2 py-2">
                         <button
                           type="button"
-                          onClick={() => onSelectTool(row, qpTip ? { mode: qpTip.mode, isoMat: qpTip.isoMat } : undefined)}
+                          onClick={() => onSelectTool(row, qpTip ? { mode: qpTip.mode, isoMat: qpTip.isoMat } : (material && material !== "all" ? { isoMat: material } : undefined))}
                           className="rounded px-2.5 py-1 text-[10px] font-semibold border border-indigo-500 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-colors whitespace-nowrap"
                         >
                           Use Tool →
