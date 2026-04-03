@@ -344,6 +344,12 @@ function CuspHeight() {
         <Result label="Cusp Height" value={metric ? `${(h * 25.4).toFixed(4)} mm` : `${h.toFixed(5)}"`} highlight />
         <Result label="Theoretical Ra" value={metric ? `~${(ra! * 25400).toFixed(3)} µm` : `~${(ra! * 1000).toFixed(3)} µin`} />
         <Result label="Step-Over / Dia" value={`${(sw_in / D_in * 100).toFixed(1)}%`} />
+        {h > 0.001 && (
+          <div className="border-t border-[#2d2d4a] pt-2 mt-1">
+            <p className="text-[10px] text-amber-400 font-semibold mb-1">How to fix it</p>
+            <p className="text-[10px] text-gray-400">Cusp height rises with the square of stepover — halving stepover reduces scallop by 4×. Reduce step-over, or use a larger ball end mill for the same pass spacing.</p>
+          </div>
+        )}
       </>}
     </CalcCard>
   );
@@ -428,6 +434,12 @@ function FeedArcCorrection() {
           <Result label="Corrected Feed" value={`${outside!.toFixed(1)} ${metric ? "mm/min" : "IPM"}`} highlight />
           <Result label="Increase" value={`${((( outside! - F) / F) * 100).toFixed(1)}% more than straight`} />
         </div>
+        {(((F - inside) / F) * 100) > 25 && (
+          <div className="border-t border-[#2d2d4a] pt-2">
+            <p className="text-[10px] text-amber-400 font-semibold mb-1">How to fix it — tight inside arc</p>
+            <p className="text-[10px] text-gray-400">Feed spikes on tight inside arcs because the tool wraps more of the corner. Increase the arc radius in CAM (larger corner blend), or reduce your programmed feed before the arc segment. A radius ≥ 2× tool radius keeps the correction under 50%.</p>
+          </div>
+        )}
       </>}
       {R > 0 && R <= r && r > 0 && (
         <p className="text-[11px] text-red-400">⚠ Arc radius must be larger than tool radius ({r.toFixed(metric ? 2 : 4)} {metric ? "mm" : '"'})</p>
@@ -670,6 +682,10 @@ function MRR() {
               <span className="text-white font-mono">{(mrr_in3 * kc).toFixed(2)} HP</span>
             </div>
           ))}
+        </div>
+        <div className="border-t border-[#2d2d4a] pt-2 mt-1">
+          <p className="text-[10px] text-amber-400 font-semibold mb-1">How to fix it — if HP exceeds machine capacity</p>
+          <p className="text-[10px] text-gray-400">Reduce WOC first (biggest impact on MRR), then DOC, then feed rate. In tough materials, drop to HEM strategy — much smaller WOC with higher feed keeps HP manageable while maintaining tool life.</p>
         </div>
       </>}
     </CalcCard>
@@ -1466,6 +1482,12 @@ function HelixEntry() {
         <Row label={`Pitch per Rev`}><NumIn value={pitch} onChange={setPitch} unit={dU} /></Row>
         {calcAngle !== null && <Result label="Ramp Angle" value={`${calcAngle.toFixed(2)}°`} highlight />}
       </div>
+      {(n(rampAngle) > 5 || calcAngle !== null && calcAngle > 5) && (
+        <div className="border-t border-[#2d2d4a] pt-2 mt-1">
+          <p className="text-[10px] text-amber-400 font-semibold mb-1">How to fix it — steep ramp angle</p>
+          <p className="text-[10px] text-gray-400">Above 5° the axial load on the tip increases rapidly. Use 1–3° for most endmills, up to 5° max. Increase the helix diameter to reduce the angle for the same pitch, or reduce pitch per revolution. Ball end mills tolerate steeper ramps than square-end tools.</p>
+        </div>
+      )}
     </CalcCard>
   );
 }
@@ -1964,7 +1986,7 @@ function EntryLoadSpike() {
   const spike = entryType === "arc" && lr > 0 ? arcSpike : spikeMult;
   const risk  = spike < 1.25 ? "low" : spike < 1.55 ? "medium" : "high";
   const riskColor = { low: "#4ade80", medium: "#fbbf24", high: "#f87171" }[risk];
-  const riskLabel = { low: "Low — entry is controlled", medium: "Moderate — consider a lead-in arc", high: "High — lead-in arc strongly recommended" }[risk];
+  const riskLabel = { low: "Low — entry is controlled", medium: "Moderate — consider a sweep / roll-in", high: "High — sweep / roll-in strongly recommended" }[risk];
 
   // Recommended minimum lead-in arc radius to bring spike below 1.2×
   // 1 + 0.15 × (acos(1 - 2r/D)×180/π / 180) < 1.20
@@ -1974,7 +1996,7 @@ function EntryLoadSpike() {
   usePrintRegister("Entry Load Spike", "Arcs & Contours", valid ? [
     { label: `Tool Diameter (${dU})`, value: (D * IN).toFixed(metric?3:4) },
     { label: `WOC (${dU})`,           value: (ae * IN).toFixed(metric?3:4) },
-    { label: "Entry Type",            value: { radial:"Straight Radial", ramp:"Ramp", arc:"Arc Lead-In" }[entryType] },
+    { label: "Entry Type",            value: { radial:"Straight Radial", ramp:"Ramp", arc:"Sweep / Roll-in" }[entryType] },
     { label: "Engagement Angle",      value: `${engDeg.toFixed(1)}°` },
     { label: "Load Spike Multiplier", value: `${spike.toFixed(2)}×`, highlight: true },
     { label: "Risk",                  value: riskLabel },
@@ -2008,7 +2030,7 @@ function EntryLoadSpike() {
       {/* Entry type */}
       <Row label="Entry Method" hint="How the tool enters the cut. Straight radial is the most aggressive — the tool hits full chip thickness instantly. Arc lead-in gradually picks up material.">
         <div className="flex gap-1 flex-wrap">
-          {([["radial","Straight Radial"],["ramp","Ramp"],["arc","Arc Lead-In"]] as const).map(([k,label]) => (
+          {([["radial","Straight Radial"],["ramp","Ramp"],["arc","Sweep / Roll-in"]] as const).map(([k,label]) => (
             <button key={k} type="button" onClick={() => setEntryType(k)}
               className="px-2 py-1 rounded text-[11px] font-semibold border transition-colors"
               style={{ borderColor: entryType===k?"#f97316":"#3f3f5a", backgroundColor: entryType===k?"#f97316":"transparent", color: entryType===k?"#fff":"#9ca3af" }}>
@@ -2019,7 +2041,7 @@ function EntryLoadSpike() {
       </Row>
 
       {entryType === "arc" && (
-        <Row label="Lead-In Radius" hint="Radius of the tangential arc used to enter the cut. Larger = smoother pick-up = lower spike. Minimum recommended: 10% of tool diameter.">
+        <Row label="Sweep Radius" hint="Radius of the tangential sweep arc used to enter the cut. Larger = smoother pick-up = lower spike. Minimum recommended: 10% of tool diameter.">
           <NumIn value={leadRadius} onChange={setLeadRadius} unit={dU} placeholder={metric?(D*IN*0.10).toFixed(2).toString():(D*0.10).toFixed(4).toString()} />
         </Row>
       )}
@@ -2030,20 +2052,18 @@ function EntryLoadSpike() {
           <div className="rounded-lg border px-3 py-2.5 space-y-1.5"
             style={{ borderColor: riskColor + "55", backgroundColor: riskColor + "11" }}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold" style={{ color: riskColor }}>Load Spike Multiplier</span>
+              <span className="text-[11px] font-semibold" style={{ color: riskColor }}>Entry Load Spike</span>
               <span className="text-lg font-mono font-bold" style={{ color: riskColor }}>{spike.toFixed(2)}×</span>
             </div>
             <div className="text-[10px]" style={{ color: riskColor }}>{riskLabel}</div>
-            {entryType !== "arc" && (
-              <div className="text-[10px] text-gray-500 border-t border-white/10 pt-1.5 mt-1">
-                Steady-state cutting force = 1.00× — spike is {((spike-1)*100).toFixed(0)}% above that at first contact.
-              </div>
-            )}
-            {entryType === "arc" && lr > 0 && (
-              <div className="text-[10px] text-gray-500 border-t border-white/10 pt-1.5 mt-1">
-                Arc lead-in gradually picks up chip — first contact arc is {(arcEngRad*180/Math.PI).toFixed(1)}° ({((arcSpike-1)*100).toFixed(0)}% above steady-state).
-              </div>
-            )}
+            <div className="text-[10px] text-gray-400 border-t border-white/10 pt-1.5 mt-1">
+              {entryType !== "arc"
+                ? <>Your spindle load meter will spike <span className="text-white font-semibold">{((spike-1)*100).toFixed(0)}% above steady-state</span> at first contact — e.g. if your normal cutting load is 40%, entry hits ~{(40 * spike).toFixed(0)}%.</>
+                : lr > 0
+                  ? <>Sweep arc picks up engagement gradually — first contact is only {(arcEngRad*180/Math.PI).toFixed(1)}° of arc, spiking <span className="text-white font-semibold">{((arcSpike-1)*100).toFixed(0)}% above steady-state</span> instead of {((spikeMult-1)*100).toFixed(0)}% for straight radial.</>
+                  : <>Enter a sweep radius above to see how the arc reduces the entry spike.</>
+              }
+            </div>
           </div>
 
           {/* Spike bar */}
@@ -2068,30 +2088,28 @@ function EntryLoadSpike() {
 
           {/* Recommendation */}
           <div className="rounded bg-[#0d1b2a] border border-[#2d2d4a] px-3 py-2 space-y-1 text-[11px]">
-            <div className="text-gray-400 font-semibold mb-1">Recommendation</div>
+            <div className="text-gray-400 font-semibold mb-1">How to fix it</div>
             {entryType === "radial" && risk !== "low" && (
-              <p className="text-amber-400">
-                Use a tangential arc lead-in of ≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} radius.
-                This reduces the spike from {spikeMult.toFixed(2)}× to &lt;1.20× — the difference between a controlled entry and a shock load.
-              </p>
+              <div className="space-y-1">
+                <p className="text-white font-semibold">① Switch to Sweep / Roll-in entry in CAM <span className="text-green-400">(best fix — no cut parameter changes needed)</span></p>
+                <p className="text-gray-400">Add a tangential arc lead-in move of ≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} radius before the cut starts. This brings the spike from {spikeMult.toFixed(2)}× down to &lt;1.20× — a CAM programming change only, your feeds and speeds stay the same.</p>
+                <p className="text-gray-500">② Reduce WOC — smaller stepover lowers the engagement angle and reduces the spike, but you'd need a significant WOC reduction for meaningful impact. Fix it in CAM first.</p>
+              </div>
             )}
             {entryType === "ramp" && risk !== "low" && (
-              <p className="text-amber-400">
-                Ramp reduces axial impact but still has a radial engagement spike of {spikeMult.toFixed(2)}×.
-                Combine with a tangential arc lead-in (≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU}) for full control.
-              </p>
+              <div className="space-y-1">
+                <p className="text-white font-semibold">Add a sweep / roll-in arc to your ramp entry <span className="text-green-400">(CAM change only)</span></p>
+                <p className="text-gray-400">Ramp reduces axial shock but the radial engagement still spikes at {spikeMult.toFixed(2)}× on first contact. Adding a tangential arc (≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} radius) into the ramp entry fully controls it.</p>
+              </div>
             )}
             {entryType === "arc" && lr > 0 && lr < recLeadRad && (
-              <p className="text-amber-400">
-                Increase lead-in radius to ≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} for spike &lt; 1.20×.
-              </p>
+              <p className="text-amber-400">Increase sweep radius to ≥ {(recLeadRad * IN).toFixed(metric?2:4)} {dU} to bring spike below 1.20×.</p>
             )}
             {risk === "low" && (
-              <p className="text-green-400">Entry is controlled — spike is within safe range for carbide tooling.</p>
+              <p className="text-green-400">Entry is controlled — spike is within safe range for carbide tooling. No changes needed.</p>
             )}
-            <p className="text-gray-500 mt-1">
-              Chamfer mills: always enter via helical/circular interpolation (G02/G03), not straight plunge.
-              Even a small lead-in arc dramatically extends tool life on the first contact.
+            <p className="text-gray-500 mt-1.5 border-t border-white/10 pt-1.5">
+              Chamfer mills: always enter via helical interpolation (G02/G03) — never straight plunge. Even a small sweep arc dramatically extends first-contact tool life.
             </p>
           </div>
         </>

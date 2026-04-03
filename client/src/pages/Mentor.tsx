@@ -950,7 +950,7 @@ export default function Mentor() {
 
   // Search catalog (+ user saved machines if logged in)
   React.useEffect(() => {
-    if (machineQuery.length < 2) { setMachineResults([]); return; }
+    if (machineQuery.length < 1) { setMachineResults([]); return; }
     const t = setTimeout(async () => {
       const e = tbEmail || localStorage.getItem("tb_email") || "";
       const tk = tbToken || localStorage.getItem("tb_token") || "";
@@ -5110,8 +5110,11 @@ ${stabSection}
                 onBlur={() => setTimeout(() => { if (!machineTouchingDropRef.current) setMachineDropOpen(false); }, 500)}
                 className="text-sm"
               />
-              {machineDropOpen && machineResults.length > 0 && (
+              {machineDropOpen && (machineResults.length > 0 || machineQuery.length >= 1) && (
                 <div className="absolute z-50 w-full mt-1 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl max-h-60 overflow-y-auto">
+                  {machineResults.length === 0 && machineQuery.length >= 1 && (
+                    <div className="px-3 py-2 text-sm text-zinc-500 italic">No machines found for "{machineQuery}" — try brand + model (e.g. Haas VF-2)</div>
+                  )}
                   {machineResults.map((m, i) => (
                     <button
                       key={`${m._saved ? "u" : "c"}-${m.id}-${i}`}
@@ -10896,7 +10899,8 @@ ${stabSection}
         <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
           <h2 className="text-base font-semibold text-white mb-1">🧰 Save to Toolbox</h2>
           {tbStep === "email" && (<>
-            <p className="text-xs text-zinc-400 mb-3">Enter your email to save this result. We'll send you a quick verification code.</p>
+            <p className="text-xs text-zinc-400 mb-1">Enter your email to save this result. We'll send you a quick verification code.</p>
+            <p className="text-xs text-indigo-400 mb-3">✦ Sign in with the same email on any device — phone, tablet, or desktop — to access all your saved setups and machines.</p>
             <input
               type="text"
               className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 mb-2 focus:outline-none focus:border-indigo-500"
@@ -11009,7 +11013,10 @@ ${stabSection}
             >{machineSaving ? "Saving…" : "Save Machine"}</button>
           </div>
           {(!tbEmail && !localStorage.getItem("tb_email")) && (
-            <p className="text-xs text-amber-400 mt-3 text-center">You'll be asked to sign in to your Toolbox first.</p>
+            <div className="mt-3 text-center space-y-1">
+              <p className="text-xs text-amber-400">You'll be asked to sign in to your Toolbox first.</p>
+              <p className="text-xs text-indigo-400">✦ Use the same email on any device to access your saved machines everywhere.</p>
+            </div>
           )}
         </div>
       </div>

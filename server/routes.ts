@@ -3531,20 +3531,35 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       if (!q || q.length < 1) return res.json([]);
       const { pool } = await import("./db");
 
-      // Split query into tokens — all tokens must match somewhere in brand/model/control/nickname.
-      // Also match dash-stripped versions so "VF2" matches "VF-2", "DM4800" matches "DM-4800", etc.
+      // Split query into tokens — all tokens must match somewhere in brand/model/control.
+      // Strip dashes and spaces for matching so "VF2" matches "VF-2", "haasVF2" matches "Haas VF-2".
       const tokens = q.trim().split(/\s+/).filter(Boolean);
       const params: string[] = tokens.map(t => `%${t}%`);
       const tokenConds = tokens.map((_, i) =>
-        `(brand ILIKE $${i+1} OR model ILIKE $${i+1} OR control ILIKE $${i+1} OR (brand || ' ' || model) ILIKE $${i+1} OR REPLACE(model,'-','') ILIKE REPLACE($${i+1},'-','') OR REPLACE(brand || ' ' || model,'-','') ILIKE REPLACE($${i+1},'-',''))`
+        `(brand ILIKE $${i+1}
+          OR model ILIKE $${i+1}
+          OR control ILIKE $${i+1}
+          OR (brand || ' ' || model) ILIKE $${i+1}
+          OR REPLACE(model, '-', '') ILIKE REPLACE($${i+1}, '-', '')
+          OR REPLACE(brand || ' ' || model, '-', '') ILIKE REPLACE($${i+1}, '-', '')
+          OR REPLACE(REPLACE(brand || model, '-', ''), ' ', '') ILIKE REPLACE(REPLACE($${i+1}, '-', ''), ' ', ''))`
       ).join(" AND ");
 
+      // Relevance: model exact match > model starts-with > brand+model starts-with > rest
+      const lastTok = `%${tokens[tokens.length - 1]}%`;
+      const lastTokStart = `${tokens[tokens.length - 1]}%`;
       const catalogRows = await pool.query(
-        `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved
+        `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved,
+           CASE
+             WHEN model ILIKE $${tokens.length + 1}        THEN 1
+             WHEN model ILIKE $${tokens.length + 2}        THEN 2
+             WHEN (brand || ' ' || model) ILIKE $${tokens.length + 2} THEN 3
+             ELSE 4
+           END AS _rank
          FROM machines
          WHERE ${tokenConds}
-         ORDER BY brand, model LIMIT 20`,
-        params
+         ORDER BY _rank, brand, model LIMIT 50`,
+        [...params, lastTok, lastTokStart]
       );
 
       // Also search user's saved machines if logged in
@@ -3557,7 +3572,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
           );
           if (auth.rows.length) {
             const userTokenConds = tokens.map((_, i) =>
-              `(brand ILIKE $${i+3} OR model ILIKE $${i+3} OR nickname ILIKE $${i+3} OR shop_machine_no ILIKE $${i+3} OR control ILIKE $${i+3} OR REPLACE(model,'-','') ILIKE REPLACE($${i+3},'-',''))`
+              `(brand ILIKE $${i+3} OR model ILIKE $${i+3} OR nickname ILIKE $${i+3} OR shop_machine_no ILIKE $${i+3} OR control ILIKE $${i+3}
+                OR REPLACE(model, '-', '') ILIKE REPLACE($${i+3}, '-', '')
+                OR REPLACE(REPLACE(brand || model, '-', ''), ' ', '') ILIKE REPLACE(REPLACE($${i+3}, '-', ''), ' ', ''))`
             ).join(" AND ");
             const userParams = [email.toLowerCase(), token, ...tokens.map(t => `%${t}%`)];
             const ur = await pool.query(
