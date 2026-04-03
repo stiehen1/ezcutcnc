@@ -79,14 +79,17 @@ const CAT_COLOR: Record<string, string> = {
 };
 
 function CalcCard({
-  title, category, children, onClear,
-}: { title: string; category: string; children: React.ReactNode; onClear?: () => void }) {
+  title, category, children, onClear, gcode,
+}: { title: string; category: string; children: React.ReactNode; onClear?: () => void; gcode?: boolean }) {
   const color = CAT_COLOR[category] ?? "#6366f1";
   return (
     <div style={{ borderLeft: `3px solid ${color}`, background: "#16213e" }}
       className="rounded-lg p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold text-white flex-1">{title}</span>
+        {gcode && (
+          <span className="text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded border border-green-700 text-green-400 bg-green-950/40 shrink-0">G-CODE</span>
+        )}
         {onClear && (
           <button
             type="button"
@@ -1620,7 +1623,7 @@ function BoltCircle() {
   ] : null);
 
   return (
-    <CalcCard title="Bolt Circle" category="Arcs & Contours"
+    <CalcCard title="Bolt Circle" category="Arcs & Contours" gcode
       onClear={() => { setCx("0"); setCy("0"); setBcr(""); setHoles(""); setStartAngle("0"); setZDepth(""); setFeedRate(""); setShowGcode(false); }}>
       <p className="text-[10px] text-gray-500 -mt-1">X/Y coordinates for equally-spaced holes on a bolt circle.</p>
       <Row label={`Center X (${dU})`}><NumIn value={cx} onChange={setCx} unit={dU} placeholder="0" /></Row>
