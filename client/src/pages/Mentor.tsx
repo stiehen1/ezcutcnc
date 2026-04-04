@@ -3254,6 +3254,7 @@ ${stabSection}
         lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
         lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
         lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
+        lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
         lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
         lines.push("");
       }
@@ -9405,6 +9406,7 @@ ${stabSection}
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Max Ramp Angle</span><span className="ml-2 font-medium">≤{em.ramp_angle_deg}°</span></div>
+                            <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{(em as any).ramp_pitch_in_per_in?.toFixed(4) ?? (Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
                             <div className="col-span-2"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">(0.5–1°, chip-thinning)</span></span></div>
                           </div>
