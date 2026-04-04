@@ -74,6 +74,25 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React
   );
 }
 
+function RoiLabel({ children, hint, required }: { children: React.ReactNode; hint: string; required?: boolean }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Label className="flex items-center gap-1 cursor-default w-fit text-[10px] text-zinc-500">
+            {children}
+            {required && <span className="text-red-400 text-[10px]">*</span>}
+            <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
+          </Label>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-72 text-xs">
+          {hint}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function Kpi({
   label,
   value,
@@ -9947,19 +9966,19 @@ ${stabSection}
               {/* End-user info */}
               <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">End User Company Name</Label>
+                  <RoiLabel hint="The name of the shop or manufacturing company where this tool is being evaluated. Appears on the printed ROI report.">End User Company Name</RoiLabel>
                   <Input type="text" className="h-7 text-xs"
                     placeholder="e.g. Acme Machining"
                     value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">End User Contact Name</Label>
+                  <RoiLabel hint="The name of the machinist, engineer, or buyer at the shop. Used to personalize the printed report.">End User Contact Name</RoiLabel>
                   <Input type="text" className="h-7 text-xs"
                     placeholder="e.g. John Smith"
                     value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">End User Contact Email</Label>
+                  <RoiLabel hint="Email address for the end user contact. Used to send them a copy of the ROI report.">End User Contact Email</RoiLabel>
                   <Input type="email" className="h-7 text-xs"
                     placeholder="e.g. john@acmemachining.com"
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
@@ -9968,7 +9987,7 @@ ${stabSection}
 
               {/* Tool Life Metric selector */}
               <div className="flex items-center gap-3">
-                <Label className="text-xs text-zinc-400 whitespace-nowrap shrink-0">ROI Measurements</Label>
+                <RoiLabel hint="How tool life is measured for this job. Parts per Tool is most common. Use Cut Time per Tool when parts vary in size. Use Linear Inches when profiling or turning where travel distance is the natural metric.">ROI Measurements</RoiLabel>
                 <select
                   value={roiLifeMode}
                   onChange={e => setRoiLifeMode(e.target.value as "parts" | "cut_time" | "linear_in")}
@@ -9987,7 +10006,7 @@ ${stabSection}
                   <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-1">Core Cutter</div>
                   {/* EDP — auto-filled from calc */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">EDP #</Label>
+                    <RoiLabel hint="Auto-populated from the milling calculator when an EDP# is entered. Identifies which Core Cutter tool is being evaluated.">EDP #</RoiLabel>
                     <div className="relative">
                       <Input
                         type="text"
@@ -10000,7 +10019,7 @@ ${stabSection}
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
+                    <RoiLabel required hint="Your list or street price for this Core Cutter tool. Used to calculate cost per part vs. the incumbent.">Tool Price ($)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10013,7 +10032,7 @@ ${stabSection}
                   {/* Parts per Tool mode */}
                   {roiLifeMode === "parts" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                      <RoiLabel required hint="How many parts this Core Cutter tool produces before it needs to be changed. Ask the customer to run a test or estimate from similar jobs.">Parts per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 120" value={roiCcParts} onChange={e => setRoiCcParts(e.target.value)} />
                     </div>
                   )}
@@ -10021,7 +10040,7 @@ ${stabSection}
                   {/* Cut Time per Tool mode */}
                   {roiLifeMode === "cut_time" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
+                      <RoiLabel required hint="Total spindle-on cutting time this tool lasts before it needs to be changed. Auto-filled from the calculator's estimated tool life if available.">Cut Time per Tool (min)</RoiLabel>
                       <div className="relative">
                         <Input type="number" className="no-spinners h-7 text-xs pr-10" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
                         {(mentor.data as any)?.engineering?.tool_life_min > 0 && (() => {
@@ -10038,14 +10057,14 @@ ${stabSection}
                   {/* Linear Inches mode */}
                   {roiLifeMode === "linear_in" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Linear Inches per Tool</Label>
+                      <RoiLabel required hint="Total length of material this tool cuts before it needs to be changed. Useful for profiling, slotting, or turning applications where linear travel is the natural metric.">Linear Inches per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 250" value={roiCcLinIn} onChange={e => setRoiCcLinIn(e.target.value)} />
                     </div>
                   )}
 
                   {/* MRR — auto-filled, lines up with incumbent MRR */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">MRR (in³/min)</Label>
+                    <RoiLabel hint="Metal removal rate in cubic inches per minute. Auto-filled from the calculator. Used to calculate cycle time savings vs. the incumbent if Material Removed per Part is also entered.">MRR (in³/min)</RoiLabel>
                     <div className="relative">
                       <Input
                         type="number"
@@ -10216,7 +10235,7 @@ ${stabSection}
                 <div className="space-y-2">
                   <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Their Current Tool</div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Brand</Label>
+                    <RoiLabel hint="The brand of the tool the customer is currently running. e.g. Kennametal, OSG, Guhring, Sandvik. For reference on the printed report.">Brand</RoiLabel>
                     <Input
                       type="text"
                       className="h-7 text-xs"
@@ -10226,7 +10245,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Incumbent EDP / Part #</Label>
+                    <RoiLabel hint="The competitor's part number or EDP for the tool currently in use. Appears on the printed ROI report for documentation.">Incumbent EDP / Part #</RoiLabel>
                     <Input
                       type="text"
                       className="h-7 text-xs"
@@ -10236,7 +10255,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
+                    <RoiLabel required hint="What the customer currently pays for the incumbent tool. Combined with tool life, this determines their current cost per part.">Tool Price ($)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10249,7 +10268,7 @@ ${stabSection}
                   {/* Parts per Tool mode */}
                   {roiLifeMode === "parts" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                      <RoiLabel required hint="How many parts the incumbent tool produces before it needs to be changed. This is the key life comparison number — get this from the customer.">Parts per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 80" value={roiCompParts} onChange={e => setRoiCompParts(e.target.value)} />
                     </div>
                   )}
@@ -10257,7 +10276,7 @@ ${stabSection}
                   {/* Cut Time per Tool mode */}
                   {roiLifeMode === "cut_time" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
+                      <RoiLabel required hint="Total spindle-on cutting time the incumbent lasts before it needs to be changed.">Cut Time per Tool (min)</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 28" value={roiCompCutTime} onChange={e => setRoiCompCutTime(e.target.value)} />
                     </div>
                   )}
@@ -10265,14 +10284,14 @@ ${stabSection}
                   {/* Linear Inches mode */}
                   {roiLifeMode === "linear_in" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Linear Inches per Tool</Label>
+                      <RoiLabel required hint="Total length of material the incumbent tool cuts before it needs to be changed.">Linear Inches per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 180" value={roiCompLinIn} onChange={e => setRoiCompLinIn(e.target.value)} />
                     </div>
                   )}
 
                   {/* MRR — manual */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">MRR (in³/min)</Label>
+                    <RoiLabel hint="Material removal rate of the incumbent tool in cubic inches per minute. Enter this to unlock cycle time savings calculations. Get it from their current speeds and feeds.">MRR (in³/min)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10284,9 +10303,7 @@ ${stabSection}
                   {/* Material volume per part — unlocks cycle-time savings */}
                   {(parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0) && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">
-                        Material Removed per Part (in³) <span className="text-zinc-600">— optional</span>
-                      </Label>
+                      <RoiLabel hint="Cubic inches of material removed per part — WOC × DOC × pass length is a quick estimate. Used to convert the MRR difference into dollars-per-part machine time savings. Optional but unlocks a meaningful savings line.">Material Removed per Part (in³)</RoiLabel>
                       <Input
                         type="number"
                         className="no-spinners h-7 text-xs"
@@ -10294,14 +10311,13 @@ ${stabSection}
                         value={roiMatVolPerPart}
                         onChange={e => setRoiMatVolPerPart(e.target.value)}
                       />
-                      <p className="text-[10px] text-zinc-600">WOC × DOC × pass length. Used to convert MRR gain into $/part machine time savings.</p>
                     </div>
                   )}
                   {/* Annual volume */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">
+                    <RoiLabel required hint={roiLifeMode === "cut_time" ? "Total hours per year this tool is actively cutting. Used to scale tool cost and changeover savings to an annual dollar figure." : roiLifeMode === "linear_in" ? "Total linear inches cut per year across all jobs using this tool. Used to scale tool cost savings to an annual figure." : "Total number of parts produced per year using this tool. Used to scale per-part savings into an annual dollar figure."}>
                       {roiLifeMode === "cut_time" ? "Annual Cutting Time (hours/yr)" : roiLifeMode === "linear_in" ? "Annual Linear Inches (in/yr)" : "Annual Volume (parts/yr)"}
-                    </Label>
+                    </RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10311,7 +10327,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Shop Rate ($/hr)</Label>
+                    <RoiLabel hint="The customer's fully-loaded machine hour rate — includes operator, overhead, and machine depreciation. Used to calculate the value of time saved from fewer tool changes and faster cycle times. Typical range: $65–$150/hr.">Shop Rate ($/hr)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10321,7 +10337,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Tool Change Time (min)</Label>
+                    <RoiLabel hint="How long it takes the operator to change out a worn tool and re-qualify. Multiplied by shop rate — tools that last longer save real changeover dollars. Typical: 3–10 min.">Tool Change Time (min)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10330,7 +10346,6 @@ ${stabSection}
                       onChange={e => setRoiChangeTime(e.target.value)}
                     />
                   </div>
-                  <p className="text-[10px] text-zinc-600">Shop rate × change time applied to both sides — more parts/tool = fewer changeovers = lower cost</p>
                 </div>
               </div>
 
