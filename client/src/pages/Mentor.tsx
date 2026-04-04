@@ -1358,7 +1358,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -5342,7 +5342,13 @@ ${stabSection}
 
             {/* Toolholder */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-emerald-500 p-3 space-y-1.5">
-              <FieldLabel hint="Toolholder rigidity affects deflection, runout, and chatter. Buttons are ordered most rigid to least rigid (left to right). Hover each holder for details.">Tool Holder</FieldLabel>
+              <FieldLabel hint={
+                form.machine_type === "mill_turn"
+                  ? "Toolholder rigidity affects deflection, runout, and live/B-axis milling stability. Capto and shrink fit are top choices for heavy B-axis milling — maximum rigidity and runout control. Hydraulic is ideal for finishing. ER collet is the most common and versatile turret option. Ordered most to least rigid."
+                  : (form.machine_type === "lathe")
+                  ? "Toolholder rigidity affects deflection, runout, and chatter on live tool ops. Ordered most to least rigid. ER collet is the most common turret holder; hydraulic or shrink fit for precision or heavy milling."
+                  : "Toolholder rigidity affects deflection, runout, and chatter. Buttons are ordered most rigid to least rigid (left to right). Hover each holder for details."
+              }>Tool Holder</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
                   (form.machine_type === "lathe" || form.machine_type === "mill_turn")
@@ -5566,8 +5572,10 @@ ${stabSection}
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
               <FieldLabel hint={
-                (form.machine_type === "lathe" || form.machine_type === "mill_turn")
-                  ? "Workholding affects live tool rigidity and access. Most rigid to least rigid for live tool milling: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
+                form.machine_type === "lathe"
+                  ? "Workholding affects live tool rigidity and access. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
+                  : form.machine_type === "mill_turn"
+                  ? "Mill-turn workholding affects both turning rigidity and live/B-axis milling stability. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support → Sub-Spindle. Collet chuck is best for bar work and precision; soft jaws are the best general production choice. 6-jaw reduces distortion on thin-wall parts."
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
@@ -5576,13 +5584,23 @@ ${stabSection}
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  (form.machine_type === "lathe" || form.machine_type === "mill_turn")
+                  form.machine_type === "lathe"
                   ? ([
                       { key: "collet_chuck",      label: "Collet Chuck"     },
                       { key: "soft_jaws",         label: "Soft Jaws"        },
                       { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"  },
                       { key: "expanding_mandrel", label: "Expanding Mandrel"},
                       { key: "sub_spindle",       label: "Sub-Spindle"      },
+                    ] as const)
+                  : form.machine_type === "mill_turn"
+                  ? ([
+                      { key: "collet_chuck",        label: "Collet Chuck"      },
+                      { key: "soft_jaws",           label: "Soft Jaws"         },
+                      { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"   },
+                      { key: "6_jaw_chuck",         label: "6-Jaw Chuck"       },
+                      { key: "expanding_mandrel",   label: "Expanding Mandrel" },
+                      { key: "tailstock_supported", label: "Tailstock Support" },
+                      { key: "sub_spindle",         label: "Sub-Spindle"       },
                     ] as const)
                   : form.machine_type === "hmc"
                   ? ([
@@ -5625,8 +5643,10 @@ ${stabSection}
                     "3_jaw_chuck":   "3-jaw chuck with hard jaws — strong grip, fast loading. Good for roughing but watch jaw interference with radial live tools. Soft jaws are a better choice when precision or clearance matters.",
                     "4_jaw_chuck":   "4-jaw independent chuck — each jaw adjusts separately for precise centering. More rigid than 3-jaw; better for heavy interrupted cuts.",
                     collet_chuck:      "Collet chuck (5C, dead-length, etc.) — best live tool access and concentricity. Low obstruction means radial tools reach the part cleanly. Best for small-to-medium round parts and bar-fed work.",
-                    expanding_mandrel: "ID-gripping mandrel — part is held from the bore, leaving the full OD exposed. Excellent live tool access, no jaw interference. Best when OD must stay clean or jaw distortion is a concern.",
-                    sub_spindle:       "Sub-spindle or back-working chuck/collet — part transferred for back-side ops. Usually lower confidence than main spindle; back off slightly from main-spindle live-milling parameters.",
+                    expanding_mandrel:   "ID-gripping mandrel — part is held from the bore, leaving the full OD exposed. Excellent live tool access, no jaw interference. Best when OD must stay clean or jaw distortion is a concern.",
+                    sub_spindle:         "Sub-spindle or back-working chuck/collet — part transferred for back-side ops. Usually lower confidence than main spindle; back off slightly from main-spindle live-milling parameters.",
+                    "6_jaw_chuck":       "6-jaw chuck — distributes clamping force across more contact points, significantly reducing distortion on thin-wall tubes, rings, and delicate turned parts. Good for finishing ops.",
+                    tailstock_supported: "Tailstock or live center supporting the far end of a long part. Improves turning rigidity on slender shafts but can limit B-axis and live tool access at that end — plan toolpath sequence carefully.",
                     between_centers:   "Part supported at both ends between a drive center and a live tailstock center. Eliminates overhang — highest rigidity for turning long shafts.",
                     face_plate:        "Part bolted directly to a face plate mounted on the spindle. Used for large or irregular parts that won't fit in a chuck.",
                     "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts.",
