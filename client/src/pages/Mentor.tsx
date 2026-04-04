@@ -74,6 +74,25 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React
   );
 }
 
+function RoiLabel({ children, hint, required }: { children: React.ReactNode; hint: string; required?: boolean }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Label className="flex items-center gap-1 cursor-default w-fit text-[10px] text-zinc-500">
+            {children}
+            {required && <span className="text-red-400 text-[10px]">*</span>}
+            <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
+          </Label>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-72 text-xs">
+          {hint}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function Kpi({
   label,
   value,
@@ -487,8 +506,6 @@ export default function Mentor() {
     if (!Number.isFinite(ccP) || ccP <= 0) missing.push("CC Tool Price");
     if (!Number.isFinite(cP) || cP <= 0) missing.push("Incumbent Tool Price");
     if (!Number.isFinite(annualVol) || annualVol <= 0) missing.push(roiLifeMode === "cut_time" ? "Annual Cutting Hours" : roiLifeMode === "linear_in" ? "Annual Linear Inches" : "Annual Volume");
-    if (!roiUserType) missing.push("Customer Type (End User or Distributor)");
-    if (roiUserType === "distributor" && !roiDistributorCode) missing.push("Authorized Distributor Name");
     setRoiMissingFields(missing);
     if (missing.length > 0) return;
     // Reconditioning: lifecycle units compound same as parts (substitute minutes or inches)
@@ -1511,9 +1528,6 @@ export default function Mentor() {
       if (d.endUserName) setRoiEndUserName(d.endUserName);
       if (d.endUserEmail) setRoiEndUserEmail(d.endUserEmail);
       if (d.endUserCompany) setRoiEndUserCompany(d.endUserCompany);
-      if (d.userType === "end_user" || d.userType === "distributor") setRoiUserType(d.userType);
-      if (d.distributorName) { setRoiDistributorName(d.distributorName); setRoiDistributorQuery(d.distributorName); }
-      if (d.distributorCode) setRoiDistributorCode(d.distributorCode);
       if (d.reconEnabled != null) setRoiReconEnabled(d.reconEnabled);
       if (d.reconGrinds) setRoiReconGrinds(d.reconGrinds);
       if (d.reconRetention) setRoiReconRetention(d.reconRetention);
@@ -1793,12 +1807,9 @@ export default function Mentor() {
   const [roiEndUserName, setRoiEndUserName] = React.useState("");
   const [roiEndUserEmail, setRoiEndUserEmail] = React.useState("");
   const [roiEndUserCompany, setRoiEndUserCompany] = React.useState("");
-  const [roiUserType, setRoiUserType] = React.useState<"distributor" | "end_user" | "">();
-  const [roiDistributorName, setRoiDistributorName] = React.useState("");
-  const [roiDistributorCode, setRoiDistributorCode] = React.useState("");
-  const [roiDistributorQuery, setRoiDistributorQuery] = React.useState("");
-  const [roiDistributorResults, setRoiDistributorResults] = React.useState<{ name: string; code: string }[]>([]);
-  const [roiDistributorOpen, setRoiDistributorOpen] = React.useState(false);
+  const roiUserType = "end_user" as const;
+  const roiDistributorName = "";
+  const roiDistributorCode = "";
   const [roiCompBrand, setRoiCompBrand] = React.useState("");
   const [roiCompEdp, setRoiCompEdp] = React.useState("");
   const [roiCompPrice, setRoiCompPrice] = React.useState("");
@@ -3243,6 +3254,7 @@ ${stabSection}
         lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
         lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
         lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
+        lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
         lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
         lines.push("");
       }
@@ -7164,7 +7176,7 @@ ${stabSection}
               <div className="flex flex-wrap gap-3">
                 {[
                   { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot", slotOnly: false, hideInSlot: true,  tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
-                  { key: "ramp",         label: "Ramp",             color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, tooltip: "Linear ramp at 2–5° angle — tool descends while moving laterally. Simpler than helical, supported by all CAM systems. Engagement builds faster than a sweep-in, so use a reduced entry feed (40–50% of full feed). Good fallback when helical clearance is tight." },
+                  { key: "ramp",         label: "Straight Ramp",    color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
                   { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
                   { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
                   { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
@@ -9394,6 +9406,7 @@ ${stabSection}
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Max Ramp Angle</span><span className="ml-2 font-medium">≤{em.ramp_angle_deg}°</span></div>
+                            <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{(em as any).ramp_pitch_in_per_in?.toFixed(4) ?? (Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
                             <div className="col-span-2"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">(0.5–1°, chip-thinning)</span></span></div>
                           </div>
@@ -9952,121 +9965,31 @@ ${stabSection}
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
                 </div>
               )}
-              {/* End-user / customer info */}
+              {/* End-user info */}
               <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
-                {/* Who is this ROI for — label + toggle together */}
-                <div className="space-y-1.5">
-                  <p className="text-xs text-zinc-300 font-semibold">Who is this ROI for? <span className="text-red-400">*</span></p>
-                  <div className={`flex rounded-md border overflow-hidden text-xs font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-600"}`}>
-                    <button type="button"
-                      onClick={() => setRoiUserType("end_user")}
-                      className={`flex-1 py-1.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
-                      End User
-                    </button>
-                    <button type="button"
-                      onClick={() => setRoiUserType("distributor")}
-                      className={`flex-1 py-1.5 transition-colors border-l border-zinc-600 ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
-                      Distributor
-                    </button>
-                  </div>
-                  {!roiUserType && (
-                    <p className="text-[10px] text-red-400">Select one before calculating.</p>
-                  )}
-                </div>
-                {/* Distributor autocomplete — only shown when Distributor is selected */}
-                {roiUserType === "distributor" && (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500 font-semibold">
-                      Authorized Distributor <span className="text-red-400">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        className={`h-7 text-xs pr-6 ${roiDistributorCode ? "border-green-700/60" : roiDistributorQuery.length > 1 ? "border-amber-700/60" : ""}`}
-                        placeholder="Start typing distributor name…"
-                        value={roiDistributorQuery}
-                        onChange={e => {
-                          const q = e.target.value;
-                          setRoiDistributorQuery(q);
-                          setRoiDistributorName("");
-                          setRoiDistributorCode("");
-                          setRoiDistributorOpen(true);
-                          if (q.length >= 2) {
-                            fetch(`/api/distributors/search?q=${encodeURIComponent(q)}`)
-                              .then(r => r.json())
-                              .then(data => setRoiDistributorResults(data))
-                              .catch(() => {});
-                          } else {
-                            setRoiDistributorResults([]);
-                          }
-                        }}
-                        onFocus={() => { if (roiDistributorQuery.length >= 2) setRoiDistributorOpen(true); }}
-                        onBlur={() => setTimeout(() => setRoiDistributorOpen(false), 150)}
-                      />
-                      {roiDistributorCode && (
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">✓</span>
-                      )}
-                      {roiDistributorOpen && roiDistributorResults.length > 0 && (
-                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-zinc-600 bg-zinc-900 shadow-lg overflow-hidden">
-                          {roiDistributorResults.map(d => (
-                            <button
-                              key={d.code}
-                              type="button"
-                              className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 transition-colors"
-                              onMouseDown={() => {
-                                setRoiDistributorName(d.name);
-                                setRoiDistributorCode(d.code);
-                                setRoiDistributorQuery(d.name);
-                                setRoiDistributorOpen(false);
-                                setRoiDistributorResults([]);
-                              }}
-                            >
-                              {d.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {roiDistributorOpen && roiDistributorQuery.length >= 2 && roiDistributorResults.length === 0 && (
-                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
-                          No authorized distributors found
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Contact fields — labels change based on toggle */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">
-                      {roiUserType === "distributor" ? "Distributor Contact Name" : "End User Contact Name"}
-                    </Label>
-                    <Input type="text" className="h-7 text-xs"
-                      placeholder={roiUserType === "distributor" ? "e.g. Jane Doe (rep at distributor)" : "e.g. John Smith (machinist/buyer)"}
-                      value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">
-                      {roiUserType === "distributor" ? "Distributor Company Name" : "End User Company Name"}
-                    </Label>
-                    <Input type="text" className="h-7 text-xs"
-                      placeholder={roiUserType === "distributor" ? "e.g. DXP - Chicago" : "e.g. Acme Machining"}
-                      value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
-                  </div>
+                <div className="space-y-1">
+                  <RoiLabel hint="The name of the shop or manufacturing company where this tool is being evaluated. Appears on the printed ROI report.">End User Company Name</RoiLabel>
+                  <Input type="text" className="h-7 text-xs"
+                    placeholder="e.g. Acme Machining"
+                    value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">
-                    {roiUserType === "distributor" ? "Distributor Contact Email" : "End User Contact Email"}
-                  </Label>
+                  <RoiLabel hint="The name of the machinist, engineer, or buyer at the shop. Used to personalize the printed report.">End User Contact Name</RoiLabel>
+                  <Input type="text" className="h-7 text-xs"
+                    placeholder="e.g. John Smith"
+                    value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <RoiLabel hint="Email address for the end user contact. Used to send them a copy of the ROI report.">End User Contact Email</RoiLabel>
                   <Input type="email" className="h-7 text-xs"
-                    placeholder={roiUserType === "distributor" ? "e.g. jane@dxpchicago.com" : "e.g. john@acmemachining.com"}
+                    placeholder="e.g. john@acmemachining.com"
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
               </div>
 
               {/* Tool Life Metric selector */}
               <div className="flex items-center gap-3">
-                <Label className="text-xs text-zinc-400 whitespace-nowrap shrink-0">ROI Measurements</Label>
+                <RoiLabel hint="How tool life is measured for this job. Parts per Tool is most common. Use Cut Time per Tool when parts vary in size. Use Linear Inches when profiling or turning where travel distance is the natural metric.">ROI Measurements</RoiLabel>
                 <select
                   value={roiLifeMode}
                   onChange={e => setRoiLifeMode(e.target.value as "parts" | "cut_time" | "linear_in")}
@@ -10085,7 +10008,7 @@ ${stabSection}
                   <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-1">Core Cutter</div>
                   {/* EDP — auto-filled from calc */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">EDP #</Label>
+                    <RoiLabel hint="Auto-populated from the milling calculator when an EDP# is entered. Identifies which Core Cutter tool is being evaluated.">EDP #</RoiLabel>
                     <div className="relative">
                       <Input
                         type="text"
@@ -10098,7 +10021,7 @@ ${stabSection}
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
+                    <RoiLabel required hint="Your list or street price for this Core Cutter tool. Used to calculate cost per part vs. the incumbent.">Tool Price ($)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10111,7 +10034,7 @@ ${stabSection}
                   {/* Parts per Tool mode */}
                   {roiLifeMode === "parts" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                      <RoiLabel required hint="How many parts this Core Cutter tool produces before it needs to be changed. Ask the customer to run a test or estimate from similar jobs.">Parts per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 120" value={roiCcParts} onChange={e => setRoiCcParts(e.target.value)} />
                     </div>
                   )}
@@ -10119,7 +10042,7 @@ ${stabSection}
                   {/* Cut Time per Tool mode */}
                   {roiLifeMode === "cut_time" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
+                      <RoiLabel required hint="Total spindle-on cutting time this tool lasts before it needs to be changed. Auto-filled from the calculator's estimated tool life if available.">Cut Time per Tool (min)</RoiLabel>
                       <div className="relative">
                         <Input type="number" className="no-spinners h-7 text-xs pr-10" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
                         {(mentor.data as any)?.engineering?.tool_life_min > 0 && (() => {
@@ -10136,14 +10059,14 @@ ${stabSection}
                   {/* Linear Inches mode */}
                   {roiLifeMode === "linear_in" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Linear Inches per Tool</Label>
+                      <RoiLabel required hint="Total length of material this tool cuts before it needs to be changed. Useful for profiling, slotting, or turning applications where linear travel is the natural metric.">Linear Inches per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 250" value={roiCcLinIn} onChange={e => setRoiCcLinIn(e.target.value)} />
                     </div>
                   )}
 
                   {/* MRR — auto-filled, lines up with incumbent MRR */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">MRR (in³/min)</Label>
+                    <RoiLabel hint="Metal removal rate in cubic inches per minute. Auto-filled from the calculator. Used to calculate cycle time savings vs. the incumbent if Material Removed per Part is also entered.">MRR (in³/min)</RoiLabel>
                     <div className="relative">
                       <Input
                         type="number"
@@ -10314,7 +10237,7 @@ ${stabSection}
                 <div className="space-y-2">
                   <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Their Current Tool</div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Brand</Label>
+                    <RoiLabel hint="The brand of the tool the customer is currently running. e.g. Kennametal, OSG, Guhring, Sandvik. For reference on the printed report.">Brand</RoiLabel>
                     <Input
                       type="text"
                       className="h-7 text-xs"
@@ -10324,7 +10247,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Incumbent EDP / Part #</Label>
+                    <RoiLabel hint="The competitor's part number or EDP for the tool currently in use. Appears on the printed ROI report for documentation.">Incumbent EDP / Part #</RoiLabel>
                     <Input
                       type="text"
                       className="h-7 text-xs"
@@ -10334,7 +10257,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Tool Price ($)</Label>
+                    <RoiLabel required hint="What the customer currently pays for the incumbent tool. Combined with tool life, this determines their current cost per part.">Tool Price ($)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10347,7 +10270,7 @@ ${stabSection}
                   {/* Parts per Tool mode */}
                   {roiLifeMode === "parts" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Parts per Tool</Label>
+                      <RoiLabel required hint="How many parts the incumbent tool produces before it needs to be changed. This is the key life comparison number — get this from the customer.">Parts per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 80" value={roiCompParts} onChange={e => setRoiCompParts(e.target.value)} />
                     </div>
                   )}
@@ -10355,7 +10278,7 @@ ${stabSection}
                   {/* Cut Time per Tool mode */}
                   {roiLifeMode === "cut_time" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Cut Time per Tool (min)</Label>
+                      <RoiLabel required hint="Total spindle-on cutting time the incumbent lasts before it needs to be changed.">Cut Time per Tool (min)</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 28" value={roiCompCutTime} onChange={e => setRoiCompCutTime(e.target.value)} />
                     </div>
                   )}
@@ -10363,14 +10286,14 @@ ${stabSection}
                   {/* Linear Inches mode */}
                   {roiLifeMode === "linear_in" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">Linear Inches per Tool</Label>
+                      <RoiLabel required hint="Total length of material the incumbent tool cuts before it needs to be changed.">Linear Inches per Tool</RoiLabel>
                       <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 180" value={roiCompLinIn} onChange={e => setRoiCompLinIn(e.target.value)} />
                     </div>
                   )}
 
                   {/* MRR — manual */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">MRR (in³/min)</Label>
+                    <RoiLabel hint="Material removal rate of the incumbent tool in cubic inches per minute. Enter this to unlock cycle time savings calculations. Get it from their current speeds and feeds.">MRR (in³/min)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10382,9 +10305,7 @@ ${stabSection}
                   {/* Material volume per part — unlocks cycle-time savings */}
                   {(parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0) && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-zinc-400">
-                        Material Removed per Part (in³) <span className="text-zinc-600">— optional</span>
-                      </Label>
+                      <RoiLabel hint="Cubic inches of material removed per part — WOC × DOC × pass length is a quick estimate. Used to convert the MRR difference into dollars-per-part machine time savings. Optional but unlocks a meaningful savings line.">Material Removed per Part (in³)</RoiLabel>
                       <Input
                         type="number"
                         className="no-spinners h-7 text-xs"
@@ -10392,14 +10313,13 @@ ${stabSection}
                         value={roiMatVolPerPart}
                         onChange={e => setRoiMatVolPerPart(e.target.value)}
                       />
-                      <p className="text-[10px] text-zinc-600">WOC × DOC × pass length. Used to convert MRR gain into $/part machine time savings.</p>
                     </div>
                   )}
                   {/* Annual volume */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">
+                    <RoiLabel required hint={roiLifeMode === "cut_time" ? "Total hours per year this tool is actively cutting. Used to scale tool cost and changeover savings to an annual dollar figure." : roiLifeMode === "linear_in" ? "Total linear inches cut per year across all jobs using this tool. Used to scale tool cost savings to an annual figure." : "Total number of parts produced per year using this tool. Used to scale per-part savings into an annual dollar figure."}>
                       {roiLifeMode === "cut_time" ? "Annual Cutting Time (hours/yr)" : roiLifeMode === "linear_in" ? "Annual Linear Inches (in/yr)" : "Annual Volume (parts/yr)"}
-                    </Label>
+                    </RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10409,7 +10329,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Shop Rate ($/hr)</Label>
+                    <RoiLabel hint="The customer's fully-loaded machine hour rate — includes operator, overhead, and machine depreciation. Used to calculate the value of time saved from fewer tool changes and faster cycle times. Typical range: $65–$150/hr.">Shop Rate ($/hr)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10419,7 +10339,7 @@ ${stabSection}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Tool Change Time (min)</Label>
+                    <RoiLabel hint="How long it takes the operator to change out a worn tool and re-qualify. Multiplied by shop rate — tools that last longer save real changeover dollars. Typical: 3–10 min.">Tool Change Time (min)</RoiLabel>
                     <Input
                       type="number"
                       className="no-spinners h-7 text-xs"
@@ -10428,7 +10348,6 @@ ${stabSection}
                       onChange={e => setRoiChangeTime(e.target.value)}
                     />
                   </div>
-                  <p className="text-[10px] text-zinc-600">Shop rate × change time applied to both sides — more parts/tool = fewer changeovers = lower cost</p>
                 </div>
               </div>
 

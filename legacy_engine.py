@@ -5615,6 +5615,7 @@ def run(payload=None):
         "stability": _stability,
         "entry_moves": {
             "ramp_angle_deg":           round(locals().get("ramp_angle", 3.0), 1),
+            "ramp_pitch_in_per_in":     round(math.tan(math.radians(locals().get("ramp_angle", 3.0))), 5),
             "standard_ramp_ipm":        round(locals().get("standard_ramp_feed", 0.0), 2),
             "standard_helix_ipm":       round(locals().get("standard_helix_feed", 0.0), 2),
             "advanced_ramp_ipm":        round(locals().get("advanced_feed", 0.0), 2),
