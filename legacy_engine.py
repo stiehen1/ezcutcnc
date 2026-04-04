@@ -109,9 +109,9 @@ BASE_SFM = {
     "Inconel": 180,
     "Titanium": 160,
     # ISO subcategory keys (conventional milling base; catalog-validated conservative midpoints)
-    "aluminum_wrought":    1400,  # 6061/6082/5052/6xxx — shop-validated 1400 SFM conventional
-    "aluminum_wrought_hs": 1100,  # 7075/2024/7xxx/2xxx — ~20% lower; harder/stronger, sharper tools needed
-    "aluminum_cast": 650,
+    "aluminum_wrought":    800,   # 6061/6082/5052/6xxx — 600–1000 SFM production range; 800 center for 8k–15k rpm shops
+    "aluminum_wrought_hs": 650,   # 7075/2024/7xxx/2xxx — harder/more abrasive; practical 500–800 SFM range
+    "aluminum_cast": 550,         # Cast grades (356, 380): ~30% below wrought; higher alloying & inclusions = faster wear
     "non_ferrous": 550,
     "steel_mild": 400,              # Plain low-carbon / structural (A36, 1018, 1020, 10xx series)
     "steel_free": 425,              # True free-machining (12L14, 1215, 1117 — sulfur-additive grades)
@@ -562,9 +562,9 @@ IPT_FRAC = {
     "Inconel": 0.003,
     "Titanium": 0.0035,
     # ISO subcategory keys
-    "aluminum_wrought":    0.0125,  # 6061 chipbreaker: 1.25%×D confirmed
-    "aluminum_wrought_hs": 0.0100,  # 7075/2024: lighter chip load — stronger alloy, more demanding on edges
-    "aluminum_cast":    0.010,
+    "aluminum_wrought":    0.0090,  # 6061: 0.9%×D — ~0.004–0.005 ipt on 1/2" (8k–15k rpm shops); avoids BUE
+    "aluminum_wrought_hs": 0.0070,  # 7075/2024: lighter chip load — harder/more abrasive, sharper edges required
+    "aluminum_cast":    0.0070,     # Cast (356, 380): conservative to manage higher wear rate
     "plastic_unfilled":  0.010,  # High chip load — too light causes rubbing, heat, BUE (1.0%×D = 0.005" on 0.5" tool)
     "plastic_filled":    0.008,  # Fiber-filled: slightly lower than unfilled — abrasion limits aggressiveness
     "composite_tpc":     0.006,  # Continuous fiber laminates: lower chip load; delamination risk at high IPT
@@ -2412,10 +2412,10 @@ def run_reaming(payload: dict) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 KEYSEAT_SFM = {
     # Aluminum
-    "Aluminum":          900,
-    "aluminum_wrought":    900,
-    "aluminum_wrought_hs": 700,   # 7075/2024 keyseat: lower full-slot SFM — stronger alloy
-    "aluminum_cast":     500,
+    "Aluminum":          600,
+    "aluminum_wrought":    600,   # Full-slot; 8k–15k spindle realistic upper end
+    "aluminum_wrought_hs": 500,   # 7075/2024 keyseat: stronger alloy, higher cutting forces
+    "aluminum_cast":     400,     # Cast: more abrasive, lower full-slot SFM
     "non_ferrous":       400,
     "plastic_unfilled":  350,   # Unfilled TPs: moderate keyseat SFM — heat is the constraint
     "plastic_filled":    275,   # Fiber-filled: lower to manage abrasion in full-slot
@@ -2484,10 +2484,10 @@ DOVETAIL_SFM = {k: round(v * 0.88) for k, v in KEYSEAT_SFM.items()}
 # Upper limit: 52 HRC (hardness_sfm_mult handles derating above that).
 FEEDMILL_SFM = {
     # Aluminum
-    "Aluminum":              1200,
-    "aluminum_wrought":      1200,
-    "aluminum_wrought_hs":    900,
-    "aluminum_cast":          700,
+    "Aluminum":              900,
+    "aluminum_wrought":      900,   # Feed mills get more SFM than end mills (light axial, lead angle)
+    "aluminum_wrought_hs":   750,   # 7075/2024: ~20% lower than 6061
+    "aluminum_cast":         600,   # Cast: more abrasive
     "non_ferrous":            550,
     # Steel
     "Steel":                  450,
