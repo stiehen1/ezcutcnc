@@ -230,6 +230,58 @@ export async function registerRoutes(
     console.warn("[user_machines migration]", err?.message ?? err);
   }
 
+  // ── machines: add live-tool columns if not present ────────────────────────
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_max_rpm INTEGER`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_hp NUMERIC(6,2)`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_coolant TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_connection TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_drive_type TEXT`);
+
+    // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
+    const liveToolMachines = [
+      // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
+      ["Haas",          "ST-10Y",        6000,  20,  "VDI/BMT", "belt",  false, "flood",  null, "lathe", "Haas",         4000, 5,   "External (no thru-tool)", "VDI/BMT", "Belt"],
+      ["Haas",          "ST-15Y",        6000,  20,  "VDI/BMT", "belt",  false, "flood",  null, "lathe", "Haas",         4000, 5,   "External (no thru-tool)", "VDI/BMT", "Belt"],
+      ["Haas",          "ST-20Y",        6000,  20,  "VDI/BMT", "belt",  false, "flood",  null, "lathe", "Haas",         4000, 5,   "External (no thru-tool)", "VDI/BMT", "Belt"],
+      ["Haas",          "ST-30Y",        4000,  30,  "VDI/BMT", "belt",  false, "flood",  null, "lathe", "Haas",         4000, 5,   "External (no thru-tool)", "VDI/BMT", "Belt"],
+      ["Mazak",         "QT-200MY",      5000,  15,  "VDI/BMT/Capto", "direct", false, "flood", null, "lathe", "MAZATROL", 5000, 7.5, "Optional thru-tool",   "VDI/BMT/Capto", "Direct"],
+      ["Mazak",         "QT-250MY",      5000,  15,  "VDI/BMT/Capto", "direct", false, "flood", null, "lathe", "MAZATROL", 5000, 7.5, "Optional thru-tool",   "VDI/BMT/Capto", "Direct"],
+      ["Mazak",         "QT-300MY",      4000,  20,  "VDI/BMT/Capto", "direct", false, "flood", null, "lathe", "MAZATROL", 5000, 7.5, "Optional thru-tool",   "VDI/BMT/Capto", "Direct"],
+      ["DMG MORI",      "NLX 2000 SY",   4000,  22,  "Capto",   "direct", false, "flood,tsc", null, "lathe", "CELOS",   12000, 10,  "High-pressure thru-tool", "Capto",  "Motorized"],
+      ["DMG MORI",      "NLX 2500 SY",   3500,  30,  "Capto",   "direct", false, "flood,tsc", null, "lathe", "CELOS",   12000, 10,  "High-pressure thru-tool", "Capto",  "Motorized"],
+      ["Nakamura-Tome", "WT-150II",      5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Nakamura-Tome", "SC-200",        5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Nakamura-Tome", "AS-200",        5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Okuma",         "LB3000 EX II MY", 5000, 22, "VDI/BMT", "direct", false, "flood", null, "lathe", "OSP-P300L",    6000, 7.5, "Thru-tool available",    "VDI/BMT", "Direct"],
+      ["Okuma",         "GENOS L3000-e MY", 4000,22, "VDI/BMT", "direct", false, "flood", null, "lathe", "OSP-P300L",    6000, 7.5, "Thru-tool available",    "VDI/BMT", "Direct"],
+      ["Tsugami",       "BO326-III",     5000,  10,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Tsugami",       "S206-II",       7000,  7.5, "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Citizen",       "L20",           10000, 7.5, "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Citizen",       "A20",           10000, 7.5, "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5000, 6,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Miyano",        "BNA-42MSY",     6000,  10,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Miyano",        "ABX-51THY",     5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Hyundai-Wia",   "LYNX 2100LY",   5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Hyundai-Wia",   "LYNX 2600Y",    4000,  22,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Johnford",      "ST-40Y",        4000,  20,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Johnford",      "ST-60Y",        3500,  25,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Daewoo",        "PUMA 240MS",    5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Daewoo",        "PUMA 250MS",    5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Kia / Hyundai-Kia", "SKT21LMS", 5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["Kia / Hyundai-Kia", "SKT2000Y", 4000,  22,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+    ];
+    for (const m of liveToolMachines) {
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, live_tool_max_rpm, live_tool_hp, live_tool_coolant, live_tool_connection, live_tool_drive_type)
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE $1 AND model ILIKE $2)
+      `, m);
+    }
+  } catch (err: any) {
+    console.warn("[live_tool migration]", err?.message ?? err);
+  }
+
   // ── Leads table ───────────────────────────────────────────────────────────
   try {
     const { pool } = await import("./db");
