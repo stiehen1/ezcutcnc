@@ -487,8 +487,6 @@ export default function Mentor() {
     if (!Number.isFinite(ccP) || ccP <= 0) missing.push("CC Tool Price");
     if (!Number.isFinite(cP) || cP <= 0) missing.push("Incumbent Tool Price");
     if (!Number.isFinite(annualVol) || annualVol <= 0) missing.push(roiLifeMode === "cut_time" ? "Annual Cutting Hours" : roiLifeMode === "linear_in" ? "Annual Linear Inches" : "Annual Volume");
-    if (!roiUserType) missing.push("Customer Type (End User or Distributor)");
-    if (roiUserType === "distributor" && !roiDistributorCode) missing.push("Authorized Distributor Name");
     setRoiMissingFields(missing);
     if (missing.length > 0) return;
     // Reconditioning: lifecycle units compound same as parts (substitute minutes or inches)
@@ -1511,9 +1509,6 @@ export default function Mentor() {
       if (d.endUserName) setRoiEndUserName(d.endUserName);
       if (d.endUserEmail) setRoiEndUserEmail(d.endUserEmail);
       if (d.endUserCompany) setRoiEndUserCompany(d.endUserCompany);
-      if (d.userType === "end_user" || d.userType === "distributor") setRoiUserType(d.userType);
-      if (d.distributorName) { setRoiDistributorName(d.distributorName); setRoiDistributorQuery(d.distributorName); }
-      if (d.distributorCode) setRoiDistributorCode(d.distributorCode);
       if (d.reconEnabled != null) setRoiReconEnabled(d.reconEnabled);
       if (d.reconGrinds) setRoiReconGrinds(d.reconGrinds);
       if (d.reconRetention) setRoiReconRetention(d.reconRetention);
@@ -1793,12 +1788,9 @@ export default function Mentor() {
   const [roiEndUserName, setRoiEndUserName] = React.useState("");
   const [roiEndUserEmail, setRoiEndUserEmail] = React.useState("");
   const [roiEndUserCompany, setRoiEndUserCompany] = React.useState("");
-  const [roiUserType, setRoiUserType] = React.useState<"distributor" | "end_user" | "">();
-  const [roiDistributorName, setRoiDistributorName] = React.useState("");
-  const [roiDistributorCode, setRoiDistributorCode] = React.useState("");
-  const [roiDistributorQuery, setRoiDistributorQuery] = React.useState("");
-  const [roiDistributorResults, setRoiDistributorResults] = React.useState<{ name: string; code: string }[]>([]);
-  const [roiDistributorOpen, setRoiDistributorOpen] = React.useState(false);
+  const roiUserType = "end_user" as const;
+  const roiDistributorName = "";
+  const roiDistributorCode = "";
   const [roiCompBrand, setRoiCompBrand] = React.useState("");
   const [roiCompEdp, setRoiCompEdp] = React.useState("");
   const [roiCompPrice, setRoiCompPrice] = React.useState("");
@@ -9952,114 +9944,24 @@ ${stabSection}
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
                 </div>
               )}
-              {/* End-user / customer info */}
+              {/* End-user info */}
               <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
-                {/* Who is this ROI for — label + toggle together */}
-                <div className="space-y-1.5">
-                  <p className="text-xs text-zinc-300 font-semibold">Who is this ROI for? <span className="text-red-400">*</span></p>
-                  <div className={`flex rounded-md border overflow-hidden text-xs font-semibold ${!roiUserType ? "border-red-700/60" : "border-zinc-600"}`}>
-                    <button type="button"
-                      onClick={() => setRoiUserType("end_user")}
-                      className={`flex-1 py-1.5 transition-colors ${roiUserType === "end_user" ? "bg-orange-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
-                      End User
-                    </button>
-                    <button type="button"
-                      onClick={() => setRoiUserType("distributor")}
-                      className={`flex-1 py-1.5 transition-colors border-l border-zinc-600 ${roiUserType === "distributor" ? "bg-blue-700 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}>
-                      Distributor
-                    </button>
-                  </div>
-                  {!roiUserType && (
-                    <p className="text-[10px] text-red-400">Select one before calculating.</p>
-                  )}
-                </div>
-                {/* Distributor autocomplete — only shown when Distributor is selected */}
-                {roiUserType === "distributor" && (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500 font-semibold">
-                      Authorized Distributor <span className="text-red-400">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        className={`h-7 text-xs pr-6 ${roiDistributorCode ? "border-green-700/60" : roiDistributorQuery.length > 1 ? "border-amber-700/60" : ""}`}
-                        placeholder="Start typing distributor name…"
-                        value={roiDistributorQuery}
-                        onChange={e => {
-                          const q = e.target.value;
-                          setRoiDistributorQuery(q);
-                          setRoiDistributorName("");
-                          setRoiDistributorCode("");
-                          setRoiDistributorOpen(true);
-                          if (q.length >= 2) {
-                            fetch(`/api/distributors/search?q=${encodeURIComponent(q)}`)
-                              .then(r => r.json())
-                              .then(data => setRoiDistributorResults(data))
-                              .catch(() => {});
-                          } else {
-                            setRoiDistributorResults([]);
-                          }
-                        }}
-                        onFocus={() => { if (roiDistributorQuery.length >= 2) setRoiDistributorOpen(true); }}
-                        onBlur={() => setTimeout(() => setRoiDistributorOpen(false), 150)}
-                      />
-                      {roiDistributorCode && (
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">✓</span>
-                      )}
-                      {roiDistributorOpen && roiDistributorResults.length > 0 && (
-                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-zinc-600 bg-zinc-900 shadow-lg overflow-hidden">
-                          {roiDistributorResults.map(d => (
-                            <button
-                              key={d.code}
-                              type="button"
-                              className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 transition-colors"
-                              onMouseDown={() => {
-                                setRoiDistributorName(d.name);
-                                setRoiDistributorCode(d.code);
-                                setRoiDistributorQuery(d.name);
-                                setRoiDistributorOpen(false);
-                                setRoiDistributorResults([]);
-                              }}
-                            >
-                              {d.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {roiDistributorOpen && roiDistributorQuery.length >= 2 && roiDistributorResults.length === 0 && (
-                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
-                          No authorized distributors found
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Contact fields — labels change based on toggle */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">
-                      {roiUserType === "distributor" ? "Distributor Contact Name" : "End User Contact Name"}
-                    </Label>
-                    <Input type="text" className="h-7 text-xs"
-                      placeholder={roiUserType === "distributor" ? "e.g. Jane Doe (rep at distributor)" : "e.g. John Smith (machinist/buyer)"}
-                      value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-zinc-500">
-                      {roiUserType === "distributor" ? "Distributor Company Name" : "End User Company Name"}
-                    </Label>
-                    <Input type="text" className="h-7 text-xs"
-                      placeholder={roiUserType === "distributor" ? "e.g. DXP - Chicago" : "e.g. Acme Machining"}
-                      value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
-                  </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-zinc-500">End User Company Name</Label>
+                  <Input type="text" className="h-7 text-xs"
+                    placeholder="e.g. Acme Machining"
+                    value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-zinc-500">
-                    {roiUserType === "distributor" ? "Distributor Contact Email" : "End User Contact Email"}
-                  </Label>
+                  <Label className="text-[10px] text-zinc-500">End User Contact Name</Label>
+                  <Input type="text" className="h-7 text-xs"
+                    placeholder="e.g. John Smith"
+                    value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-zinc-500">End User Contact Email</Label>
                   <Input type="email" className="h-7 text-xs"
-                    placeholder={roiUserType === "distributor" ? "e.g. jane@dxpchicago.com" : "e.g. john@acmemachining.com"}
+                    placeholder="e.g. john@acmemachining.com"
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
               </div>
