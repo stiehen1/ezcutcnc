@@ -401,6 +401,12 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
 };
 MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
 
+function cleanEmail(raw: string): string {
+  const angleMatch = raw.match(/<([^>]+)>/);
+  if (angleMatch) return angleMatch[1].trim();
+  return raw.replace(/[<>]/g, "").trim();
+}
+
 export default function Mentor() {
   const { toast } = useToast();
   const mentor = useMentor();
@@ -10635,10 +10641,12 @@ ${stabSection}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <input
-                type="email"
+                type="text"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="your@email.com"
                 value={erEmail}
-                onChange={e => { setErEmail(e.target.value); setErError(""); setErStatus("idle"); }}
+                onChange={e => { setErEmail(cleanEmail(e.target.value)); setErError(""); setErStatus("idle"); }}
                 onKeyDown={e => { if (e.key === "Enter") emailResults(); }}
                 className="w-52 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
                 disabled={erStatus === "sending"}
@@ -10722,10 +10730,12 @@ ${stabSection}
             <div>
               <label className="text-xs text-zinc-400 mb-1 block">Email Address <span className="text-red-400">*</span></label>
               <input
-                type="email"
+                type="text"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="you@company.com"
                 value={welcomeEmail}
-                onChange={e => setWelcomeEmail(e.target.value)}
+                onChange={e => setWelcomeEmail(cleanEmail(e.target.value))}
                 onKeyDown={e => e.key === "Enter" && submitWelcome()}
                 className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
               />
@@ -10753,11 +10763,13 @@ ${stabSection}
             {" "}One-time per device — auto-fills after.
           </p>
           <input
-            type="email"
+            type="text"
+            inputMode="email"
+            autoComplete="email"
             className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
             placeholder="your@email.com"
             value={erGateInput}
-            onChange={e => { setErGateInput(e.target.value); setErGateError(""); }}
+            onChange={e => { setErGateInput(cleanEmail(e.target.value)); setErGateError(""); }}
             onKeyDown={e => {
               if (e.key === "Enter") {
                 const v = erGateInput.trim();
