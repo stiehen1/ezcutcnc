@@ -1841,8 +1841,8 @@ export default function Mentor() {
     if (!showRoi || !erEmail || roiRepVerified !== null) return;
     fetch(`/api/sales-rep/verify?email=${encodeURIComponent(erEmail)}`)
       .then(r => r.json())
-      .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : false))
-      .catch(() => setRoiRepVerified(false));
+      .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : { name: erEmail, repId: "" }))
+      .catch(() => setRoiRepVerified({ name: erEmail, repId: "" }));
   }, [showRoi, erEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cross-device session recovery: when panel opens with a named ROI, check if DB has a session for
@@ -9961,10 +9961,12 @@ ${stabSection}
 
               {roiRepVerified && (
               <>
-              {/* Rep identity banner */}
+              {/* Rep identity banner — only shown for authorized sales reps */}
+              {(roiRepVerified as any).repId && (
               <div className="text-[10px] text-zinc-500">
                 Test recorded by: <span className="text-zinc-300 font-semibold">{(roiRepVerified as any).name}</span> <span className="text-zinc-600">({erEmail})</span>
               </div>
+              )}
 
               {roiDraftLoaded && !mentor.data && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
