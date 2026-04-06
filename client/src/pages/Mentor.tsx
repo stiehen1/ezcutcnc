@@ -403,8 +403,10 @@ MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
 
 function cleanEmail(raw: string): string {
   const angleMatch = raw.match(/<([^>]+)>/);
-  if (angleMatch) return angleMatch[1].trim();
-  return raw.replace(/[<>]/g, "").trim();
+  let e = angleMatch ? angleMatch[1] : raw;
+  e = e.replace(/[<>]/g, "").trim();
+  e = e.replace(/[.,;:]+$/, "");
+  return e;
 }
 
 export default function Mentor() {
@@ -424,7 +426,7 @@ export default function Mentor() {
   const [tbSaving, setTbSaving] = React.useState(false);
   const [tbSaved, setTbSaved] = React.useState(false);
   const [tbShowModal, setTbShowModal] = React.useState(false);
-  const [tbEmail, setTbEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
+  const [tbEmail, setTbEmail] = React.useState(() => cleanEmail(localStorage.getItem("tb_email") || ""));
   const [tbToken, setTbToken] = React.useState(() => localStorage.getItem("tb_token") || "");
   const [tbStep, setTbStep] = React.useState<"email" | "code" | "saving">(
     localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "saving" : "email"
@@ -916,13 +918,13 @@ export default function Mentor() {
   const [erGateOpen, setErGateOpen] = React.useState(false);
   const [erGatePending, setErGatePending] = React.useState<"copy" | "print" | "pdf" | "stp" | null>(null);
   const [erGateStpUrl, setErGateStpUrl] = React.useState("");
-  const [erGateInput, setErGateInput] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [erGateInput, setErGateInput] = React.useState(() => cleanEmail(localStorage.getItem("er_email") || localStorage.getItem("tb_email") || ""));
   const [erGateError, setErGateError] = React.useState("");
 
   // ── Contact modal ("Don't know which tool?") ──────────────────────────
   const [showContactModal, setShowContactModal] = React.useState(false);
   const [contactName, setContactName] = React.useState("");
-  const [contactEmail, setContactEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [contactEmail, setContactEmail] = React.useState(() => cleanEmail(localStorage.getItem("er_email") || localStorage.getItem("tb_email") || ""));
   const [contactMsg, setContactMsg] = React.useState("");
   const [contactStatus, setContactStatus] = React.useState<"idle" | "sending" | "sent">("idle");
 
@@ -3348,7 +3350,7 @@ ${stabSection}
         setErStatus("error");
       } else {
         setErStatus("sent");
-        localStorage.setItem("er_email", erEmail.trim().toLowerCase());
+        localStorage.setItem("er_email", cleanEmail(erEmail).toLowerCase());
       }
     } catch {
       setErError("Network error — check your connection.");
@@ -3383,9 +3385,10 @@ ${stabSection}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: contactName.trim(), email: contactEmail.trim(), message: contactMsg.trim() }),
       });
-      localStorage.setItem("er_email", contactEmail.trim().toLowerCase());
-      setErEmail(contactEmail.trim().toLowerCase());
-      setErGateInput(contactEmail.trim().toLowerCase());
+      const cleanedContact = cleanEmail(contactEmail).toLowerCase();
+      localStorage.setItem("er_email", cleanedContact);
+      setErEmail(cleanedContact);
+      setErGateInput(cleanedContact);
       setContactStatus("sent");
     } catch {
       setContactStatus("idle");
@@ -10825,7 +10828,7 @@ ${stabSection}
               <div className="space-y-2">
                 <input type="text" placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
-                <input type="email" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+                <input type="text" inputMode="email" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(cleanEmail(e.target.value))}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
                 <textarea placeholder="What are you trying to cut? Material, depth, finish requirements…" value={contactMsg} onChange={e => setContactMsg(e.target.value)} rows={3}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500 resize-none" />
