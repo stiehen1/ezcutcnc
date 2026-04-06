@@ -1885,20 +1885,25 @@ export async function registerRoutes(
       });
 
       // Send results to user (including internal staff)
-      await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
-        to: email,
-        subject: "Your Core Cutter Speeds & Feeds Results",
-        text: [
-          "Here are your machining parameters from the Core Cutter Machining App.",
-          "",
-          results_text ?? "(no results attached)",
-          "",
-          "─────────────────────────────────────",
-          "Questions? Contact us at sales@corecutterusa.com",
-          "corecutcnc.com",
-        ].join("\n"),
-      }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
+      try {
+        await transporter.sendMail({
+          from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+          to: email,
+          subject: "Your Core Cutter Speeds & Feeds Results",
+          text: [
+            "Here are your machining parameters from the Core Cutter Machining App.",
+            "",
+            results_text ?? "(no results attached)",
+            "",
+            "─────────────────────────────────────",
+            "Questions? Contact us at sales@corecutterusa.com",
+            "corecutcnc.com",
+          ].join("\n"),
+        });
+      } catch (e: any) {
+        console.warn("[Results Email] User email failed:", e?.message);
+        return res.status(500).json({ error: "Failed to deliver email — please check the address and try again." });
+      }
 
       // Per-query sales notification removed — registration emails handle new user alerts
       // (also skip for internal staff — they're testing, not leads)

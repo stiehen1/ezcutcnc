@@ -436,7 +436,7 @@ export default function Mentor() {
   const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
 
   // ── Email results (lead capture) ──────────────────────────────────────────
-  const [erEmail, setErEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [erEmail, setErEmail] = React.useState(() => cleanEmail(localStorage.getItem("er_email") || localStorage.getItem("tb_email") || ""));
   const [erStatus, setErStatus] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
   const [erError, setErError] = React.useState("");
 
@@ -10669,7 +10669,7 @@ ${stabSection}
             <span className="text-base">✓</span>
             <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
           </div>
-          <button onClick={() => setErStatus("idle")} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
+          <button onClick={() => { setErStatus("idle"); setErEmail(""); setErError(""); }} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
         </div>
       )}
 
