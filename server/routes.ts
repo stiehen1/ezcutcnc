@@ -3908,18 +3908,35 @@ ${catalogList}`
         max_reach: string; rn_count: string; ball_count: string;
       }> = coverageRows.rows;
 
-      // ── 3. Pick optimal bulk diameter — largest that fits corner AND reaches depth ─
-      const findBestDia = (maxDia: number): typeof coverage[0] | null => {
-        for (const row of coverage) {
+      // ── 2b. Corner-specific coverage — only ball/CR tools that reach depth ──
+      const cornerCoverageRows = await pool.query(`
+        SELECT cutting_diameter_in, MAX(COALESCE(lbs_in, loc_in)) AS max_reach
+        FROM skus
+        WHERE tool_type = 'endmill'
+          AND cutting_diameter_in > 0
+          AND corner_condition != 'square'
+          AND (
+            corner_condition = 'ball'
+            OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $1)
+          )
+          ${coatingFilter}
+        GROUP BY cutting_diameter_in
+        ORDER BY cutting_diameter_in DESC
+      `, [corner_radius]);
+      const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
+
+      // ── 3. Pick optimal diameters ────────────────────────────────────────────
+      const findBestDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
+        for (const row of cov) {
           const dia = parseFloat(row.cutting_diameter_in);
           if (dia > maxDia) continue;
           if (parseFloat(row.max_reach) >= target_depth) return row;
         }
-        return null; // nothing reaches — need special
+        return null;
       };
 
-      const bulkRow   = findBestDia(maxBulkDia);
-      const cornerRow = findBestDia(maxCornerDia);
+      const bulkRow   = findBestDia(maxBulkDia, coverage);
+      const cornerRow = findBestDia(maxCornerDia, cornerCoverage);
 
       // ── 4. Build bulk tool sequence for chosen diameter ─────────────────────
       interface SeqTool {
