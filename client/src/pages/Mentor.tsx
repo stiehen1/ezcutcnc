@@ -7611,6 +7611,11 @@ ${stabSection}
                   {tool.is_rn && <span className="ml-2 text-indigo-400 text-[10px]">RN reach {tool.reach_in.toFixed(3)}"  ·  LOC {tool.loc_in.toFixed(3)}"</span>}
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
+                {tool.is_rn && ldRatio != null && ldRatio > 4 && (
+                  <p className="text-[10px] text-amber-400 mt-0.5">
+                    Long-reach tool — reduce WOC and run conservatively. Deflection scales with L³.
+                  </p>
+                )}
               </div>
 
               {/* Physics params */}
