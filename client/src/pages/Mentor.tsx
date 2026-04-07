@@ -7427,6 +7427,7 @@ ${stabSection}
                     </div>
                     Pre-Drilled Entry Hole
                   </button>
+                  <FieldLabel hint="Turn on if a hole was pre-drilled at the pocket entry point. If the drill diameter is ≥ tool diameter, the endmill drops straight in — no helical ramp needed. If smaller, a reduced-diameter helical entry is used. Without a pre-drill, a standard helical entry is required."> </FieldLabel>
                 </div>
                 {form.dp_pre_drill && (
                   <div className="space-y-2 pl-2">
