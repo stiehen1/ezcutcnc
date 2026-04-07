@@ -3263,14 +3263,31 @@ CRITICAL RULES — READ CAREFULLY:
    - thread_tpi = threads per inch if shown; 0 if not labeled (single-profile mills show thread angle only)
    - The neck diameter (smaller Ø between shank and cutter, e.g. "Ø0.525") maps to keyseat_arbor_dia for deflection modeling
 
+CRITICAL — LOC vs LBS for ENDMILLS (read this carefully before extracting):
+
+On long-reach / reduced-neck endmill prints you will see TWO horizontal length dimensions stacked near the cutting end of the tool — one short, one long. Identify them like this:
+
+STEP 1 — Find the FLUTED zone: Look at the right end of the tool profile. The fluted/cutting zone is the short section at the tip where the cutting edges are. It typically spans 0.5×D to 3×D. The dimension arrow bracketing ONLY this short fluted section is the LOC.
+
+STEP 2 — Find the REACH/NECK: There is often a second, longer dimension arrow that spans from the shank step (where the diameter reduces) all the way to the tool tip. This longer dimension is the REACH or LBS (length below shank). It will always be LARGER than the LOC.
+
+STEP 3 — Assign correctly:
+- loc = the SHORT dimension (fluted cutting length only). Example: .625+.06/.00 → loc = 0.625
+- lbs = the LONG dimension (shank face to tip). Example: 3.25+.06/.00 → lbs = 3.25
+- If the print also shows a reduced neck diameter (smaller Ø between the shank body and the cutting tip, e.g. Ø0.475), this confirms it is a reduced-neck tool with both loc AND lbs.
+
+RULE: If you see two unlabeled length dimensions on the cutting end — one roughly equal to 1–2× the cutting diameter, and one much larger — the small one is loc, the large one is lbs. NEVER put the large reach dimension in loc.
+
+VALIDATION: lbs must ALWAYS be greater than loc. If your extracted lbs is less than or equal to your extracted loc, you have them backwards — swap them.
+
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
   "units": "in|mm",
   "tool_type": "endmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
   "tool_dia": <number, cutting diameter — nominal value only, in the print's native units>,
   "flutes": <integer>,
-  "loc": <number, length of cut / flute length / TSC in inches — nominal value only, 0 if unknown>,
-  "lbs": <number, length below shank in inches, 0 if standard>,
+  "loc": <number, FLUTED CUTTING LENGTH ONLY — the SHORT dimension at the tip (e.g. 0.625). NEVER the long reach. 0 if unknown>,
+  "lbs": <number, REACH / length below shank — the LONG dimension from shank step to tip on reduced-neck tools (e.g. 3.25). 0 if no neck>,
   "helix_angle": <integer degrees, 0 if not shown>,
   "corner_condition": "square|corner_radius|ball",
   "corner_radius": <number in inches, 0 if square>,
@@ -3375,6 +3392,15 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
           );
         }
         extracted._converted_from_mm = true;
+      }
+
+      // Safety: lbs must always be >= loc — if reversed, swap them
+      const eLoc = typeof extracted.loc === "number" ? extracted.loc : 0;
+      const eLbs = typeof extracted.lbs === "number" ? extracted.lbs : 0;
+      if (eLbs > 0 && eLoc > 0 && eLbs < eLoc) {
+        console.log(`LOC/LBS swap detected: loc=${eLoc} lbs=${eLbs} — swapping`);
+        extracted.loc = eLbs;
+        extracted.lbs = eLoc;
       }
 
       return res.json({ ok: true, extracted });

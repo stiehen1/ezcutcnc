@@ -1192,7 +1192,7 @@ export default function Mentor() {
       // Map extracted fields to form — only set fields that have real values
       setForm((p) => {
         const next = { ...p };
-        if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(String(e.tool_dia)); }
+        if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(e.tool_dia.toFixed(3)); }
         if (e.flutes > 0) next.flutes = e.flutes;
         if (e.loc > 0) { next.loc = e.loc; setLocText(String(e.loc)); }
         if (e.lbs > 0) {
@@ -1214,7 +1214,7 @@ export default function Mentor() {
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
-        if (e.shank_dia > 0) next.shank_dia = e.shank_dia;
+        if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); }
         if (e.coating) next.coating = e.coating;
         if (e.keyseat_arbor_dia > 0) next.keyseat_arbor_dia = e.keyseat_arbor_dia;
         if (e.dovetail_angle > 0) next.dovetail_angle = e.dovetail_angle;
@@ -1764,6 +1764,7 @@ export default function Mentor() {
   const [toolDiaText, setToolDiaText] = React.useState("");
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
+  const [shankDiaText, setShankDiaText] = React.useState("");
   const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
   const [machiningTipsOpen, setMachiningTipsOpen] = React.useState(false);
   const [stepReqOpen, setStepReqOpen] = React.useState(false);
@@ -2073,6 +2074,7 @@ export default function Mentor() {
     setLocText(Number(sku.loc_in).toFixed(3));
     setStickoutText(defaultStickout != null ? defaultStickout.toFixed(3) : "");
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
+    setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
     if (isChamfer) {
       setChamferTipDiaText(sku.tip_diameter ? Number(sku.tip_diameter).toFixed(4) : "");
@@ -5858,90 +5860,132 @@ ${stabSection}
             </div>
           )}
 
-          <div className="grid gap-3" style={{ gridTemplateColumns: form.tool_type === "chamfer_mill" ? "4rem 1fr 1fr" : "4rem 1fr 1fr 1fr" }}>
-            <div className="space-y-2">
-              <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
-              <Input
-                type="number"
-                step="1"
-                className="no-spinners"
-                value={form.flutes || ""}
-                onChange={onNum("flutes")}
-              />
-            </div>
-            <div className="space-y-2">
-              <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia (in)", "Cut Dia (mm)")}</FieldLabel>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="no-spinners"
-                value={toolDiaText}
-                onChange={(e) => setToolDiaText(e.target.value)}
-                onFocus={() => {
-                  if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3));
-                }}
-                onBlur={() => {
-                  const n = parseDim(toolDiaText);
-                  if (Number.isFinite(n) && n > 0) {
-                    const stored = metric ? n / 25.4 : n;
-                    setForm((p) => ({ ...p, tool_dia: stored }));
-                    setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
-                  } else {
-                    setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3)) : "");
-                  }
-                }}
-              />
-            </div>
-            {<div className="space-y-2">
-              <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC (in)", "LOC (mm)")}</FieldLabel>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="no-spinners"
-                value={locText}
-                onChange={(e) => setLocText(e.target.value)}
-                onFocus={() => {
-                  if (form.loc) setLocText(metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3));
-                }}
-                onBlur={() => {
-                  const n = parseDim(locText);
-                  if (Number.isFinite(n) && n > 0) {
-                    const stored = metric ? n / 25.4 : n;
-                    setForm((p) => ({ ...p, loc: stored }));
-                    setLocText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
-                  } else {
-                    setLocText(form.loc ? (metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3)) : "");
-                  }
-                }}
-              />
-            </div>}
-            {form.tool_type !== "chamfer_mill" && form.lbs > 0 && <div className="space-y-2">
-              <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>{UL("LBS (in)", "LBS (mm)")}</FieldLabel>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="no-spinners"
-                value={lbsText}
-                onChange={(e) => setLbsText(e.target.value)}
-                onFocus={() => {
-                  if (form.lbs) setLbsText(metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3));
-                }}
-                onBlur={() => {
-                  const n = parseDim(lbsText);
-                  if (Number.isFinite(n) && n > 0) {
-                    const stored = metric ? n / 25.4 : n;
-                    setForm((p) => ({ ...p, lbs: stored }));
-                    setLbsText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
-                  } else if (!lbsText.trim() || lbsText.trim() === "0") {
-                    setForm((p) => ({ ...p, lbs: 0 }));
-                    setLbsText("");
-                  } else {
-                    setLbsText(form.lbs ? (metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3)) : "");
-                  }
-                }}
-              />
-            </div>}
-          </div>
+          {/* Tool geometry — single row: Flutes / Cut Dia / LOC / LBS / OAL */}
+          {(() => {
+            const showLbs = form.tool_type !== "chamfer_mill" && (form.lbs > 0 || pdfExtracted);
+            const showOal = pdfExtracted && pdfOal > 0;
+            return (
+              <div className="flex gap-2">
+                <div className="space-y-2" style={{ flex: "0 0 2.8rem" }}>
+                  <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
+                  <Input
+                    type="number"
+                    step="1"
+                    className="no-spinners"
+                    value={form.flutes || ""}
+                    onChange={onNum("flutes")}
+                  />
+                </div>
+                <div className="space-y-2" style={{ flex: 1 }}>
+                  <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia", "Cut Dia")}</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    value={toolDiaText}
+                    onChange={(e) => setToolDiaText(e.target.value)}
+                    onFocus={() => {
+                      if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(toolDiaText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const stored = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, tool_dia: stored }));
+                        setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                      } else {
+                        setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-2" style={{ flex: 1 }}>
+                  <FieldLabel hint="Shank diameter. When larger than cutting diameter, activates the two-segment cantilever deflection model for reduced-neck tools.">Shank Dia</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    value={shankDiaText}
+                    onChange={(e) => setShankDiaText(e.target.value)}
+                    onFocus={() => {
+                      if (form.shank_dia) setShankDiaText(metric ? (form.shank_dia * 25.4).toFixed(2) : form.shank_dia.toFixed(3));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(shankDiaText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const stored = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, shank_dia: stored }));
+                        setShankDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                      } else if (!shankDiaText.trim() || shankDiaText.trim() === "0") {
+                        setForm((p) => ({ ...p, shank_dia: 0 }));
+                        setShankDiaText("");
+                      } else {
+                        setShankDiaText(form.shank_dia ? (metric ? (form.shank_dia * 25.4).toFixed(2) : form.shank_dia.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-2" style={{ flex: 1 }}>
+                  <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC", "LOC")}</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    value={locText}
+                    onChange={(e) => setLocText(e.target.value)}
+                    onFocus={() => {
+                      if (form.loc) setLocText(metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(locText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const stored = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, loc: stored }));
+                        setLocText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                      } else {
+                        setLocText(form.loc ? (metric ? (form.loc * 25.4).toFixed(2) : form.loc.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>
+                {showLbs && <div className="space-y-2" style={{ flex: 1 }}>
+                  <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>LBS</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    value={lbsText}
+                    onChange={(e) => setLbsText(e.target.value)}
+                    onFocus={() => {
+                      if (form.lbs) setLbsText(metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(lbsText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const stored = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, lbs: stored }));
+                        setLbsText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                      } else if (!lbsText.trim() || lbsText.trim() === "0") {
+                        setForm((p) => ({ ...p, lbs: 0 }));
+                        setLbsText("");
+                      } else {
+                        setLbsText(form.lbs ? (metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>}
+                {showOal && <div className="space-y-2" style={{ flex: 1 }}>
+                  <FieldLabel hint="Overall Length — from print. Reference only; not used in calculations.">OAL</FieldLabel>
+                  <Input
+                    type="text"
+                    className="no-spinners"
+                    value={pdfOal.toFixed(3)}
+                    readOnly
+                  />
+                </div>}
+              </div>
+            );
+          })()}
 
           {/* Chamfer Mill specific fields */}
           {form.tool_type === "chamfer_mill" && (
