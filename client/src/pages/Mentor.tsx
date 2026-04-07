@@ -7693,7 +7693,7 @@ ${stabSection}
       {/* ── DEEP POCKET OUTPUT ─────────────────────────────────────────────── */}
       {form.mode === "deep_pocket" && (dpLoading || dpResult || dpError) && (() => {
         // Helper: render one tool card
-        const renderToolCard = (tool: any, idx: number, total: number, role: "bulk" | "corner_finish") => {
+        const renderToolCard = (tool: any, idx: number, total: number, role: "bulk" | "corner_finish" | "closest_reach") => {
           const phys = dpPhysics[tool.edp];
           const mil = phys?.customer;
           const stab = phys?.stability;
@@ -7754,21 +7754,37 @@ ${stabSection}
               {/* Physics params */}
               {mil ? (
                 <div className="grid grid-cols-4 gap-px mt-2 border-t border-zinc-700/60">
-                  {[
-                    ["RPM", mil.rpm != null ? Math.round(mil.rpm).toLocaleString() : "—"],
-                    ["Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(1) : "—"],
-                    ["IPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—"],
-                    ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
-                    ["WOC", mil.woc_in != null && tool.dia > 0 ? `${((mil.woc_in/tool.dia)*100).toFixed(0)}%` : "—"],
-                    ["DOC", mil.doc_in != null ? `${mil.doc_in.toFixed(3)}"` : "—"],
-                    ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
-                    ["MRR", mil.mrr_in3_min != null ? mil.mrr_in3_min.toFixed(2) : "—"],
-                  ].map(([label, val]) => (
-                    <div key={label} className="flex flex-col items-center py-2 bg-zinc-800/60">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
-                      <span className="text-sm font-bold text-white mt-0.5">{val}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const stabPctEarly = phys?.stability?.deflection_pct ?? null;
+                    // Feed reduction based on stability score
+                    const feedMult = stabPctEarly == null ? 1.0
+                      : stabPctEarly >= 175 ? 0.60
+                      : stabPctEarly >= 130 ? 0.75
+                      : stabPctEarly >= 100 ? 0.85
+                      : 1.0;
+                    const feedReduced = feedMult < 1.0 && mil.feed_ipm != null;
+                    const adjFeed = feedReduced ? mil.feed_ipm * feedMult : mil.feed_ipm;
+                    const adjIpt = feedReduced && mil.adj_fpt != null ? mil.adj_fpt * feedMult
+                      : feedReduced && mil.fpt != null ? mil.fpt * feedMult
+                      : null;
+
+                    return [
+                      ["RPM", mil.rpm != null ? Math.round(mil.rpm).toLocaleString() : "—"],
+                      ["Feed (IPM)", adjFeed != null ? adjFeed.toFixed(1) : "—", feedReduced ? `calc ${mil.feed_ipm.toFixed(1)} → ${Math.round(feedMult*100)}% for stability` : null],
+                      ["IPT (in)", adjIpt != null ? adjIpt.toFixed(5) : mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—"],
+                      ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
+                      ["WOC", mil.woc_in != null && tool.dia > 0 ? `${((mil.woc_in/tool.dia)*100).toFixed(0)}%` : "—"],
+                      ["DOC", mil.doc_in != null ? `${mil.doc_in.toFixed(3)}"` : "—"],
+                      ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
+                      ["MRR", mil.mrr_in3_min != null ? (mil.mrr_in3_min * feedMult).toFixed(2) : "—"],
+                    ].map(([label, val, note]) => (
+                      <div key={label} className="flex flex-col items-center py-2 bg-zinc-800/60">
+                        <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
+                        <span className={`text-sm font-bold mt-0.5 ${note ? "text-amber-400" : "text-white"}`}>{val}</span>
+                        {note && <span className="text-[8px] text-amber-500 leading-tight text-center px-0.5">{note}</span>}
+                      </div>
+                    ));
+                  })()}
                 </div>
               ) : (
                 <div className="px-4 py-2 text-[11px] text-zinc-500 border-t border-zinc-700/60">
