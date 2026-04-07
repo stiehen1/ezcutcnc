@@ -3925,8 +3925,22 @@ ${catalogList}`
       `, [corner_radius]);
       const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
 
-      // ── 3. Pick optimal diameters ────────────────────────────────────────────
+      // ── 3. Pick optimal diameters — target respectable stability, not max size ─
+      // Strategy: find the largest diameter where the final tool's L/D stays within
+      // a stability target. If nothing meets the target, fall back to largest available.
+      // L/D target: HEM 5×D, Traditional 4×D (tighter because higher radial force)
+      const ldTarget = cutting_style === "hem" ? 5.0 : 4.0;
+
       const findBestDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
+        // First pass: largest dia where reach/dia <= ldTarget (stable choice)
+        for (const row of cov) {
+          const dia = parseFloat(row.cutting_diameter_in);
+          if (dia > maxDia) continue;
+          if (parseFloat(row.max_reach) < target_depth) continue;
+          const ld = target_depth / dia;
+          if (ld <= ldTarget) return row;
+        }
+        // Fallback: largest dia that reaches (no good L/D option in catalog)
         for (const row of cov) {
           const dia = parseFloat(row.cutting_diameter_in);
           if (dia > maxDia) continue;
