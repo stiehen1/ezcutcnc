@@ -7375,7 +7375,7 @@ ${stabSection}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Inside corner radius of the finished pocket. Drives maximum tool diameter via the 75% engagement rule — tool diameter must be ≤ 75% of corner diameter to avoid full-engagement force spikes.">Corner Radius (in)</FieldLabel>
+                  <FieldLabel hint="Inside corner radius of the finished pocket. Drives maximum tool diameter via the 75% engagement rule — tool diameter must be ≤ 75% of corner diameter to avoid full-engagement force spikes.">Wall-to-Wall Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.375"
                     value={form.dp_corner_radius > 0 ? form.dp_corner_radius.toFixed(4) : ""}
