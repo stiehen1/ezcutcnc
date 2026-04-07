@@ -303,6 +303,7 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS country TEXT`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip TEXT`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS postal TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ`);
   } catch (err: any) {
     console.warn("[Leads migration]", err?.message ?? err);
   }
@@ -1966,9 +1967,12 @@ export async function registerRoutes(
       );
       // Send registration notification to Scott for new users only (not duplicates)
       if (isNew.rowCount && isNew.rowCount > 0) {
+        const newId = isNew.rows[0]?.id;
         const smtpUser = process.env.SMTP_USER || "";
         const smtpPass = process.env.SMTP_PASS || "";
-        if (smtpUser && smtpPass) {
+        if (!smtpUser || !smtpPass) {
+          console.warn(`[Register] *** SMTP NOT CONFIGURED — new registration NOT emailed: ${name ?? "—"} <${email}> from ${[geo.city, geo.region, geo.country].filter(Boolean).join(", ") || "Unknown"} (leads.id=${newId})`);
+        } else {
           try {
             const transporter = nodemailer.createTransport({
               host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
@@ -1990,8 +1994,12 @@ export async function registerRoutes(
                 `— CoreCutCNC App`,
               ].join("\n"),
             });
+            // Mark as notified so we can audit gaps
+            if (newId) {
+              await pool.query(`UPDATE leads SET notified_at = NOW() WHERE id = $1`, [newId]);
+            }
           } catch (mailErr: any) {
-            console.warn("[Register] Notification email failed:", mailErr?.message);
+            console.warn(`[Register] *** EMAIL SEND FAILED for new registration: ${name ?? "—"} <${email}> (leads.id=${newId}) — ${mailErr?.message}`);
           }
         }
       }
@@ -1999,6 +2007,23 @@ export async function registerRoutes(
     } catch (err: any) {
       console.warn("[Register]", err?.message);
       res.json({ ok: true }); // never block the user
+    }
+  });
+
+  // ── Admin: registrations that were never emailed to Scott ────────────────
+  app.get("/api/admin/missed-registrations", async (req, res) => {
+    try {
+      const { pool } = await import("./db");
+      const result = await pool.query(
+        `SELECT id, name, email, city, region, country, created_at
+         FROM leads
+         WHERE operation = 'tool_request'
+           AND notified_at IS NULL
+         ORDER BY created_at DESC`
+      );
+      res.json({ count: result.rowCount, rows: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 
@@ -3089,7 +3114,7 @@ export async function registerRoutes(
     if (token !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
     const { pool } = await import("./db");
 
-    const [users, activity, operations] = await Promise.all([
+    const [users, activity, operations, registrations] = await Promise.all([
       // Users: email, signup date, save count, last active
       pool.query(`
         SELECT
@@ -3120,14 +3145,23 @@ export async function registerRoutes(
         GROUP BY operation
         ORDER BY count DESC
       `),
+      // All registrations from welcome modal (leads table)
+      pool.query(`
+        SELECT id, name, email, city, region, country, postal, created_at, notified_at
+        FROM leads
+        WHERE operation = 'tool_request'
+        ORDER BY created_at DESC
+      `),
     ]);
 
     res.json({
       users: users.rows,
       activity: activity.rows,
       operations: operations.rows,
+      registrations: registrations.rows,
       totals: {
         users: users.rows.length,
+        registrations: registrations.rowCount ?? 0,
         saves: activity.rows.length > 0 ? (await pool.query(`SELECT COUNT(*) FROM toolbox_items`)).rows[0].count : 0,
       },
     });
