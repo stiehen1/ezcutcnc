@@ -2368,10 +2368,17 @@ export default function Mentor() {
             const bandDepth = tool.depth_band_to - tool.depth_band_from;
             const docIn = Math.min(bandDepth, tool.loc_in);
             const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
-            // WOC — HEM uses med preset for material, Traditional uses med preset
             const isHem = toolMode === "hem";
             // L/D based stickout estimate if not provided
             const soEst = form.stickout > 0 ? form.stickout : tool.reach_in + tool.dia * 0.33;
+            const ldEst = tool.dia > 0 ? soEst / tool.dia : 3;
+            // WOC scales down with L/D — long reach RN tools must reduce radial engagement
+            // to control deflection regardless of cutting style:
+            //   HEM:         10% standard, 6% at L/D > 6
+            //   Traditional: 40% standard, 25% at L/D > 4, 15% at L/D > 6
+            const wocPct = isHem
+              ? (ldEst > 6 ? 6 : 10)
+              : (ldEst > 6 ? 15 : ldEst > 4 ? 25 : 40);
             const physResult = await mentor.mutateAsync({
               ...form,
               mode: toolMode as any,
@@ -2387,7 +2394,7 @@ export default function Mentor() {
               geometry: tool.geometry as any,
               tool_series: tool.series || "",
               doc_xd: docXd,
-              woc_pct: isHem ? 10 : 40, // reasonable starting WOC per mode
+              woc_pct: wocPct,
               edp: tool.edp,
               operation: "milling" as any,
               debug: false,
@@ -7613,6 +7620,11 @@ ${stabSection}
                   {tool.is_rn && <span className="ml-2 text-indigo-400 text-[10px]">RN reach {tool.reach_in.toFixed(3)}"  ·  LOC {tool.loc_in.toFixed(3)}"</span>}
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
+                {tool.is_rn && ldRatio != null && ldRatio > 4 && (
+                  <p className="text-[10px] text-amber-400 mt-0.5">
+                    Long-reach tool — reduce WOC and run conservatively. Deflection scales with L³.
+                  </p>
+                )}
               </div>
 
               {/* Physics params */}
@@ -7753,7 +7765,13 @@ ${stabSection}
                 <div className="space-y-2 mt-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Corner Finishing Tool</p>
                   {renderToolCard(dpResult.corner_tool, 0, 1, "corner_finish")}
-                  {parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
+                  {dpResult.corner_oversize && dpResult.corner_oversize_note && (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 mt-1">
+                      <p className="text-[10px] font-semibold text-amber-400 mb-0.5">⚠ Closest Available — Oversized for Corner</p>
+                      <p className="text-[10px] text-amber-300">{dpResult.corner_oversize_note}</p>
+                    </div>
+                  )}
+                  {!dpResult.corner_oversize && parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
                     <p className="text-[10px] text-indigo-300 px-1">Ball nose — corner radius matched exactly. Step-over controls scallop height. Leave 0.008" stock from bulk sequence.</p>
                   )}
                 </div>
