@@ -7714,8 +7714,8 @@ ${stabSection}
         );
       })()}
 
-      {/* OUTPUT CARD */}
-      <Card className="rounded-2xl">
+      {/* OUTPUT CARD — hidden for deep pocket (per-tool cards shown above instead) */}
+      {form.mode !== "deep_pocket" && <Card className="rounded-2xl">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recommendation</CardTitle>
@@ -10027,7 +10027,7 @@ ${stabSection}
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Optimal Tool Recommendation Card — between results and stability */}
       {optimalLoading && (
