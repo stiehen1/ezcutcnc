@@ -1167,6 +1167,39 @@ export default function Mentor() {
   const [dpError, setDpError] = React.useState<string | null>(null);
   const [dpDepthText, setDpDepthText] = React.useState("");
   const [dpCornerText, setDpCornerText] = React.useState("");
+  const [dpPreDrillText, setDpPreDrillText] = React.useState("");
+  const [dpLengthText, setDpLengthText] = React.useState("");
+  const [dpWidthText, setDpWidthText] = React.useState("");
+
+  // ── Quote request modal ───────────────────────────────────────────────────
+  const [quoteModal, setQuoteModal] = React.useState(false);
+  const [quoteEmail, setQuoteEmail] = React.useState("");
+  const [quoteZip, setQuoteZip] = React.useState("");
+  const [quoteCity, setQuoteCity] = React.useState("");
+  const [quoteState, setQuoteState] = React.useState("");
+  const [quoteZipStatus, setQuoteZipStatus] = React.useState<"idle" | "loading" | "found" | "error">("idle");
+
+  const lookupQuoteZip = React.useCallback(async (zip: string) => {
+    if (zip.length !== 5 || !/^\d{5}$/.test(zip)) return;
+    setQuoteZipStatus("loading");
+    try {
+      const r = await fetch(`https://api.zippopotam.us/us/${zip}`);
+      if (!r.ok) throw new Error("not found");
+      const data = await r.json();
+      const place = data.places?.[0];
+      if (place) {
+        setQuoteCity(place["place name"] ?? "");
+        setQuoteState(place["state abbreviation"] ?? "");
+        setQuoteZipStatus("found");
+      } else {
+        setQuoteZipStatus("error");
+      }
+    } catch {
+      setQuoteCity("");
+      setQuoteState("");
+      setQuoteZipStatus("error");
+    }
+  }, []);
   // Per-tool physics results keyed by edp
   const [dpPhysics, setDpPhysics] = React.useState<Record<string, any>>({});
 
@@ -1383,6 +1416,9 @@ export default function Mentor() {
     // Deep Pocket / Thin Wall strategy
     dp_target_depth: 0,
     dp_corner_radius: 0,
+    dp_closed_pocket: false,
+    dp_pocket_length: 0,
+    dp_pocket_width: 0,
     dp_pre_drill: false,
     dp_pre_drill_dia: 0,
     dp_cutting_style: "hem" as "hem" | "traditional",
@@ -2330,6 +2366,9 @@ export default function Mentor() {
             corner_radius: form.dp_corner_radius,
             cutting_style: form.dp_cutting_style,
             thin_wall: form.dp_thin_wall,
+            closed_pocket: form.dp_closed_pocket,
+            pocket_length: form.dp_pocket_length || 0,
+            pocket_width: form.dp_pocket_width || 0,
             pre_drill_dia: form.dp_pre_drill ? (form.dp_pre_drill_dia || 0) : 0,
             material: form.material,
             iso_category: isoCategory,
@@ -7422,34 +7461,114 @@ ${stabSection}
                 <FieldLabel hint="Turn on when milling next to a thin wall condition. Adds a wall-approach WOC taper schedule to each tool card so the programmer knows to reduce radial engagement as the tool nears the wall. Also suppresses the feed mill advisory — feed mills are open-zone tools only."> </FieldLabel>
               </div>
 
-              {/* Pre-drill toggle */}
+              {/* Closed pocket toggle */}
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
                   <button type="button"
-                    onClick={() => setForm(p => ({ ...p, dp_pre_drill: !p.dp_pre_drill, dp_pre_drill_dia: p.dp_pre_drill ? 0 : p.dp_pre_drill_dia }))}
+                    onClick={() => setForm(p => {
+                      const closing = !p.dp_closed_pocket;
+                      return { ...p, dp_closed_pocket: closing, dp_pre_drill: closing ? true : false, dp_pre_drill_dia: closing ? p.dp_pre_drill_dia : 0 };
+                    })}
                     className="flex items-center gap-2 text-xs font-medium transition-colors"
-                    style={{ color: form.dp_pre_drill ? "#38bdf8" : "#71717a" }}>
+                    style={{ color: form.dp_closed_pocket ? "#38bdf8" : "#71717a" }}>
                     <div className="w-8 h-4 rounded-full border flex items-center transition-all px-0.5"
-                      style={{ borderColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", backgroundColor: form.dp_pre_drill ? "rgba(56,189,248,0.2)" : "transparent" }}>
+                      style={{ borderColor: form.dp_closed_pocket ? "#38bdf8" : "#52525b", backgroundColor: form.dp_closed_pocket ? "rgba(56,189,248,0.2)" : "transparent" }}>
                       <div className="w-3 h-3 rounded-full transition-all"
-                        style={{ backgroundColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", marginLeft: form.dp_pre_drill ? "auto" : "0" }} />
+                        style={{ backgroundColor: form.dp_closed_pocket ? "#38bdf8" : "#52525b", marginLeft: form.dp_closed_pocket ? "auto" : "0" }} />
                     </div>
-                    Pre-Drilled Entry Hole
+                    Closed Pocket
                   </button>
-                  <FieldLabel hint="Turn on if a hole was pre-drilled at the pocket entry point. If the drill diameter is ≥ tool diameter, the endmill drops straight in — no helical ramp needed. If smaller, a reduced-diameter helical entry is used. Without a pre-drill, a standard helical entry is required."> </FieldLabel>
+                  <FieldLabel hint="Turn on when the pocket is fully enclosed — no open edge for the tool to enter from. Entry must be helical ramp or straight drop into a pre-drill. Pocket length and width limit the largest tool that fits, which the sequencer uses to optimize L/D stability from the start."> </FieldLabel>
                 </div>
-                {form.dp_pre_drill && (
-                  <div className="space-y-2 pl-2">
-                    <FieldLabel hint="Diameter of the pre-drilled hole. If ≥ tool diameter, tool drops straight in. If smaller, a reduced-diameter helical entry is used.">Drill Dia (in)</FieldLabel>
-                    <Input type="text" inputMode="decimal" className="no-spinners"
-                      placeholder="e.g. 0.500"
-                      value={form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia.toFixed(4) : ""}
-                      onChange={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_pre_drill_dia: n })); else if (!e.target.value.trim()) setForm(p => ({ ...p, dp_pre_drill_dia: 0 })); }}
-                      onBlur={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_pre_drill_dia: n })); }}
-                    />
+
+                {/* Pocket dimensions — only for closed pocket */}
+                {form.dp_closed_pocket && (
+                  <div className="pl-2 space-y-2">
+                    <p className="text-[10px] text-zinc-400">Pocket dimensions cap the largest tool that physically fits, giving the sequencer an accurate L/D ceiling.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <FieldLabel hint="Interior length of the closed pocket (longest dimension). Used to determine the maximum tool diameter that can fit and maneuver.">Pocket Length (in)</FieldLabel>
+                        <Input type="text" inputMode="decimal" className="no-spinners"
+                          placeholder="e.g. 2.000"
+                          value={dpLengthText}
+                          onChange={e => { setDpLengthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pocket_length: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                          onBlur={() => { if (form.dp_pocket_length > 0) setDpLengthText(form.dp_pocket_length.toFixed(3)); else setDpLengthText(""); }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <FieldLabel hint="Interior width of the closed pocket (shortest dimension). The sequencer uses min(length, width) × 0.85 as the hard tool diameter ceiling.">Pocket Width (in)</FieldLabel>
+                        <Input type="text" inputMode="decimal" className="no-spinners"
+                          placeholder="e.g. 1.000"
+                          value={dpWidthText}
+                          onChange={e => { setDpWidthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pocket_width: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                          onBlur={() => { if (form.dp_pocket_width > 0) setDpWidthText(form.dp_pocket_width.toFixed(3)); else setDpWidthText(""); }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pre-drill — required for closed pocket */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 text-xs font-medium" style={{ color: "#38bdf8", opacity: 0.6 }}>
+                          <div className="w-8 h-4 rounded-full border flex items-center px-0.5"
+                            style={{ borderColor: "#38bdf8", backgroundColor: "rgba(56,189,248,0.2)" }}>
+                            <div className="w-3 h-3 rounded-full ml-auto" style={{ backgroundColor: "#38bdf8" }} />
+                          </div>
+                          Pre-Drilled Entry Hole <span className="text-[10px] text-zinc-500 ml-1">(required for closed pocket)</span>
+                        </div>
+                      </div>
+                      <div className="pl-2 space-y-1">
+                        <FieldLabel hint="Diameter of the pre-drilled hole. The sequencer will also show the minimum pre-drill size needed based on the largest recommended bulk tool. If ≥ tool diameter, tool drops straight in. If smaller, a reduced-diameter helical entry is used.">Drill Dia (in) — optional, leave blank to use sequencer recommendation</FieldLabel>
+                        <Input type="text" inputMode="decimal" className="no-spinners"
+                          placeholder="leave blank for auto"
+                          value={dpPreDrillText}
+                          onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                          onBlur={() => {
+                            const pocketMax = form.dp_pocket_length > 0 && form.dp_pocket_width > 0 ? Math.min(form.dp_pocket_length, form.dp_pocket_width) : Infinity;
+                            const capped = form.dp_pre_drill_dia > 0 ? Math.min(form.dp_pre_drill_dia, pocketMax) : 0;
+                            if (capped > 0) { setDpPreDrillText(capped.toFixed(4)); setForm(p => ({ ...p, dp_pre_drill_dia: capped })); } else setDpPreDrillText("");
+                          }}
+                        />
+                        {form.dp_pocket_length > 0 && form.dp_pocket_width > 0 && (
+                          <p className="text-[10px] text-zinc-500">Max: {Math.min(form.dp_pocket_length, form.dp_pocket_width).toFixed(3)}" (pocket width)</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Pre-drill toggle — open pocket only */}
+              {!form.dp_closed_pocket && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <button type="button"
+                      onClick={() => setForm(p => ({ ...p, dp_pre_drill: !p.dp_pre_drill, dp_pre_drill_dia: p.dp_pre_drill ? 0 : p.dp_pre_drill_dia }))}
+                      className="flex items-center gap-2 text-xs font-medium transition-colors"
+                      style={{ color: form.dp_pre_drill ? "#38bdf8" : "#71717a" }}>
+                      <div className="w-8 h-4 rounded-full border flex items-center transition-all px-0.5"
+                        style={{ borderColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", backgroundColor: form.dp_pre_drill ? "rgba(56,189,248,0.2)" : "transparent" }}>
+                        <div className="w-3 h-3 rounded-full transition-all"
+                          style={{ backgroundColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", marginLeft: form.dp_pre_drill ? "auto" : "0" }} />
+                      </div>
+                      Pre-Drilled Entry Hole
+                    </button>
+                    <FieldLabel hint="Optional for open pockets. Turn on if a hole was pre-drilled at the pocket entry point. For open pockets, tools can sweep in from the open edge — a pre-drill is not required but can be used if preferred."> </FieldLabel>
+                  </div>
+                  {form.dp_pre_drill && (
+                    <div className="space-y-2 pl-2">
+                      <FieldLabel hint="Diameter of the pre-drilled hole. If ≥ tool diameter, tool drops straight in. If smaller, a reduced-diameter helical entry is used.">Drill Dia (in)</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners"
+                        placeholder="e.g. 0.500"
+                        value={dpPreDrillText}
+                        onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                        onBlur={() => { if (form.dp_pre_drill_dia > 0) setDpPreDrillText(form.dp_pre_drill_dia.toFixed(4)); else setDpPreDrillText(""); }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
 
@@ -7571,10 +7690,12 @@ ${stabSection}
           const ldLabel = !ldRatio ? "" : ldRatio <= 3 ? "Good" : ldRatio <= 5 ? "Moderate" : "High";
 
           // Entry label
-          const entryLabel = tool.entry?.type === "straight_drop"
+          const entryLabel = tool.entry?.type === "sweep_in"
+            ? "Sweep-in from open edge — no ramp needed"
+            : tool.entry?.type === "straight_drop"
             ? "Straight drop — pre-drill clears tool"
             : tool.entry?.type === "helical"
-            ? `Helical  ·  ⌀${tool.entry.helix_dia}"  ·  ${tool.entry.angle_deg}°`
+            ? `Helical ramp  ·  ⌀${tool.entry.helix_dia}"  ·  ${tool.entry.angle_deg}°`
             : tool.entry?.type === "plunge_to_prior_depth"
             ? "Plunge to prior band depth"
             : tool.entry?.type === "plunge_from_bulk_path"
@@ -7588,11 +7709,11 @@ ${stabSection}
             <div key={tool.edp} className="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700"
-                style={{ backgroundColor: role === "corner_finish" ? "rgba(99,102,241,0.15)" : "rgba(249,115,22,0.10)" }}>
+                style={{ backgroundColor: role === "corner_finish" ? "rgba(99,102,241,0.15)" : role === "closest_reach" ? "rgba(249,115,22,0.15)" : "rgba(249,115,22,0.10)" }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest"
-                    style={{ color: role === "corner_finish" ? "#a5b4fc" : "#fb923c" }}>
-                    {role === "corner_finish" ? "Corner Finishing Tool" : `Tool ${idx + 1} of ${total}`}
+                    style={{ color: role === "corner_finish" ? "#a5b4fc" : role === "closest_reach" ? "#fb923c" : "#fb923c" }}>
+                    {role === "corner_finish" ? "Corner Finishing Tool" : role === "closest_reach" ? "Closest Reach Tool" : `Tool ${idx + 1} of ${total}`}
                   </span>
                   <span className="text-xs font-semibold text-white">EDP# {tool.edp}</span>
                 </div>
@@ -7733,14 +7854,6 @@ ${stabSection}
               {dpError && (
                 <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{dpError}</div>
               )}
-              {dpResult?.needs_special && (
-                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
-                  <p className="font-semibold mb-1">⚠ Standard products cannot reach this depth</p>
-                  <p className="text-xs">{dpResult.special_note}</p>
-                  <button className="mt-2 text-xs underline text-amber-400 hover:text-amber-200">Contact Core Cutter for a quoted special →</button>
-                </div>
-              )}
-
               {/* Bulk sequence */}
               {(dpResult?.bulk_tools ?? []).length > 0 && (
                 <div className="space-y-2">
@@ -7754,28 +7867,133 @@ ${stabSection}
               {/* Corner finish */}
               {dpResult?.corner_tool && (
                 <div className="space-y-2 mt-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Corner Finishing Tool</p>
-                  {renderToolCard(dpResult.corner_tool, 0, 1, "corner_finish")}
-                  {dpResult.corner_oversize && dpResult.corner_oversize_note && (
-                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 mt-1">
-                      <p className="text-[10px] font-semibold text-amber-400 mb-0.5">⚠ Closest Available — Oversized for Corner</p>
-                      <p className="text-[10px] text-amber-300">{dpResult.corner_oversize_note}</p>
-                    </div>
-                  )}
-                  {!dpResult.corner_oversize && parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
-                    <p className="text-[10px] text-indigo-300 px-1">Ball nose — corner radius matched exactly. Step-over controls scallop height. Leave 0.008" stock from bulk sequence.</p>
-                  )}
+                  {renderToolCard(dpResult.corner_tool, 0, 1, dpResult.corner_oversize ? "closest_reach" : "corner_finish")}
                 </div>
               )}
 
-              {/* Feed mill advisory */}
-              {dpResult?.feedmill_eligible && (
-                <div className="rounded-xl border border-zinc-600 bg-zinc-800/40 p-3 mt-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Optional — Feed Mill Bulk Removal</p>
-                  <p className="text-xs text-zinc-300">An axial feed mill can replace Tool 1 in the bulk sequence for significantly faster open-zone stock removal in steel/cast iron.</p>
-                  <p className="text-[10px] text-amber-400 mt-1">⚠ Special order only — no standard EDP. Contact Core Cutter for quote.</p>
-                </div>
-              )}
+              {/* ── Notes & Advisories ── consolidated block */}
+              {dpResult && (() => {
+                const notes: { color: "amber" | "sky" | "indigo" | "zinc"; title: string; body: React.ReactNode; action?: React.ReactNode }[] = [];
+
+                if (dpResult.needs_special) {
+                  notes.push({
+                    color: "amber",
+                    title: "Standard products cannot reach this depth",
+                    body: dpResult.special_note,
+                    action: <button onClick={() => setQuoteModal(true)} className="text-xs underline text-amber-400 hover:text-amber-200 mt-1 block">Contact Core Cutter for a quoted special →</button>,
+                  });
+                }
+
+                if (dpResult.closed_pocket && dpResult.required_pre_drill_dia) {
+                  notes.push({
+                    color: "sky",
+                    title: "Closed Pocket — Pre-Drill Required",
+                    body: <>
+                      Pre-drill to minimum <span className="font-semibold text-white">⌀{dpResult.required_pre_drill_dia.toFixed(4)}"</span> before starting the sequence. This clears the largest bulk tool ({dpResult.constraints.bulk_dia ? `⌀${dpResult.constraints.bulk_dia}"` : "selected"}) and allows helical ramp or straight-drop entry.
+                      {form.dp_pre_drill_dia > 0 && form.dp_pre_drill_dia < dpResult.required_pre_drill_dia && (
+                        <span className="block mt-1 text-amber-400">⚠ Your specified pre-drill (⌀{form.dp_pre_drill_dia.toFixed(4)}") is smaller than the largest bulk tool — helical entry will be used for that tool.</span>
+                      )}
+                    </>,
+                  });
+                }
+
+                if (dpResult.corner_oversize && dpResult.corner_oversize_note) {
+                  notes.push({
+                    color: "amber",
+                    title: "Cannot Finish Corners to Print",
+                    body: dpResult.corner_oversize_note,
+                  });
+                }
+
+                if (!dpResult.corner_oversize && dpResult.constraints.corner_dia && parseFloat(dpResult.constraints.corner_dia) < 0.250) {
+                  notes.push({
+                    color: "indigo",
+                    title: "Ball Nose Corner Match",
+                    body: "Corner radius matched exactly. Step-over controls scallop height. Leave 0.008\" stock from bulk sequence.",
+                  });
+                }
+
+                if (dpResult.feedmill_eligible) {
+                  notes.push({
+                    color: "zinc",
+                    title: "Optional — Feed Mill Bulk Removal",
+                    body: "An axial feed mill can replace Tool 1 in the bulk sequence for significantly faster open-zone stock removal in steel/cast iron. Special order only — contact Core Cutter for quote.",
+                  });
+                }
+
+                // DOC = LOC per pass explanation — shown once, based on first bulk tool
+                const firstBulk = dpResult.bulk_tools?.[0];
+                if (firstBulk) {
+                  const isRn = firstBulk.lbs_in > 0;
+                  notes.push({
+                    color: "zinc",
+                    title: "DOC = Full LOC Per Pass",
+                    body: isRn
+                      ? `On reduced-neck (RN) tools, LOC is the cutting edge length (${firstBulk.loc_in?.toFixed(3)}") and reach is the total extension (${firstBulk.reach_in?.toFixed(3)}"). Program your axial step-down to the LOC — not the reach. Multiple passes step down to full band depth.`
+                      : `Each axial pass cuts the full LOC depth (${firstBulk.loc_in?.toFixed(3)}"). Step down by LOC each pass until the full depth band is covered.`,
+                  });
+                }
+
+                if (!notes.length) return null;
+
+                const borderColor = { amber: "border-amber-500/40", sky: "border-sky-500/40", indigo: "border-indigo-500/40", zinc: "border-zinc-600" };
+                const bgColor    = { amber: "bg-amber-500/10",    sky: "bg-sky-500/10",    indigo: "bg-indigo-500/10",    zinc: "bg-zinc-800/40" };
+                const titleColor = { amber: "text-amber-400",     sky: "text-sky-400",     indigo: "text-indigo-400",     zinc: "text-zinc-400" };
+                const bodyColor  = { amber: "text-amber-200",     sky: "text-sky-200",     indigo: "text-indigo-300",     zinc: "text-zinc-300" };
+
+                return (
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-3 space-y-3 mt-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Notes &amp; Advisories</p>
+                    {notes.map((n, i) => (
+                      <div key={i} className={`rounded-lg border ${borderColor[n.color]} ${bgColor[n.color]} px-3 py-2`}>
+                        <p className={`text-[10px] font-semibold ${titleColor[n.color]} mb-0.5`}>⚑ {n.title}</p>
+                        <p className={`text-[10px] ${bodyColor[n.color]}`}>{n.body}</p>
+                        {n.action}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* ── Core Cutter Tool Needs Summary ── */}
+              {dpResult && (() => {
+                const allTools: any[] = [
+                  ...(dpResult.bulk_tools ?? []),
+                  ...(dpResult.corner_tool ? [dpResult.corner_tool] : []),
+                ];
+                if (!allTools.length) return null;
+
+                // Deduplicate by EDP — same tool may appear in multiple roles
+                const seen = new Set<string>();
+                const unique = allTools.filter(t => {
+                  if (seen.has(t.edp)) return false;
+                  seen.add(t.edp);
+                  return true;
+                });
+
+                return (
+                  <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 mt-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-3">Core Cutter Tool Needs Summary</p>
+                    <div className="space-y-2">
+                      {unique.map((tool, i) => {
+                        const role = dpResult.bulk_tools?.find((b: any) => b.edp === tool.edp)
+                          ? (dpResult.corner_tool?.edp === tool.edp ? "Roughing + Finishing Tool" : "Roughing Tool")
+                          : "Finishing Tool";
+                        return (
+                          <div key={tool.edp} className="flex items-start gap-3 border-t border-indigo-500/20 pt-2 first:border-0 first:pt-0">
+                            <span className="text-[10px] font-bold text-indigo-300 w-4 shrink-0">#{i + 1}</span>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold text-zinc-300">{role}</p>
+                              <p className="text-xs font-bold text-white">EDP# {tool.edp}</p>
+                              <p className="text-[10px] text-zinc-400 truncate">{tool.description}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         );
@@ -11477,6 +11695,82 @@ ${stabSection}
       </div>
     )}
 
+    {/* ── Quote Request Modal ─────────────────────────────────────────────── */}
+    {quoteModal && dpResult && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+        onClick={() => setQuoteModal(false)}>
+        <div className="relative bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 space-y-4"
+          onClick={e => e.stopPropagation()}>
+          <button onClick={() => setQuoteModal(false)}
+            className="absolute top-3 right-4 text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-0.5">Request a Quote</p>
+            <p className="text-sm text-zinc-300">Core Cutter will follow up with options for your deep-reach application.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 uppercase tracking-widest">Your Email</label>
+              <input type="email" placeholder="you@company.com"
+                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                value={quoteEmail}
+                onChange={e => setQuoteEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1 space-y-1">
+                <label className="text-[10px] text-zinc-400 uppercase tracking-widest">City</label>
+                <input type="text"
+                  placeholder={quoteZipStatus === "loading" ? "Looking up…" : quoteZipStatus === "error" ? "Not found" : ""}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                  value={quoteCity}
+                  onChange={e => setQuoteCity(e.target.value)}
+                />
+              </div>
+              <div className="w-20 space-y-1">
+                <label className="text-[10px] text-zinc-400 uppercase tracking-widest">State</label>
+                <input type="text" maxLength={2}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                  value={quoteState}
+                  onChange={e => setQuoteState(e.target.value.toUpperCase().slice(0, 2))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 uppercase tracking-widest">ZIP Code</label>
+              <input type="text" inputMode="numeric" maxLength={5} placeholder="e.g. 90210"
+                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                value={quoteZip}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+                  setQuoteZip(v);
+                  setQuoteZipStatus("idle");
+                  if (v.length === 5) lookupQuoteZip(v);
+                }}
+              />
+            </div>
+          </div>
+
+          <a
+            href={quoteEmail ? `mailto:sales@corecutterusa.com?subject=${encodeURIComponent("Deep Reach Special Quote Request")}&body=${encodeURIComponent(
+              `Hello,\n\nI need a quote for a deep-reach special endmill.\n\nDepth: ${dpResult.inputs.target_depth}"\nCorner Radius: ${dpResult.inputs.corner_radius}"\nMaterial: ${form.material}\nCutting Style: ${dpResult.inputs.cutting_style === "hem" ? "HEM / Adaptive" : "Traditional"}` +
+              (quoteCity ? `\n\nLocation: ${quoteCity}, ${quoteState} ${quoteZip}` : "") +
+              (quoteEmail ? `\nReply to: ${quoteEmail}` : "") +
+              `\n\nPlease advise on available options.\n\nThank you`
+            )}` : "#"}
+            onClick={() => { if (quoteEmail) setQuoteModal(false); }}
+            className={`block w-full text-center rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              quoteEmail ? "bg-amber-500 hover:bg-amber-400 text-black cursor-pointer" : "bg-zinc-700 text-zinc-400 cursor-default"
+            }`}
+          >
+            {quoteEmail ? "Send Quote Request →" : "Enter your email to continue"}
+          </a>
+        </div>
+      </div>
+    )}
 
     </div>
   );

@@ -3852,9 +3852,10 @@ ${catalogList}`
   // ── Deep Pocket / Thin Wall sequence advisor ─────────────────────────────
   app.post("/api/deep-pocket/sequence", async (req, res) => {
     try {
-      const { target_depth, corner_radius, cutting_style, thin_wall, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive } = req.body as {
+      const { target_depth, corner_radius, cutting_style, thin_wall, closed_pocket, pocket_length, pocket_width, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive } = req.body as {
         target_depth: number; corner_radius: number; cutting_style: "hem" | "traditional";
-        thin_wall: boolean; pre_drill_dia: number; material: string; iso_category: string;
+        thin_wall: boolean; closed_pocket: boolean; pocket_length: number; pocket_width: number;
+        pre_drill_dia: number; material: string; iso_category: string;
         flutes: number; tool_dia: number; stickout: number; toolholder: string;
         machine_hp: number; machine_max_rpm: number; spindle_drive: string;
       };
@@ -3869,8 +3870,15 @@ ${catalogList}`
       const hardMat = ["S","H"].includes((iso_category ?? "").toUpperCase());
       const bulkFactor   = hardMat ? 0.65 : 0.75;
       const cornerFactor = 0.60;
-      const maxBulkDia   = corner_radius * 2 * bulkFactor;
+      const cornerBasedBulkDia = corner_radius * 2 * bulkFactor;
       const maxCornerDia = corner_radius * 2 * cornerFactor;
+
+      // For closed pockets, tool must physically fit inside — cap by pocket narrowest dim × 0.85
+      // Open pockets: tool sweeps in from open edge, no pocket-dim constraint
+      const pocketCeilingDia = closed_pocket && pocket_length > 0 && pocket_width > 0
+        ? Math.min(pocket_length, pocket_width) * 0.85
+        : Infinity;
+      const maxBulkDia = Math.min(cornerBasedBulkDia, pocketCeilingDia);
 
       // ── Material-appropriate coating + flute filters ───────────────────────
       // ISO N (aluminum): D-Max or A-Max coating, 2–3 flutes
@@ -4060,7 +4068,7 @@ ${catalogList}`
         // Progressive band selection: greedily pick largest-dia tool for each depth band
         const sequence: { tool: ToolRow; bandFrom: number; bandTo: number }[] = [];
         let depthCovered = 0;
-        const MAX_TOOLS = 3;
+        const MAX_TOOLS = 4;
 
         while (depthCovered < target_depth && sequence.length < MAX_TOOLS) {
           let picked: { tool: ToolRow; reach: number; dia: number } | null = null;
@@ -4122,7 +4130,10 @@ ${catalogList}`
 
           let entry: SeqTool["entry"];
           if (i === 0) {
-            if (pre_drill_dia > 0 && pre_drill_dia >= toolDia) {
+            if (!closed_pocket) {
+              // Open pocket — tool sweeps in from open edge, no ramp needed
+              entry = { type: "sweep_in" };
+            } else if (pre_drill_dia > 0 && pre_drill_dia >= toolDia) {
               entry = { type: "straight_drop" };
             } else if (pre_drill_dia > 0 && pre_drill_dia < toolDia) {
               entry = { type: "helical", helix_dia: +(pre_drill_dia - 0.020).toFixed(4), angle_deg: cutting_style === "hem" ? 2 : 3 };
@@ -4276,12 +4287,19 @@ ${catalogList}`
         }
       }
 
+      // For closed pockets, compute required pre-drill size from largest bulk tool
+      const largestBulkDia = bulk_tools.length > 0 ? bulk_tools[0].dia : null;
+      const required_pre_drill_dia = closed_pocket && largestBulkDia
+        ? +( largestBulkDia * 1.05).toFixed(4)
+        : null;
+
       return res.json({
         ok: true,
-        inputs: { target_depth, corner_radius, cutting_style, thin_wall, pre_drill_dia, iso_category },
+        inputs: { target_depth, corner_radius, cutting_style, thin_wall, closed_pocket, pre_drill_dia, pocket_length, pocket_width, iso_category },
         constraints: {
           max_bulk_dia: +maxBulkDia.toFixed(4),
           max_corner_dia: +maxCornerDia.toFixed(4),
+          pocket_ceiling_dia: pocketCeilingDia === Infinity ? null : +pocketCeilingDia.toFixed(4),
           bulk_dia: bulk_tools[0]?.dia ?? null,
           corner_dia: cornerRow ? parseFloat(cornerRow.cutting_diameter_in) : null,
         },
@@ -4293,6 +4311,8 @@ ${catalogList}`
         corner_oversize_note,
         feedmill_eligible,
         woc_taper,
+        closed_pocket,
+        required_pre_drill_dia,
       });
 
     } catch (err: any) {
