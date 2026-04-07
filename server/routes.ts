@@ -3872,6 +3872,18 @@ ${catalogList}`
       const maxBulkDia   = corner_radius * 2 * bulkFactor;
       const maxCornerDia = corner_radius * 2 * cornerFactor;
 
+      // ── Material-appropriate coating + flute filters ───────────────────────
+      // ISO N (aluminum): D-Max or A-Max coating, 2–3 flutes
+      // ISO P/M/K/S/H (steel/stainless/titanium/superalloy/hardened): P-Max or T-Max, 4+ flutes
+      const isoUpper = (iso_category ?? "").toUpperCase();
+      const isAluminum = isoUpper === "N";
+      const coatingFilter = isAluminum
+        ? `AND (coating ILIKE 'D-Max%' OR coating ILIKE 'A-Max%' OR coating IS NULL OR coating = '')`
+        : `AND (coating ILIKE 'P-Max%' OR coating ILIKE 'T-Max%')`;
+      const fluteFilter = isAluminum
+        ? `AND flutes <= 3`
+        : `AND flutes >= 4`;
+
       // ── 2. Catalog lookup — available diameters with depth coverage ─────────
       // Key rule: for RN tools, lbs_in IS the reach; for standard tools, loc_in is the reach
       // LBS tools always have shorter LOC — reach = lbs_in when lbs_in > 0, else loc_in
@@ -3886,6 +3898,8 @@ ${catalogList}`
         FROM skus
         WHERE tool_type = 'endmill'
           AND cutting_diameter_in > 0
+          ${coatingFilter}
+          ${fluteFilter}
         GROUP BY cutting_diameter_in
         ORDER BY cutting_diameter_in DESC
       `);
@@ -3942,6 +3956,8 @@ ${catalogList}`
             AND corner_condition = 'square'
             AND geometry NOT IN ('chipbreaker','truncated_rougher')
             AND COALESCE(lbs_in, loc_in) >= $2
+            ${coatingFilter}
+            ${fluteFilter}
           ORDER BY COALESCE(lbs_in, loc_in) ASC
           LIMIT 20
         `, [dia, 0]);
@@ -4041,6 +4057,7 @@ ${catalogList}`
             AND cutting_diameter_in = $1
             AND corner_condition = $2
             AND COALESCE(lbs_in, loc_in) >= $3
+            ${coatingFilter}
           ORDER BY COALESCE(lbs_in, loc_in) DESC
           LIMIT 1
         `, [dia, cornerCond, target_depth]);
