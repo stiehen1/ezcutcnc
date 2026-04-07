@@ -7583,7 +7583,7 @@ ${stabSection}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest"
                     style={{ color: role === "corner_finish" ? "#a5b4fc" : "#fb923c" }}>
-                    {role === "corner_finish" ? "Corner Finish" : `Bulk Tool ${idx + 1} of ${total}`}
+                    {role === "corner_finish" ? "Corner Finish" : `Tool ${idx + 1} of ${total}`}
                   </span>
                   <span className="text-xs font-semibold text-white">EDP# {tool.edp}</span>
                 </div>
