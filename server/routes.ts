@@ -1971,10 +1971,13 @@ export async function registerRoutes(
               from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
               to: "scott@corecutterusa.com",
               subject: `New App Registration — ${name ?? email}`,
+              headers: { "X-Mailin-no-track": "1" },
               text: [
                 `Name:     ${name ?? "—"}`,
                 `Email:    ${email}`,
                 `Location: ${[geo.city, geo.region, geo.country].filter(Boolean).join(", ") || "Unknown"}`,
+                ``,
+                `— CoreCutCNC App`,
               ].join("\n"),
             });
           } catch (mailErr: any) {
