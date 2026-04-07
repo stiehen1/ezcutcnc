@@ -156,33 +156,139 @@ const HELP_SECTIONS = [
   },
 ];
 
-function WelcomeModal() {
-  const [open, setOpen] = React.useState(() => !localStorage.getItem("welcome_seen"));
+const WALKTHROUGH_STEPS = [
+  {
+    icon: "👋",
+    title: "Welcome to CoreCutCNC",
+    subtitle: "Physics-based speeds & feeds tailored to the exact Core Cutter tool you're running.",
+    body: "The app walks you through three paths depending on where you're starting. Use the arrows to pick the one that fits your situation — you can always revisit this guide from the Tips button.",
+    cta: "Show me how →",
+  },
+  {
+    icon: "🔍",
+    title: "Path 1 — Find Your Tool First (Tool Finder Section)",
+    subtitle: "Not sure which Core Cutter tool to use?",
+    steps: [
+      { n: "1", text: "Go to the Tool Finder section at the top of the page" },
+      { n: "2", text: "Start with Quick Pick for guided suggestions, or filter by diameter, material, operation, flute count — use as many filters as you like" },
+      { n: "3", text: "Select Endmill or Chamfer Mill mode button to narrow results to that tool type" },
+      { n: "4", text: "Hit the Search button at the bottom to see results below" },
+      { n: "5", text: "Download the associated .STP file for your CAM system if needed" },
+      { n: "6", text: "Tap Use Tool → to transfer the EDP into the calculator, fill in your setup and cut parameters — the engine does the rest" },
+    ],
+  },
+  {
+    icon: "⚙️",
+    title: "Path 2 — Know Your Tool Already?",
+    subtitle: "Have an EDP# for a standard Core Cutter endmill or chamfer mill?",
+    steps: [
+      { n: "1", text: "Go to Milling or Chamfer Mill in the Operation section" },
+      { n: "2", text: "Select your material, machine type, and toolholder" },
+      { n: "3", text: "Enter your Core Cutter EDP# — all tool geometry auto-fills" },
+      { n: "4", text: "Enter your WOC, DOC, and stickout — hit Calculate for RPM, feed, chip load, HP, and a full stability analysis" },
+    ],
+    note: "Results export as a PDF report or a CAM setup sheet. Email required for exports.",
+  },
+  {
+    icon: "📐",
+    title: "Path 3 — Running a Special Tool?",
+    subtitle: "Core Cutter custom endmill, keyseat, dovetail, thread mill, or other special?",
+    steps: [
+      { n: "1", text: "Select the matching operation — Keyseat, Dovetail, Thread Milling, etc." },
+      { n: "2", text: "Upload your Core Cutter special tool print (PDF or photo from your phone)" },
+      { n: "3", text: "The engine reads the print dimensions and auto-fills the tool geometry" },
+      { n: "4", text: "Enter your setup and run — same full output as standard tools" },
+    ],
+    note: "Uploading a photo from a mobile device works just as well as a PDF scan.",
+  },
+  {
+    icon: "🧮",
+    title: "Calculators — Quick Reference Tools",
+    subtitle: "Standalone shop-floor calculators — no EDP or setup required.",
+    body: "Access them from the Misc. Calculators selector. Includes: chip thinning, arc entry load spike, helix & ramp angle, cusp height, bolt circle G-code, tap drill sizes, feed correction for arcs, MRR & HP estimate, and more. Each has a How to fix it section when something looks off. Great for quick sanity checks at the machine.",
+    cta: "Let's get started →",
+    last: true,
+  },
+];
+
+const walkThruOpenRef = { open: false, setOpen: (_: boolean) => {} };
+
+function WelcomeModal({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: () => void } = {}) {
+  const [open, setOpen] = React.useState(() => forceOpen ?? !localStorage.getItem("welcome_seen"));
+  const [step, setStep] = React.useState(0);
+  React.useEffect(() => { walkThruOpenRef.open = open; walkThruOpenRef.setOpen = setOpen; }, [open]);
+  React.useEffect(() => { if (forceOpen) { setOpen(true); setStep(0); } }, [forceOpen]);
   if (!open) return null;
+  const s = WALKTHROUGH_STEPS[step];
+  const isLast = !!(s as any).last;
+  const isFirst = step === 0;
+  const total = WALKTHROUGH_STEPS.length;
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="px-6 pt-6 pb-3 border-b border-zinc-800">
-          <p className="text-base font-bold text-white">Welcome to CoreCutCNC</p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">Your physics-based mentor where our engine integrates Core Cutter tool geometry, coating behavior, and cutting data directly into the model — so every recommendation is tailored to the exact cutter you're running.</p>
-        </div>
-        <div className="overflow-y-auto flex-1 px-6 py-4 flex flex-col gap-4">
-          {HELP_SECTIONS.map(s => (
-            <div key={s.title}>
-              <p className="text-xs font-semibold text-white mb-0.5">{s.icon} {s.title}</p>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">{s.body}</p>
+        {/* Header */}
+        <div className="px-6 pt-5 pb-3 border-b border-zinc-800">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xl">{s.icon}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-zinc-600 font-mono">{step + 1} / {total}</span>
+              <button onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); onClose?.(); }} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
             </div>
+          </div>
+          <p className="text-sm font-bold text-white leading-snug">{s.title}</p>
+          {(s as any).subtitle && <p className="text-[11px] text-orange-400 mt-0.5">{(s as any).subtitle}</p>}
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {(s as any).body && (
+            <p className="text-[11px] text-zinc-400 leading-relaxed">{(s as any).body}</p>
+          )}
+          {(s as any).steps && (
+            <div className="space-y-2.5 mt-1">
+              {((s as any).steps as { n: string; text: string }[]).map(item => (
+                <div key={item.n} className="flex gap-3 items-start">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 text-[10px] font-bold flex items-center justify-center mt-0.5">{item.n}</span>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">{item.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {(s as any).note && (
+            <p className="text-[10px] text-zinc-500 mt-3 border-t border-zinc-800 pt-3 leading-relaxed">💡 {(s as any).note}</p>
+          )}
+        </div>
+
+        {/* Step dots */}
+        <div className="flex justify-center gap-1.5 py-2">
+          {WALKTHROUGH_STEPS.map((_, i) => (
+            <button key={i} onClick={() => setStep(i)}
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${i === step ? "bg-orange-500" : "bg-zinc-700 hover:bg-zinc-500"}`} />
           ))}
         </div>
-        <div className="px-6 py-4 border-t border-zinc-800">
-          <button
-            onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); }}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2 rounded-lg"
-          >
-            Got it, let's go →
-          </button>
-          <p className="text-[10px] text-zinc-600 text-center mt-2">Tap the Pro Tips tab anytime to review this guide.</p>
+
+        {/* Footer */}
+        <div className="px-6 pb-5 flex gap-2">
+          {!isFirst && (
+            <button onClick={() => setStep(p => p - 1)}
+              className="flex-1 border border-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold py-2 rounded-lg transition-colors">
+              ← Back
+            </button>
+          )}
+          {isLast ? (
+            <button onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); onClose?.(); }}
+              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+              {(s as any).cta ?? "Let's go →"}
+            </button>
+          ) : (
+            <button onClick={() => { if (isFirst && (s as any).cta) setStep(1); else setStep(p => p + 1); }}
+              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+              {(s as any).cta ?? "Next →"}
+            </button>
+          )}
         </div>
+        <p className="text-[10px] text-zinc-600 text-center pb-3 -mt-2">Tap Tips anytime to review this guide.</p>
       </div>
     </div>
   );
@@ -389,7 +495,7 @@ function HelpButton() {
       <button
         onClick={() => setOpen(true)}
         className="fixed right-0 z-50 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 36px)" }}
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 36px)" }}
         aria-label="Pro Tips"
       >
         Pro Tips
@@ -450,6 +556,23 @@ function HelpButton() {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+function WalkThruButton() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed right-0 z-50 bg-zinc-700 hover:bg-zinc-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 108px)" }}
+        aria-label="Walk-Thru"
+      >
+        Walk-Thru
+      </button>
+      {open && <WelcomeModal forceOpen onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -525,7 +648,7 @@ function FeedbackButton() {
       <button
         onClick={() => setOpen(true)}
         className="fixed right-0 z-50 bg-zinc-700 hover:bg-zinc-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 36px)" }}
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 36px)" }}
         aria-label="Send feedback"
       >
         Feedback
@@ -641,6 +764,7 @@ function App() {
         <Router />
         <Toaster />
         <WelcomeModal />
+        <WalkThruButton />
         <FeedbackButton />
         <HelpButton />
         <BrevoNudge />
