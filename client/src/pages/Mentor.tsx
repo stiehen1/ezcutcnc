@@ -2403,13 +2403,25 @@ export default function Mentor() {
             // L/D based stickout estimate if not provided
             const soEst = form.stickout > 0 ? form.stickout : tool.reach_in + tool.dia * 0.33;
             const ldEst = tool.dia > 0 ? soEst / tool.dia : 3;
-            // WOC scales down with L/D — long reach RN tools must reduce radial engagement
-            // to control deflection regardless of cutting style:
-            //   HEM:         10% standard, 6% at L/D > 6
-            //   Traditional: 40% standard, 25% at L/D > 4, 15% at L/D > 6
+            // As L/D increases, deflection dominates — strategy shifts to:
+            //   - Fewer WOC (less radial force)
+            //   - Reduced IPT (lighter chip load, less cutting force)
+            //   - More flutes already handled by sequencer (larger core = stiffer)
+            //
+            // WOC by L/D:
+            //   HEM:         ≤4→10%,  4–6→8%,  >6→6%
+            //   Traditional: ≤4→40%,  4–6→25%, >6→15%
             const wocPct = isHem
-              ? (ldEst > 6 ? 6 : 10)
+              ? (ldEst > 6 ? 6 : ldEst > 4 ? 8 : 10)
               : (ldEst > 6 ? 15 : ldEst > 4 ? 25 : 40);
+
+            // IPT feed multiplier — scale down with L/D to reduce cutting force
+            //   L/D ≤ 4: full feed (1.00×)
+            //   L/D 4–5: 0.85×
+            //   L/D 5–6: 0.70×
+            //   L/D 6–7: 0.60×
+            //   L/D > 7: 0.50×
+            const iptMult = ldEst > 7 ? 0.50 : ldEst > 6 ? 0.60 : ldEst > 5 ? 0.70 : ldEst > 4 ? 0.85 : 1.00;
             const physResult = await mentor.mutateAsync({
               ...form,
               mode: toolMode as any,
@@ -7934,6 +7946,27 @@ ${stabSection}
                   });
                 }
 
+                // Feed reduction advisory for long-reach tools
+                const deepTools = [...(dpResult.bulk_tools ?? []), ...(dpResult.corner_tool ? [dpResult.corner_tool] : [])]
+                  .filter((t: any) => {
+                    const soEst = t.reach_in + t.dia * 0.33;
+                    const ld = t.dia > 0 ? soEst / t.dia : 0;
+                    return ld > 4;
+                  });
+                if (deepTools.length > 0) {
+                  const lines = deepTools.map((t: any) => {
+                    const soEst = t.reach_in + t.dia * 0.33;
+                    const ld = t.dia > 0 ? soEst / t.dia : 0;
+                    const feedMult = ld > 7 ? 50 : ld > 6 ? 60 : ld > 5 ? 70 : 85;
+                    return `EDP# ${t.edp} (L/D ${ld.toFixed(1)}×) — reduce programmed feed to ${feedMult}% of displayed IPM`;
+                  });
+                  notes.push({
+                    color: "amber",
+                    title: "Reduce Feed Rate for Long-Reach Tools",
+                    body: `Deflection scales with L³ — at high L/D ratios, reduce feed to limit cutting force and chatter:\n${lines.join("\n")}`,
+                  });
+                }
+
                 if (!notes.length) return null;
 
                 const borderColor = { amber: "border-amber-500/40", sky: "border-sky-500/40", indigo: "border-indigo-500/40", zinc: "border-zinc-600" };
@@ -7977,8 +8010,8 @@ ${stabSection}
                     <div className="space-y-2">
                       {unique.map((tool, i) => {
                         const role = dpResult.bulk_tools?.find((b: any) => b.edp === tool.edp)
-                          ? (dpResult.corner_tool?.edp === tool.edp ? "Roughing + Finishing Tool" : "Roughing Tool")
-                          : "Finishing Tool";
+                          ? (dpResult.corner_tool?.edp === tool.edp ? "Roughing + Corner Finishing Tool" : `Roughing Tool${tool.corner_condition === "corner_radius" ? " (CR protected)" : ""}`)
+                          : "Corner Finishing Tool";
                         return (
                           <div key={tool.edp} className="flex items-start gap-3 border-t border-indigo-500/20 pt-2 first:border-0 first:pt-0">
                             <span className="text-[10px] font-bold text-indigo-300 w-4 shrink-0">#{i + 1}</span>
