@@ -1494,8 +1494,9 @@ export default function Mentor() {
         setForm(f => ({ ...f, ...inputs }));
         // Sync text display fields
         if (inputs.tool_dia)      setToolDiaText(Number(inputs.tool_dia).toFixed(4));
-        if (inputs.woc_pct)       setWocText(String(inputs.woc_pct));
-        if (inputs.doc_xd)        setDocText(String(inputs.doc_xd));
+        const _rDia = Number(inputs.tool_dia) || 0;
+        if (inputs.woc_pct && _rDia) setWocText(((Number(inputs.woc_pct) / 100) * _rDia).toFixed(4));
+        if (inputs.doc_xd  && _rDia) setDocText((Number(inputs.doc_xd) * _rDia).toFixed(3));
         if (inputs.loc)           setLocText(Number(inputs.loc).toFixed(3));
         if (inputs.stickout)      setStickoutText(Number(inputs.stickout).toFixed(3));
         if (inputs.lbs)           setLbsText(Number(inputs.lbs).toFixed(3));
@@ -3648,24 +3649,35 @@ ${stabSection}
                   const faceWocPct   = faceStepover !== null && dia > 0 ? (faceStepover / dia) * 100 : wp.med;
 
                   const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : "med";
+                  const hasDia = form.tool_dia > 0;
                   setForm((p) => ({
                     ...p,
                     mode,
                     ...(mode === "slot" ? { woc_pct: 100 } : mode === "face" ? { woc_pct: faceWocPct } : { woc_pct: wp.med }),
                     doc_xd: dp[docLevel],
                   }));
-                  if (mode === "slot") {
-                    setWocText(dia ? dia.toFixed(4) : "");
+                  if (!hasDia) {
+                    // No tool selected yet — leave text fields blank so nothing shows in the inputs
+                    setWocText("");
+                    setDocText("");
+                    setWocPreset("med");
+                    setDocPreset(docLevel);
+                  } else if (mode === "slot") {
+                    setWocText(dia.toFixed(4));
                     setWocPreset(null);
+                    setDocText((dp[docLevel] * dia).toFixed(3));
+                    setDocPreset(docLevel);
                   } else if (mode === "face" && faceStepover !== null) {
                     setWocText(faceStepover.toFixed(4));
                     setWocPreset(null);
+                    setDocText((dp[docLevel] * dia).toFixed(3));
+                    setDocPreset(docLevel);
                   } else {
                     setWocText(((wp.med / 100) * dia).toFixed(4));
                     setWocPreset("med");
+                    setDocText((dp[docLevel] * dia).toFixed(3));
+                    setDocPreset(docLevel);
                   }
-                  setDocText(dia > 0 ? (dp[docLevel] * dia).toFixed(3) : "");
-                  setDocPreset(docLevel);
                 }}
               >
                 <option value="" disabled>— Select Process —</option>
@@ -7022,12 +7034,26 @@ ${stabSection}
                 }
                 return null;
               })()}
-              {/* DOC > LOC warning */}
+              {/* DOC > reach warning */}
               {form.doc_xd > 0 && form.loc > 0 && form.tool_dia > 0 && (() => {
                 const docIn = form.doc_xd * form.tool_dia;
-                const ratio = docIn / form.loc;
+                const isNecked = form.lbs > 0;
+                const reach = isNecked ? form.lbs : form.loc;
+                const ratio = docIn / reach;
                 if (ratio <= 1.05) return null;
                 const isRed = ratio > 1.30;
+                if (isNecked) {
+                  // For necked tools: DOC can exceed LOC — user just needs multiple passes
+                  // Only warn when DOC exceeds LBS (the true reach limit)
+                  return (
+                    <p className={`text-xs mt-1 ${isRed ? "text-red-400" : "text-amber-400"}`}>
+                      {isRed
+                        ? `⛔ DOC (${docIn.toFixed(3)}") exceeds tool reach / LBS (${reach.toFixed(3)}") — the neck cannot reach this depth.`
+                        : `⚠ DOC (${docIn.toFixed(3)}") is approaching tool reach / LBS (${reach.toFixed(3)}") — verify clearance.`}
+                      {" "}Note: total depth can exceed LOC (${form.loc.toFixed(3)}") — machine this depth in LOC-sized passes.
+                    </p>
+                  );
+                }
                 return (
                   <p className={`text-xs mt-1 ${isRed ? "text-red-400" : "text-amber-400"}`}>
                     {isRed
@@ -7040,7 +7066,7 @@ ${stabSection}
               </>)}
               {/* Tool Stickout — lives under DOC */}
               <div className="mt-10 pt-5 border-t border-zinc-800 space-y-2">
-                <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Stickout (in)", "Tool Stickout (mm)")}</FieldLabel>
+                <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
                 <Input
                   type="text" inputMode="decimal"
                   className="no-spinners"
