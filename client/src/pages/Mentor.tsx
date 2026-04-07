@@ -10076,13 +10076,13 @@ ${stabSection}
         </CardContent>
       </Card>}
 
-      {/* Optimal Tool Recommendation Card — between results and stability */}
-      {optimalLoading && (
+      {/* Optimal Tool Recommendation Card — between results and stability (hidden for deep pocket) */}
+      {form.mode !== "deep_pocket" && optimalLoading && (
         <div className="mt-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
           Finding optimal tool match…
         </div>
       )}
-      {!optimalLoading && optimalRec && (() => {
+      {form.mode !== "deep_pocket" && !optimalLoading && optimalRec && (() => {
         const rec = optimalRec;
         const recSku = rec.recommended_sku;
         const recCust = rec.recommended_result?.customer ?? {};
@@ -10219,8 +10219,8 @@ ${stabSection}
           <span className="text-sm font-bold text-zinc-200 tracking-wide">Configuration &amp; Stability Assessment</span>
         </div>
 
-      {/* SETUP READINESS — unified section */}
-      {stabilityIndex && stability && (() => {
+      {/* SETUP READINESS — unified section (hidden for deep pocket — per-tool stability shown on each card) */}
+      {form.mode !== "deep_pocket" && stabilityIndex && stability && (() => {
         const si      = stabilityIndex.overall;
         const deflPct = stability.deflection_pct ?? 0;
         const siLabel = si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 35 ? "Fair" : "Needs Attention";
