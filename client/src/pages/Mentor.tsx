@@ -7583,7 +7583,7 @@ ${stabSection}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest"
                     style={{ color: role === "corner_finish" ? "#a5b4fc" : "#fb923c" }}>
-                    {role === "corner_finish" ? "Corner Finish" : `Tool ${idx + 1} of ${total}`}
+                    {role === "corner_finish" ? "Corner Finishing Tool" : `Tool ${idx + 1} of ${total}`}
                   </span>
                   <span className="text-xs font-semibold text-white">EDP# {tool.edp}</span>
                 </div>
@@ -7740,7 +7740,7 @@ ${stabSection}
               {/* Corner finish */}
               {dpResult?.corner_tool && (
                 <div className="space-y-2 mt-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Corner Finish</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Corner Finishing Tool</p>
                   {renderToolCard(dpResult.corner_tool, 0, 1, "corner_finish")}
                   {parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
                     <p className="text-[10px] text-indigo-300 px-1">Ball nose — corner radius matched exactly. Step-over controls scallop height. Leave 0.008" stock from bulk sequence.</p>
