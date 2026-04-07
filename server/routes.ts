@@ -4019,8 +4019,9 @@ ${catalogList}`
         //   6. Square + standard
         // For RN bands: same CR preference order, no chipbreaker (not available in RN)
 
-        const R030 = `AND corner_condition = '0.030'`;
-        const anyCR = `AND corner_condition = 'corner_radius'`;
+        // DB stores CR as plain decimal string: '0.03', '0.06', '0.09', '0.125' etc. — NOT 'corner_radius'
+        const R030  = `AND corner_condition = '0.03'`;
+        const anyCR = `AND corner_condition NOT IN ('square','ball') AND corner_condition ~ '^[0-9.]+'`;
         const square = `AND corner_condition = 'square'`;
         const cbGeo  = `AND geometry = 'chipbreaker' AND lbs_in IS NULL`;
         const stdGeo = `AND geometry NOT IN ('chipbreaker','truncated_rougher') AND lbs_in IS NULL`;
@@ -4193,9 +4194,9 @@ ${catalogList}`
               AND COALESCE(lbs_in, loc_in) >= $2
               ${coatingFilter}
             ORDER BY
-              -- Prefer largest CR ≤ pocket radius (closest fit = best floor-to-wall blend)
-              CASE WHEN corner_condition = 'ball' THEN 0 ELSE 1 END DESC,
-              CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 0 END DESC,
+              -- Prefer CR over ball; among CR tools prefer smallest radius (cleanest corner, most control)
+              CASE WHEN corner_condition = 'ball' THEN 1 ELSE 0 END ASC,
+              CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 999 END ASC,
               COALESCE(lbs_in, loc_in) ASC
             LIMIT 1
           `, [dia, target_depth, corner_radius]);
