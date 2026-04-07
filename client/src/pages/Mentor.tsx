@@ -7629,6 +7629,53 @@ ${stabSection}
                 </div>
               )}
 
+              {/* Engagement angle · Teeth in cut · Stability audit */}
+              {mil && mil.woc_in != null && tool.dia > 0 && (() => {
+                const wocFrac = mil.woc_in / tool.dia;
+                const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
+                const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
+                const teethInCut = (engAngleDeg / 360) * tool.flutes;
+                const engColor = engAngleDeg > 270 ? "#f87171" : engAngleDeg > 180 ? "#facc15" : "#4ade80";
+                const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
+                const stabPct = phys?.stability?.deflection_pct ?? null;
+                const stabColor = stabPct == null ? "#71717a" : stabPct >= 175 ? "#f87171" : stabPct >= 100 ? "#facc15" : "#4ade80";
+                const stabLabel = stabPct == null ? "—" : stabPct >= 175 ? "High Chatter Risk" : stabPct >= 100 ? "Chatter Risk" : "Stable";
+                const cardStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.20)" };
+                return (
+                  <div className="px-3 pb-3 pt-2 border-t border-zinc-700/60 space-y-2">
+                    <div className="flex gap-1.5">
+                      {/* Engagement Angle */}
+                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                        <div className="text-[9px] uppercase tracking-widest text-zinc-500 mb-1">Eng. Angle</div>
+                        <div className="text-sm font-bold" style={{ color: engColor }}>{engAngleDeg.toFixed(1)}°</div>
+                        <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (engAngleDeg / 360) * 100)}%`, background: engColor }} />
+                        </div>
+                      </div>
+                      {/* Teeth in Cut */}
+                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                        <div className="text-[9px] uppercase tracking-widest text-zinc-500 mb-1">Teeth in Cut</div>
+                        <div className="text-sm font-bold" style={{ color: ticColor }}>{teethInCut.toFixed(2)}</div>
+                        <div className="mt-1.5 text-[9px] text-zinc-500">of {tool.flutes} flutes</div>
+                      </div>
+                      {/* Stability */}
+                      <div className="flex-1 rounded-md px-2 pt-1.5 pb-2" style={cardStyle}>
+                        <div className="text-[9px] uppercase tracking-widest text-zinc-500 mb-1">Stability</div>
+                        <div className="text-sm font-bold" style={{ color: stabColor }}>{stabLabel}</div>
+                        {stabPct != null && (
+                          <>
+                            <div className="mt-1.5 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
+                              <div className="h-full rounded-full" style={{ width: `${Math.min(100, stabPct)}%`, background: stabColor }} />
+                            </div>
+                            <div className="text-[9px] text-zinc-500 mt-0.5">{stabPct.toFixed(0)}% of limit · L/D {phys.stability.l_over_d?.toFixed(1)}×</div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Thin wall taper */}
               {taper && role === "bulk" && (
                 <div className="px-4 py-2 border-t border-zinc-700/60 space-y-0.5">
