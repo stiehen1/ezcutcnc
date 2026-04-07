@@ -1165,6 +1165,8 @@ export default function Mentor() {
   const [dpResult, setDpResult] = React.useState<any>(null);
   const [dpLoading, setDpLoading] = React.useState(false);
   const [dpError, setDpError] = React.useState<string | null>(null);
+  const [dpDepthText, setDpDepthText] = React.useState("");
+  const [dpCornerText, setDpCornerText] = React.useState("");
   // Per-tool physics results keyed by edp
   const [dpPhysics, setDpPhysics] = React.useState<Record<string, any>>({});
 
@@ -7369,18 +7371,18 @@ ${stabSection}
                   <FieldLabel hint="Total finished pocket depth from top of part to floor.">Total Finished Depth (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 2.500"
-                    value={form.dp_target_depth > 0 ? form.dp_target_depth.toFixed(3) : ""}
-                    onChange={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_target_depth: n })); else if (!e.target.value.trim()) setForm(p => ({ ...p, dp_target_depth: 0 })); }}
-                    onBlur={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_target_depth: n })); }}
+                    value={dpDepthText}
+                    onChange={e => { setDpDepthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_target_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                    onBlur={() => { if (form.dp_target_depth > 0) setDpDepthText(form.dp_target_depth.toFixed(3)); else setDpDepthText(""); }}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
                   <FieldLabel hint="Inside corner radius of the finished pocket. Drives maximum tool diameter via the 75% engagement rule — tool diameter must be ≤ 75% of corner diameter to avoid full-engagement force spikes.">Wall-to-Wall Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.375"
-                    value={form.dp_corner_radius > 0 ? form.dp_corner_radius.toFixed(4) : ""}
-                    onChange={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_corner_radius: n })); else if (!e.target.value.trim()) setForm(p => ({ ...p, dp_corner_radius: 0 })); }}
-                    onBlur={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_corner_radius: n })); }}
+                    value={dpCornerText}
+                    onChange={e => { setDpCornerText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_corner_radius: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                    onBlur={() => { if (form.dp_corner_radius > 0) setDpCornerText(form.dp_corner_radius.toFixed(4)); else setDpCornerText(""); }}
                   />
                 </div>
               </div>
@@ -10220,7 +10222,7 @@ ${stabSection}
         </div>
 
       {/* SETUP READINESS — unified section (hidden for deep pocket — per-tool stability shown on each card) */}
-      {form.mode !== "deep_pocket" && stabilityIndex && stability && (() => {
+      {(form.mode as string) !== "deep_pocket" && stabilityIndex && stability && (() => {
         const si      = stabilityIndex.overall;
         const deflPct = stability.deflection_pct ?? 0;
         const siLabel = si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 35 ? "Fair" : "Needs Attention";
