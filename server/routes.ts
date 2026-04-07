@@ -3925,22 +3925,17 @@ ${catalogList}`
       `, [corner_radius]);
       const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
 
-      // ── 3. Pick optimal diameters — target respectable stability, not max size ─
-      // Strategy: find the largest diameter where the final tool's L/D stays within
-      // a stability target. If nothing meets the target, fall back to largest available.
-      // L/D target: HEM 5×D, Traditional 4×D (tighter because higher radial force)
+      // ── 3. Corner dia picker (unchanged single-pass logic) ────────────────────
+      // L/D target: HEM 5×D, Traditional 4×D
       const ldTarget = cutting_style === "hem" ? 5.0 : 4.0;
 
-      const findBestDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
-        // First pass: largest dia where reach/dia <= ldTarget (stable choice)
+      const findBestCornerDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
         for (const row of cov) {
           const dia = parseFloat(row.cutting_diameter_in);
           if (dia > maxDia) continue;
           if (parseFloat(row.max_reach) < target_depth) continue;
-          const ld = target_depth / dia;
-          if (ld <= ldTarget) return row;
+          if (target_depth / dia <= ldTarget) return row;
         }
-        // Fallback: largest dia that reaches (no good L/D option in catalog)
         for (const row of cov) {
           const dia = parseFloat(row.cutting_diameter_in);
           if (dia > maxDia) continue;
@@ -3949,10 +3944,13 @@ ${catalogList}`
         return null;
       };
 
-      const bulkRow   = findBestDia(maxBulkDia, coverage);
-      const cornerRow = findBestDia(maxCornerDia, cornerCoverage);
+      const cornerRow = findBestCornerDia(maxCornerDia, cornerCoverage);
 
-      // ── 4. Build bulk tool sequence for chosen diameter ─────────────────────
+      // ── 4. Progressive bulk sequence — multi-diameter, top to bottom ─────────
+      // Walk depth bands: at each band pick the LARGEST diameter whose max_reach
+      // covers that band AND whose L/D (band_depth / dia) stays within ldTarget.
+      // Larger tools at shallow depth → smaller/longer tools as depth increases.
+      // Cap at 3 tools to keep the sequence practical.
       interface SeqTool {
         role: "bulk" | "corner_finish";
         edp: string; description: string;
@@ -3964,19 +3962,20 @@ ${catalogList}`
         is_rn: boolean;
       }
 
-      const buildBulkSequence = async (row: { cutting_diameter_in: string; max_reach: string; [k: string]: any }): Promise<SeqTool[]> => {
-        const dia = parseFloat(row.cutting_diameter_in);
-        const maxLoc  = parseFloat(row.max_loc);
-        const maxReach = parseFloat(row.max_reach);
+      interface ToolRow { edp: string; description1: string; description2: string;
+        cutting_diameter_in: string; flutes: number; loc_in: string; lbs_in: string;
+        reach_in: string; corner_condition: string; series: string; geometry: string;
+        helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia_in: string; is_rn: boolean; }
 
-        // L/D threshold for including a stub:
-        // HEM can go to 4×D on Tool 1 before stub needed; Traditional 3×D
-        const ldThreshold = cutting_style === "hem" ? 4.0 : 3.0;
-
-        // Query tools ordered by reach ascending — stub/short first, RN last
-        // For each band we want the tool whose reach JUST covers the band
-        // Key: reach = lbs_in when lbs_in > 0, else loc_in
-        const toolRows = await pool.query(`
+      // Fetch best tool at a given diameter that reaches the required depth.
+      // Sorting priority:
+      //   1. Prefer variable_pitch (HEM adaptive toolpaths need it; also helps traditional)
+      //   2. For HEM: prefer higher flute count (more teeth = higher feed rate)
+      //      For Traditional: prefer lower flute count (better chip clearance at 40-60% WOC)
+      //   3. Shortest reach that still covers the band (best rigidity for the band)
+      const fluteOrder = cutting_style === "hem" ? "DESC" : "ASC";
+      const fetchBestToolAtDia = async (dia: number, minReach: number): Promise<ToolRow | null> => {
+        const r = await pool.query(`
           SELECT edp, description1, description2, cutting_diameter_in, flutes,
                  loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
                  corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
@@ -3989,59 +3988,80 @@ ${catalogList}`
             AND COALESCE(lbs_in, loc_in) >= $2
             ${coatingFilter}
             ${fluteFilter}
-          ORDER BY COALESCE(lbs_in, loc_in) ASC
-          LIMIT 20
-        `, [dia, 0]);
+          ORDER BY
+            CASE WHEN variable_pitch = true THEN 0 ELSE 1 END ASC,
+            flutes ${fluteOrder},
+            COALESCE(lbs_in, loc_in) ASC
+          LIMIT 1
+        `, [dia, minReach]);
+        return r.rows[0] ?? null;
+      };
 
-        if (!toolRows.rows.length) return [];
+      const buildBulkSequence = async (): Promise<SeqTool[]> => {
+        // Build candidate list: all diameters <= maxBulkDia that have any reach > 0, sorted largest first
+        const candidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= maxBulkDia);
+        if (!candidates.length) return [];
 
-        // Group into tiers by reach
-        interface ToolRow { edp: string; description1: string; description2: string;
-          cutting_diameter_in: string; flutes: number; loc_in: string; lbs_in: string;
-          reach_in: string; corner_condition: string; series: string; geometry: string;
-          helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia_in: string; is_rn: boolean; }
-        const tools: ToolRow[] = toolRows.rows;
+        // Progressive band selection: greedily pick largest-dia tool for each depth band
+        const sequence: { tool: ToolRow; bandFrom: number; bandTo: number }[] = [];
+        let depthCovered = 0;
+        const MAX_TOOLS = 3;
 
-        // Pick minimal sequence: find tools that bracket from 0 → target_depth
-        // Strategy: pick shortest-reach tool first (covers upper band, best rigidity)
-        // then next tool that reaches final depth
-        const sequence: ToolRow[] = [];
+        while (depthCovered < target_depth && sequence.length < MAX_TOOLS) {
+          let picked: { tool: ToolRow; reach: number; dia: number } | null = null;
 
-        // Tool 1: smallest reach that covers a meaningful band AND has good L/D
-        // If L/D of the shortest tool > threshold, need a stub first
-        const shortestTool = tools[0];
-        const shortestReach = parseFloat(shortestTool.reach_in);
-        const ld1 = (stickout > 0 ? stickout : shortestReach + dia * 0.33) / dia;
+          for (const row of candidates) {
+            const dia = parseFloat(row.cutting_diameter_in);
+            const maxReach = parseFloat(row.max_reach);
+            if (maxReach <= depthCovered) continue; // doesn't extend coverage
 
-        if (shortestReach < target_depth) {
-          // Need at least 2 tools
-          if (ld1 > ldThreshold) {
-            // Include stub — find tool with reach ~LOC only (not RN)
-            const stub = tools.find(t => !t.is_rn);
-            if (stub) sequence.push(stub);
-          } else {
-            sequence.push(shortestTool);
+            // L/D of this tool at its max reach from surface
+            const ld = maxReach / dia;
+
+            // Accept if within target, OR if this is the last tool slot (must reach full depth)
+            const isLastSlot = sequence.length === MAX_TOOLS - 1;
+            const reachesAll = maxReach >= target_depth;
+
+            if (isLastSlot) {
+              // Must reach full depth — pick largest dia that does, regardless of L/D
+              if (reachesAll) { picked = { tool: null as any, reach: maxReach, dia }; break; }
+            } else {
+              // Prefer largest dia with acceptable L/D; also require meaningful band gain (> 10% dia)
+              const bandGain = maxReach - depthCovered;
+              if (ld <= ldTarget && bandGain >= dia * 0.5) {
+                picked = { tool: null as any, reach: maxReach, dia }; break;
+              }
+            }
           }
-          // Final tool: deepest reach that reaches target_depth
-          const finalTool = [...tools].reverse().find(t => parseFloat(t.reach_in) >= target_depth);
-          if (finalTool && finalTool.edp !== sequence[sequence.length-1]?.edp) {
-            sequence.push(finalTool);
+
+          if (!picked) {
+            // No candidate met criteria — fall back to largest that extends coverage at all
+            const fallback = candidates.find(r => parseFloat(r.max_reach) > depthCovered && parseFloat(r.cutting_diameter_in) <= maxBulkDia);
+            if (!fallback) break;
+            picked = { tool: null as any, reach: parseFloat(fallback.max_reach), dia: parseFloat(fallback.cutting_diameter_in) };
           }
-        } else {
-          // One tool covers full depth
-          sequence.push(shortestTool);
+
+          // Fetch the actual best EDP at this diameter that reaches the band end
+          const bandTo = Math.min(picked.reach, target_depth);
+          const tool = await fetchBestToolAtDia(picked.dia, bandTo);
+          if (!tool) break;
+
+          // Avoid duplicate diameter (same dia twice in a row)
+          if (sequence.length > 0 && parseFloat(sequence[sequence.length-1].tool.cutting_diameter_in) === picked.dia) break;
+
+          sequence.push({ tool, bandFrom: depthCovered, bandTo });
+          depthCovered = bandTo;
         }
 
-        // Map to SeqTool
-        let bandFrom = 0;
-        return sequence.map((t, i) => {
+        if (!sequence.length) return [];
+
+        // Map to SeqTool with entry logic
+        return sequence.map(({ tool: t, bandFrom, bandTo }, i) => {
           const reach = parseFloat(t.reach_in);
           const loc = parseFloat(t.loc_in);
           const lbs = parseFloat(t.lbs_in ?? "0") || 0;
-          const bandTo = i === sequence.length - 1 ? target_depth : Math.min(reach, target_depth);
-
-          // Entry type
           const toolDia = parseFloat(t.cutting_diameter_in);
+
           let entry: SeqTool["entry"];
           if (i === 0) {
             if (pre_drill_dia > 0 && pre_drill_dia >= toolDia) {
@@ -4055,8 +4075,8 @@ ${catalogList}`
             entry = { type: "plunge_to_prior_depth" };
           }
 
-          const result: SeqTool = {
-            role: "bulk",
+          return {
+            role: "bulk" as const,
             edp: t.edp,
             description: [t.description1, t.description2].filter(Boolean).join(" — "),
             dia: toolDia, flutes: t.flutes,
@@ -4066,9 +4086,7 @@ ${catalogList}`
             helix: t.helix ?? 0, variable_pitch: !!t.variable_pitch, variable_helix: !!t.variable_helix,
             shank_dia: parseFloat(t.shank_dia_in ?? "0") || 0,
             entry, is_rn: t.is_rn,
-          };
-          bandFrom = bandTo;
-          return result;
+          } as SeqTool;
         });
       };
 
@@ -4142,9 +4160,8 @@ ${catalogList}`
       };
 
       // ── 6. Assemble result ──────────────────────────────────────────────────
-      const needs_special = !bulkRow;
-      const bulk_tools: SeqTool[] = bulkRow ? await buildBulkSequence(bulkRow) : [];
-      // buildBulkSequence/buildCornerTool only use cutting_diameter_in from the row
+      const bulk_tools: SeqTool[] = await buildBulkSequence();
+      const needs_special = bulk_tools.length === 0;
       type CovRow = typeof coverage[0];
 
       // Corner tool: if no tool fits the corner radius constraint, fall back to the
@@ -4207,7 +4224,7 @@ ${catalogList}`
         constraints: {
           max_bulk_dia: +maxBulkDia.toFixed(4),
           max_corner_dia: +maxCornerDia.toFixed(4),
-          bulk_dia: bulkRow ? parseFloat(bulkRow.cutting_diameter_in) : null,
+          bulk_dia: bulk_tools[0]?.dia ?? null,
           corner_dia: cornerRow ? parseFloat(cornerRow.cutting_diameter_in) : null,
         },
         needs_special,
