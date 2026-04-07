@@ -3926,7 +3926,10 @@ ${catalogList}`
       const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
 
       // ── 3. Corner dia picker (unchanged single-pass logic) ────────────────────
-      // L/D target: HEM 5×D, Traditional 4×D
+      // L/D target: HEM 5×D (light WOC keeps radial force low, tolerates more reach),
+      // Traditional 4×D (higher radial force at 40-60% WOC needs shorter reach).
+      // Higher flute count tools have larger core dia → stiffer → effectively better L/D,
+      // but we use a single target and let flute-count sorting pick the best EDP within it.
       const ldTarget = cutting_style === "hem" ? 5.0 : 4.0;
 
       const findBestCornerDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
@@ -3968,13 +3971,57 @@ ${catalogList}`
         helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia_in: string; is_rn: boolean; }
 
       // Fetch best tool at a given diameter that reaches the required depth.
-      // Sorting priority:
-      //   1. Prefer variable_pitch (HEM adaptive toolpaths need it; also helps traditional)
-      //   2. For HEM: prefer higher flute count (more teeth = higher feed rate)
-      //      For Traditional: prefer lower flute count (better chip clearance at 40-60% WOC)
-      //   3. Shortest reach that still covers the band (best rigidity for the band)
+      //
+      // Stability selection priority:
+      //   1. Chipbreaker geometry preferred for standard-LOC (non-RN) slots — ~20% force
+      //      reduction improves deflection directly. Not available in necked tooling, so
+      //      RN slots exclude it. Truncated rougher excluded (needs wide WOC we can't guarantee).
+      //   2. Variable pitch preferred — disrupts regenerative chatter, critical for HEM.
+      //   3. Higher flute count for HEM (more teeth → larger core → stiffer, higher MRR).
+      //      Lower flute count for Traditional (chip clearance at 40–60% WOC).
+      //      More flutes also means larger core diameter → higher second moment of area → stiffer.
+      //   4. Shortest reach that covers the band (minimize L/D within the band).
+      //
+      // allowRn: false for the final deep tool (will be fetched separately as RN); true means
+      //   we want the shortest standard LOC tool — chipbreaker eligible.
       const fluteOrder = cutting_style === "hem" ? "DESC" : "ASC";
-      const fetchBestToolAtDia = async (dia: number, minReach: number): Promise<ToolRow | null> => {
+
+      const fetchBestToolAtDia = async (dia: number, minReach: number, preferRn = false): Promise<ToolRow | null> => {
+        // For non-RN preference (upper bands): prefer chipbreaker, exclude necked tools
+        // For RN preference (deep bands): allow necked tools, exclude chipbreaker (not available in RN)
+        const geoFilter = preferRn
+          ? `AND geometry NOT IN ('chipbreaker','truncated_rougher')`
+          : `AND geometry NOT IN ('truncated_rougher')`;
+        const rnFilter = preferRn
+          ? `` // allow both standard and RN
+          : `AND lbs_in IS NULL`; // standard LOC only for chipbreaker eligibility
+
+        // First try with chipbreaker preference (non-RN bands only)
+        if (!preferRn) {
+          const cbResult = await pool.query(`
+            SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                   loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                   corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   (lbs_in > 0) as is_rn
+            FROM skus
+            WHERE tool_type = 'endmill'
+              AND cutting_diameter_in = $1
+              AND corner_condition = 'square'
+              AND geometry = 'chipbreaker'
+              AND lbs_in IS NULL
+              AND COALESCE(lbs_in, loc_in) >= $2
+              ${coatingFilter}
+              ${fluteFilter}
+            ORDER BY
+              CASE WHEN variable_pitch = true THEN 0 ELSE 1 END ASC,
+              flutes ${fluteOrder},
+              COALESCE(lbs_in, loc_in) ASC
+            LIMIT 1
+          `, [dia, minReach]);
+          if (cbResult.rows.length) return cbResult.rows[0];
+        }
+
+        // Fall back to standard geometry (or RN if preferRn)
         const r = await pool.query(`
           SELECT edp, description1, description2, cutting_diameter_in, flutes,
                  loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
@@ -3984,7 +4031,8 @@ ${catalogList}`
           WHERE tool_type = 'endmill'
             AND cutting_diameter_in = $1
             AND corner_condition = 'square'
-            AND geometry NOT IN ('chipbreaker','truncated_rougher')
+            ${geoFilter}
+            ${rnFilter}
             AND COALESCE(lbs_in, loc_in) >= $2
             ${coatingFilter}
             ${fluteFilter}
@@ -4041,9 +4089,12 @@ ${catalogList}`
             picked = { tool: null as any, reach: parseFloat(fallback.max_reach), dia: parseFloat(fallback.cutting_diameter_in) };
           }
 
-          // Fetch the actual best EDP at this diameter that reaches the band end
+          // Fetch the actual best EDP at this diameter that reaches the band end.
+          // Last slot: preferRn=true (needs deep reach of RN/LBS tool, no chipbreaker available in necked)
+          // Upper slots: preferRn=false (standard LOC, chipbreaker preferred for force reduction)
           const bandTo = Math.min(picked.reach, target_depth);
-          const tool = await fetchBestToolAtDia(picked.dia, bandTo);
+          const isLastBand = bandTo >= target_depth;
+          const tool = await fetchBestToolAtDia(picked.dia, bandTo, isLastBand);
           if (!tool) break;
 
           // Avoid duplicate diameter (same dia twice in a row)
