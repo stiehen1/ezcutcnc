@@ -3099,7 +3099,7 @@ export async function registerRoutes(
     if (token !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
     const { pool } = await import("./db");
 
-    const [users, activity, operations] = await Promise.all([
+    const [users, activity, operations, registrations] = await Promise.all([
       // Users: email, signup date, save count, last active
       pool.query(`
         SELECT
@@ -3130,14 +3130,23 @@ export async function registerRoutes(
         GROUP BY operation
         ORDER BY count DESC
       `),
+      // All registrations from welcome modal (leads table)
+      pool.query(`
+        SELECT id, name, email, city, region, country, postal, created_at, notified_at
+        FROM leads
+        WHERE operation = 'tool_request'
+        ORDER BY created_at DESC
+      `),
     ]);
 
     res.json({
       users: users.rows,
       activity: activity.rows,
       operations: operations.rows,
+      registrations: registrations.rows,
       totals: {
         users: users.rows.length,
+        registrations: registrations.rowCount ?? 0,
         saves: activity.rows.length > 0 ? (await pool.query(`SELECT COUNT(*) FROM toolbox_items`)).rows[0].count : 0,
       },
     });

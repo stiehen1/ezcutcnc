@@ -22,11 +22,24 @@ type OperationCount = {
   count: string;
 };
 
+type Registration = {
+  id: number;
+  name: string | null;
+  email: string;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  postal: string | null;
+  created_at: string;
+  notified_at: string | null;
+};
+
 type Stats = {
   users: User[];
   activity: ActivityItem[];
   operations: OperationCount[];
-  totals: { users: number; saves: number };
+  registrations: Registration[];
+  totals: { users: number; registrations: number; saves: number };
 };
 
 type AllowedEmail = { email: string; notes: string; added_at: string };
@@ -44,7 +57,7 @@ export default function Admin() {
   const [password, setPassword] = React.useState("");
   const [authError, setAuthError] = React.useState("");
   const [authLoading, setAuthLoading] = React.useState(false);
-  const [tab, setTab] = React.useState<"users" | "activity" | "usage" | "access">("users");
+  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access">("registrations");
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [access, setAccess] = React.useState<AccessData | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -227,7 +240,16 @@ export default function Admin() {
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Summary cards */}
         {stats && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-zinc-900 border border-border rounded-xl px-4 py-3">
+              <div className="text-xs text-muted-foreground">Registrations</div>
+              <div className="text-3xl font-bold text-emerald-400 mt-1">{stats.totals.registrations}</div>
+              {stats.registrations.filter(r => !r.notified_at).length > 0 && (
+                <div className="text-[10px] text-amber-400 mt-1">
+                  {stats.registrations.filter(r => !r.notified_at).length} not yet emailed
+                </div>
+              )}
+            </div>
             <div className="bg-zinc-900 border border-border rounded-xl px-4 py-3">
               <div className="text-xs text-muted-foreground">Toolbox Users</div>
               <div className="text-3xl font-bold text-indigo-400 mt-1">{stats.totals.users}</div>
@@ -241,17 +263,21 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 border border-border">
-          {(["users", "activity", "usage", "access"] as const).map(t => (
+          {(["registrations", "users", "activity", "usage", "access"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className="flex-1 rounded-md py-1.5 text-xs font-semibold transition-all capitalize"
               style={{
-                backgroundColor: tab === t ? (t === "access" ? "#7c3aed" : "#6366f1") : "transparent",
+                backgroundColor: tab === t
+                  ? t === "access" ? "#7c3aed"
+                  : t === "registrations" ? "#059669"
+                  : "#6366f1"
+                  : "transparent",
                 color: tab === t ? "#fff" : "#a1a1aa",
               }}
             >
-              {t === "users" ? "Users" : t === "activity" ? "Recent Activity" : t === "usage" ? "Usage" : "Access Control"}
+              {t === "registrations" ? "Registrations" : t === "users" ? "Toolbox Users" : t === "activity" ? "Activity" : t === "usage" ? "Usage" : "Access"}
             </button>
           ))}
         </div>
@@ -264,6 +290,44 @@ export default function Admin() {
         )}
 
         {loading && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+
+        {/* Registrations tab */}
+        {!loading && tab === "registrations" && stats && (
+          <div className="border border-border rounded-xl overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-zinc-900 border-b border-border">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Name</th>
+                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Email</th>
+                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Location</th>
+                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Registered</th>
+                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Notified</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.registrations.length === 0 && (
+                  <tr><td colSpan={5} className="text-center text-muted-foreground px-4 py-8">No registrations yet.</td></tr>
+                )}
+                {stats.registrations.map((r, i) => (
+                  <tr key={r.id} className={i % 2 === 0 ? "bg-zinc-950/30" : ""}>
+                    <td className="px-4 py-2.5 font-medium text-white">{r.name || "—"}</td>
+                    <td className="px-4 py-2.5 text-zinc-300">{r.email}</td>
+                    <td className="px-4 py-2.5 text-zinc-400">
+                      {[r.city, r.region, r.country].filter(Boolean).join(", ") || "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-400">{fmtTime(r.created_at)}</td>
+                    <td className="px-4 py-2.5">
+                      {r.notified_at
+                        ? <span className="text-emerald-400">{fmt(r.notified_at)}</span>
+                        : <span className="text-amber-400 font-semibold">Not sent</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Users tab */}
         {!loading && tab === "users" && stats && (
