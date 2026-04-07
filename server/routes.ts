@@ -4045,22 +4045,49 @@ ${catalogList}`
       const buildCornerTool = async (row: typeof coverage[0]): Promise<SeqTool | null> => {
         const dia = parseFloat(row.cutting_diameter_in);
         const useBallNose = dia < 0.250;
-        const cornerCond = useBallNose ? "ball" : "square";
 
-        const toolRows = await pool.query(`
-          SELECT edp, description1, description2, cutting_diameter_in, flutes,
-                 loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
-                 corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
-                 (lbs_in > 0) as is_rn
-          FROM skus
-          WHERE tool_type = 'endmill'
-            AND cutting_diameter_in = $1
-            AND corner_condition = $2
-            AND COALESCE(lbs_in, loc_in) >= $3
-            ${coatingFilter}
-          ORDER BY COALESCE(lbs_in, loc_in) DESC
-          LIMIT 1
-        `, [dia, cornerCond, target_depth]);
+        // Ball nose: corner dia < 0.250" — matches corner radius exactly via axial engagement
+        // Corner radius (bull nose): corner dia >= 0.250" — CR tool whose radius <= pocket corner radius
+        // Never use square corner for a corner finishing tool
+        let toolRows;
+        if (useBallNose) {
+          toolRows = await pool.query(`
+            SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                   loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                   corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   (lbs_in > 0) as is_rn
+            FROM skus
+            WHERE tool_type = 'endmill'
+              AND cutting_diameter_in = $1
+              AND corner_condition = 'ball'
+              AND COALESCE(lbs_in, loc_in) >= $2
+              ${coatingFilter}
+            ORDER BY COALESCE(lbs_in, loc_in) DESC
+            LIMIT 1
+          `, [dia, target_depth]);
+        } else {
+          // Prefer corner radius tool; fall back to ball nose if no CR tool stocked at this dia
+          toolRows = await pool.query(`
+            SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                   loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                   corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   (lbs_in > 0) as is_rn
+            FROM skus
+            WHERE tool_type = 'endmill'
+              AND cutting_diameter_in = $1
+              AND corner_condition NOT IN ('square')
+              AND (
+                corner_condition = 'ball'
+                OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $3)
+              )
+              AND COALESCE(lbs_in, loc_in) >= $2
+              ${coatingFilter}
+            ORDER BY
+              CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 0 END DESC,
+              COALESCE(lbs_in, loc_in) DESC
+            LIMIT 1
+          `, [dia, target_depth, corner_radius]);
+        }
 
         if (!toolRows.rows.length) return null;
         const t = toolRows.rows[0];
