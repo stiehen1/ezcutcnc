@@ -175,7 +175,6 @@ const WALKTHROUGH_STEPS = [
       { n: "4", text: "Download the associated .STP file for your CAM system if needed" },
       { n: "5", text: "Tap Use Tool → to transfer the EDP into the calculator, fill in your setup and cut parameters — the engine does the rest" },
     ],
-    note: "Tool Finder also lets you download an STP file for any standard tool to use directly in your CAM system.",
   },
   {
     icon: "⚙️",
