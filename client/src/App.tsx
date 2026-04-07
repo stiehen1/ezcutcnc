@@ -230,7 +230,10 @@ function WelcomeModal({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: (
         <div className="px-6 pt-5 pb-3 border-b border-zinc-800">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xl">{s.icon}</span>
-            <span className="text-[10px] text-zinc-600 font-mono">{step + 1} / {total}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-zinc-600 font-mono">{step + 1} / {total}</span>
+              <button onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); onClose?.(); }} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+            </div>
           </div>
           <p className="text-sm font-bold text-white leading-snug">{s.title}</p>
           {(s as any).subtitle && <p className="text-[11px] text-orange-400 mt-0.5">{(s as any).subtitle}</p>}
