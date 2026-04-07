@@ -7366,7 +7366,7 @@ ${stabSection}
               {/* Target depth + corner radius */}
               <div className="flex gap-3">
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Total finished pocket depth from top of part to floor.">Target Depth (in)</FieldLabel>
+                  <FieldLabel hint="Total finished pocket depth from top of part to floor.">Total Finished Depth (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 2.500"
                     value={form.dp_target_depth > 0 ? form.dp_target_depth.toFixed(3) : ""}
