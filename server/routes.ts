@@ -4011,84 +4011,44 @@ ${catalogList}`
 
         // Corner radius preferred for all roughing — better tool life, edge protection
         // Priority for standard-LOC (non-RN) bands:
-        //   1. CR + chipbreaker
-        //   2. CR + standard geometry
-        //   3. Square + chipbreaker
-        //   4. Square + standard geometry
-        // For RN bands: CR preferred, then square; no chipbreaker (not available in RN)
+        //   1. R030 CR + chipbreaker  (best stocked CR size + force reduction)
+        //   2. R030 CR + standard
+        //   3. Any other CR + chipbreaker
+        //   4. Any other CR + standard
+        //   5. Square + chipbreaker
+        //   6. Square + standard
+        // For RN bands: same CR preference order, no chipbreaker (not available in RN)
+
+        const R030 = `AND corner_condition = '0.030'`;
+        const anyCR = `AND corner_condition = 'corner_radius'`;
+        const square = `AND corner_condition = 'square'`;
+        const cbGeo  = `AND geometry = 'chipbreaker' AND lbs_in IS NULL`;
+        const stdGeo = `AND geometry NOT IN ('chipbreaker','truncated_rougher') AND lbs_in IS NULL`;
+        const rnGeo  = `AND geometry NOT IN ('chipbreaker','truncated_rougher')`;
+
+        const tryQuery = (cornerFilter: string, geoFilter: string) => pool.query(`
+          SELECT ${selectCols} FROM skus
+          WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
+            ${cornerFilter} ${geoFilter}
+            AND COALESCE(lbs_in, loc_in) >= $2
+            ${coatingFilter} ${fluteFilter}
+          ORDER BY ${orderBy} LIMIT 1
+        `, [dia, minReach]);
 
         if (!preferRn) {
-          // 1. CR + chipbreaker
-          const r1 = await pool.query(`
-            SELECT ${selectCols} FROM skus
-            WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
-              AND corner_condition = 'corner_radius'
-              AND geometry = 'chipbreaker' AND lbs_in IS NULL
-              AND COALESCE(lbs_in, loc_in) >= $2
-              ${coatingFilter} ${fluteFilter}
-            ORDER BY ${orderBy} LIMIT 1
-          `, [dia, minReach]);
-          if (r1.rows.length) return r1.rows[0];
-
-          // 2. CR + standard geometry
-          const r2 = await pool.query(`
-            SELECT ${selectCols} FROM skus
-            WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
-              AND corner_condition = 'corner_radius'
-              AND geometry NOT IN ('chipbreaker','truncated_rougher') AND lbs_in IS NULL
-              AND COALESCE(lbs_in, loc_in) >= $2
-              ${coatingFilter} ${fluteFilter}
-            ORDER BY ${orderBy} LIMIT 1
-          `, [dia, minReach]);
-          if (r2.rows.length) return r2.rows[0];
-
-          // 3. Square + chipbreaker
-          const r3 = await pool.query(`
-            SELECT ${selectCols} FROM skus
-            WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
-              AND corner_condition = 'square'
-              AND geometry = 'chipbreaker' AND lbs_in IS NULL
-              AND COALESCE(lbs_in, loc_in) >= $2
-              ${coatingFilter} ${fluteFilter}
-            ORDER BY ${orderBy} LIMIT 1
-          `, [dia, minReach]);
-          if (r3.rows.length) return r3.rows[0];
-
-          // 4. Square + standard geometry
-          const r4 = await pool.query(`
-            SELECT ${selectCols} FROM skus
-            WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
-              AND corner_condition = 'square'
-              AND geometry NOT IN ('truncated_rougher') AND lbs_in IS NULL
-              AND COALESCE(lbs_in, loc_in) >= $2
-              ${coatingFilter} ${fluteFilter}
-            ORDER BY ${orderBy} LIMIT 1
-          `, [dia, minReach]);
-          return r4.rows[0] ?? null;
-
+          const r1 = await tryQuery(R030, cbGeo);   if (r1.rows.length) return r1.rows[0];
+          const r2 = await tryQuery(R030, stdGeo);  if (r2.rows.length) return r2.rows[0];
+          const r3 = await tryQuery(anyCR, cbGeo);  if (r3.rows.length) return r3.rows[0];
+          const r4 = await tryQuery(anyCR, stdGeo); if (r4.rows.length) return r4.rows[0];
+          const r5 = await tryQuery(square, cbGeo); if (r5.rows.length) return r5.rows[0];
+          const r6 = await tryQuery(square, `AND geometry NOT IN ('truncated_rougher') AND lbs_in IS NULL`);
+          return r6.rows[0] ?? null;
         } else {
-          // RN bands — CR preferred, then square; chipbreaker not available in RN
-          const r1 = await pool.query(`
-            SELECT ${selectCols} FROM skus
-            WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
-              AND corner_condition = 'corner_radius'
-              AND geometry NOT IN ('chipbreaker','truncated_rougher')
-              AND COALESCE(lbs_in, loc_in) >= $2
-              ${coatingFilter} ${fluteFilter}
-            ORDER BY ${orderBy} LIMIT 1
-          `, [dia, minReach]);
-          if (r1.rows.length) return r1.rows[0];
-
-          const r2 = await pool.query(`
-            SELECT ${selectCols} FROM skus
-            WHERE tool_type = 'endmill' AND cutting_diameter_in = $1
-              AND corner_condition = 'square'
-              AND geometry NOT IN ('chipbreaker','truncated_rougher')
-              AND COALESCE(lbs_in, loc_in) >= $2
-              ${coatingFilter} ${fluteFilter}
-            ORDER BY ${orderBy} LIMIT 1
-          `, [dia, minReach]);
-          return r2.rows[0] ?? null;
+          // RN bands — .030 CR first, then any CR, then square; no chipbreaker
+          const r1 = await tryQuery(R030, rnGeo);   if (r1.rows.length) return r1.rows[0];
+          const r2 = await tryQuery(anyCR, rnGeo);  if (r2.rows.length) return r2.rows[0];
+          const r3 = await tryQuery(square, rnGeo);
+          return r3.rows[0] ?? null;
         }
       };
 
