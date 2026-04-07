@@ -10210,8 +10210,8 @@ ${stabSection}
         );
       })()}
 
-      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only */}
-      {operation === "milling" && (stabilityIndex || stability) && (
+      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only, not deep pocket */}
+      {operation === "milling" && form.mode !== "deep_pocket" && (stabilityIndex || stability) && (
       <div className="rounded-2xl border border-card-border overflow-hidden mt-5">
 
         {/* Section header */}
