@@ -204,7 +204,7 @@ const WALKTHROUGH_STEPS = [
     icon: "🧮",
     title: "Calculators — Quick Reference Tools",
     subtitle: "Standalone shop-floor calculators — no EDP or setup required.",
-    body: "Access them from the Calculators tab. Includes: chip thinning, arc entry load spike, helix & ramp angle, cusp height, bolt circle G-code, tap drill sizes, feed correction for arcs, MRR & HP estimate, and more. Each has a How to fix it section when something looks off. Great for quick sanity checks at the machine.",
+    body: "Access them from the Misc. Calculators selector. Includes: chip thinning, arc entry load spike, helix & ramp angle, cusp height, bolt circle G-code, tap drill sizes, feed correction for arcs, MRR & HP estimate, and more. Each has a How to fix it section when something looks off. Great for quick sanity checks at the machine.",
     cta: "Let's get started →",
     last: true,
   },
