@@ -759,6 +759,232 @@ function FeedbackButton() {
   );
 }
 
+function RegrindingTab() {
+  const [open, setOpen] = React.useState(false);
+  const [contactOpen, setContactOpen] = React.useState(false);
+  const [email, setEmail] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [state, setState] = React.useState("");
+  const [zip, setZip] = React.useState("");
+  const [zipStatus, setZipStatus] = React.useState<"idle"|"loading"|"found"|"error">("idle");
+
+  const lookupZip = React.useCallback(async (z: string) => {
+    if (z.length !== 5 || !/^\d{5}$/.test(z)) return;
+    setZipStatus("loading");
+    try {
+      const r = await fetch(`https://api.zippopotam.us/us/${z}`);
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      const place = data.places?.[0];
+      if (place) { setCity(place["place name"] ?? ""); setState(place["state abbreviation"] ?? ""); setZipStatus("found"); }
+      else setZipStatus("error");
+    } catch { setCity(""); setState(""); setZipStatus("error"); }
+  }, []);
+
+  return (
+    <>
+      {/* Floating tab */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed right-0 z-50 bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 36px)" }}
+        aria-label="Tool Regrinding Program"
+      >
+        Regrinding
+      </button>
+
+      {/* Slide-in panel */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+          <div
+            className="w-full max-w-sm bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-5 py-4 flex items-center justify-between z-10">
+              <div>
+                <p className="text-sm font-bold text-orange-400 uppercase tracking-widest">Tool Reconditioning</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Core Cutter LLC · Gardiner, ME</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+            </div>
+
+            <div className="p-5 space-y-5">
+
+              {/* Hero stat */}
+              <div className="rounded-xl bg-orange-500/10 border border-orange-500/30 p-4 text-center">
+                <p className="text-3xl font-black text-orange-400">~50%</p>
+                <p className="text-sm text-zinc-200 font-semibold mt-1">of new tool cost</p>
+                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — with performance to match.</p>
+              </div>
+
+              {/* Customer feedback stat */}
+              <div className="rounded-xl bg-green-500/10 border border-green-500/30 p-4 text-center">
+                <p className="text-3xl font-black text-green-400">90–125%</p>
+                <p className="text-sm text-zinc-200 font-semibold mt-1">of new tool performance</p>
+                <p className="text-[11px] text-zinc-400 mt-1">Customer feedback consistently shows reconditioned Core Cutter tools meet or exceed new tool performance.</p>
+              </div>
+
+              {/* What we recondition */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">Any Brand · Any of These Tool Types</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {["Corner Rounders","Dovetail Cutters","Drills","End Mills","Feed Mills","Form Tools","Key Seat Cutters","Lollipop Cutters","Radius Cutters","Reamers","Step Drills","Tapered Endmills"].map(t => (
+                    <p key={t} className="text-[11px] text-zinc-300 flex items-center gap-1.5">
+                      <span className="text-orange-400">›</span>{t}
+                    </p>
+                  ))}
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">How It Works</p>
+                <div className="space-y-3">
+                  {[
+                    { n: "1", title: "Collect & Send", body: "Contact your distributor with your tool list and any special requirements (min LOC, end-only, min dia reduction, etc.). Tube or wax-dip all tools for best recovery." },
+                    { n: "2", title: "Evaluate & Quote", body: "We inspect and quote based on 'similar tool' quantity batching — more of the same EDP = better price. Non-reconditionable tools returned as 'no work done'." },
+                    { n: "3", title: "Recondition & Return", body: "Fresh geometry + original coating restored. Tools ship on the confirmed delivery date." },
+                  ].map(s => (
+                    <div key={s.n} className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-[10px] font-black text-white">{s.n}</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">{s.title}</p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">{s.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Minimum quantities */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">Minimum Quantities</p>
+                <div className="rounded-lg border border-zinc-700 overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-zinc-800">
+                        <th className="text-left px-3 py-2 text-zinc-400 font-semibold">Diameter</th>
+                        <th className="text-right px-3 py-2 text-zinc-400 font-semibold">Min Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[["1/4\"","16 pcs"],["3/8\"","12 pcs"],["1/2\"","6 pcs"],["5/8\"","4 pcs"],["3/4\"","4 pcs"],["1.0\"","3 pcs"]].map(([dia, qty], i) => (
+                        <tr key={dia} className={i % 2 === 0 ? "bg-zinc-900" : "bg-zinc-800/50"}>
+                          <td className="px-3 py-1.5 text-zinc-200 font-medium">{dia}</td>
+                          <td className="px-3 py-1.5 text-orange-400 font-bold text-right">{qty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Key notes */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Good to Know</p>
+                {[
+                  "Solid carbide only — no carbide-tipped, HSS, or cobalt",
+                  "1/4\" diameter minimum",
+                  "Any brand accepted",
+                  "Serrated roughers & chipbreakers: we clean rake face and add edge prep — cannot replace missing serrations",
+                  "Shipping to/from Core Cutter is customer's responsibility",
+                  "Tools reconditioned to our engineered grind spec — no guarantee on output performance, but customers love the results",
+                ].map((note, i) => (
+                  <p key={i} className="text-[11px] text-zinc-400 flex gap-2">
+                    <span className="text-orange-400 shrink-0">·</span>{note}
+                  </p>
+                ))}
+              </div>
+
+              {/* CTA */}
+              <button
+                onClick={() => setContactOpen(true)}
+                className="block w-full text-center bg-orange-500 hover:bg-orange-400 text-white font-semibold text-sm rounded-xl py-3 transition-colors"
+              >
+                Email Us for More Information →
+              </button>
+              <p className="text-[10px] text-zinc-500 text-center">sales@corecutterusa.com · 207.588.7519 · Gardiner, ME</p>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contact modal */}
+      {contactOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setContactOpen(false)}>
+          <div className="relative bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <button onClick={() => setContactOpen(false)}
+              className="absolute top-3 right-4 text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-orange-400 mb-0.5">Reconditioning Inquiry</p>
+              <p className="text-sm text-zinc-300">We'll follow up with pricing and a reconditioning form.</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-400 uppercase tracking-widest">Your Email</label>
+                <input type="email" placeholder="you@company.com"
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-400"
+                  value={email} onChange={e => setEmail(e.target.value)} />
+              </div>
+
+              <div className="flex gap-2">
+                <div className="flex-1 space-y-1">
+                  <label className="text-[10px] text-zinc-400 uppercase tracking-widest">City</label>
+                  <input type="text"
+                    placeholder={zipStatus === "loading" ? "Looking up…" : zipStatus === "error" ? "Not found" : ""}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-400"
+                    value={city} onChange={e => setCity(e.target.value)} />
+                </div>
+                <div className="w-20 space-y-1">
+                  <label className="text-[10px] text-zinc-400 uppercase tracking-widest">State</label>
+                  <input type="text" maxLength={2}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-400"
+                    value={state} onChange={e => setState(e.target.value.toUpperCase().slice(0, 2))} />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-400 uppercase tracking-widest">ZIP Code</label>
+                <input type="text" inputMode="numeric" maxLength={5} placeholder="e.g. 90210"
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-400"
+                  value={zip}
+                  onChange={e => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+                    setZip(v);
+                    setZipStatus("idle");
+                    if (v.length === 5) lookupZip(v);
+                  }} />
+              </div>
+            </div>
+
+            <a
+              href={email ? `mailto:sales@corecutterusa.com?subject=${encodeURIComponent("Tool Reconditioning Inquiry")}&body=${encodeURIComponent(
+                `Hello,\n\nI'm interested in your tool reconditioning program.\n\nPlease send me pricing and a reconditioning form.` +
+                (city ? `\n\nLocation: ${city}, ${state} ${zip}` : "") +
+                `\nReply to: ${email}\n\nThank you`
+              )}` : "#"}
+              onClick={() => { if (email) setContactOpen(false); }}
+              className={`block w-full text-center rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                email ? "bg-orange-500 hover:bg-orange-400 text-white cursor-pointer" : "bg-zinc-700 text-zinc-400 cursor-default"
+              }`}
+            >
+              {email ? "Send Inquiry →" : "Enter your email to continue"}
+            </a>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -780,6 +1006,7 @@ function App() {
         <WelcomeModal />
         <WalkThruButton />
         <FeedbackButton />
+        <RegrindingTab />
         <HelpButton />
         <BrevoNudge />
         <AddToHomeScreenBanner />
