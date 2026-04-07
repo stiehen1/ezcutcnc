@@ -6425,7 +6425,7 @@ ${stabSection}
           )}
 
           {/* Corner Condition — endmill only */}
-          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
+          {form.tool_type !== "chamfer_mill" && form.mode !== "deep_pocket" && <div className="space-y-1.5">
             <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = bull nose for 3D contouring. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
             {form.mode === "surfacing" && (
               <p className="text-[10px] text-amber-400">3D surfacing requires a ball or bull nose tool — square corner excluded.</p>
@@ -6479,7 +6479,7 @@ ${stabSection}
             </div>
           </div>}
 
-          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5">
+          {form.tool_type !== "chamfer_mill" && form.mode !== "deep_pocket" && <div className="space-y-1.5">
             <FieldLabel hint="Standard = full-length flute. Chipbreaker (-CB) = notched flute that segments the chip, net ~20% force reduction. Truncated Rougher (VXR) = serrated flute with negative K-land edge prep — K-land strengthens the edge but adds back ~12% pressure, so net force reduction is ~17% vs standard.">
               Flute Geometry
             </FieldLabel>
@@ -6506,7 +6506,7 @@ ${stabSection}
             </div>
           </div>}
 
-          {form.tool_type !== "chamfer_mill" && <div className="space-y-1.5 mt-1">
+          {form.tool_type !== "chamfer_mill" && form.mode !== "deep_pocket" && <div className="space-y-1.5 mt-1">
             <FieldLabel hint="Variable Pitch spaces flute angles unevenly to disrupt regenerative chatter — the primary driver of vibration in steel, stainless, and titanium. Variable Helix varies the helix angle along the flute length to spread axial cutting forces and further dampen vibration. Most Core Cutter steel/stainless/titanium tools are Variable Pitch; select tools add Variable Helix. Aluminum tools are typically neither.">
               Tool Design
             </FieldLabel>
