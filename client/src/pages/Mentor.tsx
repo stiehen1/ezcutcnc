@@ -7985,7 +7985,7 @@ ${stabSection}
                             <div className="min-w-0">
                               <p className="text-[10px] font-semibold text-zinc-300">{role}</p>
                               <p className="text-xs font-bold text-white">EDP# {tool.edp}</p>
-                              <p className="text-[10px] text-zinc-400 truncate">{tool.description}</p>
+                              <p className="text-[10px] text-zinc-400 leading-relaxed">{tool.description}</p>
                             </div>
                           </div>
                         );
