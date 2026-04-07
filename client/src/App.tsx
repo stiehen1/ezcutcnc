@@ -170,7 +170,7 @@ const WALKTHROUGH_STEPS = [
     subtitle: "Not sure which Core Cutter tool to use?",
     steps: [
       { n: "1", text: "Select Tool Finder at the top of the page" },
-      { n: "2", text: "Search by diameter, material, operation, or flute count" },
+      { n: "2", text: "Start with Quick Pick for guided suggestions, or filter by diameter, material, operation, flute count — use as many filters as you like" },
       { n: "3", text: "Tap Use Tool → to transfer the EDP directly into the calculator" },
       { n: "4", text: "Fill in your machine setup and cut parameters — the engine does the rest" },
     ],
