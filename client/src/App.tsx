@@ -418,6 +418,18 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
       { heading: "7. Calculate Your Results", body: "Hit Calculate to get RPM, feed rate, chip load per tooth, HP draw, effective cutting diameter (adjusted for dovetail angle), deflection, and a pass-by-pass lateral strategy for reaching your final wall depth safely. If chatter occurs after running — reduce stickout first, then reduce radial pass depth, then reduce chip load." },
     ],
   },
+  deep_pocket: {
+    title: "Deep Pocket / Thin Wall Tips",
+    sections: [
+      { heading: "1. Select Your Material & Setup", body: "Material, machine, toolholder, and workholding must all be filled in before running the sequence — the engine uses these to calculate speeds/feeds per tool. Hard materials (Inconel, Ti, hardened) automatically tighten the corner engagement factor to 65% (vs 75% standard) to protect tools in the corner zone." },
+      { heading: "2. Target Depth & Corner Radius", body: "Enter your finished pocket depth and the inside corner radius. The 75% engagement rule is applied automatically — tool diameter is set to ≤75% of the corner diameter to prevent full-corner engagement spikes. Corner finish tool uses 60% rule (tighter, for light finishing passes)." },
+      { heading: "3. HEM vs Traditional", body: "HEM (Adaptive/Trochoidal) is strongly recommended for deep pockets and thin walls — light WOC keeps radial forces low, which is critical at high L/D. Traditional is available when your CAM system doesn't support adaptive paths, but expect heavier forces and more chatter risk at depth.\n\n• HEM: L/D up to 4× before stub tool added\n• Traditional: L/D up to 3× before stub tool added" },
+      { heading: "4. Understanding the Sequence", body: "The app selects the fewest tools to reach full depth — typically 2, max 3. Each tool covers a depth band:\n\n• Stub/short tool: upper band — best rigidity, runs fast\n• Standard LOC tool: mid band — balances reach and stiffness\n• RN (reduced-neck) tool: full depth — shorter LOC per pass, but full reach via the neck\n\nFor RN tools: DOC per pass = LOC (not LBS). The neck reaches depth but only the fluted zone cuts. Program multiple passes stepping down LOC at a time." },
+      { heading: "5. Corner Finish Tool", body: "A separate corner finish tool is always recommended to machine corners to true radius at full depth. The bulk tools leave 0.008–0.015\" stock on corner walls. The corner finish tool then makes a light, controlled pass to final dimension.\n\n• Corner dia ≥ 0.250\": square-end RN endmill, full depth in one sequence\n• Corner dia < 0.250\": ball nose RN — matches corner radius exactly, step-over controls scallop" },
+      { heading: "6. Thin Wall Strategy", body: "When Thin Wall is toggled on, a WOC taper schedule is shown on each bulk tool card:\n\n• HEM: >0.100\" from wall → 10% WOC / 0.030–0.100\" → 5% / Final pass → 3%\n• Traditional: Open zone → 50% / Mid → 30% / <0.100\" → 10% / Final → 5%\n\nLeave bilateral stock on both wall faces until the final passes — this keeps the wall supported and prevents flexing during roughing." },
+      { heading: "7. Feed Mill Option", body: "In P/K materials (steel, cast iron) an optional axial feed mill advisory may appear. Feed mills dramatically reduce cycle time in open-zone bulk removal but are currently special-order only. Use the quote button to request one pre-filled with your job details." },
+    ],
+  },
 };
 
 const PAGE_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
@@ -482,6 +494,8 @@ function HelpButton() {
         pageHelp = OPERATION_HELP["feedmilling"];
       } else if (mode === "surfacing") {
         pageHelp = OPERATION_HELP["surfacing"];
+      } else if (mode === "deep_pocket") {
+        pageHelp = OPERATION_HELP["deep_pocket"];
       } else {
         pageHelp = OPERATION_HELP["milling"];
       }

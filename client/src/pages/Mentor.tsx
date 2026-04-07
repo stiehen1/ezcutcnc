@@ -398,6 +398,15 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Stickout control is more critical in surfacing than almost any other operation.", body: "Deflection at the contact zone causes chatter that shows as periodic surface waviness — subtle and nearly impossible to fix by adjusting feeds after the fact. Shorten stickout first, every time. Reduce WOC before DOC. Going from 4\" to 3\" stickout gives a massive stiffness gain at the contact point." },
     { title: "Coolant, chip evacuation, and tool freshness matter most in long surfacing cycles.", body: "Aluminum: air blast — chip recutting leaves marks even at finishing engagement. Steel/stainless: consistent flood or TSC. Titanium/Inconel: high-pressure coolant mandatory, never dwell. Use fresh tools for finish passes — a slightly worn tool pushes material instead of cutting it and creates a surface haze that won't polish out." },
   ],
+  deep_pocket: [
+    { title: "Start with the largest diameter the corner allows — it's your best rigidity.", body: "The 75% engagement rule exists to prevent corner force spikes — but within that constraint, always pick the largest tool that fits. A 1/2\" tool is roughly 2.5× stiffer than a 3/8\" tool at the same L/D. Diameter is your first and most powerful rigidity lever before anything else." },
+    { title: "LOC is the pass limit, LBS is the reach — don't confuse them.", body: "On a reduced-neck tool, the LOC is short (say 0.625\") but the LBS/reach is long (say 3.25\"). You can reach 3.25\" deep — but each axial pass can only cut 0.625\" at a time. Program your DOC to the LOC, not the LBS. Multiple passes step down to full depth. Running DOC beyond LOC causes rubbing on the neck, heat, and chatter." },
+    { title: "HEM is almost always the right choice for long-reach pockets.", body: "Light WOC (8–12%) keeps radial force low, which keeps deflection low, which keeps chatter away. At 5×D stickout in Traditional, a moderate 40% WOC creates huge radial force. That same setup in HEM at 10% WOC reduces radial force by 70%. The longer the reach, the more HEM wins — the physics is cubic." },
+    { title: "Leave bilateral stock until the final pass — walls support themselves.", body: "Leaving 0.010–0.020\" stock on both sides of a thin wall keeps the material in compression. The unsupported wall can't flex because material behind it resists it. Machining both sides down simultaneously, then taking a final spring pass, produces far better wall straightness and finish than machining one side to final then the other." },
+    { title: "The corner finish tool does all the precision work — let the bulk tool go fast.", body: "The bulk tool doesn't need to hit final wall radius — it just needs to leave consistent stock (0.008–0.015\"). Aggressive bulk passes are fine. The corner finish tool (usually an RN or ball nose) then machines to final dimension in a controlled, light-engagement pass. Don't slow the bulk tool trying to hit a corner — that's not its job." },
+    { title: "Stub and standard tools handle the upper bands best — don't over-reach.", body: "Using a long-reach RN tool for the full depth when a short tool can cover the top 60% of the pocket is wasteful and introduces unnecessary vibration in the easy zone. Let the stub or standard tool do what it's good at — short, stiff, aggressive. Save the long-reach tool for where it's actually needed." },
+    { title: "Chip evacuation is critical in deep pockets — air blast or TSC mandatory.", body: "Re-cut chips in a deep pocket are abrasive. At 3×D depth, chips have nowhere to go unless you actively move them. Use TSC or directed air blast. For aluminum: air blast into the pocket from above works well. For steel/stainless: TSC prevents chip welding on the neck near the workpiece. Program a periodic Z-retract to clear chips if doing long passes." },
+  ],
 };
 MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
 
@@ -1152,6 +1161,13 @@ export default function Mentor() {
     finally { setTbSaving(false); }
   }
 
+  // ── Deep Pocket sequence state ────────────────────────────────────────────
+  const [dpResult, setDpResult] = React.useState<any>(null);
+  const [dpLoading, setDpLoading] = React.useState(false);
+  const [dpError, setDpError] = React.useState<string | null>(null);
+  // Per-tool physics results keyed by edp
+  const [dpPhysics, setDpPhysics] = React.useState<Record<string, any>>({});
+
   // ── PDF Print Upload ──────────────────────────────────────────────────────
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfExtracted, setPdfExtracted] = React.useState(false);
@@ -1336,7 +1352,7 @@ export default function Mentor() {
   // This matches shared/routes.ts input schema keys (or is trivially mappable)
   const INITIAL_FORM = {
     operation: "milling" as "milling" | "drilling" | "reaming" | "threadmilling" | "keyseat" | "dovetail" | "feedmill",
-    mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "surfacing" | "",
+    mode: "" as "hem" | "traditional" | "finish" | "face" | "slot" | "trochoidal" | "circ_interp" | "surfacing" | "deep_pocket" | "",
     material: "",
     tool_dia: 0,
     flutes: 0,
@@ -1361,6 +1377,14 @@ export default function Mentor() {
     surfacing_stepover_in: 0,
     surfacing_ap_in: 0,
     surfacing_tilt_deg: 0,
+
+    // Deep Pocket / Thin Wall strategy
+    dp_target_depth: 0,
+    dp_corner_radius: 0,
+    dp_pre_drill: false,
+    dp_pre_drill_dia: 0,
+    dp_cutting_style: "hem" as "hem" | "traditional",
+    dp_thin_wall: false,
 
     // Chamfer mill
     chamfer_series: "CMH" as "CMS" | "CMH",
@@ -2200,8 +2224,8 @@ export default function Mentor() {
   React.useEffect(() => { runRef.current = run; });
 
   const run = async () => {
-    // Must have an EDP or CC print PDF
-    if (!skuLocked && !pdfExtracted) {
+    // Must have an EDP or CC print PDF (not required for deep pocket — tools are selected by the sequencer)
+    if (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted) {
       setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);
       return;
     }
@@ -2211,19 +2235,23 @@ export default function Mentor() {
     else if (!form.material) missing.push("Material — select a specific material from the dropdown");
     if (!(form.machine_hp > 0)) missing.push("Machine HP");
     if (!(form.max_rpm > 0)) missing.push("Max RPM");
-    if (!(form.tool_dia > 0)) missing.push("Tool Diameter");
+    if (form.mode !== "deep_pocket" && !(form.tool_dia > 0)) missing.push("Tool Diameter");
     if (form.tool_type === "chamfer_mill") {
       if (!(form.flutes > 0)) missing.push("Flute Count");
       if (!(form.chamfer_angle > 0)) missing.push("Chamfer Angle");
       if (!(form.chamfer_depth > 0)) missing.push("Chamfer Depth");
     } else if (operation === "milling" || operation === "feedmilling") {
       if (!form.mode) missing.push("Process (HEM / Conventional / Slot…)");
-      if (!(form.flutes > 0)) missing.push("Flute Count");
+      if (form.mode !== "deep_pocket" && !(form.flutes > 0)) missing.push("Flute Count");
       if (form.mode === "circ_interp") {
         if (!(form.doc_xd > 0)) missing.push("Bore Depth");
       } else if (form.mode === "surfacing") {
         if (!(form.surfacing_ap_in > 0)) missing.push("Axial Pass Depth (ap)");
         if (!(form.target_ra_uin > 0)) missing.push("Surface Finish Target (Ra)");
+      } else if (form.mode === "deep_pocket") {
+        if (!(form.dp_target_depth > 0)) missing.push("Target Pocket Depth");
+        if (!(form.dp_corner_radius > 0)) missing.push("Corner Radius");
+        if (!(form.material)) missing.push("Material");
       } else {
         if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
         if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
@@ -2284,6 +2312,90 @@ export default function Mentor() {
     setRunWarnings([]);
     setErStatus("idle");
     setErError("");
+
+    // ── Deep Pocket mode — custom sequence path ─────────────────────────────
+    if (form.mode === "deep_pocket") {
+      setDpLoading(true);
+      setDpResult(null);
+      setDpError(null);
+      setDpPhysics({});
+      try {
+        const seqRes = await fetch("/api/deep-pocket/sequence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            target_depth: form.dp_target_depth,
+            corner_radius: form.dp_corner_radius,
+            cutting_style: form.dp_cutting_style,
+            thin_wall: form.dp_thin_wall,
+            pre_drill_dia: form.dp_pre_drill ? (form.dp_pre_drill_dia || 0) : 0,
+            material: form.material,
+            iso_category: isoCategory,
+            flutes: form.flutes || 5,
+            tool_dia: form.tool_dia || 0,
+            stickout: form.stickout || 0,
+            toolholder: form.toolholder,
+            machine_hp: form.machine_hp || 0,
+            machine_max_rpm: form.max_rpm || 0,
+            spindle_drive: form.spindle_drive || "direct",
+          }),
+        });
+        const seqData = await seqRes.json();
+        if (!seqData.ok) throw new Error(seqData.error ?? "Sequence lookup failed");
+        setDpResult(seqData);
+
+        // Now call the physics engine once per tool in sequence
+        const allTools: any[] = [
+          ...(seqData.bulk_tools ?? []),
+          ...(seqData.corner_tool ? [seqData.corner_tool] : []),
+        ];
+        const physicsMap: Record<string, any> = {};
+        await Promise.all(allTools.map(async (tool: any) => {
+          try {
+            // Use HEM or Traditional mode per cutting style
+            const toolMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
+            // DOC for this tool = its depth band height, capped at LOC
+            const bandDepth = tool.depth_band_to - tool.depth_band_from;
+            const docIn = Math.min(bandDepth, tool.loc_in);
+            const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
+            // WOC — HEM uses med preset for material, Traditional uses med preset
+            const isHem = toolMode === "hem";
+            // L/D based stickout estimate if not provided
+            const soEst = form.stickout > 0 ? form.stickout : tool.reach_in + tool.dia * 0.33;
+            const physResult = await mentor.mutateAsync({
+              ...form,
+              mode: toolMode as any,
+              tool_dia: tool.dia,
+              flutes: tool.flutes,
+              loc: tool.loc_in,
+              lbs: tool.lbs_in || 0,
+              stickout: soEst,
+              shank_dia: tool.shank_dia || 0,
+              helix_angle: tool.helix || 0,
+              variable_pitch: tool.variable_pitch,
+              variable_helix: tool.variable_helix,
+              geometry: tool.geometry as any,
+              tool_series: tool.series || "",
+              doc_xd: docXd,
+              woc_pct: isHem ? 10 : 40, // reasonable starting WOC per mode
+              edp: tool.edp,
+              operation: "milling" as any,
+              debug: false,
+            });
+            physicsMap[tool.edp] = physResult;
+          } catch {
+            // physics failed for this tool — still show card without params
+          }
+        }));
+        setDpPhysics(physicsMap);
+      } catch (err: any) {
+        setDpError(err?.message ?? "Sequence lookup failed");
+      } finally {
+        setDpLoading(false);
+      }
+      return;
+    }
+
     try {
       // Chamfer: form stores face width (as on print); engine expects axial depth
       const chamferAxial = form.tool_type === "chamfer_mill" && form.chamfer_angle > 0 && form.chamfer_depth > 0
@@ -2363,7 +2475,7 @@ export default function Mentor() {
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const MODE_LABELS: Record<string, string> = {
       hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
-      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation",
+      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation", deep_pocket: "Deep Pocket / Thin Wall",
       surfacing: "3D Surface Contouring",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
@@ -3688,6 +3800,7 @@ ${stabSection}
                 <option value="slot">Slotting</option>
                 <option value="circ_interp">Circular Interpolation</option>
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
+                <option value="deep_pocket">Deep Pocket / Thin Wall (Progressive Reach)</option>
               </select>
             )}
 
@@ -5707,7 +5820,7 @@ ${stabSection}
           </div>
 
           {/* Tool Geometry — adapts per operation */}
-          {operation !== "threadmilling" && operation !== "keyseat" && operation !== "dovetail" && (
+          {operation !== "threadmilling" && operation !== "keyseat" && operation !== "dovetail" && form.mode !== "deep_pocket" && (
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Tool Geometry</div>
@@ -5716,8 +5829,8 @@ ${stabSection}
           )}
 
           {operation === "milling" ? (<>
-          {/* EDP# / SKU lookup */}
-          <div className="mb-4 relative">
+          {/* EDP# / SKU lookup — hidden for deep pocket (sequencer selects tools from catalog) */}
+          {form.mode !== "deep_pocket" && <div className="mb-4 relative">
             <FieldLabel hint="Enter a Core Cutter EDP# to auto-populate tool geometry fields and enable the calculator.">Core Cutter EDP# (required to run — auto-fills tool specifications)</FieldLabel>
             <div className="relative mt-1.5">
               <Input
@@ -5790,10 +5903,10 @@ ${stabSection}
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* PDF Print Upload — shown in customer mode or as shortcut in eng mode */}
-          {(operation === "milling") && (!skuLocked) && (
+          {(operation === "milling") && (!skuLocked) && form.mode !== "deep_pocket" && (
             <div className={`rounded-lg border p-3 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-gray-600"}`}>
               {pdfExtracted ? (
                 <div className="space-y-2">
@@ -5872,8 +5985,8 @@ ${stabSection}
             </div>
           )}
 
-          {/* Tool geometry — single row: Flutes / Cut Dia / LOC / LBS / OAL */}
-          {(() => {
+          {/* Tool geometry — single row: Flutes / Cut Dia / LOC / LBS / OAL (hidden for deep pocket — sequencer selects tools) */}
+          {form.mode !== "deep_pocket" && (() => {
             const showLbs = form.tool_type !== "chamfer_mill" && (form.lbs > 0 || pdfExtracted);
             const showOal = pdfExtracted && pdfOal > 0;
             return (
@@ -6000,6 +6113,7 @@ ${stabSection}
           })()}
 
           {/* Chamfer Mill specific fields */}
+
           {form.tool_type === "chamfer_mill" && (
             <div className="space-y-4 mt-2">
               <div className="space-y-1.5">
@@ -6709,8 +6823,8 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Standard WOC/DOC (hidden for surfacing mode and chamfer_mill) ── */}
-          {form.mode !== "surfacing" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
+          {/* ── Standard WOC/DOC (hidden for surfacing, chamfer_mill, deep_pocket) ── */}
+          {form.mode !== "surfacing" && form.mode !== "deep_pocket" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
@@ -6862,7 +6976,7 @@ ${stabSection}
                       </Tooltip>
                     </TooltipProvider>
                     {/* Teeth in Cut — hidden for slot (all flutes engaged, obvious) */}
-                    {form.mode !== "slot" && (() => {
+                    {(form.mode as string) !== "slot" && (() => {
                       const ticColor = teethInCut < 1.0 ? "#f87171" : teethInCut <= 1.5 ? "#facc15" : teethInCut <= 2.5 ? "#4ade80" : "#fb923c";
                       return (
                         <TooltipProvider delayDuration={200}>
@@ -7231,6 +7345,103 @@ ${stabSection}
             );
           })()}
 
+          {/* ── Deep Pocket / Thin Wall inputs ──────────────────────────────── */}
+          {form.mode === "deep_pocket" && (
+            <div className="space-y-4 mt-2">
+              {/* Cutting style */}
+              <div className="space-y-2">
+                <FieldLabel hint="How the toolpath is programmed. HEM (adaptive/trochoidal) uses light WOC and deep DOC — better for long reach and thin wall. Traditional uses heavier WOC and shallower DOC.">Cutting Style</FieldLabel>
+                <div className="flex gap-2">
+                  {([["hem", "HEM / Adaptive"], ["traditional", "Traditional"]] as const).map(([val, label]) => (
+                    <button key={val} type="button"
+                      onClick={() => setForm(p => ({ ...p, dp_cutting_style: val }))}
+                      className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                      style={{ backgroundColor: form.dp_cutting_style === val ? "#6366f1" : "transparent", borderColor: form.dp_cutting_style === val ? "#6366f1" : "#52525b", color: "#fff" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Target depth + corner radius */}
+              <div className="flex gap-3">
+                <div className="flex-1 space-y-2">
+                  <FieldLabel hint="Total finished pocket depth from top of part to floor.">Target Depth (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 2.500"
+                    value={form.dp_target_depth > 0 ? form.dp_target_depth.toFixed(3) : ""}
+                    onChange={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_target_depth: n })); else if (!e.target.value.trim()) setForm(p => ({ ...p, dp_target_depth: 0 })); }}
+                    onBlur={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_target_depth: n })); }}
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <FieldLabel hint="Inside corner radius of the finished pocket. Drives maximum tool diameter via the 75% engagement rule — tool diameter must be ≤ 75% of corner diameter to avoid full-engagement force spikes.">Corner Radius (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.375"
+                    value={form.dp_corner_radius > 0 ? form.dp_corner_radius.toFixed(4) : ""}
+                    onChange={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_corner_radius: n })); else if (!e.target.value.trim()) setForm(p => ({ ...p, dp_corner_radius: 0 })); }}
+                    onBlur={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_corner_radius: n })); }}
+                  />
+                </div>
+              </div>
+
+              {/* Corner radius advisory */}
+              {form.dp_corner_radius > 0 && (() => {
+                const maxBulkDia = form.dp_corner_radius * 2 * 0.75;
+                const maxCornerDia = form.dp_corner_radius * 2 * 0.60;
+                return (
+                  <p className="text-[10px] text-zinc-400">
+                    75% rule → bulk tool max <span className="text-white">{maxBulkDia.toFixed(4)}"</span> &nbsp;·&nbsp;
+                    60% rule → corner finish max <span className="text-white">{maxCornerDia.toFixed(4)}"</span>
+                  </p>
+                );
+              })()}
+
+              {/* Thin wall toggle */}
+              <div className="flex items-center gap-3">
+                <button type="button"
+                  onClick={() => setForm(p => ({ ...p, dp_thin_wall: !p.dp_thin_wall }))}
+                  className="flex items-center gap-2 text-xs font-medium transition-colors"
+                  style={{ color: form.dp_thin_wall ? "#f97316" : "#71717a" }}>
+                  <div className="w-8 h-4 rounded-full border flex items-center transition-all px-0.5"
+                    style={{ borderColor: form.dp_thin_wall ? "#f97316" : "#52525b", backgroundColor: form.dp_thin_wall ? "rgba(249,115,22,0.2)" : "transparent" }}>
+                    <div className="w-3 h-3 rounded-full transition-all"
+                      style={{ backgroundColor: form.dp_thin_wall ? "#f97316" : "#52525b", marginLeft: form.dp_thin_wall ? "auto" : "0" }} />
+                  </div>
+                  Thin Wall (bilateral stock strategy)
+                </button>
+              </div>
+
+              {/* Pre-drill toggle */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <button type="button"
+                    onClick={() => setForm(p => ({ ...p, dp_pre_drill: !p.dp_pre_drill, dp_pre_drill_dia: p.dp_pre_drill ? 0 : p.dp_pre_drill_dia }))}
+                    className="flex items-center gap-2 text-xs font-medium transition-colors"
+                    style={{ color: form.dp_pre_drill ? "#38bdf8" : "#71717a" }}>
+                    <div className="w-8 h-4 rounded-full border flex items-center transition-all px-0.5"
+                      style={{ borderColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", backgroundColor: form.dp_pre_drill ? "rgba(56,189,248,0.2)" : "transparent" }}>
+                      <div className="w-3 h-3 rounded-full transition-all"
+                        style={{ backgroundColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", marginLeft: form.dp_pre_drill ? "auto" : "0" }} />
+                    </div>
+                    Pre-Drilled Entry Hole
+                  </button>
+                </div>
+                {form.dp_pre_drill && (
+                  <div className="space-y-2 pl-2">
+                    <FieldLabel hint="Diameter of the pre-drilled hole. If ≥ tool diameter, tool drops straight in. If smaller, a reduced-diameter helical entry is used.">Drill Dia (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners"
+                      placeholder="e.g. 0.500"
+                      value={form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia.toFixed(4) : ""}
+                      onChange={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_pre_drill_dia: n })); else if (!e.target.value.trim()) setForm(p => ({ ...p, dp_pre_drill_dia: 0 })); }}
+                      onBlur={e => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, dp_pre_drill_dia: n })); }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Tool Entry */}
           {operation === "milling" && (
             <>
@@ -7301,10 +7512,12 @@ ${stabSection}
             <Button
               className="w-full transition-all"
               onClick={run}
-              disabled={mentor.isPending || (!skuLocked && !pdfExtracted)}
+              disabled={(form.mode === "deep_pocket" ? dpLoading : mentor.isPending) || (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted)}
               style={formDirty && (skuLocked || pdfExtracted) ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
             >
-              {mentor.isPending ? "Running…" : formDirty ? "⟳ Inputs changed — Re-run CoreCutCNC" : "Run CoreCutCNC"}
+              {form.mode === "deep_pocket"
+                ? (dpLoading ? "Building Sequence…" : "Build Sequence")
+                : (mentor.isPending ? "Running…" : formDirty ? "⟳ Inputs changed — Re-run CoreCutCNC" : "Run CoreCutCNC")}
             </Button>
             <Button
               variant="secondary"
@@ -7334,6 +7547,170 @@ ${stabSection}
 
       {/* RIGHT — OUTPUT + STABILITY */}
       <div className="flex flex-col gap-4">
+
+      {/* ── DEEP POCKET OUTPUT ─────────────────────────────────────────────── */}
+      {form.mode === "deep_pocket" && (dpLoading || dpResult || dpError) && (() => {
+        // Helper: render one tool card
+        const renderToolCard = (tool: any, idx: number, total: number, role: "bulk" | "corner_finish") => {
+          const phys = dpPhysics[tool.edp];
+          const mil = phys?.customer;
+          const stab = phys?.stability;
+          const ldRatio = stab?.l_over_d;
+          const ldColor = !ldRatio ? "#71717a" : ldRatio <= 3 ? "#22c55e" : ldRatio <= 5 ? "#f59e0b" : "#ef4444";
+          const ldLabel = !ldRatio ? "" : ldRatio <= 3 ? "Good" : ldRatio <= 5 ? "Moderate" : "High";
+
+          // Entry label
+          const entryLabel = tool.entry?.type === "straight_drop"
+            ? "Straight drop — pre-drill clears tool"
+            : tool.entry?.type === "helical"
+            ? `Helical  ·  ⌀${tool.entry.helix_dia}"  ·  ${tool.entry.angle_deg}°`
+            : tool.entry?.type === "plunge_to_prior_depth"
+            ? "Plunge to prior band depth"
+            : tool.entry?.type === "plunge_from_bulk_path"
+            ? "Follows bulk tool path"
+            : tool.entry?.type ?? "";
+
+          // Thin wall WOC schedule
+          const taper = dpResult?.woc_taper;
+
+          return (
+            <div key={tool.edp} className="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700"
+                style={{ backgroundColor: role === "corner_finish" ? "rgba(99,102,241,0.15)" : "rgba(249,115,22,0.10)" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest"
+                    style={{ color: role === "corner_finish" ? "#a5b4fc" : "#fb923c" }}>
+                    {role === "corner_finish" ? "Corner Finish" : `Bulk  ${idx + 1} of ${total}`}
+                  </span>
+                  <span className="text-xs font-mono font-semibold text-white">{tool.edp}</span>
+                </div>
+                {ldRatio != null && (
+                  <span className="text-[10px] font-semibold" style={{ color: ldColor }}>
+                    L/D {ldRatio.toFixed(1)}×  {ldLabel}
+                  </span>
+                )}
+              </div>
+
+              {/* Tool info */}
+              <div className="px-4 pt-3 pb-1 space-y-0.5">
+                <p className="text-xs text-zinc-400">{tool.description || `Ø${tool.dia.toFixed(4)}"  ·  ${tool.flutes}fl  ·  ${tool.is_rn ? `LBS ${tool.lbs_in.toFixed(3)}"` : `LOC ${tool.loc_in.toFixed(3)}"`}`}</p>
+                <p className="text-[11px] text-zinc-500">
+                  Depth band: <span className="text-zinc-300">{tool.depth_band_from.toFixed(3)}" – {tool.depth_band_to.toFixed(3)}"</span>
+                  {tool.is_rn && <span className="ml-2 text-indigo-400 text-[10px]">RN reach {tool.reach_in.toFixed(3)}"  ·  LOC {tool.loc_in.toFixed(3)}"</span>}
+                </p>
+                <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
+              </div>
+
+              {/* Physics params */}
+              {mil ? (
+                <div className="grid grid-cols-4 gap-px mt-2 border-t border-zinc-700/60">
+                  {[
+                    ["RPM", mil.rpm != null ? Math.round(mil.rpm).toLocaleString() : "—"],
+                    ["Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(1) : "—"],
+                    ["IPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—"],
+                    ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
+                    ["WOC", mil.woc_in != null && tool.dia > 0 ? `${((mil.woc_in/tool.dia)*100).toFixed(0)}%` : "—"],
+                    ["DOC", mil.doc_in != null ? `${mil.doc_in.toFixed(3)}"` : "—"],
+                    ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
+                    ["MRR", mil.mrr_in3_min != null ? mil.mrr_in3_min.toFixed(2) : "—"],
+                  ].map(([label, val]) => (
+                    <div key={label} className="flex flex-col items-center py-2 bg-zinc-800/60">
+                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
+                      <span className="text-sm font-bold text-white mt-0.5">{val}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-4 py-2 text-[11px] text-zinc-500 border-t border-zinc-700/60">
+                  {dpLoading ? "Calculating parameters…" : "Parameters unavailable — verify material and tool selection"}
+                </div>
+              )}
+
+              {/* Thin wall taper */}
+              {taper && role === "bulk" && (
+                <div className="px-4 py-2 border-t border-zinc-700/60 space-y-0.5">
+                  <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wider mb-1">Wall Approach — WOC Schedule</p>
+                  {taper.map((t: any, i: number) => (
+                    <p key={i} className="text-[10px] text-zinc-400">
+                      <span className="text-zinc-300">{t.zone}</span>  →  WOC {t.woc_pct}%
+                      {t.note && <span className="text-zinc-500 ml-1">({t.note})</span>}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <Card className="rounded-2xl">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle>Progressive Reach Sequence</CardTitle>
+                {dpResult && (
+                  <span className="text-[10px] text-zinc-400">
+                    {form.dp_cutting_style === "hem" ? "HEM / Adaptive" : "Traditional"}
+                    {form.dp_thin_wall ? "  ·  Thin Wall" : ""}
+                  </span>
+                )}
+              </div>
+              {dpResult && (
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Depth {form.dp_target_depth.toFixed(3)}"  ·  Corner R{form.dp_corner_radius.toFixed(4)}"  ·
+                  Bulk Ø{dpResult.constraints.bulk_dia?.toFixed(4) ?? "—"}"  ·
+                  Corner Ø{dpResult.constraints.corner_dia?.toFixed(4) ?? "—"}"
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dpLoading && (
+                <div className="text-sm text-zinc-400 text-center py-6">Building sequence…</div>
+              )}
+              {dpError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{dpError}</div>
+              )}
+              {dpResult?.needs_special && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
+                  <p className="font-semibold mb-1">⚠ Standard products cannot reach this depth</p>
+                  <p className="text-xs">{dpResult.special_note}</p>
+                  <button className="mt-2 text-xs underline text-amber-400 hover:text-amber-200">Contact Core Cutter for a quoted special →</button>
+                </div>
+              )}
+
+              {/* Bulk sequence */}
+              {(dpResult?.bulk_tools ?? []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400">Bulk Removal</p>
+                  {dpResult.bulk_tools.map((tool: any, i: number) =>
+                    renderToolCard(tool, i, dpResult.bulk_tools.length, "bulk")
+                  )}
+                </div>
+              )}
+
+              {/* Corner finish */}
+              {dpResult?.corner_tool && (
+                <div className="space-y-2 mt-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Corner Finish</p>
+                  {renderToolCard(dpResult.corner_tool, 0, 1, "corner_finish")}
+                  {parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
+                    <p className="text-[10px] text-indigo-300 px-1">Ball nose — corner radius matched exactly. Step-over controls scallop height. Leave 0.008" stock from bulk sequence.</p>
+                  )}
+                </div>
+              )}
+
+              {/* Feed mill advisory */}
+              {dpResult?.feedmill_eligible && (
+                <div className="rounded-xl border border-zinc-600 bg-zinc-800/40 p-3 mt-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Optional — Feed Mill Bulk Removal</p>
+                  <p className="text-xs text-zinc-300">An axial feed mill can replace Tool 1 in the bulk sequence for significantly faster open-zone stock removal in steel/cast iron.</p>
+                  <p className="text-[10px] text-amber-400 mt-1">⚠ Special order only — no standard EDP. Contact Core Cutter for quote.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* OUTPUT CARD */}
       <Card className="rounded-2xl">
@@ -8386,7 +8763,7 @@ ${stabSection}
                       <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
                       {form.mode && MILLING_MODE_TIPS[form.mode] && (
                         <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
-                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring"}[form.mode] ?? ""}
+                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[form.mode as string] ?? ""}
                         </span>
                       )}
                     </div>

@@ -3849,5 +3849,281 @@ ${catalogList}`
     }
   });
 
+  // ── Deep Pocket / Thin Wall sequence advisor ─────────────────────────────
+  app.post("/api/deep-pocket/sequence", async (req, res) => {
+    try {
+      const { target_depth, corner_radius, cutting_style, thin_wall, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive } = req.body as {
+        target_depth: number; corner_radius: number; cutting_style: "hem" | "traditional";
+        thin_wall: boolean; pre_drill_dia: number; material: string; iso_category: string;
+        flutes: number; tool_dia: number; stickout: number; toolholder: string;
+        machine_hp: number; machine_max_rpm: number; spindle_drive: string;
+      };
+
+      if (!(target_depth > 0)) return res.status(400).json({ error: "target_depth required" });
+      if (!(corner_radius > 0)) return res.status(400).json({ error: "corner_radius required" });
+
+      const { pool } = await import("./db");
+
+      // ── 1. Corner radius → max tool diameters ──────────────────────────────
+      // Hard material ISO categories get tighter engagement factor
+      const hardMat = ["S","H"].includes((iso_category ?? "").toUpperCase());
+      const bulkFactor   = hardMat ? 0.65 : 0.75;
+      const cornerFactor = 0.60;
+      const maxBulkDia   = corner_radius * 2 * bulkFactor;
+      const maxCornerDia = corner_radius * 2 * cornerFactor;
+
+      // ── 2. Catalog lookup — available diameters with depth coverage ─────────
+      // Key rule: for RN tools, lbs_in IS the reach; for standard tools, loc_in is the reach
+      // LBS tools always have shorter LOC — reach = lbs_in when lbs_in > 0, else loc_in
+      const coverageRows = await pool.query(`
+        SELECT
+          cutting_diameter_in,
+          MAX(loc_in)                                          AS max_loc,
+          MAX(lbs_in)                                         AS max_lbs,
+          MAX(COALESCE(lbs_in, loc_in))                       AS max_reach,
+          COUNT(CASE WHEN lbs_in > 0 THEN 1 END)              AS rn_count,
+          COUNT(CASE WHEN corner_condition = 'ball' THEN 1 END) AS ball_count
+        FROM skus
+        WHERE tool_type = 'endmill'
+          AND cutting_diameter_in > 0
+        GROUP BY cutting_diameter_in
+        ORDER BY cutting_diameter_in DESC
+      `);
+      const coverage: Array<{
+        cutting_diameter_in: string; max_loc: string; max_lbs: string;
+        max_reach: string; rn_count: string; ball_count: string;
+      }> = coverageRows.rows;
+
+      // ── 3. Pick optimal bulk diameter — largest that fits corner AND reaches depth ─
+      const findBestDia = (maxDia: number): typeof coverage[0] | null => {
+        for (const row of coverage) {
+          const dia = parseFloat(row.cutting_diameter_in);
+          if (dia > maxDia) continue;
+          if (parseFloat(row.max_reach) >= target_depth) return row;
+        }
+        return null; // nothing reaches — need special
+      };
+
+      const bulkRow   = findBestDia(maxBulkDia);
+      const cornerRow = findBestDia(maxCornerDia);
+
+      // ── 4. Build bulk tool sequence for chosen diameter ─────────────────────
+      interface SeqTool {
+        role: "bulk" | "corner_finish";
+        edp: string; description: string;
+        dia: number; flutes: number; loc_in: number; lbs_in: number; reach_in: number;
+        depth_band_from: number; depth_band_to: number;
+        corner_condition: string; series: string; geometry: string;
+        helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia: number;
+        entry: { type: string; helix_dia?: number; angle_deg?: number };
+        is_rn: boolean;
+      }
+
+      const buildBulkSequence = async (row: typeof coverage[0]): Promise<SeqTool[]> => {
+        const dia = parseFloat(row.cutting_diameter_in);
+        const maxLoc  = parseFloat(row.max_loc);
+        const maxReach = parseFloat(row.max_reach);
+
+        // L/D threshold for including a stub:
+        // HEM can go to 4×D on Tool 1 before stub needed; Traditional 3×D
+        const ldThreshold = cutting_style === "hem" ? 4.0 : 3.0;
+
+        // Query tools ordered by reach ascending — stub/short first, RN last
+        // For each band we want the tool whose reach JUST covers the band
+        // Key: reach = lbs_in when lbs_in > 0, else loc_in
+        const toolRows = await pool.query(`
+          SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                 loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                 corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                 (lbs_in > 0) as is_rn
+          FROM skus
+          WHERE tool_type = 'endmill'
+            AND cutting_diameter_in = $1
+            AND corner_condition = 'square'
+            AND geometry NOT IN ('chipbreaker','truncated_rougher')
+            AND COALESCE(lbs_in, loc_in) >= $2
+          ORDER BY COALESCE(lbs_in, loc_in) ASC
+          LIMIT 20
+        `, [dia, 0]);
+
+        if (!toolRows.rows.length) return [];
+
+        // Group into tiers by reach
+        interface ToolRow { edp: string; description1: string; description2: string;
+          cutting_diameter_in: string; flutes: number; loc_in: string; lbs_in: string;
+          reach_in: string; corner_condition: string; series: string; geometry: string;
+          helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia_in: string; is_rn: boolean; }
+        const tools: ToolRow[] = toolRows.rows;
+
+        // Pick minimal sequence: find tools that bracket from 0 → target_depth
+        // Strategy: pick shortest-reach tool first (covers upper band, best rigidity)
+        // then next tool that reaches final depth
+        const sequence: ToolRow[] = [];
+
+        // Tool 1: smallest reach that covers a meaningful band AND has good L/D
+        // If L/D of the shortest tool > threshold, need a stub first
+        const shortestTool = tools[0];
+        const shortestReach = parseFloat(shortestTool.reach_in);
+        const ld1 = (stickout > 0 ? stickout : shortestReach + dia * 0.33) / dia;
+
+        if (shortestReach < target_depth) {
+          // Need at least 2 tools
+          if (ld1 > ldThreshold) {
+            // Include stub — find tool with reach ~LOC only (not RN)
+            const stub = tools.find(t => !t.is_rn);
+            if (stub) sequence.push(stub);
+          } else {
+            sequence.push(shortestTool);
+          }
+          // Final tool: deepest reach that reaches target_depth
+          const finalTool = [...tools].reverse().find(t => parseFloat(t.reach_in) >= target_depth);
+          if (finalTool && finalTool.edp !== sequence[sequence.length-1]?.edp) {
+            sequence.push(finalTool);
+          }
+        } else {
+          // One tool covers full depth
+          sequence.push(shortestTool);
+        }
+
+        // Map to SeqTool
+        let bandFrom = 0;
+        return sequence.map((t, i) => {
+          const reach = parseFloat(t.reach_in);
+          const loc = parseFloat(t.loc_in);
+          const lbs = parseFloat(t.lbs_in ?? "0") || 0;
+          const bandTo = i === sequence.length - 1 ? target_depth : Math.min(reach, target_depth);
+
+          // Entry type
+          const toolDia = parseFloat(t.cutting_diameter_in);
+          let entry: SeqTool["entry"];
+          if (i === 0) {
+            if (pre_drill_dia > 0 && pre_drill_dia >= toolDia) {
+              entry = { type: "straight_drop" };
+            } else if (pre_drill_dia > 0 && pre_drill_dia < toolDia) {
+              entry = { type: "helical", helix_dia: +(pre_drill_dia - 0.020).toFixed(4), angle_deg: cutting_style === "hem" ? 2 : 3 };
+            } else {
+              entry = { type: "helical", helix_dia: +(toolDia * 0.93).toFixed(4), angle_deg: cutting_style === "hem" ? 2 : 3 };
+            }
+          } else {
+            entry = { type: "plunge_to_prior_depth" };
+          }
+
+          const result: SeqTool = {
+            role: "bulk",
+            edp: t.edp,
+            description: [t.description1, t.description2].filter(Boolean).join(" — "),
+            dia: toolDia, flutes: t.flutes,
+            loc_in: loc, lbs_in: lbs, reach_in: reach,
+            depth_band_from: +bandFrom.toFixed(4), depth_band_to: +bandTo.toFixed(4),
+            corner_condition: t.corner_condition, series: t.series ?? "", geometry: t.geometry ?? "standard",
+            helix: t.helix ?? 0, variable_pitch: !!t.variable_pitch, variable_helix: !!t.variable_helix,
+            shank_dia: parseFloat(t.shank_dia_in ?? "0") || 0,
+            entry, is_rn: t.is_rn,
+          };
+          bandFrom = bandTo;
+          return result;
+        });
+      };
+
+      // ── 5. Corner finish tool (single tool) ────────────────────────────────
+      const buildCornerTool = async (row: typeof coverage[0]): Promise<SeqTool | null> => {
+        const dia = parseFloat(row.cutting_diameter_in);
+        const useBallNose = dia < 0.250;
+        const cornerCond = useBallNose ? "ball" : "square";
+
+        const toolRows = await pool.query(`
+          SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                 loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                 corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                 (lbs_in > 0) as is_rn
+          FROM skus
+          WHERE tool_type = 'endmill'
+            AND cutting_diameter_in = $1
+            AND corner_condition = $2
+            AND COALESCE(lbs_in, loc_in) >= $3
+          ORDER BY COALESCE(lbs_in, loc_in) DESC
+          LIMIT 1
+        `, [dia, cornerCond, target_depth]);
+
+        if (!toolRows.rows.length) return null;
+        const t = toolRows.rows[0];
+        const reach = parseFloat(t.reach_in);
+        const loc = parseFloat(t.loc_in);
+        const lbs = parseFloat(t.lbs_in ?? "0") || 0;
+
+        return {
+          role: "corner_finish",
+          edp: t.edp,
+          description: [t.description1, t.description2].filter(Boolean).join(" — "),
+          dia: parseFloat(t.cutting_diameter_in), flutes: t.flutes,
+          loc_in: loc, lbs_in: lbs, reach_in: reach,
+          depth_band_from: 0, depth_band_to: target_depth,
+          corner_condition: t.corner_condition, series: t.series ?? "", geometry: t.geometry ?? "standard",
+          helix: t.helix ?? 0, variable_pitch: !!t.variable_pitch, variable_helix: !!t.variable_helix,
+          shank_dia: parseFloat(t.shank_dia_in ?? "0") || 0,
+          entry: { type: "plunge_from_bulk_path" },
+          is_rn: t.is_rn,
+        };
+      };
+
+      // ── 6. Assemble result ──────────────────────────────────────────────────
+      const needs_special = !bulkRow;
+      const bulk_tools: SeqTool[] = bulkRow ? await buildBulkSequence(bulkRow) : [];
+      const corner_tool: SeqTool | null = cornerRow ? await buildCornerTool(cornerRow) : null;
+
+      // Feed mill eligibility
+      const feedmill_eligible = ["P","K"].includes((iso_category ?? "").toUpperCase()) && !thin_wall;
+
+      // Thin wall WOC taper schedule
+      const woc_taper = thin_wall ? (
+        cutting_style === "hem"
+          ? [
+              { zone: "> 0.100\" from wall", woc_pct: 10 },
+              { zone: "0.030–0.100\" from wall", woc_pct: 5 },
+              { zone: "Final wall pass", woc_pct: 3, note: "Spring pass recommended" },
+            ]
+          : [
+              { zone: "Open zone", woc_pct: 50 },
+              { zone: "Mid zone", woc_pct: 30 },
+              { zone: "< 0.100\" from wall", woc_pct: 10 },
+              { zone: "Final wall pass", woc_pct: 5, note: "Spring pass recommended" },
+            ]
+      ) : null;
+
+      // Special flag details
+      let special_note: string | null = null;
+      if (needs_special) {
+        // Find largest dia that fits corner at all (even if it can't reach depth)
+        const anyFit = coverage.find(r => parseFloat(r.cutting_diameter_in) <= maxBulkDia);
+        if (anyFit) {
+          special_note = `Depth ${target_depth}" exceeds max catalog reach (${anyFit.max_reach}") for Ø${parseFloat(anyFit.cutting_diameter_in).toFixed(4)}" tools. Step up to a larger diameter if corner allows, or contact Core Cutter for a quoted special.`;
+        } else {
+          special_note = `Corner radius ${corner_radius}" is too tight for any standard diameter at this depth. Contact Core Cutter for a quoted special.`;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        inputs: { target_depth, corner_radius, cutting_style, thin_wall, pre_drill_dia, iso_category },
+        constraints: {
+          max_bulk_dia: +maxBulkDia.toFixed(4),
+          max_corner_dia: +maxCornerDia.toFixed(4),
+          bulk_dia: bulkRow ? parseFloat(bulkRow.cutting_diameter_in) : null,
+          corner_dia: cornerRow ? parseFloat(cornerRow.cutting_diameter_in) : null,
+        },
+        needs_special,
+        special_note,
+        bulk_tools,
+        corner_tool,
+        feedmill_eligible,
+        woc_taper,
+      });
+
+    } catch (err: any) {
+      console.error("deep-pocket sequence error:", err?.message ?? err);
+      return res.status(500).json({ error: "Sequence lookup failed" });
+    }
+  });
+
   return httpServer;
 }
