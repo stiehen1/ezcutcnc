@@ -210,9 +210,13 @@ const WALKTHROUGH_STEPS = [
   },
 ];
 
-function WelcomeModal() {
-  const [open, setOpen] = React.useState(() => !localStorage.getItem("welcome_seen"));
+const walkThruOpenRef = { open: false, setOpen: (_: boolean) => {} };
+
+function WelcomeModal({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: () => void } = {}) {
+  const [open, setOpen] = React.useState(() => forceOpen ?? !localStorage.getItem("welcome_seen"));
   const [step, setStep] = React.useState(0);
+  React.useEffect(() => { walkThruOpenRef.open = open; walkThruOpenRef.setOpen = setOpen; }, [open]);
+  React.useEffect(() => { if (forceOpen) { setOpen(true); setStep(0); } }, [forceOpen]);
   if (!open) return null;
   const s = WALKTHROUGH_STEPS[step];
   const isLast = !!(s as any).last;
@@ -269,7 +273,7 @@ function WelcomeModal() {
             </button>
           )}
           {isLast ? (
-            <button onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); }}
+            <button onClick={() => { localStorage.setItem("welcome_seen", "1"); setOpen(false); onClose?.(); }}
               className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
               {(s as any).cta ?? "Let's go →"}
             </button>
@@ -552,6 +556,23 @@ function HelpButton() {
   );
 }
 
+function WalkThruButton() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed right-0 z-50 bg-zinc-700 hover:bg-zinc-600 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 24px)" }}
+        aria-label="Walk-Thru"
+      >
+        Walk-Thru
+      </button>
+      {open && <WelcomeModal forceOpen onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 function FeedbackButton() {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState("Bug");
@@ -739,6 +760,7 @@ function App() {
         <Router />
         <Toaster />
         <WelcomeModal />
+        <WalkThruButton />
         <FeedbackButton />
         <HelpButton />
         <BrevoNudge />
