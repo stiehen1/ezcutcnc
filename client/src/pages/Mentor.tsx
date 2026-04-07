@@ -2360,10 +2360,17 @@ export default function Mentor() {
             const bandDepth = tool.depth_band_to - tool.depth_band_from;
             const docIn = Math.min(bandDepth, tool.loc_in);
             const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
-            // WOC — HEM uses med preset for material, Traditional uses med preset
             const isHem = toolMode === "hem";
             // L/D based stickout estimate if not provided
             const soEst = form.stickout > 0 ? form.stickout : tool.reach_in + tool.dia * 0.33;
+            const ldEst = tool.dia > 0 ? soEst / tool.dia : 3;
+            // WOC scales down with L/D — long reach RN tools must reduce radial engagement
+            // to control deflection regardless of cutting style:
+            //   HEM:         10% standard, 6% at L/D > 6
+            //   Traditional: 40% standard, 25% at L/D > 4, 15% at L/D > 6
+            const wocPct = isHem
+              ? (ldEst > 6 ? 6 : 10)
+              : (ldEst > 6 ? 15 : ldEst > 4 ? 25 : 40);
             const physResult = await mentor.mutateAsync({
               ...form,
               mode: toolMode as any,
@@ -2379,7 +2386,7 @@ export default function Mentor() {
               geometry: tool.geometry as any,
               tool_series: tool.series || "",
               doc_xd: docXd,
-              woc_pct: isHem ? 10 : 40, // reasonable starting WOC per mode
+              woc_pct: wocPct,
               edp: tool.edp,
               operation: "milling" as any,
               debug: false,

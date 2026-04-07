@@ -3984,9 +3984,16 @@ ${catalogList}`
       //
       // allowRn: false for the final deep tool (will be fetched separately as RN); true means
       //   we want the shortest standard LOC tool — chipbreaker eligible.
-      const fluteOrder = cutting_style === "hem" ? "DESC" : "ASC";
+      // Flute count order by context:
+      // - Upper bands (standard LOC): HEM → more flutes (MRR); Traditional → fewer (chip clearance at wide WOC)
+      // - Deep RN bands (long reach): always prefer MORE flutes regardless of style —
+      //   more flutes = lighter chip load per tooth = less radial force = less deflection.
+      //   At long reach you must reduce WOC anyway so chip clearance isn't the constraint.
+      const fluteOrderUpper = cutting_style === "hem" ? "DESC" : "ASC";
+      const fluteOrderDeep  = "DESC"; // always more flutes for deep RN — force/deflection dominant
 
       const fetchBestToolAtDia = async (dia: number, minReach: number, preferRn = false): Promise<ToolRow | null> => {
+        const fluteOrder = preferRn ? fluteOrderDeep : fluteOrderUpper;
         // For non-RN preference (upper bands): prefer chipbreaker, exclude necked tools
         // For RN preference (deep bands): allow necked tools, exclude chipbreaker (not available in RN)
         const geoFilter = preferRn
