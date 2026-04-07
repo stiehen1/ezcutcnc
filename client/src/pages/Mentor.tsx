@@ -7410,6 +7410,7 @@ ${stabSection}
                   </div>
                   Thin Wall (bilateral stock strategy)
                 </button>
+                <FieldLabel hint="Turn on when milling next to a thin wall condition. Adds a wall-approach WOC taper schedule to each tool card so the programmer knows to reduce radial engagement as the tool nears the wall. Also suppresses the feed mill advisory — feed mills are open-zone tools only."> </FieldLabel>
               </div>
 
               {/* Pre-drill toggle */}
