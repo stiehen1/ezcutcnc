@@ -166,7 +166,7 @@ const WALKTHROUGH_STEPS = [
   },
   {
     icon: "🔍",
-    title: "Path 1 — Find Your Tool First",
+    title: "Path 1 — Find Your Tool First (Tool Finder Section)",
     subtitle: "Not sure which Core Cutter tool to use?",
     steps: [
       { n: "1", text: "Select Tool Finder at the top of the page" },
