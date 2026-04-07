@@ -7744,7 +7744,13 @@ ${stabSection}
                 <div className="space-y-2 mt-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Corner Finishing Tool</p>
                   {renderToolCard(dpResult.corner_tool, 0, 1, "corner_finish")}
-                  {parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
+                  {dpResult.corner_oversize && dpResult.corner_oversize_note && (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 mt-1">
+                      <p className="text-[10px] font-semibold text-amber-400 mb-0.5">⚠ Closest Available — Oversized for Corner</p>
+                      <p className="text-[10px] text-amber-300">{dpResult.corner_oversize_note}</p>
+                    </div>
+                  )}
+                  {!dpResult.corner_oversize && parseFloat(dpResult.constraints.corner_dia) < 0.250 && (
                     <p className="text-[10px] text-indigo-300 px-1">Ball nose — corner radius matched exactly. Step-over controls scallop height. Leave 0.008" stock from bulk sequence.</p>
                   )}
                 </div>

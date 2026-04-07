@@ -3964,7 +3964,7 @@ ${catalogList}`
         is_rn: boolean;
       }
 
-      const buildBulkSequence = async (row: typeof coverage[0]): Promise<SeqTool[]> => {
+      const buildBulkSequence = async (row: { cutting_diameter_in: string; max_reach: string; [k: string]: any }): Promise<SeqTool[]> => {
         const dia = parseFloat(row.cutting_diameter_in);
         const maxLoc  = parseFloat(row.max_loc);
         const maxReach = parseFloat(row.max_reach);
@@ -4073,7 +4073,7 @@ ${catalogList}`
       };
 
       // ── 5. Corner finish tool (single tool) ────────────────────────────────
-      const buildCornerTool = async (row: typeof coverage[0]): Promise<SeqTool | null> => {
+      const buildCornerTool = async (row: { cutting_diameter_in: string; max_reach: string; [k: string]: any }): Promise<SeqTool | null> => {
         const dia = parseFloat(row.cutting_diameter_in);
         const useBallNose = dia < 0.250;
 
@@ -4144,7 +4144,31 @@ ${catalogList}`
       // ── 6. Assemble result ──────────────────────────────────────────────────
       const needs_special = !bulkRow;
       const bulk_tools: SeqTool[] = bulkRow ? await buildBulkSequence(bulkRow) : [];
-      const corner_tool: SeqTool | null = cornerRow ? await buildCornerTool(cornerRow) : null;
+      // buildBulkSequence/buildCornerTool only use cutting_diameter_in from the row
+      type CovRow = typeof coverage[0];
+
+      // Corner tool: if no tool fits the corner radius constraint, fall back to the
+      // smallest-diameter tool in the full coverage list that reaches depth.
+      // This clears as much material as possible — leaves stock at corners for manual finish or special.
+      let corner_tool: SeqTool | null = cornerRow ? await buildCornerTool(cornerRow) : null;
+      let corner_oversize = false;
+      let corner_oversize_note: string | null = null;
+
+      if (!corner_tool) {
+        // Find smallest dia in full coverage that reaches depth (unconstrained by corner)
+        const fallbackRow = [...coverage].reverse().find(
+          r => parseFloat(r.max_reach) >= target_depth
+        );
+        if (fallbackRow) {
+          const fallbackTool = await buildCornerTool(fallbackRow as CovRow);
+          if (fallbackTool) {
+            corner_tool = fallbackTool;
+            corner_oversize = true;
+            const stockLeft = (fallbackTool.dia / 2 - corner_radius).toFixed(4);
+            corner_oversize_note = `No standard ball/CR tool reaches ${target_depth}" at ≤${maxCornerDia.toFixed(4)}" dia. Using Ø${fallbackTool.dia.toFixed(4)}" as closest available — leaves ~${stockLeft}" stock at corners. Contact Core Cutter for a deep-reach reduced-neck CR tool to finish corners to print.`;
+          }
+        }
+      }
 
       // Feed mill eligibility
       const feedmill_eligible = ["P","K"].includes((iso_category ?? "").toUpperCase()) && !thin_wall;
@@ -4190,6 +4214,8 @@ ${catalogList}`
         special_note,
         bulk_tools,
         corner_tool,
+        corner_oversize,
+        corner_oversize_note,
         feedmill_eligible,
         woc_taper,
       });
