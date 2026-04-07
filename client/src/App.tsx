@@ -171,8 +171,9 @@ const WALKTHROUGH_STEPS = [
     steps: [
       { n: "1", text: "Select Tool Finder at the top of the page" },
       { n: "2", text: "Start with Quick Pick for guided suggestions, or filter by diameter, material, operation, flute count — use as many filters as you like" },
-      { n: "3", text: "Tap Use Tool → to transfer the EDP directly into the calculator" },
-      { n: "4", text: "Fill in your machine setup and cut parameters — the engine does the rest" },
+      { n: "3", text: "Hit the Search button at the bottom to see results" },
+      { n: "4", text: "Tap Use Tool → to transfer the EDP directly into the calculator" },
+      { n: "5", text: "Fill in your machine setup and cut parameters — the engine does the rest" },
     ],
     note: "Tool Finder also lets you download an STP file for any standard tool to use directly in your CAM system.",
   },
