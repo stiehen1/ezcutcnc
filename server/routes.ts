@@ -3924,18 +3924,49 @@ ${catalogList}`
         max_reach: string; rn_count: string; ball_count: string;
       }> = coverageRows.rows;
 
-      // ── 3. Pick optimal bulk diameter — largest that fits corner AND reaches depth ─
-      const findBestDia = (maxDia: number): typeof coverage[0] | null => {
-        for (const row of coverage) {
+      // ── 2b. Corner-specific coverage — only ball/CR tools that reach depth ──
+      const cornerCoverageRows = await pool.query(`
+        SELECT cutting_diameter_in, MAX(COALESCE(lbs_in, loc_in)) AS max_reach
+        FROM skus
+        WHERE tool_type = 'endmill'
+          AND cutting_diameter_in > 0
+          AND corner_condition != 'square'
+          AND (
+            corner_condition = 'ball'
+            OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $1)
+          )
+          ${coatingFilter}
+        GROUP BY cutting_diameter_in
+        ORDER BY cutting_diameter_in DESC
+      `, [corner_radius]);
+      const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
+
+      // ── 3. Pick optimal diameters — target respectable stability, not max size ─
+      // Strategy: find the largest diameter where the final tool's L/D stays within
+      // a stability target. If nothing meets the target, fall back to largest available.
+      // L/D target: HEM 5×D, Traditional 4×D (tighter because higher radial force)
+      const ldTarget = cutting_style === "hem" ? 5.0 : 4.0;
+
+      const findBestDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
+        // First pass: largest dia where reach/dia <= ldTarget (stable choice)
+        for (const row of cov) {
+          const dia = parseFloat(row.cutting_diameter_in);
+          if (dia > maxDia) continue;
+          if (parseFloat(row.max_reach) < target_depth) continue;
+          const ld = target_depth / dia;
+          if (ld <= ldTarget) return row;
+        }
+        // Fallback: largest dia that reaches (no good L/D option in catalog)
+        for (const row of cov) {
           const dia = parseFloat(row.cutting_diameter_in);
           if (dia > maxDia) continue;
           if (parseFloat(row.max_reach) >= target_depth) return row;
         }
-        return null; // nothing reaches — need special
+        return null;
       };
 
-      const bulkRow   = findBestDia(maxBulkDia);
-      const cornerRow = findBestDia(maxCornerDia);
+      const bulkRow   = findBestDia(maxBulkDia, coverage);
+      const cornerRow = findBestDia(maxCornerDia, cornerCoverage);
 
       // ── 4. Build bulk tool sequence for chosen diameter ─────────────────────
       interface SeqTool {
@@ -4061,22 +4092,49 @@ ${catalogList}`
       const buildCornerTool = async (row: typeof coverage[0]): Promise<SeqTool | null> => {
         const dia = parseFloat(row.cutting_diameter_in);
         const useBallNose = dia < 0.250;
-        const cornerCond = useBallNose ? "ball" : "square";
 
-        const toolRows = await pool.query(`
-          SELECT edp, description1, description2, cutting_diameter_in, flutes,
-                 loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
-                 corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
-                 (lbs_in > 0) as is_rn
-          FROM skus
-          WHERE tool_type = 'endmill'
-            AND cutting_diameter_in = $1
-            AND corner_condition = $2
-            AND COALESCE(lbs_in, loc_in) >= $3
-            ${coatingFilter}
-          ORDER BY COALESCE(lbs_in, loc_in) DESC
-          LIMIT 1
-        `, [dia, cornerCond, target_depth]);
+        // Ball nose: corner dia < 0.250" — matches corner radius exactly via axial engagement
+        // Corner radius (bull nose): corner dia >= 0.250" — CR tool whose radius <= pocket corner radius
+        // Never use square corner for a corner finishing tool
+        let toolRows;
+        if (useBallNose) {
+          toolRows = await pool.query(`
+            SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                   loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                   corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   (lbs_in > 0) as is_rn
+            FROM skus
+            WHERE tool_type = 'endmill'
+              AND cutting_diameter_in = $1
+              AND corner_condition = 'ball'
+              AND COALESCE(lbs_in, loc_in) >= $2
+              ${coatingFilter}
+            ORDER BY COALESCE(lbs_in, loc_in) DESC
+            LIMIT 1
+          `, [dia, target_depth]);
+        } else {
+          // Prefer corner radius tool; fall back to ball nose if no CR tool stocked at this dia
+          toolRows = await pool.query(`
+            SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                   loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                   corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   (lbs_in > 0) as is_rn
+            FROM skus
+            WHERE tool_type = 'endmill'
+              AND cutting_diameter_in = $1
+              AND corner_condition NOT IN ('square')
+              AND (
+                corner_condition = 'ball'
+                OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $3)
+              )
+              AND COALESCE(lbs_in, loc_in) >= $2
+              ${coatingFilter}
+            ORDER BY
+              CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 0 END DESC,
+              COALESCE(lbs_in, loc_in) DESC
+            LIMIT 1
+          `, [dia, target_depth, corner_radius]);
+        }
 
         if (!toolRows.rows.length) return null;
         const t = toolRows.rows[0];
