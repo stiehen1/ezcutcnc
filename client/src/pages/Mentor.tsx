@@ -7585,7 +7585,7 @@ ${stabSection}
                     style={{ color: role === "corner_finish" ? "#a5b4fc" : "#fb923c" }}>
                     {role === "corner_finish" ? "Corner Finish" : `Bulk  ${idx + 1} of ${total}`}
                   </span>
-                  <span className="text-xs font-mono font-semibold text-white">{tool.edp}</span>
+                  <span className="text-xs font-semibold text-white">EDP# {tool.edp}</span>
                 </div>
                 {ldRatio != null && (
                   <span className="text-[10px] font-semibold" style={{ color: ldColor }}>
