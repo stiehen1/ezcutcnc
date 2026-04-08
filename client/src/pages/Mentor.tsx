@@ -7970,6 +7970,8 @@ ${stabSection}
                     body: <>
                       A Core Cutter high feed mill is worth considering before the endmill sequence begins. Unlike endmills, a feed mill works entirely in the <span className="text-white font-semibold">Z direction</span> — small axial steps (typically 0.020–0.060") at very high feed rates, with all cutting force directed axially into the spindle rather than radially into the workholding. This means <span className="text-white">no deflection, no chatter, and no wall pressure</span> — it simply plunges and rasters the floor down in fast Z passes until it reaches near-depth, then the endmill sequence finishes the walls and floor.
                       <span className="block mt-1 text-zinc-400">Best in steel, stainless, cast iron, and titanium. Core Cutter feed mills are special order — contact us for a quote sized to your pocket.</span>
+                      <span className="block mt-2 text-zinc-300 font-semibold">Also consider a Z-axis plunge roughing tool.</span>
+                      <span className="block text-zinc-400">A dedicated plunge rougher is designed specifically for straight Z-axis drilling-style cuts — multiple plunge locations across the pocket floor, stepping over by ~75% of the tool diameter each pass. Like a feed mill, all force is axial with zero radial wall pressure. Ideal for deep pockets where endmill reach and deflection are the limiting factor. Core Cutter can manufacture these as specials — contact us with your pocket dimensions and material.</span>
                     </>,
                   });
                 }
