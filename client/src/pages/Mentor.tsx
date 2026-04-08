@@ -1165,6 +1165,7 @@ export default function Mentor() {
   const [dpResult, setDpResult] = React.useState<any>(null);
   const [dpLoading, setDpLoading] = React.useState(false);
   const [dpError, setDpError] = React.useState<string | null>(null);
+  const [dpSpecialTool, setDpSpecialTool] = React.useState(false);
   const [dpDepthText, setDpDepthText] = React.useState("");
   const [dpCornerText, setDpCornerText] = React.useState("");
   const [dpFloorRadiusText, setDpFloorRadiusText] = React.useState("");
@@ -1293,6 +1294,11 @@ export default function Mentor() {
         else if (tt === "dovetail") { setOperation("dovetail"); next.operation = "dovetail" as any; }
         else if (tt === "drill" || tt === "step_drill") { setOperation("drilling"); next.operation = "drilling"; }
         else if (tt === "reamer") { setOperation("reaming"); next.operation = "reaming"; }
+        else if (tt === "feedmill") {
+          setOperation("feedmill"); next.operation = "feedmill" as any;
+          if (e.lead_angle > 0) next.lead_angle = e.lead_angle;
+          if (e.corner_radius > 0) next.feedmill_doc_in = 0; // let engine suggest based on CR
+        }
         else if (tt === "threadmill") { setOperation("threadmilling"); next.operation = "threadmilling"; }
         else if (tt === "chamfer_mill") {
           next.tool_type = "chamfer_mill";
@@ -1495,6 +1501,7 @@ export default function Mentor() {
     // Feed mill-specific
     lead_angle: 20,
     feedmill_doc_in: 0,
+    feedmill_pocket_depth: 0,
 
     // Thread milling-specific
     thread_standard: "unc" as "unc" | "unf" | "unef" | "metric" | "npt" | "nptf",
@@ -2291,9 +2298,17 @@ export default function Mentor() {
         if (!(form.surfacing_ap_in > 0)) missing.push("Axial Pass Depth (ap)");
         if (!(form.target_ra_uin > 0)) missing.push("Surface Finish Target (Ra)");
       } else if (form.mode === "deep_pocket") {
-        if (!(form.dp_target_depth > 0)) missing.push("Target Pocket Depth");
-        if (!(form.dp_corner_radius > 0)) missing.push("Corner Radius");
-        if (!(form.material)) missing.push("Material");
+        if (dpSpecialTool && pdfExtracted) {
+          // Special tool mode — needs tool dims from print, not sequencer inputs
+          if (!(form.tool_dia > 0)) missing.push("Tool Diameter (upload print or enter manually)");
+          if (!(form.flutes > 0)) missing.push("Flute Count");
+          if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
+          if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
+        } else {
+          if (!(form.dp_target_depth > 0)) missing.push("Target Pocket Depth");
+          if (!(form.dp_corner_radius > 0)) missing.push("Corner Radius");
+          if (!(form.material)) missing.push("Material");
+        }
       } else {
         if (!(form.doc_xd > 0)) missing.push("Depth of Cut (DOC)");
         if (!(form.woc_pct > 0)) missing.push("Width of Cut (WOC)");
@@ -2357,6 +2372,15 @@ export default function Mentor() {
 
     // ── Deep Pocket mode — custom sequence path ─────────────────────────────
     if (form.mode === "deep_pocket") {
+      // Special tool mode: skip sequencer, run normal Mentor physics for the uploaded tool
+      if (dpSpecialTool && pdfExtracted) {
+        // Switch to normal milling mode temporarily — run the standard Mentor calc path
+        // We do this by calling mentor.mutate with the current form (tool already populated from PDF)
+        const specialMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
+        mentor.mutate({ ...form, mode: specialMode, operation: "milling" } as any);
+        return;
+      }
+
       setDpLoading(true);
       setDpResult(null);
       setDpError(null);
@@ -4926,6 +4950,38 @@ ${stabSection}
               </div>
             )}
 
+            {/* Feed Mill — Pocket Depth (optional) */}
+            {operation === "feedmill" && (
+              <div className="mt-3 rounded-lg border border-cyan-700/40 bg-cyan-900/10 px-3 py-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-cyan-400">Deep Pocket Mode</span>
+                  <span className="text-[10px] text-zinc-500">— optional: enter total pocket depth to get Z-pass breakdown &amp; cycle time estimate</span>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1 space-y-1">
+                    <FieldLabel hint="Total pocket depth from surface to floor (inches). When set, the advisor calculates number of Z passes and estimated cycle time based on your DOC per pass.">Total Pocket Depth (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners"
+                      placeholder="e.g. 2.500"
+                      value={form.feedmill_pocket_depth > 0 ? form.feedmill_pocket_depth.toFixed(3) : ""}
+                      onChange={(e) => { const n = parseDim(e.target.value); setForm(p => ({ ...p, feedmill_pocket_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                    />
+                  </div>
+                  {form.feedmill_pocket_depth > 0 && form.feedmill_doc_in > 0 && (
+                    <div className="flex-1 rounded border border-cyan-700/30 bg-zinc-900 px-3 py-2 space-y-0.5 self-end mb-0.5">
+                      <p className="text-[10px] text-zinc-400">Z passes: <span className="font-semibold text-white">{Math.ceil(form.feedmill_pocket_depth / form.feedmill_doc_in)}</span></p>
+                      <p className="text-[10px] text-zinc-500">at {form.feedmill_doc_in.toFixed(4)}" DOC/pass</p>
+                    </div>
+                  )}
+                  {form.feedmill_pocket_depth > 0 && form.feedmill_doc_in === 0 && form.corner_radius > 0 && (
+                    <div className="flex-1 rounded border border-cyan-700/30 bg-zinc-900 px-3 py-2 space-y-0.5 self-end mb-0.5">
+                      <p className="text-[10px] text-zinc-400">Z passes: <span className="font-semibold text-white">{Math.ceil(form.feedmill_pocket_depth / (form.corner_radius * 0.8))}</span></p>
+                      <p className="text-[10px] text-zinc-500">at rec. {(form.corner_radius * 0.8).toFixed(4)}" DOC/pass</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Machining Tips accordion — feed mill */}
             {operation === "feedmill" && (
               <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
@@ -7414,6 +7470,80 @@ ${stabSection}
           {/* ── Deep Pocket / Thin Wall inputs ──────────────────────────────── */}
           {form.mode === "deep_pocket" && (
             <div className="space-y-4 mt-2">
+
+              {/* ── Special Tool toggle ── */}
+              <div className="rounded-lg border border-orange-600/40 bg-orange-900/10 px-3 py-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-orange-400">I have a Core Cutter special tool</span>
+                    <span className="ml-2 text-[10px] text-zinc-500">— upload your print to get running parameters for this specific tool</span>
+                  </div>
+                  <button type="button"
+                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) setPdfExtracted(false); }}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${dpSpecialTool ? "bg-orange-500" : "bg-zinc-600"}`}>
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${dpSpecialTool ? "translate-x-4" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+                {dpSpecialTool && (
+                  <div className={`rounded border p-2.5 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-zinc-600"}`}>
+                    {pdfExtracted ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
+                        <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center gap-1 cursor-pointer">
+                        <span className="text-[11px] text-zinc-400">Upload your Core Cutter special tool print (PDF or photo)</span>
+                        <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                          {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
+                        </span>
+                        <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading}
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                        <span className="text-[10px] text-zinc-500">Dimensions auto-fill — review before running</span>
+                      </label>
+                    )}
+                    {pdfExtracted && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-zinc-400">
+                        <div>Dia: <span className="text-white font-semibold">{form.tool_dia > 0 ? form.tool_dia.toFixed(4) + '"' : "—"}</span></div>
+                        <div>Flutes: <span className="text-white font-semibold">{form.flutes > 0 ? form.flutes : "—"}</span></div>
+                        <div>LOC: <span className="text-white font-semibold">{form.loc > 0 ? form.loc.toFixed(4) + '"' : "—"}</span></div>
+                        <div>Reach: <span className="text-white font-semibold">{form.lbs > 0 ? form.lbs.toFixed(4) + '"' : "same as LOC"}</span></div>
+                        <div>Corner: <span className="text-white font-semibold">{form.corner_condition === "square" ? "Square" : form.corner_condition === "ball" ? "Ball" : `CR ${form.corner_radius.toFixed(4)}"`}</span></div>
+                        <div>Coating: <span className="text-white font-semibold">{form.coating || "—"}</span></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {dpSpecialTool && pdfExtracted && (
+                  <p className="text-[10px] text-orange-300">Running in special tool mode — sequencer skipped. Output shows speeds &amp; feeds for this tool only.</p>
+                )}
+              </div>
+
+              {/* Special tool mode — DOC / WOC inputs */}
+              {dpSpecialTool && pdfExtracted && (
+                <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-3 space-y-3">
+                  <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <FieldLabel hint="Depth of cut in multiples of diameter (e.g. 1.5 = 1.5×D). For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
+                      <Input type="number" step="0.1" className="no-spinners"
+                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
+                        value={form.doc_xd > 0 ? form.doc_xd : ""}
+                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <FieldLabel hint="Width of cut as % of tool diameter (e.g. 10 = 10% WOC). For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
+                      <Input type="number" step="1" className="no-spinners"
+                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 10" : "e.g. 50"}
+                        value={form.woc_pct > 0 ? form.woc_pct : ""}
+                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Cutting style */}
               <div className="space-y-2">
                 <FieldLabel hint="How the toolpath is programmed. HEM (adaptive/trochoidal) uses light WOC and deep DOC — better for long reach and thin wall. Traditional uses heavier WOC and shallower DOC.">Cutting Style</FieldLabel>
@@ -7702,11 +7832,17 @@ ${stabSection}
             <Button
               className="w-full transition-all"
               onClick={run}
-              disabled={(form.mode === "deep_pocket" ? dpLoading : mentor.isPending) || (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted)}
+              disabled={
+                form.mode === "deep_pocket"
+                  ? (dpSpecialTool && pdfExtracted ? mentor.isPending : dpLoading)
+                  : (mentor.isPending || (!skuLocked && !pdfExtracted))
+              }
               style={formDirty && (skuLocked || pdfExtracted) ? { boxShadow: "0 0 0 2px #f97316", borderColor: "#f97316" } : {}}
             >
               {form.mode === "deep_pocket"
-                ? (dpLoading ? "Building Sequence…" : "Build Sequence")
+                ? (dpSpecialTool && pdfExtracted)
+                  ? (mentor.isPending ? "Running…" : "Calculate Special Tool")
+                  : (dpLoading ? "Building Sequence…" : "Build Sequence")
                 : (mentor.isPending ? "Running…" : formDirty ? "⟳ Inputs changed — Re-run CoreCutCNC" : "Run CoreCutCNC")}
             </Button>
             <Button
@@ -7739,7 +7875,7 @@ ${stabSection}
       <div className="flex flex-col gap-4">
 
       {/* ── DEEP POCKET OUTPUT ─────────────────────────────────────────────── */}
-      {form.mode === "deep_pocket" && (dpLoading || dpResult || dpError) && (() => {
+      {form.mode === "deep_pocket" && !(dpSpecialTool && pdfExtracted) && (dpLoading || dpResult || dpError) && (() => {
         // Helper: render one tool card
         const renderToolCard = (tool: any, idx: number, total: number, role: "bulk" | "corner_finish" | "closest_reach") => {
           const phys = dpPhysics[tool.edp];
@@ -8105,6 +8241,7 @@ ${stabSection}
                                 </div>
                               ))}
                               <p className="text-[10px] text-zinc-500">Estimates only — add endmill finish passes separately.</p>
+                              <p className="text-[10px] text-violet-300">Once you have your Core Cutter quote and print, use the <span className="font-semibold text-white">Feed Mill</span> section to generate exact running parameters for your specific tool.</p>
                             </div>
                           )}
                         </div>
@@ -8179,7 +8316,7 @@ ${stabSection}
       })()}
 
       {/* OUTPUT CARD — hidden for deep pocket (per-tool cards shown above instead) */}
-      {form.mode !== "deep_pocket" && <Card className="rounded-2xl">
+      {(form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && <Card className="rounded-2xl">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recommendation</CardTitle>
@@ -9546,6 +9683,43 @@ ${stabSection}
                 </div>
               )}
 
+              {/* Feed Mill — Pocket Depth Breakdown */}
+              {feedmillResult && form.feedmill_pocket_depth > 0 && (() => {
+                const docPerPass = feedmillResult.doc_in > 0 ? feedmillResult.doc_in : (form.corner_radius * 0.8);
+                const feedIpm = result?.customer?.feed_ipm ?? 0;
+                const zPasses = docPerPass > 0 ? Math.ceil(form.feedmill_pocket_depth / docPerPass) : 0;
+                // Cycle time per pass = pocket area estimate not available, so estimate by feed rate + assumed pass length
+                // Use feed_ipm from result if available; show passes + note
+                const estMinPerPass = feedIpm > 0 ? null : null; // can't estimate without path length
+                return (
+                  <div className="mb-3 rounded-xl border border-cyan-600/40 bg-cyan-900/10 px-4 py-3 space-y-2">
+                    <div className="text-xs font-bold uppercase tracking-widest text-cyan-400">Deep Pocket — Z-Pass Breakdown</div>
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div className="rounded border border-zinc-700 bg-zinc-800/50 px-3 py-2 text-center">
+                        <div className="text-[10px] text-zinc-400 mb-0.5">Total Depth</div>
+                        <div className="font-semibold text-white">{form.feedmill_pocket_depth.toFixed(3)}"</div>
+                      </div>
+                      <div className="rounded border border-zinc-700 bg-zinc-800/50 px-3 py-2 text-center">
+                        <div className="text-[10px] text-zinc-400 mb-0.5">DOC / Pass</div>
+                        <div className="font-semibold text-white">{docPerPass.toFixed(4)}"</div>
+                      </div>
+                      <div className="rounded border border-emerald-700/50 bg-emerald-900/20 px-3 py-2 text-center">
+                        <div className="text-[10px] text-zinc-400 mb-0.5">Z Passes</div>
+                        <div className="font-bold text-emerald-400 text-sm">{zPasses}</div>
+                      </div>
+                    </div>
+                    {feedIpm > 0 && (
+                      <div className="text-[10px] text-zinc-400">
+                        Running at <span className="text-white font-semibold">{feedIpm} IPM</span> — multiply passes × estimated path length per level to get cycle time. Use the Feed Mill section cycle time estimate for full pocket area coverage.
+                      </div>
+                    )}
+                    <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-700/50">
+                      Feed mill rasters the full floor at each Z level — add endmill passes for walls and floor finish separately.
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Customer KPIs (single grid, auto-flows) */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Kpi
@@ -10628,7 +10802,7 @@ ${stabSection}
       })()}
 
       {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only, not deep pocket */}
-      {operation === "milling" && form.mode !== "deep_pocket" && (stabilityIndex || stability) && (
+      {operation === "milling" && (form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && (stabilityIndex || stability) && (
       <div className="rounded-2xl border border-card-border overflow-hidden mt-5">
 
         {/* Section header */}

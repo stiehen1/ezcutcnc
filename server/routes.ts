@@ -3290,6 +3290,14 @@ CRITICAL RULES — READ CAREFULLY:
 
 5. keyseat_arbor_dia is the small narrow neck connecting the cutter disc/head to the shank — applies to both keyseat AND dovetail cutters.
 
+6. For HIGH-FEED MILL (feedmill) cutters specifically:
+   - tool_type = "feedmill"
+   - tool_dia = the cutting diameter
+   - loc = the axial flute length / cutting height
+   - lbs = the reach/TSC dimension if it is a long-reach feed mill with a reduced neck (0 if standard body)
+   - lead_angle = the lead angle in degrees — look for a dimension callout on the cutting insert face angle or a note like "20° LEAD", "LEAD ANGLE: 17°", or an angular dimension on the cutting face. Common values: 10, 12, 15, 17, 20. Use 20 if not explicitly shown.
+   - corner_radius = the insert corner radius (from the insert designation or a callout, e.g. "R0.060" → 0.060)
+
 5. shank_dia is the large cylindrical body at the far end (shank) of the tool.
 
 6. For THREAD MILLS specifically:
@@ -3320,7 +3328,7 @@ VALIDATION: lbs must ALWAYS be greater than loc. If your extracted lbs is less t
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
   "units": "in|mm",
-  "tool_type": "endmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
+  "tool_type": "endmill|feedmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
   "tool_dia": <number, cutting diameter — nominal value only, in the print's native units>,
   "flutes": <integer>,
   "loc": <number, FLUTED CUTTING LENGTH ONLY — the SHORT dimension at the tip (e.g. 0.625). NEVER the long reach. 0 if unknown>,
@@ -3340,7 +3348,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "cutting_material": <string, the workpiece material this tool is designed for — look for "CUTTING=" or "FOR:" in the notes section. Map to one of: "aluminum_wrought", "steel_alloy", "steel_free", "stainless_304", "stainless_316", "stainless_ph", "cast_iron", "inconel_718", "inconel_625", "titanium", "hardened_lt55", "hardened_gt55" — use null if not specified>,
   "coolant_fed": <boolean, true if the print includes any note indicating coolant-through capability — look for text like "COOLANT FED", "COOLANT THROUGH", "COOLANT THRU", "THRU COOLANT", "TSC", "THROUGH SPINDLE COOLANT", or any note referencing internal coolant passages. false if no such note is found.>,
   "shank_type": <string or null — look in the title block, notes section, or shank detail for shank type callouts. Return "weldon" if "WELDON FLAT", "WELDON", or "W/FLAT" is noted. Return "safe_lock" if "SAFE LOCK", "SAFELOCK", "SAFE-LOCK", "HAIMER", or "HAIMER SAFE-LOCK" is noted. Return null if no special shank type is noted.>,
-  "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>
+  "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>,
+  "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>
 }`;
 
   app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {
@@ -3972,12 +3981,13 @@ ${catalogList}`
           AND corner_condition != 'square'
           AND (
             corner_condition = 'ball'
-            OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $1)
+            OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $1
+                AND ($2 = 0 OR corner_condition::numeric >= $2))
           )
           ${coatingFilter}
         GROUP BY cutting_diameter_in
         ORDER BY cutting_diameter_in DESC
-      `, [corner_radius]);
+      `, [corner_radius, floor_radius || 0]);
       const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
 
       // ── 3. Corner dia picker (unchanged single-pass logic) ────────────────────
@@ -4237,17 +4247,18 @@ ${catalogList}`
               AND corner_condition NOT IN ('square')
               AND (
                 corner_condition = 'ball'
-                OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $3)
+                OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $3
+                    AND ($4 = 0 OR corner_condition::numeric >= $4))
               )
               AND COALESCE(lbs_in, loc_in) >= $2
               ${coatingFilter}
             ORDER BY
-              -- Prefer CR over ball; among CR tools prefer smallest radius (cleanest corner, most control)
+              -- Prefer CR over ball; among CR tools prefer largest radius that still fits floor (closest match)
               CASE WHEN corner_condition = 'ball' THEN 1 ELSE 0 END ASC,
-              CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 999 END ASC,
+              CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 999 END DESC,
               COALESCE(lbs_in, loc_in) ASC
             LIMIT 1
-          `, [dia, target_depth, corner_radius]);
+          `, [dia, target_depth, corner_radius, floor_radius || 0]);
         }
 
         if (!toolRows.rows.length) return null;
