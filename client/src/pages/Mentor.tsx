@@ -7529,68 +7529,40 @@ ${stabSection}
                         </div>
                       </div>
                       <div className="pl-2 space-y-1">
-                        <FieldLabel hint="Diameter of the pre-drilled hole. The sequencer will also show the minimum pre-drill size needed based on the largest recommended bulk tool. If ≥ tool diameter, tool drops straight in. If smaller, a reduced-diameter helical entry is used.">Drill Dia (in) — optional, leave blank to use sequencer recommendation</FieldLabel>
-                        <Input type="text" inputMode="decimal" className="no-spinners"
-                          placeholder="leave blank for auto"
-                          value={dpPreDrillText}
-                          onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
-                          onBlur={() => {
-                            const pocketMax = form.dp_pocket_length > 0 && form.dp_pocket_width > 0 ? Math.min(form.dp_pocket_length, form.dp_pocket_width) : Infinity;
-                            const capped = form.dp_pre_drill_dia > 0 ? Math.min(form.dp_pre_drill_dia, pocketMax) : 0;
-                            if (capped > 0) { setDpPreDrillText(capped.toFixed(4)); setForm(p => ({ ...p, dp_pre_drill_dia: capped })); } else setDpPreDrillText("");
-                          }}
-                        />
-                        {form.dp_pocket_length > 0 && form.dp_pocket_width > 0 && (
-                          <p className="text-[10px] text-zinc-500">Max: {Math.min(form.dp_pocket_length, form.dp_pocket_width).toFixed(3)}" (pocket width)</p>
-                        )}
-                        <FieldLabel hint="How deep to drill. Recommended: pocket depth × 95% — leaves floor stock for endmill cleanup and accommodates drill point. Leave blank to use the sequencer recommendation.">Drill Depth (in) — optional</FieldLabel>
-                        <Input type="text" inputMode="decimal" className="no-spinners"
-                          placeholder={form.dp_depth > 0 ? `rec: ${(form.dp_depth * 0.95).toFixed(4)}` : "leave blank for auto"}
-                          value={dpPreDrillDepthText}
-                          onChange={e => { setDpPreDrillDepthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
-                          onBlur={() => { if (form.dp_pre_drill_depth > 0) setDpPreDrillDepthText(form.dp_pre_drill_depth.toFixed(4)); else setDpPreDrillDepthText(""); }}
-                        />
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <FieldLabel hint="Pre-drill diameter. Leave blank to use sequencer recommendation.">Dia (in)</FieldLabel>
+                            <Input type="text" inputMode="decimal" className="no-spinners"
+                              placeholder="auto"
+                              value={dpPreDrillText}
+                              onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                              onBlur={() => {
+                                const pocketMax = form.dp_pocket_length > 0 && form.dp_pocket_width > 0 ? Math.min(form.dp_pocket_length, form.dp_pocket_width) : Infinity;
+                                const capped = form.dp_pre_drill_dia > 0 ? Math.min(form.dp_pre_drill_dia, pocketMax) : 0;
+                                if (capped > 0) { setDpPreDrillText(capped.toFixed(4)); setForm(p => ({ ...p, dp_pre_drill_dia: capped })); } else setDpPreDrillText("");
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <FieldLabel hint="Drill depth — recommended: pocket depth ×95% to leave floor stock. Leave blank for auto.">Depth (in)</FieldLabel>
+                            <Input type="text" inputMode="decimal" className="no-spinners"
+                              placeholder={form.dp_target_depth > 0 ? `~${(form.dp_target_depth * 0.95).toFixed(3)}` : "auto"}
+                              value={dpPreDrillDepthText}
+                              onChange={e => { setDpPreDrillDepthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                              onBlur={() => { if (form.dp_pre_drill_depth > 0) setDpPreDrillDepthText(form.dp_pre_drill_depth.toFixed(4)); else setDpPreDrillDepthText(""); }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Pre-drill toggle — open pocket only */}
+              {/* Open pocket — sweep-in entry, no pre-drill needed */}
               {!form.dp_closed_pocket && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <button type="button"
-                      onClick={() => setForm(p => ({ ...p, dp_pre_drill: !p.dp_pre_drill, dp_pre_drill_dia: p.dp_pre_drill ? 0 : p.dp_pre_drill_dia }))}
-                      className="flex items-center gap-2 text-xs font-medium transition-colors"
-                      style={{ color: form.dp_pre_drill ? "#38bdf8" : "#71717a" }}>
-                      <div className="w-8 h-4 rounded-full border flex items-center transition-all px-0.5"
-                        style={{ borderColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", backgroundColor: form.dp_pre_drill ? "rgba(56,189,248,0.2)" : "transparent" }}>
-                        <div className="w-3 h-3 rounded-full transition-all"
-                          style={{ backgroundColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", marginLeft: form.dp_pre_drill ? "auto" : "0" }} />
-                      </div>
-                      Pre-Drilled Entry Hole
-                    </button>
-                    <FieldLabel hint="Optional for open pockets. Turn on if a hole was pre-drilled at the pocket entry point. For open pockets, tools can sweep in from the open edge — a pre-drill is not required but can be used if preferred."> </FieldLabel>
-                  </div>
-                  {form.dp_pre_drill && (
-                    <div className="space-y-2 pl-2">
-                      <FieldLabel hint="Diameter of the pre-drilled hole. If ≥ tool diameter, tool drops straight in. If smaller, a reduced-diameter helical entry is used.">Drill Dia (in)</FieldLabel>
-                      <Input type="text" inputMode="decimal" className="no-spinners"
-                        placeholder="e.g. 0.500"
-                        value={dpPreDrillText}
-                        onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
-                        onBlur={() => { if (form.dp_pre_drill_dia > 0) setDpPreDrillText(form.dp_pre_drill_dia.toFixed(4)); else setDpPreDrillText(""); }}
-                      />
-                      <FieldLabel hint="How deep to drill. Recommended: pocket depth × 95% — leaves floor stock for endmill cleanup. Leave blank for auto.">Drill Depth (in) — optional</FieldLabel>
-                      <Input type="text" inputMode="decimal" className="no-spinners"
-                        placeholder={form.dp_depth > 0 ? `rec: ${(form.dp_depth * 0.95).toFixed(4)}` : "leave blank for auto"}
-                        value={dpPreDrillDepthText}
-                        onChange={e => { setDpPreDrillDepthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
-                        onBlur={() => { if (form.dp_pre_drill_depth > 0) setDpPreDrillDepthText(form.dp_pre_drill_depth.toFixed(4)); else setDpPreDrillDepthText(""); }}
-                      />
-                    </div>
-                  )}
+                <div className="text-[10px] text-zinc-500 px-1">
+                  Open pocket — tool sweeps in from open edge. No pre-drill required.
                 </div>
               )}
 
