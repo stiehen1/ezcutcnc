@@ -10081,16 +10081,13 @@ ${stabSection}
                   const zoneColor = zone === "red" ? "text-red-400" : zone === "yellow" ? "text-amber-400" : "text-emerald-400";
                   const zoneBg   = zone === "red" ? "bg-red-500/10 border-red-500/30" : zone === "yellow" ? "bg-amber-500/10 border-amber-500/30" : "bg-emerald-500/10 border-emerald-500/30";
                   const zoneLabel = zone === "red" ? "Overloaded" : zone === "yellow" ? "Near Limit" : "In Range";
-                  const confDot   = customer.torque_curve_confidence === "high" ? "●" : customer.torque_curve_confidence === "medium" ? "◑" : "○";
+                  const confLabel = customer.torque_curve_confidence === "high" ? "official curve" : customer.torque_curve_confidence === "medium" ? "family est." : "generic est.";
                   const confTitle = customer.torque_curve_confidence === "high" ? "High confidence — official spindle curve" : customer.torque_curve_confidence === "medium" ? "Medium confidence — family estimate" : "Low confidence — generic estimate";
                   return (
                     <div className={`col-span-full rounded-lg border px-3 py-2.5 ${zoneBg}`}>
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">Torque Zone</span>
-                            <span title={confTitle} className="text-[10px] text-zinc-500 cursor-default">{confDot}</span>
-                          </div>
+                          <div className="text-xs font-medium text-muted-foreground">Torque Zone</div>
                           <div className={`text-base font-bold ${zoneColor}`}>{zoneLabel}</div>
                         </div>
                         <div className="text-right">
@@ -10102,6 +10099,7 @@ ${stabSection}
                           <div className="text-xs text-muted-foreground">
                             req / avail at {fmtNum(customer.rpm, 0)} RPM
                           </div>
+                          <div title={confTitle} className="text-[10px] text-zinc-500 cursor-default mt-0.5">{confLabel}</div>
                         </div>
                         {customer.torque_util_pct != null && (
                           <div className={`text-lg font-bold ${zoneColor}`}>
