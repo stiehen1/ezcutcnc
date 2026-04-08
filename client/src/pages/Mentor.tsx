@@ -9833,19 +9833,6 @@ ${stabSection}
                 );
               })()}
 
-              {/* Stale results banner */}
-              {formDirty && !mentor.isPending && (
-                <button
-                  type="button"
-                  onClick={run}
-                  className="w-full flex items-center gap-2 rounded-lg border border-orange-500/50 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-300 hover:bg-orange-500/20 transition-colors text-left"
-                >
-                  <span className="text-base leading-none">⟳</span>
-                  <span className="flex-1">Inputs changed — re-run to update results</span>
-                  <span className="text-xs text-orange-400/70 font-normal shrink-0">Tap to run</span>
-                </button>
-              )}
-
               {/* Customer KPIs (single grid, auto-flows) */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Kpi
@@ -11957,6 +11944,20 @@ ${stabSection}
           <div>Powered by Core Cutter LLC</div>
         </div>
       </div>
+
+    {/* Floating stale-results bar — always visible when inputs changed */}
+    {formDirty && customer !== null && !mentor.isPending && (
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border border-orange-500/60 bg-zinc-900/95 px-4 py-2.5 shadow-xl backdrop-blur-sm">
+        <span className="text-sm text-orange-300">Inputs changed</span>
+        <button
+          type="button"
+          onClick={run}
+          className="rounded-full bg-orange-500 hover:bg-orange-400 px-4 py-1 text-sm font-semibold text-black transition-colors"
+        >
+          Re-run
+        </button>
+      </div>
+    )}
 
     {/* Welcome Modal — first-visit name + email capture */}
     {showWelcomeModal && (
