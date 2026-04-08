@@ -3919,7 +3919,13 @@ ${catalogList}`
       const pocketCeilingDia = closed_pocket && pocket_length > 0 && pocket_width > 0
         ? Math.min(pocket_length, pocket_width) * hemFit
         : Infinity;
-      const maxBulkDia = pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0;
+      // HEM: hard cap at 0.625" — keeps radial forces manageable at depth.
+      // Traditional: no hard cap beyond pocket ceiling (wider WOC tolerates larger dia).
+      const hemDiaCap = cutting_style === "hem" ? 0.625 : Infinity;
+      const maxBulkDia = Math.min(
+        pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0,
+        hemDiaCap
+      );
 
       // ── Material-appropriate coating + flute filters ───────────────────────
       // ISO N (aluminum): D-Max or A-Max coating, 2–3 flutes
