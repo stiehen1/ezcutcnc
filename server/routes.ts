@@ -3910,12 +3910,15 @@ ${catalogList}`
       const maxCornerDia = corner_radius * 2 * cornerFactor;
 
       // For closed pockets, bulk tool must physically fit inside — cap by pocket narrowest dim × 0.85
-      // For open pockets with no pocket dims, no cap (tool sweeps in from open edge)
+      // For closed pockets, bulk tool must fit AND leave clearance for HEM passes.
+      // HEM needs the tool to traverse the pocket — cap at 50% of narrowest dim so the
+      // non-cutting side doesn't rub the opposite wall during radial passes.
+      // Traditional: 65% (wider WOC, less traversal needed).
+      // Open pockets: no pocket-dim constraint.
+      const hemFit   = cutting_style === "hem" ? 0.50 : 0.65;
       const pocketCeilingDia = closed_pocket && pocket_length > 0 && pocket_width > 0
-        ? Math.min(pocket_length, pocket_width) * 0.85
+        ? Math.min(pocket_length, pocket_width) * hemFit
         : Infinity;
-      // Bulk roughers have NO corner constraint — they rip out bulk material and leave stock
-      // at the walls/corners for the finishing tool to clean up. Only cap by pocket physical fit.
       const maxBulkDia = pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0;
 
       // ── Material-appropriate coating + flute filters ───────────────────────

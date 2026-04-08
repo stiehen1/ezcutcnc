@@ -7435,7 +7435,7 @@ ${stabSection}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Inside corner radius of the finished pocket. Drives maximum tool diameter via the 75% engagement rule — tool diameter must be ≤ 75% of corner diameter to avoid full-engagement force spikes.">Wall-to-Wall Corner Radius (in)</FieldLabel>
+                  <FieldLabel hint="Inside corner radius of the finished pocket (in inches). Roughing tools are unconstrained by this — they rip out bulk material and leave stock at the corners. The finishing tool diameter must be ≤ wall-to-wall diameter (corner radius × 2) to reach the corners.">Wall-to-Wall Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.375"
                     value={dpCornerText}
@@ -7446,16 +7446,12 @@ ${stabSection}
               </div>
 
               {/* Corner radius advisory */}
-              {form.dp_corner_radius > 0 && (() => {
-                const maxBulkDia = form.dp_corner_radius * 2 * 0.75;
-                const maxCornerDia = form.dp_corner_radius * 2 * 0.60;
-                return (
-                  <p className="text-[10px] text-zinc-400">
-                    75% rule → bulk tool max <span className="text-white">{maxBulkDia.toFixed(4)}"</span> &nbsp;·&nbsp;
-                    60% rule → corner finish max <span className="text-white">{maxCornerDia.toFixed(4)}"</span>
-                  </p>
-                );
-              })()}
+              {form.dp_corner_radius > 0 && (
+                <p className="text-[10px] text-zinc-400">
+                  Wall-to-wall diameter: <span className="text-white">{(form.dp_corner_radius * 2).toFixed(4)}"</span>
+                  &nbsp;·&nbsp; Finishing tool must be ≤ this diameter
+                </p>
+              )}
 
               {/* Thin wall toggle */}
               <div className="flex items-center gap-3">
