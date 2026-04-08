@@ -268,7 +268,7 @@ export async function registerRoutes(
       ["Johnford",      "ST-60Y",        3500,  25,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
       ["Daewoo",        "PUMA 240MS",    5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
       ["Daewoo",        "PUMA 250MS",    5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
-      ["DN Solutions",  "PUMA 2100SY II", 5000, 30, "A2-6/A2-8", "direct", false, "tsc", null, "mill_turn", "FANUC",     5000, 30,  "Turret Coolant",          "VDI/BMT", "Direct"],
+      ["Doosan/DN Solutions", "PUMA 2100SY II", 5000, 30, "A2-6/A2-8", "direct", false, "tsc", null, "mill_turn", "FANUC", 5000, 30, "Turret Coolant", "VDI/BMT", "Direct"],
       ["Kia / Hyundai-Kia", "SKT21LMS", 5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
       ["Kia / Hyundai-Kia", "SKT2000Y", 4000,  22,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
     ];
@@ -279,6 +279,8 @@ export async function registerRoutes(
         WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE $1 AND model ILIKE $2)
       `, m);
     }
+    // Fix any rows inserted under old brand names so search aliases work
+    await pool.query(`UPDATE machines SET brand = 'Doosan/DN Solutions' WHERE model ILIKE 'PUMA 2100SY II' AND brand ILIKE 'DN Solutions'`);
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
