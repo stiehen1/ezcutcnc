@@ -1167,6 +1167,7 @@ export default function Mentor() {
   const [dpError, setDpError] = React.useState<string | null>(null);
   const [dpDepthText, setDpDepthText] = React.useState("");
   const [dpCornerText, setDpCornerText] = React.useState("");
+  const [dpFloorRadiusText, setDpFloorRadiusText] = React.useState("");
   const [dpPreDrillText, setDpPreDrillText] = React.useState("");
   const [dpPreDrillDepthText, setDpPreDrillDepthText] = React.useState("");
   const [dpLengthText, setDpLengthText] = React.useState("");
@@ -1420,6 +1421,7 @@ export default function Mentor() {
     dp_closed_pocket: false,
     dp_pocket_length: 0,
     dp_pocket_width: 0,
+    dp_floor_radius: 0,
     dp_pre_drill: false,
     dp_pre_drill_dia: 0,
     dp_pre_drill_depth: 0,
@@ -2371,6 +2373,7 @@ export default function Mentor() {
             closed_pocket: form.dp_closed_pocket,
             pocket_length: form.dp_pocket_length || 0,
             pocket_width: form.dp_pocket_width || 0,
+            floor_radius: form.dp_floor_radius || 0,
             pre_drill_dia: form.dp_pre_drill ? (form.dp_pre_drill_dia || 0) : 0,
             pre_drill_depth: form.dp_pre_drill ? (form.dp_pre_drill_depth || 0) : 0,
             material: form.material,
@@ -7426,7 +7429,7 @@ ${stabSection}
                 </div>
               </div>
 
-              {/* Target depth + corner radius */}
+              {/* Target depth + corner radii */}
               <div className="flex gap-3">
                 <div className="flex-1 space-y-2">
                   <FieldLabel hint="Total finished pocket depth from top of part to floor.">Total Finished Depth (in)</FieldLabel>
@@ -7438,12 +7441,21 @@ ${stabSection}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Inside corner radius of the finished pocket (in inches). Roughing tools are unconstrained by this — they rip out bulk material and leave stock at the corners. The finishing tool diameter must be ≤ wall-to-wall diameter (corner radius × 2) to reach the corners.">Wall-to-Wall Corner Radius (in)</FieldLabel>
+                  <FieldLabel hint="Wall-to-wall inside corner radius from the print (inches). The finishing tool diameter must be ≤ this × 2 to reach the corners. Roughing tools are unconstrained by this.">Wall Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder="e.g. 0.375"
+                    placeholder="e.g. 0.250"
                     value={dpCornerText}
                     onChange={e => { setDpCornerText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_corner_radius: Number.isFinite(n) && n > 0 ? n : 0 })); }}
                     onBlur={() => { if (form.dp_corner_radius > 0) setDpCornerText(form.dp_corner_radius.toFixed(4)); else setDpCornerText(""); }}
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <FieldLabel hint="Wall-to-floor (bottom) corner radius from the print (inches). If 0 or sharp, a square-end finishing tool can be used. If specified, the finishing tool needs a matching corner radius on the bottom cutting edge.">Floor Corner Radius (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="0 if sharp"
+                    value={dpFloorRadiusText}
+                    onChange={e => { setDpFloorRadiusText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_floor_radius: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                    onBlur={() => { if (form.dp_floor_radius > 0) setDpFloorRadiusText(form.dp_floor_radius.toFixed(4)); else setDpFloorRadiusText(""); }}
                   />
                 </div>
               </div>
@@ -7453,6 +7465,7 @@ ${stabSection}
                 <p className="text-[10px] text-zinc-400">
                   Wall-to-wall diameter: <span className="text-white">{(form.dp_corner_radius * 2).toFixed(4)}"</span>
                   &nbsp;·&nbsp; Finishing tool must be ≤ this diameter
+                  {form.dp_floor_radius > 0 && <>&nbsp;·&nbsp; Floor radius: <span className="text-white">{form.dp_floor_radius.toFixed(4)}"</span> — finishing tool needs matching bottom CR</>}
                 </p>
               )}
 
@@ -7947,6 +7960,24 @@ ${stabSection}
                     color: "indigo",
                     title: "Ball Nose Corner Match",
                     body: "Corner radius matched exactly. Step-over controls scallop height. Leave 0.008\" stock from bulk sequence.",
+                  });
+                }
+
+                // Floor radius note
+                if (dpResult.inputs?.floor_radius > 0) {
+                  const fr = dpResult.inputs.floor_radius;
+                  const cornerTool = dpResult.corner_tool;
+                  const toolCr = cornerTool ? parseFloat(cornerTool.corner_condition) || 0 : 0;
+                  const crMatch = toolCr > 0 && Math.abs(toolCr - fr) < 0.001;
+                  const crSmaller = toolCr > 0 && toolCr < fr;
+                  notes.push({
+                    color: crMatch ? "indigo" : "amber",
+                    title: crMatch ? "Floor Corner Radius Matched" : "Floor Corner Radius — Finishing Tool Check",
+                    body: crMatch
+                      ? `Finishing tool corner radius (${toolCr.toFixed(4)}") matches the specified wall-to-floor radius. No separate floor pass needed.`
+                      : crSmaller
+                      ? `Finishing tool has CR ${toolCr.toFixed(4)}" — smaller than the floor radius ${fr.toFixed(4)}". The floor radius will not be fully blended. A dedicated floor finishing pass with a ${fr.toFixed(4)}" CR tool may be needed.`
+                      : `Wall-to-floor radius is ${fr.toFixed(4)}". Verify the finishing tool has a matching bottom corner radius — a square-end tool will leave a sharp floor junction.`,
                   });
                 }
 
