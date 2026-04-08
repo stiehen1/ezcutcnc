@@ -954,8 +954,12 @@ export default function Mentor() {
   const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
   const fmtMachType = (t?: string | null) => {
     if (!t) return "";
-    const m: Record<string, string> = { mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", lathe: "Lathe" };
-    return m[t.trim().toLowerCase()] ?? t.toUpperCase();
+    const m: Record<string, string> = {
+      mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", lathe: "Lathe",
+      "5-axis vmc": "5-Axis VMC", "5-axis hmc": "5-Axis HMC",
+      swiss: "Swiss", "double column": "Double Column",
+    };
+    return m[t.trim().toLowerCase()] ?? t;
   };
   const [showManageMachines, setShowManageMachines] = React.useState(false);
   const [savedMachinesOpen, setSavedMachinesOpen] = React.useState(false);
@@ -1023,7 +1027,7 @@ export default function Mentor() {
     const rawDrive = typeof m.drive_type === "string" ? m.drive_type.trim().toLowerCase() : null;
     const rawMachType = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
     const validDrives = ["direct", "belt", "gear"];
-    const validMachTypes = ["vmc", "hmc", "5axis", "mill_turn", "lathe"];
+    const validMachTypes = ["vmc", "hmc", "5axis", "mill_turn", "lathe", "5-axis vmc", "5-axis hmc", "swiss", "double column"];
     const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
     const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : null) ?? m.machine_type;
     const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
