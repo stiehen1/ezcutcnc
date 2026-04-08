@@ -4315,10 +4315,56 @@ ${catalogList}`
         }
       }
 
-      // Feed mill eligibility
-      // Feed mill is always worth mentioning for deep pockets — small Z steps, all axial pressure,
-      // no radial deflection. Especially powerful in steel/cast iron but viable in most materials.
-      const feedmill_eligible = !thin_wall; // show for all materials except thin wall
+      // Feed mill eligibility + estimated cycle time
+      const feedmill_eligible = !thin_wall;
+
+      // Feed mill cycle time estimate — show two sizes:
+      //   Large: matches largest bulk rougher (max MRR, fewer passes, more Z force)
+      //   Small: matches smallest bulk rougher or one step down (less Z force, fits tighter pockets)
+      // Standard feed mill CR = 0.060" dual-radius design
+      const FM_FLUTES = 4;
+      const FM_CR = 0.060;
+      const fmParams: Record<string, { sfm: number; ipt: number }> = {
+        P: { sfm: 337, ipt: 0.010 },
+        M: { sfm: 230, ipt: 0.008 },
+        K: { sfm: 315, ipt: 0.010 },
+        S: { sfm: 115, ipt: 0.005 },
+        H: { sfm: 200, ipt: 0.007 },
+        N: { sfm: 850, ipt: 0.014 },
+      };
+      const fmMat = fmParams[(iso_category ?? "P").toUpperCase()] ?? fmParams["P"];
+
+      // Standard sizes available as specials
+      const FM_SIZES = [0.250, 0.375, 0.500, 0.625, 0.750, 1.000];
+      const bulkDias = bulk_tools.map(t => t.dia).filter(d => d > 0);
+      const largestBulk = bulkDias.length > 0 ? Math.max(...bulkDias) : 0.625;
+      const smallestBulk = bulkDias.length > 0 ? Math.min(...bulkDias) : 0.375;
+
+      // Large FM: largest standard size ≤ largestBulk (same footprint as first rougher)
+      const fmLargeDia = FM_SIZES.filter(d => d <= largestBulk).slice(-1)[0] ?? 0.625;
+      // Small FM: one step down from smallest bulk tool (less Z pressure option)
+      const fmSmallDia = FM_SIZES.filter(d => d < smallestBulk).slice(-1)[0] ?? FM_SIZES[0];
+
+      function fmEstimate(dia: number) {
+        const doc = Math.min(0.8 * FM_CR, 0.12 * dia);
+        const rpm = (fmMat.sfm * 12) / (Math.PI * dia);
+        const feed = rpm * FM_FLUTES * fmMat.ipt;
+        const woc = dia * 0.08;
+        const depth = target_depth * 0.95;
+        const zPasses = Math.ceil(depth / doc);
+        const xPasses = closed_pocket && pocket_length > 0 && pocket_width > 0
+          ? Math.ceil((pocket_width - dia) / woc)
+          : Math.ceil((corner_radius * 2 * 4) / woc);
+        const passLen = closed_pocket && pocket_length > 0 ? pocket_length : corner_radius * 8;
+        const minutes = Math.round((zPasses * xPasses * passLen) / feed * 1.10);
+        const timeStr = minutes < 1 ? "< 1 min" : minutes === 1 ? "~1 min" : `~${minutes} min`;
+        return { dia, doc_in: +doc.toFixed(4), z_passes: zPasses, feed_ipm: +feed.toFixed(0), rpm: +rpm.toFixed(0), est_str: timeStr };
+      }
+
+      const feedmill_estimate = {
+        large: fmEstimate(fmLargeDia),
+        small: fmSmallDia !== fmLargeDia ? fmEstimate(fmSmallDia) : null,
+      };
 
       // Thin wall WOC taper schedule
       const woc_taper = thin_wall ? (
@@ -4409,6 +4455,7 @@ ${catalogList}`
         corner_oversize,
         corner_oversize_note,
         feedmill_eligible,
+        feedmill_estimate,
         woc_taper,
         closed_pocket,
         required_pre_drill_dia,
