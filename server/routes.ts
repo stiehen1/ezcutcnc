@@ -3982,8 +3982,8 @@ ${catalogList}`
           AND (
             corner_condition = 'ball'
             OR (corner_condition ~ '^[0-9.]+$'
-                AND (corner_condition::numeric <= $1)
-                AND ($2 = 0 OR corner_condition::numeric >= $2))
+                AND (corner_condition::numeric <= $1::numeric)
+                AND ($2::numeric = 0 OR corner_condition::numeric >= $2::numeric))
           )
           ${coatingFilter}
         GROUP BY cutting_diameter_in
@@ -4249,8 +4249,8 @@ ${catalogList}`
               AND (
                 corner_condition = 'ball'
                 OR (corner_condition ~ '^[0-9.]+$'
-                    AND (corner_condition::numeric <= $3)
-                    AND ($4 = 0 OR corner_condition::numeric >= $4))
+                    AND (corner_condition::numeric <= $3::numeric)
+                    AND ($4::numeric = 0 OR corner_condition::numeric >= $4::numeric))
               )
               AND COALESCE(lbs_in, loc_in) >= $2
               ${coatingFilter}
