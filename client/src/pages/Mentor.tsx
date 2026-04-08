@@ -11947,12 +11947,12 @@ ${stabSection}
 
     {/* Floating stale-results bar — always visible when inputs changed */}
     {formDirty && customer !== null && !mentor.isPending && (
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border border-orange-500/60 bg-zinc-900/95 px-4 py-2.5 shadow-xl backdrop-blur-sm">
-        <span className="text-sm text-orange-300">Inputs changed</span>
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border border-yellow-400/80 bg-zinc-900/95 px-4 py-2.5 shadow-xl backdrop-blur-sm">
+        <span className="text-sm text-yellow-300">Inputs changed</span>
         <button
           type="button"
           onClick={run}
-          className="rounded-full bg-orange-500 hover:bg-orange-400 px-4 py-1 text-sm font-semibold text-black transition-colors"
+          className="rounded-full bg-yellow-400 hover:bg-yellow-300 px-4 py-1 text-sm font-semibold text-black transition-colors"
         >
           Re-run
         </button>
