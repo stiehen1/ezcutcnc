@@ -943,6 +943,14 @@ export default function Mentor() {
   const [machineSaving, setMachineSaving] = React.useState(false);
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
+  // Mill-turn spindle selector — stores raw DB values from selected machine
+  const [activeMachineData, setActiveMachineData] = React.useState<{
+    main_rpm: number; main_hp: number;
+    sub_rpm: number | null;
+    live_rpm: number | null; live_hp: number | null;
+    drive: string;
+  } | null>(null);
+  const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub">("main");
   const fmtMachType = (t?: string | null) => {
     if (!t) return "";
     const m: Record<string, string> = { mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", lathe: "Lathe" };
@@ -1018,10 +1026,21 @@ export default function Mentor() {
     const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
     const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : null) ?? m.machine_type;
     const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
+    // Store raw machine specs for spindle toggle
+    const _machData = {
+      main_rpm: m.max_rpm ?? 0,
+      main_hp: m.spindle_hp ? Number(m.spindle_hp) : 0,
+      sub_rpm: m.sub_spindle_rpm ?? null,
+      live_rpm: m.live_tool_max_rpm ?? null,
+      live_hp: m.live_tool_hp ? Number(m.live_tool_hp) : null,
+      drive,
+    };
+    setActiveMachineData(_machData);
+    setSelectedSpindle("main");
     setForm(p => ({
       ...p,
-      max_rpm: m.max_rpm ?? p.max_rpm,
-      machine_hp: m.spindle_hp ? Number(m.spindle_hp) : p.machine_hp,
+      max_rpm: _machData.main_rpm || p.max_rpm,
+      machine_hp: _machData.main_hp || p.machine_hp,
       spindle_taper: rawTaper ?? p.spindle_taper,
       spindle_drive: drive as any,
       dual_contact: dualContact,
@@ -2246,6 +2265,8 @@ export default function Mentor() {
     setMatMatchError(null);
     setActiveMachineId(null);
     setActiveMachineName("");
+    setActiveMachineData(null);
+    setSelectedSpindle("main");
     setMachineQuery("");
     setFormDirty(false);
     setShowRoi(false);
@@ -5402,6 +5423,37 @@ ${stabSection}
               )}
             </div>
           </div>
+
+          {/* Mill-Turn spindle selector — only when selected machine has a sub spindle */}
+          {activeMachineData && form.machine_type === "mill_turn" && activeMachineData.sub_rpm && (
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
+              <FieldLabel hint="This machine has both a main spindle and a sub spindle with different RPM capabilities. Select which spindle the tool will run in — the engine will use that spindle's RPM and HP limits.">Active Spindle</FieldLabel>
+              <div className="flex gap-2">
+                {([
+                  { key: "main", label: "Main Spindle", rpm: activeMachineData.main_rpm, hp: activeMachineData.main_hp },
+                  { key: "sub",  label: "Sub Spindle",  rpm: activeMachineData.sub_rpm,  hp: activeMachineData.main_hp },
+                ] as const).map(({ key, label, rpm, hp }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSpindle(key);
+                      setForm(p => ({ ...p, max_rpm: rpm, machine_hp: hp }));
+                    }}
+                    className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
+                    style={{
+                      backgroundColor: selectedSpindle === key ? "#f59e0b" : "transparent",
+                      borderColor: "#f59e0b",
+                      color: selectedSpindle === key ? "#000" : "#f59e0b",
+                    }}
+                  >
+                    <div>{label}</div>
+                    <div className="text-xs font-normal mt-0.5 opacity-80">{rpm.toLocaleString()} RPM · {hp} HP</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
