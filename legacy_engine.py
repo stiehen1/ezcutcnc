@@ -3474,9 +3474,17 @@ def run(payload=None):
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(material_group, 300))
     if data["mode"] in ("hem", "trochoidal"):
         base_sfm *= 2.0  # HEM = 2× conventional for all materials
-        # Per-material HEM SFM overrides (shop-validated; override the 2× result)
+        # Per-material HEM SFM overrides (shop-validated; prorated from 718 baseline of 216)
         _hem_sfm_override = {
             "inconel_718": 216,
+            "inconel_625": 212,
+            "monel_k500":  226,
+            "hastelloy_x": 161,
+            "inconel_617": 153,
+            "waspaloy":    134,
+            "mp35n":       118,
+            "hiTemp_fe":   187,
+            "hiTemp_co":   265,
         }
         if _mat_key in _hem_sfm_override:
             base_sfm = _hem_sfm_override[_mat_key]
