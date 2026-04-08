@@ -7972,6 +7972,8 @@ ${stabSection}
                       <span className="block mt-1 text-zinc-400">Best in steel, stainless, cast iron, and titanium. Core Cutter feed mills are special order — contact us for a quote sized to your pocket.</span>
                       <span className="block mt-2 text-zinc-300 font-semibold">Also consider a Z-axis plunge roughing tool.</span>
                       <span className="block text-zinc-400">A dedicated plunge rougher is designed specifically for straight Z-axis drilling-style cuts — multiple plunge locations across the pocket floor, stepping over by ~75% of the tool diameter each pass. Like a feed mill, all force is axial with zero radial wall pressure. Ideal for deep pockets where endmill reach and deflection are the limiting factor. Core Cutter can manufacture these as specials — contact us with your pocket dimensions and material.</span>
+                      <span className="block mt-2 text-sky-300 font-semibold">Through-coolant tooling is strongly recommended for this pocket.</span>
+                      <span className="block text-zinc-400">In a closed pocket, chips have nowhere to go — they pack at the bottom, re-cut, generate heat, and kill tools fast. Through-spindle coolant forced directly to the cutting edge blasts chips up and out of the pocket on every pass. This is especially critical at depth. If your machine has through-spindle coolant, use it. Core Cutter feed mills, plunge roughers, and extended-reach endmills can all be manufactured with through-coolant as a special option.</span>
                     </>,
                   });
                 }
