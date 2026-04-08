@@ -7721,11 +7721,13 @@ ${stabSection}
             <div key={tool.edp} className="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700"
-                style={{ backgroundColor: role === "corner_finish" ? "rgba(99,102,241,0.15)" : role === "closest_reach" ? "rgba(249,115,22,0.15)" : "rgba(249,115,22,0.10)" }}>
+                style={{ backgroundColor: role === "corner_finish" || role === "closest_reach" ? "rgba(99,102,241,0.15)" : "rgba(249,115,22,0.10)" }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest"
-                    style={{ color: role === "corner_finish" ? "#a5b4fc" : role === "closest_reach" ? "#fb923c" : "#fb923c" }}>
-                    {role === "corner_finish" ? "Corner Finishing Tool" : role === "closest_reach" ? "Closest Reach Tool" : `Tool ${idx + 1} of ${total}`}
+                    style={{ color: role === "corner_finish" || role === "closest_reach" ? "#a5b4fc" : "#fb923c" }}>
+                    {role === "corner_finish" || role === "closest_reach"
+                      ? `Finishing Tool ${idx + 1} of ${total}`
+                      : `Roughing Tool ${idx + 1} of ${total}`}
                   </span>
                   <span className="text-xs font-semibold text-white">EDP# {tool.edp}</span>
                 </div>
@@ -7889,21 +7891,28 @@ ${stabSection}
               {dpError && (
                 <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{dpError}</div>
               )}
-              {/* Bulk sequence */}
-              {(dpResult?.bulk_tools ?? []).length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400">Bulk Removal</p>
-                  {dpResult.bulk_tools.map((tool: any, i: number) =>
-                    renderToolCard(tool, i, dpResult.bulk_tools.length, "bulk")
-                  )}
-                </div>
-              )}
+              {/* Full sequence — roughing tools + finishing tool, numbered together */}
+              {(dpResult?.bulk_tools ?? []).length > 0 && (() => {
+                const totalTools = dpResult.bulk_tools.length + (dpResult.corner_tool ? 1 : 0);
+                return (
+                  <div className="space-y-2">
+                    {dpResult.bulk_tools.map((tool: any, i: number) =>
+                      renderToolCard(tool, i, totalTools, "bulk")
+                    )}
+                  </div>
+                );
+              })()}
 
-              {/* Corner finish */}
-              {dpResult?.corner_tool && (
-                <div className="space-y-2 mt-2">
-                  {renderToolCard(dpResult.corner_tool, 0, 1, dpResult.corner_oversize ? "closest_reach" : "corner_finish")}
-                </div>
+              {/* Finishing tool */}
+              {dpResult?.corner_tool && (() => {
+                const totalTools = (dpResult.bulk_tools?.length ?? 0) + 1;
+                const finishIdx = totalTools - 1;
+                return (
+                  <div className="space-y-2 mt-2">
+                    {renderToolCard(dpResult.corner_tool, finishIdx, totalTools, dpResult.corner_oversize ? "closest_reach" : "corner_finish")}
+                  </div>
+                );
+              })()}
               )}
 
               {/* ── Notes & Advisories ── consolidated block */}
