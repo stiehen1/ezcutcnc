@@ -951,6 +951,24 @@ export default function Mentor() {
   const [machineSaving, setMachineSaving] = React.useState(false);
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
+  // Mill-turn spindle selector — stores raw DB values from selected machine
+  const [activeMachineData, setActiveMachineData] = React.useState<{
+    main_rpm: number; main_hp: number;
+    sub_rpm: number | null;
+    live_rpm: number | null; live_hp: number | null;
+    drive: string;
+  } | null>(null);
+  const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub">("main");
+  const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
+  const fmtMachType = (t?: string | null) => {
+    if (!t) return "";
+    const m: Record<string, string> = {
+      mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", lathe: "Lathe",
+      "5-axis vmc": "5-Axis VMC", "5-axis hmc": "5-Axis HMC",
+      swiss: "Swiss", "double column": "Double Column",
+    };
+    return m[t.trim().toLowerCase()] ?? t;
+  };
   const [showManageMachines, setShowManageMachines] = React.useState(false);
   const [savedMachinesOpen, setSavedMachinesOpen] = React.useState(false);
   const [editingMachineId, setEditingMachineId] = React.useState<number | null>(null);
@@ -1017,16 +1035,33 @@ export default function Mentor() {
     const rawDrive = typeof m.drive_type === "string" ? m.drive_type.trim().toLowerCase() : null;
     const rawMachType = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
     const validDrives = ["direct", "belt", "gear"];
-    const validMachTypes = ["vmc", "hmc", "5axis", "mill_turn", "lathe"];
+    const validMachTypes = ["vmc", "hmc", "5axis", "mill_turn", "lathe", "5-axis vmc", "5-axis hmc", "swiss", "double column"];
     const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
     const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : null) ?? m.machine_type;
     const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
+    // Store raw machine specs for spindle toggle
+    const _machData = {
+      main_rpm: m.max_rpm ?? 0,
+      main_hp: m.spindle_hp ? Number(m.spindle_hp) : 0,
+      sub_rpm: m.sub_spindle_rpm ?? null,
+      live_rpm: m.live_tool_max_rpm ?? null,
+      live_hp: m.live_tool_hp ? Number(m.live_tool_hp) : null,
+      drive,
+    };
+    setActiveMachineData(_machData);
+    setSelectedSpindle("main");
+    // For lathe live-tool: use live tool RPM/HP/drive — main spindle is turning only
+    const isLatheType = machType === "lathe";
+    const effectiveRpm   = isLatheType && _machData.live_rpm  ? _machData.live_rpm  : _machData.main_rpm;
+    const effectiveHp    = isLatheType && _machData.live_hp   ? _machData.live_hp   : _machData.main_hp;
+    const rawLtDrive     = typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type.trim().toLowerCase() : null;
+    const effectiveDrive = (isLatheType && rawLtDrive && ["direct","belt","gear"].includes(rawLtDrive) ? rawLtDrive : drive) as typeof drive;
     setForm(p => ({
       ...p,
-      max_rpm: m.max_rpm ?? p.max_rpm,
-      machine_hp: m.spindle_hp ? Number(m.spindle_hp) : p.machine_hp,
+      max_rpm: effectiveRpm || p.max_rpm,
+      machine_hp: effectiveHp || p.machine_hp,
       spindle_taper: rawTaper ?? p.spindle_taper,
-      spindle_drive: drive as any,
+      spindle_drive: effectiveDrive as any,
       dual_contact: dualContact,
       machine_type: machType ?? p.machine_type,
     }));
@@ -2249,6 +2284,9 @@ export default function Mentor() {
     setMatMatchError(null);
     setActiveMachineId(null);
     setActiveMachineName("");
+    setActiveMachineData(null);
+    setSelectedSpindle("main");
+    setManualSubRpm(0);
     setMachineQuery("");
     setFormDirty(false);
     setShowRoi(false);
@@ -2961,7 +2999,7 @@ export default function Mentor() {
   ${row("Corner Condition", form.corner_condition === "corner_radius" ? `CR ${form.corner_radius?.toFixed(4)}"` : form.corner_condition)}
   ${row("Flute Geometry", form.geometry ?? "standard")}
   ${form.stickout > 0 ? row("Tool Stickout (in)", `${form.stickout.toFixed(3)}"`) : ""}
-  ${row("Machine", `${activeMachineName ? activeMachineName + " · " : ""}${form.machine_type?.toUpperCase()} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
+  ${row("Machine", `${activeMachineName ? activeMachineName + " · " : ""}${fmtMachType(form.machine_type)} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
   ${row("Coolant", form.coolant?.replace(/_/g," "))}
   ${(() => {
     if (!drill && !ream) {
@@ -5399,7 +5437,7 @@ ${stabSection}
                         {m._saved && m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
                       </span>
                       {m._saved && <span className="text-[10px] font-bold text-emerald-400 border border-emerald-600/50 rounded px-1">Saved</span>}
-                      <span className="text-xs text-zinc-400">{m.machine_type && <span className="text-zinc-300">{m.machine_type} · </span>}{m.max_rpm?.toLocaleString()} RPM · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
+                      <span className="text-xs text-zinc-400">{m.machine_type && <span className="text-zinc-300">{fmtMachType(m.machine_type)} · </span>}{m.max_rpm?.toLocaleString()} RPM{m.sub_spindle_rpm ? ` / ${m.sub_spindle_rpm.toLocaleString()} sub` : ""} · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
                     </button>
                   ))}
                 </div>
@@ -5407,19 +5445,93 @@ ${stabSection}
             </div>
           </div>
 
+          {/* Mill-Turn spindle selector — catalog machine OR manually entered sub RPM */}
+          {form.machine_type === "mill_turn" && (activeMachineData?.sub_rpm || manualSubRpm > 0) && (
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
+              <FieldLabel hint="Sub spindles typically run faster than the main (e.g. 6,000 vs 5,000 RPM) — ideal for backworking and finishing ops where higher surface speed improves finish quality. Select which spindle this tool will run in; the engine caps RPM and HP accordingly.">Active Spindle</FieldLabel>
+              <div className="flex gap-2">
+                {([
+                  { key: "main" as const, label: "Main Spindle", note: "Primary ops / roughing",
+                    rpm: activeMachineData?.main_rpm ?? form.max_rpm,
+                    hp:  activeMachineData?.main_hp  ?? form.machine_hp },
+                  { key: "sub"  as const, label: "Sub Spindle",  note: "",
+                    rpm: activeMachineData?.sub_rpm  ?? manualSubRpm,
+                    hp:  activeMachineData?.main_hp  ?? form.machine_hp },
+                ].map(o => ({ ...o, note: o.key === "sub"
+                    ? ((activeMachineData?.sub_rpm ?? manualSubRpm) > (activeMachineData?.main_rpm ?? form.max_rpm)
+                        ? "Backwork · finishing · higher SFM" : "Backwork / finishing")
+                    : o.note }))).map(({ key, label, note, rpm, hp }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSpindle(key);
+                      setForm(p => ({ ...p, max_rpm: rpm, machine_hp: hp }));
+                    }}
+                    className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
+                    style={{
+                      backgroundColor: selectedSpindle === key ? "#f59e0b" : "transparent",
+                      borderColor: "#f59e0b",
+                      color: selectedSpindle === key ? "#000" : "#f59e0b",
+                    }}
+                  >
+                    <div>{label}</div>
+                    <div className="text-xs font-normal mt-0.5 opacity-75">{note}</div>
+                    <div className="text-xs font-bold mt-0.5">{rpm.toLocaleString()} RPM · {hp} HP</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <FieldLabel hint="Spindle speed ceiling from your machine spec. The engine will not exceed this value.">Max RPM</FieldLabel>
+              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool (driven turret) RPM limit. Main spindle turning RPM is not used for milling calcs — only the live tool station RPM matters here." : "Spindle speed ceiling from your machine spec. The engine will not exceed this value."}>{form.machine_type === "mill_turn" ? "Main Spindle RPM" : form.machine_type === "lathe" ? "Live Tool RPM" : "Max RPM"}</FieldLabel>
               <Input
                 type="number"
                 step="10"
                 className="no-spinners"
                 value={form.max_rpm || ""}
-                onChange={onNum("max_rpm")}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  onNum("max_rpm")(e);
+                  // If on main spindle selection, keep activeMachineData in sync
+                  if (selectedSpindle === "main" && activeMachineData) setActiveMachineData(p => p ? { ...p, main_rpm: v } : p);
+                }}
               />
             </div>
+            {form.machine_type === "lathe" && activeMachineData && (
+              <div className="space-y-2">
+                <FieldLabel hint="Main turning spindle RPM — shown for reference only. Not used for milling calculations.">Main Spindle RPM</FieldLabel>
+                <div className="rounded px-3 py-2 text-sm text-zinc-400 bg-zinc-800/60 border border-zinc-700/40">
+                  {activeMachineData.main_rpm.toLocaleString()} RPM <span className="text-xs">(turning only)</span>
+                </div>
+              </div>
+            )}
+            {form.machine_type === "mill_turn" && (
+              <div className="space-y-2">
+                <FieldLabel hint="Sub spindles typically run faster than the main spindle — ideal for backworking and finishing ops. Enter 0 or leave blank if your machine has no sub spindle.">Sub Spindle RPM</FieldLabel>
+                <Input
+                  type="number"
+                  step="10"
+                  className="no-spinners"
+                  placeholder="0 = no sub"
+                  value={activeMachineData ? (activeMachineData.sub_rpm ?? "") : (manualSubRpm || "")}
+                  onChange={e => {
+                    const v = Number(e.target.value) || 0;
+                    if (activeMachineData) {
+                      setActiveMachineData(p => p ? { ...p, sub_rpm: v || null } : p);
+                    } else {
+                      setManualSubRpm(v);
+                    }
+                    // If currently on sub spindle, update max_rpm live
+                    if (selectedSpindle === "sub") setForm(p => ({ ...p, max_rpm: v }));
+                  }}
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <FieldLabel hint="Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP.">{UL("Machine HP", "Machine kW")}</FieldLabel>
+              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool station HP — typically 5–10 HP on most lathes, much less than the main turning spindle. The engine uses this for milling power calcs." : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."}>{form.machine_type === "lathe" ? UL("Live Tool HP", "Live Tool kW") : UL("Machine HP", "Machine kW")}</FieldLabel>
               <Input
                 type="number"
                 step={metric ? "0.1" : "0.5"}
