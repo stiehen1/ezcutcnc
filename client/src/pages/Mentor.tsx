@@ -943,6 +943,11 @@ export default function Mentor() {
   const [machineSaving, setMachineSaving] = React.useState(false);
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
+  const fmtMachType = (t?: string | null) => {
+    if (!t) return "";
+    const m: Record<string, string> = { mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", lathe: "Lathe" };
+    return m[t.trim().toLowerCase()] ?? t.toUpperCase();
+  };
   const [showManageMachines, setShowManageMachines] = React.useState(false);
   const [savedMachinesOpen, setSavedMachinesOpen] = React.useState(false);
   const [editingMachineId, setEditingMachineId] = React.useState<number | null>(null);
@@ -2953,7 +2958,7 @@ export default function Mentor() {
   ${row("Corner Condition", form.corner_condition === "corner_radius" ? `CR ${form.corner_radius?.toFixed(4)}"` : form.corner_condition)}
   ${row("Flute Geometry", form.geometry ?? "standard")}
   ${form.stickout > 0 ? row("Tool Stickout (in)", `${form.stickout.toFixed(3)}"`) : ""}
-  ${row("Machine", `${activeMachineName ? activeMachineName + " · " : ""}${form.machine_type?.toUpperCase()} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
+  ${row("Machine", `${activeMachineName ? activeMachineName + " · " : ""}${fmtMachType(form.machine_type)} · ${form.spindle_taper}${form.dual_contact ? " · Big-Plus Dual Contact" : ""} · ${form.toolholder?.replace(/_/g," ")}`)}
   ${row("Coolant", form.coolant?.replace(/_/g," "))}
   ${(() => {
     if (!drill && !ream) {
@@ -5390,7 +5395,7 @@ ${stabSection}
                         {m._saved && m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
                       </span>
                       {m._saved && <span className="text-[10px] font-bold text-emerald-400 border border-emerald-600/50 rounded px-1">Saved</span>}
-                      <span className="text-xs text-zinc-400">{m.machine_type && <span className="text-zinc-300">{m.machine_type} · </span>}{m.max_rpm?.toLocaleString()} RPM · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
+                      <span className="text-xs text-zinc-400">{m.machine_type && <span className="text-zinc-300">{fmtMachType(m.machine_type)} · </span>}{m.max_rpm?.toLocaleString()} RPM · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
                     </button>
                   ))}
                 </div>
