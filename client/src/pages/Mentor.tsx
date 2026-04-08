@@ -1038,12 +1038,18 @@ export default function Mentor() {
     };
     setActiveMachineData(_machData);
     setSelectedSpindle("main");
+    // For lathe live-tool: use live tool RPM/HP/drive — main spindle is turning only
+    const isLatheType = machType === "lathe";
+    const effectiveRpm   = isLatheType && _machData.live_rpm  ? _machData.live_rpm  : _machData.main_rpm;
+    const effectiveHp    = isLatheType && _machData.live_hp   ? _machData.live_hp   : _machData.main_hp;
+    const rawLtDrive     = typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type.trim().toLowerCase() : null;
+    const effectiveDrive = (isLatheType && rawLtDrive && ["direct","belt","gear"].includes(rawLtDrive) ? rawLtDrive : drive) as typeof drive;
     setForm(p => ({
       ...p,
-      max_rpm: _machData.main_rpm || p.max_rpm,
-      machine_hp: _machData.main_hp || p.machine_hp,
+      max_rpm: effectiveRpm || p.max_rpm,
+      machine_hp: effectiveHp || p.machine_hp,
       spindle_taper: rawTaper ?? p.spindle_taper,
-      spindle_drive: drive as any,
+      spindle_drive: effectiveDrive as any,
       dual_contact: dualContact,
       machine_type: machType ?? p.machine_type,
     }));
@@ -5467,7 +5473,7 @@ ${stabSection}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <FieldLabel hint="Spindle speed ceiling from your machine spec. The engine will not exceed this value.">{form.machine_type === "mill_turn" ? "Main Spindle RPM" : "Max RPM"}</FieldLabel>
+              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool (driven turret) RPM limit. Main spindle turning RPM is not used for milling calcs — only the live tool station RPM matters here." : "Spindle speed ceiling from your machine spec. The engine will not exceed this value."}>{form.machine_type === "mill_turn" ? "Main Spindle RPM" : form.machine_type === "lathe" ? "Live Tool RPM" : "Max RPM"}</FieldLabel>
               <Input
                 type="number"
                 step="10"
@@ -5481,6 +5487,14 @@ ${stabSection}
                 }}
               />
             </div>
+            {form.machine_type === "lathe" && activeMachineData && (
+              <div className="space-y-2">
+                <FieldLabel hint="Main turning spindle RPM — shown for reference only. Not used for milling calculations.">Main Spindle RPM</FieldLabel>
+                <div className="rounded px-3 py-2 text-sm text-zinc-400 bg-zinc-800/60 border border-zinc-700/40">
+                  {activeMachineData.main_rpm.toLocaleString()} RPM <span className="text-xs">(turning only)</span>
+                </div>
+              </div>
+            )}
             {form.machine_type === "mill_turn" && (
               <div className="space-y-2">
                 <FieldLabel hint="Sub spindles typically run faster than the main spindle — ideal for backworking and finishing ops. Enter 0 or leave blank if your machine has no sub spindle.">Sub Spindle RPM</FieldLabel>
@@ -5504,7 +5518,7 @@ ${stabSection}
               </div>
             )}
             <div className="space-y-2">
-              <FieldLabel hint="Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP.">{UL("Machine HP", "Machine kW")}</FieldLabel>
+              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool station HP — typically 5–10 HP on most lathes, much less than the main turning spindle. The engine uses this for milling power calcs." : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."}>{form.machine_type === "lathe" ? UL("Live Tool HP", "Live Tool kW") : UL("Machine HP", "Machine kW")}</FieldLabel>
               <Input
                 type="number"
                 step={metric ? "0.1" : "0.5"}
