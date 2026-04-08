@@ -818,8 +818,45 @@ export async function registerRoutes(
       customer.hp_util_pct =
         availableHp > 0 && hpReq > 0 ? (hpReq / availableHp) * 100 : null;
       customer.hp_margin_hp = availableHp > 0 ? availableHp - hpReq : null;
-      // Enrich flute-upgrade suggestions with matching EDP from catalog
+
+      // ── Torque zone calculation ──────────────────────────────────────────────
       const { pool } = await import("./db");
+      const machineId = (parsed.data as any).machine_id;
+      if (machineId) {
+        const mrow = await pool.query(
+          `SELECT base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence
+           FROM machines WHERE id = $1`,
+          [machineId]
+        );
+        if (mrow.rows.length && mrow.rows[0].base_torque_ftlb) {
+          const { base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence } = mrow.rows[0];
+          const recRpm = Number(customer.rpm ?? 0);
+          // Two-segment torque model: flat below peak_torque_rpm, hyperbolic (HP×5252/RPM) above
+          let torqueAvail: number;
+          if (recRpm <= 0) {
+            torqueAvail = Number(base_torque_ftlb);
+          } else if (recRpm <= Number(peak_torque_rpm)) {
+            torqueAvail = Number(base_torque_ftlb);
+          } else {
+            torqueAvail = (availableHp * 5252) / recRpm;
+          }
+          // Required torque from engineering output (convert in-lbf → ft-lbf)
+          const torqueInlbf = Number((raw as any).engineering?.torque_inlbf ?? 0);
+          const torqueReqFtlb = torqueInlbf / 12;
+          const torqueUtilPct = torqueAvail > 0 ? (torqueReqFtlb / torqueAvail) * 100 : null;
+          const torqueZone =
+            torqueUtilPct === null ? null
+            : torqueUtilPct < 75 ? "green"
+            : torqueUtilPct < 100 ? "yellow"
+            : "red";
+          customer.torque_avail_ftlb = Math.round(torqueAvail * 10) / 10;
+          customer.torque_req_ftlb = Math.round(torqueReqFtlb * 10) / 10;
+          customer.torque_util_pct = torqueUtilPct !== null ? Math.round(torqueUtilPct * 10) / 10 : null;
+          customer.torque_zone = torqueZone;
+          customer.torque_curve_confidence = curve_confidence ?? null;
+        }
+      }
+      // Enrich flute-upgrade suggestions with matching EDP from catalog
       const stability = (raw as any).stability;
       if (stability?.suggestions) {
         // Exclude roughing geometries from suggestions when engagement is too light:
