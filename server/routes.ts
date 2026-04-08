@@ -3981,13 +3981,14 @@ ${catalogList}`
           AND corner_condition != 'square'
           AND (
             corner_condition = 'ball'
-            OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $1
+            OR (corner_condition ~ '^[0-9.]+$'
+                AND (corner_condition::numeric <= $1)
                 AND ($2 = 0 OR corner_condition::numeric >= $2))
           )
           ${coatingFilter}
         GROUP BY cutting_diameter_in
         ORDER BY cutting_diameter_in DESC
-      `, [corner_radius, floor_radius || 0]);
+      `, [corner_radius, floor_radius ?? 0]);
       const cornerCoverage: Array<{ cutting_diameter_in: string; max_reach: string }> = cornerCoverageRows.rows;
 
       // ── 3. Corner dia picker (unchanged single-pass logic) ────────────────────
@@ -4247,7 +4248,8 @@ ${catalogList}`
               AND corner_condition NOT IN ('square')
               AND (
                 corner_condition = 'ball'
-                OR (corner_condition ~ '^[0-9.]+$' AND corner_condition::numeric <= $3
+                OR (corner_condition ~ '^[0-9.]+$'
+                    AND (corner_condition::numeric <= $3)
                     AND ($4 = 0 OR corner_condition::numeric >= $4))
               )
               AND COALESCE(lbs_in, loc_in) >= $2
