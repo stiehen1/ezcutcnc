@@ -9,7 +9,6 @@ import { writeFile, unlink } from "fs/promises";
 import path from "path";
 import fs from "fs";
 import nodemailer from "nodemailer";
-const NOTRACK = { headers: { "X-Mailin-no-track": "1" } };
 import multer from "multer";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
@@ -1670,8 +1669,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        ...NOTRACK,
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1753,8 +1751,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        ...NOTRACK,
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1830,8 +1827,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        ...NOTRACK,
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1890,25 +1886,20 @@ export async function registerRoutes(
       });
 
       // Send results to user (including internal staff)
-      try {
-        await transporter.sendMail({
-          from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
-          to: email,
-          subject: "Your Core Cutter Speeds & Feeds Results",
-          text: [
-            "Here are your machining parameters from the Core Cutter Machining App.",
-            "",
-            results_text ?? "(no results attached)",
-            "",
-            "─────────────────────────────────────",
-            "Questions? Contact us at sales@corecutterusa.com",
-            "corecutcnc.com",
-          ].join("\n"),
-        });
-      } catch (e: any) {
-        console.warn("[Results Email] User email failed:", e?.message);
-        return res.status(500).json({ error: "Failed to deliver email — please check the address and try again." });
-      }
+      await transporter.sendMail({
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
+        to: email,
+        subject: "Your Core Cutter Speeds & Feeds Results",
+        text: [
+          "Here are your machining parameters from the Core Cutter Machining App.",
+          "",
+          results_text ?? "(no results attached)",
+          "",
+          "─────────────────────────────────────",
+          "Questions? Contact us at sales@corecutterusa.com",
+          "corecutcnc.com",
+        ].join("\n"),
+      }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
 
       // Per-query sales notification removed — registration emails handle new user alerts
       // (also skip for internal staff — they're testing, not leads)
@@ -1981,8 +1972,7 @@ export async function registerRoutes(
               auth: { user: smtpUser, pass: smtpPass },
             });
             await transporter.sendMail({
-              ...NOTRACK,
-              from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+              from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
               to: "scott@corecutterusa.com",
               subject: `New App Registration — ${name ?? email}`,
               headers: { "X-Mailin-no-track": "1" },
@@ -2066,8 +2056,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        ...NOTRACK,
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: email,
         subject: `Tool Request — ${name ?? email}`,
@@ -2114,7 +2103,6 @@ export async function registerRoutes(
           ? `<br><br><strong>Screenshot:</strong><br><img src="${screenshot}" style="max-width:600px;border:1px solid #444;border-radius:4px;" alt="${screenshotName || 'screenshot'}"/>`
           : "";
         await transporter.sendMail({
-          ...NOTRACK,
           from: `"CoreCutCNC Feedback" <${smtpUser}>`,
           to: "scott@corecutterusa.com",
           subject: `[${type || "Feedback"}] CoreCutCNC — ${email || "anonymous"}`,
@@ -2158,7 +2146,6 @@ export async function registerRoutes(
           auth: { user: smtpUser, pass: smtpPass },
         });
         await transporter.sendMail({
-          ...NOTRACK,
           from: `"CoreCutCNC" <${smtpUser}>`,
           to: "scott@corecutterusa.com",
           subject: `STEP file request — ${tool_number || "unknown tool"}`,
@@ -2220,7 +2207,6 @@ export async function registerRoutes(
             auth: { user: smtpUser, pass: smtpPass },
           });
           await transporter.sendMail({
-            ...NOTRACK,
             from: `"CoreCutCNC" <${smtpUser}>`,
             to: "scott@corecutterusa.com",
             subject: "New beta signup — CoreCutCNC",
@@ -2580,7 +2566,6 @@ export async function registerRoutes(
           auth: { user: smtpUser, pass: smtpPass },
         });
         await transporter.sendMail({
-          ...NOTRACK,
           from: `"CoreCutCNC" <${smtpUser}>`,
           to: userEmail,
           cc: salesTo,
@@ -3520,9 +3505,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
     const fromName = "CoreCutCNC by Core Cutter";
-    const fromAddr = process.env.FROM_EMAIL || "noreply@corecutterusa.com";
+    const fromAddr = process.env.FROM_EMAIL || "scott@corecutterusa.com";
     const mailOptions = {
-      ...NOTRACK,
       from: `"${fromName}" <${fromAddr}>`,
       to: email,
       subject: "Your CoreCutCNC Toolbox Access Code",
