@@ -7970,11 +7970,16 @@ ${stabSection}
                     body: <>
                       A Core Cutter high feed mill is worth considering before the endmill sequence begins. Unlike endmills, a feed mill works entirely in the <span className="text-white font-semibold">Z direction</span> — small axial steps at very high feed rates, with all cutting force directed axially into the spindle rather than radially into the workholding. This means <span className="text-white">no deflection, no chatter, and no wall pressure</span> — it rasters the floor down in fast Z passes until near-depth, then the endmill sequence finishes the walls and floor.
                       {dpResult.feedmill_estimate && (
-                        <span className="block mt-2 bg-zinc-800/60 rounded-lg px-3 py-2 text-[11px] space-y-0.5">
-                          <span className="block text-zinc-300 font-semibold">Estimated bulk removal time using Ø{dpResult.feedmill_estimate.tool_dia}" feed mill:</span>
-                          <span className="block text-zinc-400">DOC/pass: <span className="text-white">{dpResult.feedmill_estimate.doc_in.toFixed(4)}"</span> · Z passes: <span className="text-white">{dpResult.feedmill_estimate.z_passes}</span> · Feed: <span className="text-white">{dpResult.feedmill_estimate.feed_ipm} IPM</span> · RPM: <span className="text-white">{dpResult.feedmill_estimate.rpm.toLocaleString()}</span></span>
-                          <span className="block text-emerald-400 font-semibold">Estimated pocket cycle time: {dpResult.feedmill_estimate.est_str}</span>
-                          <span className="block text-zinc-500 text-[10px]">Estimate only — actual time varies with machine rapids, toolpath style, and setup. Add endmill finish passes separately.</span>
+                        <span className="block mt-2 bg-zinc-800/60 rounded-lg px-3 py-2 text-[11px] space-y-2">
+                          <span className="block text-zinc-300 font-semibold">Estimated bulk removal — two size options:</span>
+                          {[dpResult.feedmill_estimate.large, dpResult.feedmill_estimate.small].filter(Boolean).map((e: any) => (
+                            <span key={e.dia} className="block border border-zinc-700 rounded px-2 py-1.5 space-y-0.5">
+                              <span className="block text-white font-semibold">Ø{e.dia}" feed mill <span className="text-zinc-400 font-normal text-[10px]">{e.dia <= 0.375 ? "— lower Z force, tighter pockets" : e.dia >= 0.625 ? "— max MRR, wider pockets" : "— balanced"}</span></span>
+                              <span className="block text-zinc-400">DOC/pass: <span className="text-white">{e.doc_in.toFixed(4)}"</span> · Z passes: <span className="text-white">{e.z_passes}</span> · Feed: <span className="text-white">{e.feed_ipm} IPM</span> · RPM: <span className="text-white">{e.rpm.toLocaleString()}</span></span>
+                              <span className="block text-emerald-400 font-semibold">Est. cycle time: {e.est_str}</span>
+                            </span>
+                          ))}
+                          <span className="block text-zinc-500 text-[10px]">Estimates only — varies with machine rapids, toolpath, and setup. Add endmill finish passes separately.</span>
                         </span>
                       )}
                       <span className="block mt-1 text-zinc-400">Best in steel, stainless, cast iron, and titanium. Core Cutter feed mills are special order — contact us for a quote sized to your pocket.</span>
