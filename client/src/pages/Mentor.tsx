@@ -1168,6 +1168,7 @@ export default function Mentor() {
   const [dpDepthText, setDpDepthText] = React.useState("");
   const [dpCornerText, setDpCornerText] = React.useState("");
   const [dpPreDrillText, setDpPreDrillText] = React.useState("");
+  const [dpPreDrillDepthText, setDpPreDrillDepthText] = React.useState("");
   const [dpLengthText, setDpLengthText] = React.useState("");
   const [dpWidthText, setDpWidthText] = React.useState("");
 
@@ -1421,6 +1422,7 @@ export default function Mentor() {
     dp_pocket_width: 0,
     dp_pre_drill: false,
     dp_pre_drill_dia: 0,
+    dp_pre_drill_depth: 0,
     dp_cutting_style: "hem" as "hem" | "traditional",
     dp_thin_wall: false,
 
@@ -1912,7 +1914,7 @@ export default function Mentor() {
     fetch(`/api/roi/session?email=${encodeURIComponent(erEmail)}&name=${encodeURIComponent(roiName)}`)
       .then(r => r.json())
       .then((d: { sessionId: string | null }) => {
-        if (d.sessionId) setRoiSessionId(d.sessionId);
+        if (d.sessionId) setRoiSessionId(d.sessionId as ReturnType<typeof crypto.randomUUID>);
       })
       .catch(() => {/* keep local session id */});
   }, [showRoi, erEmail, roiName]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2370,6 +2372,7 @@ export default function Mentor() {
             pocket_length: form.dp_pocket_length || 0,
             pocket_width: form.dp_pocket_width || 0,
             pre_drill_dia: form.dp_pre_drill ? (form.dp_pre_drill_dia || 0) : 0,
+            pre_drill_depth: form.dp_pre_drill ? (form.dp_pre_drill_depth || 0) : 0,
             material: form.material,
             iso_category: isoCategory,
             flutes: form.flutes || 5,
@@ -7540,6 +7543,13 @@ ${stabSection}
                         {form.dp_pocket_length > 0 && form.dp_pocket_width > 0 && (
                           <p className="text-[10px] text-zinc-500">Max: {Math.min(form.dp_pocket_length, form.dp_pocket_width).toFixed(3)}" (pocket width)</p>
                         )}
+                        <FieldLabel hint="How deep to drill. Recommended: pocket depth × 95% — leaves floor stock for endmill cleanup and accommodates drill point. Leave blank to use the sequencer recommendation.">Drill Depth (in) — optional</FieldLabel>
+                        <Input type="text" inputMode="decimal" className="no-spinners"
+                          placeholder={form.dp_depth > 0 ? `rec: ${(form.dp_depth * 0.95).toFixed(4)}` : "leave blank for auto"}
+                          value={dpPreDrillDepthText}
+                          onChange={e => { setDpPreDrillDepthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                          onBlur={() => { if (form.dp_pre_drill_depth > 0) setDpPreDrillDepthText(form.dp_pre_drill_depth.toFixed(4)); else setDpPreDrillDepthText(""); }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -7571,6 +7581,13 @@ ${stabSection}
                         value={dpPreDrillText}
                         onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
                         onBlur={() => { if (form.dp_pre_drill_dia > 0) setDpPreDrillText(form.dp_pre_drill_dia.toFixed(4)); else setDpPreDrillText(""); }}
+                      />
+                      <FieldLabel hint="How deep to drill. Recommended: pocket depth × 95% — leaves floor stock for endmill cleanup. Leave blank for auto.">Drill Depth (in) — optional</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners"
+                        placeholder={form.dp_depth > 0 ? `rec: ${(form.dp_depth * 0.95).toFixed(4)}` : "leave blank for auto"}
+                        value={dpPreDrillDepthText}
+                        onChange={e => { setDpPreDrillDepthText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                        onBlur={() => { if (form.dp_pre_drill_depth > 0) setDpPreDrillDepthText(form.dp_pre_drill_depth.toFixed(4)); else setDpPreDrillDepthText(""); }}
                       />
                     </div>
                   )}
@@ -7924,22 +7941,20 @@ ${stabSection}
                 }
 
                 if (dpResult.closed_pocket && dpResult.required_pre_drill_dia) {
-                  const userDia = form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia : null;
-                  const recDia = dpResult.recommended_pre_drill_dia;
-                  const recDepth = dpResult.recommended_pre_drill_depth;
+                  const userDia   = form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia : null;
+                  const userDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : null;
+                  const recDia    = dpResult.recommended_pre_drill_dia;
+                  const recDepth  = dpResult.recommended_pre_drill_depth;
+                  const showDia   = userDia ?? (recDia ?? dpResult.required_pre_drill_dia);
+                  const showDepth = userDepth ?? recDepth;
                   notes.push({
                     color: "sky",
                     title: "Closed Pocket — Pre-Drill First",
                     body: <>
-                      {userDia
-                        ? <>Pre-drilling <span className="font-semibold text-white">⌀{userDia.toFixed(4)}"</span>
-                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −5% — leaves floor stock for endmill)</> : " to full depth"}.
-                          </>
-                        : <>Pre-drill <span className="font-semibold text-white">{recDia ? `⌀${recDia.toFixed(4)}"` : `⌀${dpResult.required_pre_drill_dia.toFixed(4)}"`}</span>
-                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −5% — leaves floor stock for endmill)</> : " to full depth"}.
-                            {" "}Drill is the fastest way to clear axial material — go as large and as deep as the pocket allows before the endmill sequence starts.
-                          </>
-                      }
+                      Pre-drill <span className="font-semibold text-white">⌀{showDia.toFixed(4)}"</span>
+                      {showDepth ? <> × <span className="font-semibold text-white">{showDepth.toFixed(4)}" deep</span></> : null}
+                      {userDepth ? " (user specified)" : showDepth ? " (pocket depth −5% — leaves floor stock for endmill)" : " to full depth"}.
+                      {!userDia && <> Drill is the fastest way to clear axial material — go as large and as deep as the pocket allows before the endmill sequence starts.</>}
                       {userDia && userDia < dpResult.required_pre_drill_dia && (
                         <span className="block mt-1 text-amber-400">⚠ ⌀{userDia.toFixed(4)}" is smaller than the largest bulk tool (⌀{dpResult.constraints.bulk_dia}") — helical entry will be used for that tool.</span>
                       )}
@@ -7960,34 +7975,6 @@ ${stabSection}
                     color: "indigo",
                     title: "Ball Nose Corner Match",
                     body: "Corner radius matched exactly. Step-over controls scallop height. Leave 0.008\" stock from bulk sequence.",
-                  });
-                }
-
-                if (dpResult.feedmill_eligible) {
-                  notes.push({
-                    color: "zinc",
-                    title: "Consider a High Feed Mill for Bulk Axial Removal",
-                    body: <>
-                      A Core Cutter high feed mill is worth considering before the endmill sequence begins. Unlike endmills, a feed mill works entirely in the <span className="text-white font-semibold">Z direction</span> — small axial steps at very high feed rates, with all cutting force directed axially into the spindle rather than radially into the workholding. This means <span className="text-white">no deflection, no chatter, and no wall pressure</span> — it rasters the floor down in fast Z passes until near-depth, then the endmill sequence finishes the walls and floor.
-                      {dpResult.feedmill_estimate && (
-                        <span className="block mt-2 bg-zinc-800/60 rounded-lg px-3 py-2 text-[11px] space-y-2">
-                          <span className="block text-zinc-300 font-semibold">Estimated bulk removal — two size options:</span>
-                          {[dpResult.feedmill_estimate.large, dpResult.feedmill_estimate.small].filter(Boolean).map((e: any) => (
-                            <span key={e.dia} className="block border border-zinc-700 rounded px-2 py-1.5 space-y-0.5">
-                              <span className="block text-white font-semibold">Ø{e.dia}" feed mill <span className="text-zinc-400 font-normal text-[10px]">{e.dia <= 0.375 ? "— lower Z force, tighter pockets" : e.dia >= 0.625 ? "— max MRR, wider pockets" : "— balanced"}</span></span>
-                              <span className="block text-zinc-400">DOC/pass: <span className="text-white">{e.doc_in.toFixed(4)}"</span> · Z passes: <span className="text-white">{e.z_passes}</span> · Feed: <span className="text-white">{e.feed_ipm} IPM</span> · RPM: <span className="text-white">{e.rpm.toLocaleString()}</span></span>
-                              <span className="block text-emerald-400 font-semibold">Est. cycle time: {e.est_str}</span>
-                            </span>
-                          ))}
-                          <span className="block text-zinc-500 text-[10px]">Estimates only — varies with machine rapids, toolpath, and setup. Add endmill finish passes separately.</span>
-                        </span>
-                      )}
-                      <span className="block mt-1 text-zinc-400">Best in steel, stainless, cast iron, and titanium. Core Cutter feed mills are special order — contact us for a quote sized to your pocket.</span>
-                      <span className="block mt-2 text-zinc-300 font-semibold">Also consider a Z-axis plunge roughing tool.</span>
-                      <span className="block text-zinc-400">A dedicated plunge rougher is designed specifically for straight Z-axis drilling-style cuts — multiple plunge locations across the pocket floor, stepping over by ~75% of the tool diameter each pass. Like a feed mill, all force is axial with zero radial wall pressure. Ideal for deep pockets where endmill reach and deflection are the limiting factor. Core Cutter can manufacture these as specials — contact us with your pocket dimensions and material.</span>
-                      <span className="block mt-2 text-sky-300 font-semibold">Through-coolant tooling is strongly recommended for this pocket.</span>
-                      <span className="block text-zinc-400">In a closed pocket, chips have nowhere to go — they pack at the bottom, re-cut, generate heat, and kill tools fast. Through-spindle coolant forced directly to the cutting edge blasts chips up and out of the pocket on every pass. This is especially critical at depth. If your machine has through-spindle coolant, use it. Core Cutter feed mills, plunge roughers, and extended-reach endmills can all be manufactured with through-coolant as a special option.</span>
-                    </>,
                   });
                 }
 
@@ -8025,24 +8012,66 @@ ${stabSection}
                   });
                 }
 
-                if (!notes.length) return null;
-
                 const borderColor = { amber: "border-amber-500/40", sky: "border-sky-500/40", indigo: "border-indigo-500/40", zinc: "border-zinc-600" };
                 const bgColor    = { amber: "bg-amber-500/10",    sky: "bg-sky-500/10",    indigo: "bg-indigo-500/10",    zinc: "bg-zinc-800/40" };
                 const titleColor = { amber: "text-amber-400",     sky: "text-sky-400",     indigo: "text-indigo-400",     zinc: "text-zinc-400" };
                 const bodyColor  = { amber: "text-amber-200",     sky: "text-sky-200",     indigo: "text-indigo-300",     zinc: "text-zinc-300" };
 
                 return (
-                  <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-3 space-y-3 mt-1">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Notes &amp; Advisories</p>
-                    {notes.map((n, i) => (
-                      <div key={i} className={`rounded-lg border ${borderColor[n.color]} ${bgColor[n.color]} px-3 py-2`}>
-                        <p className={`text-[10px] font-semibold ${titleColor[n.color]} mb-0.5`}>⚑ {n.title}</p>
-                        <p className={`text-[10px] ${bodyColor[n.color]}`}>{n.body}</p>
-                        {n.action}
+                  <>
+                    {/* ── Sequence Notes ── about the recommended tools */}
+                    {notes.length > 0 && (
+                      <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-3 space-y-3 mt-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Sequence Notes</p>
+                        {notes.map((n, i) => (
+                          <div key={i} className={`rounded-lg border ${borderColor[n.color]} ${bgColor[n.color]} px-3 py-2`}>
+                            <p className={`text-[10px] font-semibold ${titleColor[n.color]} mb-0.5`}>⚑ {n.title}</p>
+                            <div className={`text-[10px] ${bodyColor[n.color]}`}>{n.body}</div>
+                            {n.action}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {/* ── Special Order Options ── feed mill, plunge rougher, through-coolant */}
+                    {dpResult.feedmill_eligible && (
+                      <div className="rounded-xl border border-violet-700/40 bg-violet-900/10 p-3 space-y-3 mt-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Special Order Options — Core Cutter</p>
+
+                        {/* Feed Mill */}
+                        <div className="rounded-lg border border-violet-600/30 bg-violet-900/10 px-3 py-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-violet-300">High Feed Mill — Fastest Axial Bulk Removal</p>
+                          <p className="text-[10px] text-zinc-300">Works entirely in the <span className="font-semibold text-white">Z direction</span> — small axial steps at very high feed rates, all cutting force directed into the spindle. No radial wall pressure, no deflection, no chatter. Rasters the pocket floor down to near-depth, then the endmill sequence finishes walls and floor.</p>
+                          {dpResult.feedmill_estimate && (
+                            <div className="mt-1.5 space-y-1.5">
+                              {[dpResult.feedmill_estimate.large, dpResult.feedmill_estimate.small].filter(Boolean).map((e: any) => (
+                                <div key={e.dia} className="rounded border border-zinc-700 bg-zinc-800/50 px-2 py-1.5">
+                                  <p className="text-[10px] font-semibold text-white">Ø{e.dia}" <span className="text-zinc-400 font-normal">{e.dia <= 0.375 ? "— lower Z force, fits tighter pockets" : e.dia >= 0.625 ? "— max MRR, wider pockets" : "— balanced"}</span></p>
+                                  <p className="text-[10px] text-zinc-400">DOC/pass: <span className="text-white">{e.doc_in.toFixed(4)}"</span> · Z passes: <span className="text-white">{e.z_passes}</span> · Feed: <span className="text-white">{e.feed_ipm} IPM</span> · RPM: <span className="text-white">{e.rpm.toLocaleString()}</span></p>
+                                  <p className="text-[10px] text-emerald-400 font-semibold">Est. cycle time: {e.est_str}</p>
+                                </div>
+                              ))}
+                              <p className="text-[10px] text-zinc-500">Estimates only — add endmill finish passes separately.</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Plunge Rougher */}
+                        <div className="rounded-lg border border-violet-600/30 bg-violet-900/10 px-3 py-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-violet-300">Z-Axis Plunge Roughing Tool</p>
+                          <p className="text-[10px] text-zinc-300">Designed for straight Z-axis drilling-style cuts across the pocket floor — step over ~75% of tool diameter each plunge. All force is axial with zero radial wall pressure. Ideal where endmill reach and deflection are the limiting factor. Contact Core Cutter with pocket dimensions and material for a quote.</p>
+                        </div>
+
+                        {/* Through-Coolant */}
+                        {dpResult.closed_pocket && (
+                          <div className="rounded-lg border border-sky-600/30 bg-sky-900/10 px-3 py-2 space-y-1">
+                            <p className="text-[10px] font-semibold text-sky-300">Through-Coolant Tooling — Strongly Recommended</p>
+                            <p className="text-[10px] text-zinc-300">In a closed pocket chips have nowhere to go — they pack at the bottom, re-cut, generate heat, and kill tools fast. Through-spindle coolant blasts chips up and out on every pass. Critical at depth. All three tool types above (feed mill, plunge rougher, extended-reach endmill) can be manufactured with through-coolant as a Core Cutter special.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 );
               })()}
 
