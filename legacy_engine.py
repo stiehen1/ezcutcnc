@@ -140,7 +140,7 @@ BASE_SFM = {
     "hiTemp_co": 135,               # Stellite — cobalt-based superalloy
     "monel_k500":   115,            # Monel K-500 — guide 90–140, mid 115 SFM (was 110)
     "inconel_625":  110,            # 625 / Hastelloy C-276 — guide 80–120; baseline 110 → HEM 220 SFM (was 100)
-    "inconel_718":  110,            # Inconel 718 — guide 70–110; baseline 110 → HEM 220 SFM (was 90)
+    "inconel_718":  110,            # Inconel 718 — guide 70–110; baseline 110 conv → HEM 216 SFM (override; was 220)
     "hastelloy_x":   82,            # Hastelloy X/725/X-750/Nimonic C-263/Haynes 242 — avg guide mids 82 SFM
     "inconel_617":   78,            # Inconel 617 / Haynes 230 — solid-solution Ni-Cr-Co-Mo, power-gen combustors
     "waspaloy":      68,            # Waspaloy / HAYNES 282 / René 41/77/80 / Nimonic 80A/90/105 / Udimet 500/700 — hot-section
@@ -3474,6 +3474,20 @@ def run(payload=None):
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(material_group, 300))
     if data["mode"] in ("hem", "trochoidal"):
         base_sfm *= 2.0  # HEM = 2× conventional for all materials
+        # Per-material HEM SFM overrides (shop-validated; prorated from 718 baseline of 216)
+        _hem_sfm_override = {
+            "inconel_718": 216,
+            "inconel_625": 212,
+            "monel_k500":  226,
+            "hastelloy_x": 161,
+            "inconel_617": 153,
+            "waspaloy":    134,
+            "mp35n":       118,
+            "hiTemp_fe":   187,
+            "hiTemp_co":   265,
+        }
+        if _mat_key in _hem_sfm_override:
+            base_sfm = _hem_sfm_override[_mat_key]
 
     # Apply hardness SFM reduction — skip for Inconel/HRSA (hardness is intrinsic, not a variable)
     _hrc = float(data.get("hardness_hrc", 0) or 0)
