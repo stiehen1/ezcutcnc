@@ -7917,7 +7917,11 @@ ${stabSection}
                     color: "sky",
                     title: "Closed Pocket — Pre-Drill Required",
                     body: <>
-                      Pre-drill to minimum <span className="font-semibold text-white">⌀{dpResult.required_pre_drill_dia.toFixed(4)}"</span> before starting the sequence. This clears the largest bulk tool ({dpResult.constraints.bulk_dia ? `⌀${dpResult.constraints.bulk_dia}"` : "selected"}) and allows helical ramp or straight-drop entry.
+                      Pre-drill to minimum <span className="font-semibold text-white">⌀{dpResult.required_pre_drill_dia.toFixed(4)}"</span>
+                      {dpResult.required_pre_drill_depth
+                        ? <> × <span className="font-semibold text-white">{dpResult.required_pre_drill_depth.toFixed(4)}" deep</span> (first tool pass depth only — not full pocket)</>
+                        : null
+                      }. This clears the largest bulk tool ({dpResult.constraints.bulk_dia ? `⌀${dpResult.constraints.bulk_dia}"` : "selected"}) and allows helical ramp or straight-drop entry.
                       {form.dp_pre_drill_dia > 0 && form.dp_pre_drill_dia < dpResult.required_pre_drill_dia && (
                         <span className="block mt-1 text-amber-400">⚠ Your specified pre-drill (⌀{form.dp_pre_drill_dia.toFixed(4)}") is smaller than the largest bulk tool — helical entry will be used for that tool.</span>
                       )}

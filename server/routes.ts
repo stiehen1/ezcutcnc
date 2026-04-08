@@ -4319,10 +4319,15 @@ ${catalogList}`
         }
       }
 
-      // For closed pockets, compute required pre-drill size from largest bulk tool
+      // For closed pockets, compute required pre-drill size and minimum depth
       const largestBulkDia = bulk_tools.length > 0 ? bulk_tools[0].dia : null;
       const required_pre_drill_dia = closed_pocket && largestBulkDia
         ? +( largestBulkDia * 1.05).toFixed(4)
+        : null;
+      // Minimum pre-drill depth = first bulk tool's first pass depth (depth_band_to of tool 1)
+      // No need to drill the full pocket — just deep enough for the first tool to start
+      const required_pre_drill_depth = closed_pocket && bulk_tools.length > 0
+        ? +bulk_tools[0].depth_band_to.toFixed(4)
         : null;
 
       return res.json({
@@ -4345,6 +4350,7 @@ ${catalogList}`
         woc_taper,
         closed_pocket,
         required_pre_drill_dia,
+        required_pre_drill_depth,
       });
 
     } catch (err: any) {
