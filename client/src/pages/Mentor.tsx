@@ -10079,33 +10079,57 @@ ${stabSection}
                 {customer.torque_avail_ftlb != null && customer.torque_req_ftlb != null && (() => {
                   const zone = customer.torque_zone;
                   const zoneColor = zone === "red" ? "text-red-400" : zone === "yellow" ? "text-amber-400" : "text-emerald-400";
-                  const zoneBg   = zone === "red" ? "bg-red-500/10 border-red-500/30" : zone === "yellow" ? "bg-amber-500/10 border-amber-500/30" : "bg-emerald-500/10 border-emerald-500/30";
-                  const zoneLabel = zone === "red" ? "Overloaded" : zone === "yellow" ? "Near Limit" : "In Range";
-                  const confLabel = customer.torque_curve_confidence === "high" ? "official curve" : customer.torque_curve_confidence === "medium" ? "family est." : "generic est.";
-                  const confTitle = customer.torque_curve_confidence === "high" ? "High confidence — official spindle curve" : customer.torque_curve_confidence === "medium" ? "Medium confidence — family estimate" : "Low confidence — generic estimate";
+                  const zoneBg    = zone === "red" ? "bg-red-500/10 border-red-500/30" : zone === "yellow" ? "bg-amber-500/10 border-amber-500/30" : "bg-emerald-500/10 border-emerald-500/30";
+                  const zoneLabel = zone === "red" ? "Torque Overloaded" : zone === "yellow" ? "Near Torque Limit" : "Torque In Range";
+                  const zoneDesc  = zone === "red"
+                    ? "This cut demands more torque than your spindle can deliver at this RPM. The spindle will stall, fault, or produce poor results. Reduce DOC, WOC, feed rate, or run a smaller diameter tool."
+                    : zone === "yellow"
+                    ? "Torque demand is close to your spindle's capacity at this RPM. The machine will likely run, but leaves little headroom for workholding variability or tool wear. Consider reducing chip load 10–15%."
+                    : "This cut is well within your spindle's torque capacity. The machine is not torque-limited — HP or deflection are the constraints to watch.";
+                  const confLabel = customer.torque_curve_confidence === "high" ? "official spindle curve" : customer.torque_curve_confidence === "medium" ? "family curve estimate" : "generic estimate";
+                  const confDesc  = customer.torque_curve_confidence === "high"
+                    ? "Torque data sourced from the manufacturer's published spindle curve — high accuracy."
+                    : customer.torque_curve_confidence === "medium"
+                    ? "Torque data estimated from a related machine family — moderate accuracy."
+                    : "Torque data is a generic estimate based on drive type. Treat as directional only.";
+                  const reqVal  = metric ? (customer.torque_req_ftlb  * 1.35582) : customer.torque_req_ftlb;
+                  const availVal= metric ? (customer.torque_avail_ftlb * 1.35582) : customer.torque_avail_ftlb;
+                  const unit    = metric ? "N·m" : "ft-lbf";
                   return (
-                    <div className={`col-span-full rounded-lg border px-3 py-2.5 ${zoneBg}`}>
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className={`col-span-full rounded-lg border px-3 py-3 space-y-2 ${zoneBg}`}>
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div>
-                          <div className="text-xs font-medium text-muted-foreground">Torque Zone</div>
+                          <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground mb-0.5">Spindle Torque</div>
                           <div className={`text-base font-bold ${zoneColor}`}>{zoneLabel}</div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-xs text-muted-foreground">
-                            {metric
-                              ? `${(customer.torque_req_ftlb * 1.35582).toFixed(1)} / ${(customer.torque_avail_ftlb * 1.35582).toFixed(1)} N·m`
-                              : `${customer.torque_req_ftlb.toFixed(1)} / ${customer.torque_avail_ftlb.toFixed(1)} ft-lbf`}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            req / avail at {fmtNum(customer.rpm, 0)} RPM
-                          </div>
-                          <div title={confTitle} className="text-[10px] text-zinc-500 cursor-default mt-0.5">{confLabel}</div>
-                        </div>
                         {customer.torque_util_pct != null && (
-                          <div className={`text-lg font-bold ${zoneColor}`}>
-                            {fmtNum(customer.torque_util_pct, 0)}%
+                          <div className="text-right">
+                            <div className={`text-2xl font-bold tabular-nums ${zoneColor}`}>{fmtNum(customer.torque_util_pct, 0)}%</div>
+                            <div className="text-[10px] text-muted-foreground">of spindle torque used</div>
                           </div>
                         )}
+                      </div>
+                      {/* Numbers row */}
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded bg-black/20 px-2 py-1.5">
+                          <div className="text-xs font-semibold text-zinc-200">{reqVal.toFixed(1)} <span className="text-[10px] font-normal text-muted-foreground">{unit}</span></div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Required by cut</div>
+                        </div>
+                        <div className="rounded bg-black/20 px-2 py-1.5">
+                          <div className="text-xs font-semibold text-zinc-200">{availVal.toFixed(1)} <span className="text-[10px] font-normal text-muted-foreground">{unit}</span></div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Available at {fmtNum(customer.rpm, 0)} RPM</div>
+                        </div>
+                        <div className="rounded bg-black/20 px-2 py-1.5">
+                          <div className="text-xs font-semibold text-zinc-200">{(availVal - reqVal).toFixed(1)} <span className="text-[10px] font-normal text-muted-foreground">{unit}</span></div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Headroom</div>
+                        </div>
+                      </div>
+                      {/* Explanation */}
+                      <div className="text-xs text-zinc-300 leading-relaxed">{zoneDesc}</div>
+                      {/* Confidence footnote */}
+                      <div className="text-[10px] text-zinc-500 italic" title={confDesc}>
+                        Curve data: {confLabel} — {confDesc}
                       </div>
                     </div>
                   );
