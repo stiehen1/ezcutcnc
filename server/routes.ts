@@ -3676,7 +3676,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       const lastTok = `%${tokens[tokens.length - 1]}%`;
       const lastTokStart = `${tokens[tokens.length - 1]}%`;
       const catalogRows = await pool.query(
-        `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved,
+        `SELECT id, brand, model, max_rpm, sub_spindle_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved,
            CASE
              WHEN model ILIKE $${tokens.length + 1}        THEN 1
              WHEN model ILIKE $${tokens.length + 2}        THEN 2

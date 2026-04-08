@@ -5395,7 +5395,7 @@ ${stabSection}
                         {m._saved && m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
                       </span>
                       {m._saved && <span className="text-[10px] font-bold text-emerald-400 border border-emerald-600/50 rounded px-1">Saved</span>}
-                      <span className="text-xs text-zinc-400">{m.machine_type && <span className="text-zinc-300">{fmtMachType(m.machine_type)} · </span>}{m.max_rpm?.toLocaleString()} RPM · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
+                      <span className="text-xs text-zinc-400">{m.machine_type && <span className="text-zinc-300">{fmtMachType(m.machine_type)} · </span>}{m.max_rpm?.toLocaleString()} RPM{m.sub_spindle_rpm ? ` / ${m.sub_spindle_rpm.toLocaleString()} sub` : ""} · {m.spindle_hp} HP · {m.taper} · {m.drive_type}</span>
                     </button>
                   ))}
                 </div>
