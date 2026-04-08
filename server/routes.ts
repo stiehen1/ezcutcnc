@@ -268,6 +268,7 @@ export async function registerRoutes(
       ["Johnford",      "ST-60Y",        3500,  25,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
       ["Daewoo",        "PUMA 240MS",    5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
       ["Daewoo",        "PUMA 250MS",    5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
+      ["DN Solutions",  "PUMA 2100SY II", 5000, 30, "A2-6/A2-8", "direct", false, "tsc", null, "mill_turn", "FANUC",     5000, 30,  "Turret Coolant",          "VDI/BMT", "Direct"],
       ["Kia / Hyundai-Kia", "SKT21LMS", 5000,  15,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
       ["Kia / Hyundai-Kia", "SKT2000Y", 4000,  22,  "VDI/BMT", "direct", false, "flood", null, "lathe", "FANUC",         5500, 7,   "Varies",                 "VDI/BMT", "Direct"],
     ];
