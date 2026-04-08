@@ -3905,8 +3905,8 @@ ${catalogList}`
   // ── Deep Pocket / Thin Wall sequence advisor ─────────────────────────────
   app.post("/api/deep-pocket/sequence", async (req, res) => {
     try {
-      const { target_depth, corner_radius, cutting_style, thin_wall, closed_pocket, pocket_length, pocket_width, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive } = req.body as {
-        target_depth: number; corner_radius: number; cutting_style: "hem" | "traditional";
+      const { target_depth, corner_radius, floor_radius, cutting_style, thin_wall, closed_pocket, pocket_length, pocket_width, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive } = req.body as {
+        target_depth: number; corner_radius: number; floor_radius: number; cutting_style: "hem" | "traditional";
         thin_wall: boolean; closed_pocket: boolean; pocket_length: number; pocket_width: number;
         pre_drill_dia: number; material: string; iso_category: string;
         flutes: number; tool_dia: number; stickout: number; toolholder: string;
@@ -4316,7 +4316,7 @@ ${catalogList}`
       }
 
       // Feed mill eligibility + estimated cycle time
-      const feedmill_eligible = !thin_wall;
+      const feedmill_eligible = true;
 
       // Feed mill cycle time estimate — show two sizes:
       //   Large: matches largest bulk rougher (max MRR, fewer passes, more Z force)
@@ -4440,7 +4440,7 @@ ${catalogList}`
 
       return res.json({
         ok: true,
-        inputs: { target_depth, corner_radius, cutting_style, thin_wall, closed_pocket, pre_drill_dia, pocket_length, pocket_width, iso_category },
+        inputs: { target_depth, corner_radius, floor_radius: floor_radius || 0, cutting_style, thin_wall, closed_pocket, pre_drill_dia, pocket_length, pocket_width, iso_category },
         constraints: {
           max_bulk_dia: +maxBulkDia.toFixed(4),
           max_corner_dia: +maxCornerDia.toFixed(4),
