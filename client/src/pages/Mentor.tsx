@@ -7966,8 +7966,11 @@ ${stabSection}
                 if (dpResult.feedmill_eligible) {
                   notes.push({
                     color: "zinc",
-                    title: "Optional — Feed Mill Bulk Removal",
-                    body: "An axial feed mill can replace Tool 1 in the bulk sequence for significantly faster open-zone stock removal in steel/cast iron. Special order only — contact Core Cutter for quote.",
+                    title: "Consider a High Feed Mill for Bulk Axial Removal",
+                    body: <>
+                      A Core Cutter high feed mill is worth considering before the endmill sequence begins. Unlike endmills, a feed mill works entirely in the <span className="text-white font-semibold">Z direction</span> — small axial steps (typically 0.020–0.060") at very high feed rates, with all cutting force directed axially into the spindle rather than radially into the workholding. This means <span className="text-white">no deflection, no chatter, and no wall pressure</span> — it simply plunges and rasters the floor down in fast Z passes until it reaches near-depth, then the endmill sequence finishes the walls and floor.
+                      <span className="block mt-1 text-zinc-400">Best in steel, stainless, cast iron, and titanium. Core Cutter feed mills are special order — contact us for a quote sized to your pocket.</span>
+                    </>,
                   });
                 }
 

@@ -4294,7 +4294,9 @@ ${catalogList}`
       }
 
       // Feed mill eligibility
-      const feedmill_eligible = ["P","K"].includes((iso_category ?? "").toUpperCase()) && !thin_wall;
+      // Feed mill is always worth mentioning for deep pockets — small Z steps, all axial pressure,
+      // no radial deflection. Especially powerful in steel/cast iron but viable in most materials.
+      const feedmill_eligible = !thin_wall; // show for all materials except thin wall
 
       // Thin wall WOC taper schedule
       const woc_taper = thin_wall ? (
