@@ -7738,10 +7738,17 @@ ${stabSection}
 
               {/* Tool info */}
               <div className="px-4 pt-3 pb-1 space-y-0.5">
-                <p className="text-xs text-zinc-400">{tool.description || `Ø${tool.dia.toFixed(4)}"  ·  ${tool.flutes}fl  ·  ${tool.is_rn ? `LBS ${tool.lbs_in.toFixed(3)}"` : `LOC ${tool.loc_in.toFixed(3)}"`}`}</p>
+                <p className="text-xs text-zinc-400">
+                  {tool.description || `Ø${tool.dia.toFixed(4)}"  ·  ${tool.flutes}fl`}
+                  <span className="ml-2 text-zinc-500">
+                    {tool.is_rn
+                      ? `·  LBS ${tool.lbs_in.toFixed(3)}"  ·  LOC ${tool.loc_in.toFixed(3)}"  ·  Reach ${tool.reach_in.toFixed(3)}"`
+                      : `·  LOC ${tool.loc_in.toFixed(3)}"`
+                    }
+                  </span>
+                </p>
                 <p className="text-[11px] text-zinc-500">
                   Depth band: <span className="text-zinc-300">{tool.depth_band_from.toFixed(3)}" – {tool.depth_band_to.toFixed(3)}"</span>
-                  {tool.is_rn && <span className="ml-2 text-indigo-400 text-[10px]">RN reach {tool.reach_in.toFixed(3)}"  ·  LOC {tool.loc_in.toFixed(3)}"</span>}
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
                 {tool.is_rn && ldRatio != null && ldRatio > 4 && (
@@ -8045,7 +8052,13 @@ ${stabSection}
                             <div className="min-w-0">
                               <p className="text-[10px] font-semibold text-zinc-300">{role}</p>
                               <p className="text-xs font-bold text-white">EDP# {tool.edp}</p>
-                              <p className="text-[10px] text-zinc-400 leading-relaxed">{tool.description}</p>
+                              <p className="text-[10px] text-zinc-400 leading-relaxed">
+                                {tool.description}
+                                {tool.is_rn
+                                  ? `  ·  LBS ${tool.lbs_in?.toFixed(3)}"  ·  LOC ${tool.loc_in?.toFixed(3)}"  ·  Reach ${tool.reach_in?.toFixed(3)}"`
+                                  : `  ·  LOC ${tool.loc_in?.toFixed(3)}"`
+                                }
+                              </p>
                             </div>
                           </div>
                         );
