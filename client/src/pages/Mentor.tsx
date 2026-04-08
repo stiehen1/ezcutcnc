@@ -7922,10 +7922,10 @@ ${stabSection}
                     body: <>
                       {userDia
                         ? <>Pre-drilling <span className="font-semibold text-white">⌀{userDia.toFixed(4)}"</span>
-                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −10% — leaves floor stock for endmill)</> : " to full depth"}.
+                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −5% — leaves floor stock for endmill)</> : " to full depth"}.
                           </>
                         : <>Pre-drill <span className="font-semibold text-white">{recDia ? `⌀${recDia.toFixed(4)}"` : `⌀${dpResult.required_pre_drill_dia.toFixed(4)}"`}</span>
-                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −10% — leaves floor stock for endmill)</> : " to full depth"}.
+                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −5% — leaves floor stock for endmill)</> : " to full depth"}.
                             {" "}Drill is the fastest way to clear axial material — go as large and as deep as the pocket allows before the endmill sequence starts.
                           </>
                       }

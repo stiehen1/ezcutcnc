@@ -4351,10 +4351,9 @@ ${catalogList}`
       const recommended_pre_drill_dia = closed_pocket
         ? snapDrillDown(drillMaxDia * 0.99) // tiny margin so we're clearly under ceiling
         : null;
-      // Depth = pocket depth - 10% — leaves floor stock for endmill to clean up,
-      // accommodates drill point so tip doesn't blow through the floor
+      // Depth = pocket depth - 5% — leaves floor stock for endmill to clean up
       const recommended_pre_drill_depth = closed_pocket
-        ? +( target_depth * 0.90).toFixed(4)
+        ? +( target_depth * 0.95).toFixed(4)
         : null;
 
       // Min clearance dia — endmill needs at least this to drop in (kept for warning logic)
