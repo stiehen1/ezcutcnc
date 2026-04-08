@@ -7914,22 +7914,23 @@ ${stabSection}
 
                 if (dpResult.closed_pocket && dpResult.required_pre_drill_dia) {
                   const userDia = form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia : null;
-                  const minDepth = dpResult.required_pre_drill_depth;
+                  const recDia = dpResult.recommended_pre_drill_dia;
+                  const recDepth = dpResult.recommended_pre_drill_depth;
                   notes.push({
                     color: "sky",
-                    title: "Closed Pocket — Pre-Drill Required",
+                    title: "Closed Pocket — Pre-Drill First",
                     body: <>
                       {userDia
                         ? <>Pre-drilling <span className="font-semibold text-white">⌀{userDia.toFixed(4)}"</span>
-                            {minDepth ? <> × <span className="font-semibold text-white">{minDepth.toFixed(4)}" deep</span> minimum (first tool pass only — not full pocket depth)</> : null}.
+                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −10% — leaves floor stock for endmill)</> : " to full depth"}.
                           </>
-                        : <>Pre-drill to minimum <span className="font-semibold text-white">⌀{dpResult.required_pre_drill_dia.toFixed(4)}"</span>
-                            {minDepth ? <> × <span className="font-semibold text-white">{minDepth.toFixed(4)}" deep</span> (first tool pass depth only — not full pocket)</> : null}.
-                            {" "}This clears the largest bulk tool ({dpResult.constraints.bulk_dia ? `⌀${dpResult.constraints.bulk_dia}"` : "selected"}) and allows helical ramp or straight-drop entry.
+                        : <>Pre-drill <span className="font-semibold text-white">{recDia ? `⌀${recDia.toFixed(4)}"` : `⌀${dpResult.required_pre_drill_dia.toFixed(4)}"`}</span>
+                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −10% — leaves floor stock for endmill)</> : " to full depth"}.
+                            {" "}Drill is the fastest way to clear axial material — go as large and as deep as the pocket allows before the endmill sequence starts.
                           </>
                       }
                       {userDia && userDia < dpResult.required_pre_drill_dia && (
-                        <span className="block mt-1 text-amber-400">⚠ Pre-drill ⌀{userDia.toFixed(4)}" is smaller than the largest bulk tool (⌀{dpResult.constraints.bulk_dia}") — helical entry will be used for that tool.</span>
+                        <span className="block mt-1 text-amber-400">⚠ ⌀{userDia.toFixed(4)}" is smaller than the largest bulk tool (⌀{dpResult.constraints.bulk_dia}") — helical entry will be used for that tool.</span>
                       )}
                     </>,
                   });

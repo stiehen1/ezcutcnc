@@ -4319,16 +4319,50 @@ ${catalogList}`
         }
       }
 
-      // For closed pockets, compute required pre-drill size and minimum depth
+      // For closed pockets, recommend the largest standard drill that fits the pocket,
+      // drilled to full depth. Drill is the fastest axial roughing tool — use it to its max.
+      // Max drill dia = pocketCeilingDia (min pocket dim × 0.85), capped at maxBulkDia for
+      // endmill clearance. Snapped down to nearest standard fractional/letter/number drill.
+      const STANDARD_DRILLS_IN = [
+        0.0135,0.0145,0.0156,0.0160,0.0177,0.0180,0.0197,0.0200,0.0210,0.0225,0.0240,0.0250,
+        0.0260,0.0280,0.0292,0.0310,0.0313,0.0320,0.0330,0.0350,0.0360,0.0370,0.0380,0.0390,
+        0.0400,0.0410,0.0420,0.0430,0.0465,0.0469,0.0520,0.0550,0.0595,0.0625,0.0635,0.0670,
+        0.0700,0.0730,0.0760,0.0785,0.0810,0.0820,0.0860,0.0890,0.0935,0.0938,0.0960,0.0980,
+        0.1015,0.1040,0.1065,0.1094,0.1100,0.1110,0.1130,0.1160,0.1200,0.1250,0.1285,0.1360,
+        0.1405,0.1406,0.1440,0.1470,0.1495,0.1520,0.1540,0.1563,0.1570,0.1590,0.1610,0.1660,
+        0.1695,0.1719,0.1730,0.1770,0.1800,0.1820,0.1850,0.1875,0.1890,0.1910,0.1935,0.1960,
+        0.1990,0.2010,0.2031,0.2040,0.2055,0.2090,0.2130,0.2188,0.2210,0.2280,0.2340,0.2344,
+        0.2380,0.2420,0.2460,0.2500,0.2570,0.2610,0.2656,0.2660,0.2720,0.2770,0.2813,0.2900,
+        0.2950,0.3020,0.3125,0.3160,0.3230,0.3281,0.3320,0.3390,0.3438,0.3480,0.3580,0.3594,
+        0.3680,0.3750,0.3860,0.3906,0.3970,0.4040,0.4063,0.4130,0.4219,0.4375,0.4531,0.4688,
+        0.4844,0.5000,0.5156,0.5313,0.5469,0.5625,0.5781,0.5938,0.6094,0.6250,0.6406,0.6563,
+        0.6719,0.6875,0.7031,0.7188,0.7344,0.7500,0.7656,0.7813,0.7969,0.8125,0.8281,0.8438,
+        0.8594,0.8750,0.8906,0.9063,0.9219,0.9375,0.9531,0.9688,0.9844,1.0000,1.0156,1.0313,
+        1.0469,1.0625,1.0781,1.0938,1.1094,1.1250,1.1406,1.1563,1.1719,1.1875,1.2031,1.2188,
+        1.2344,1.2500,1.2656,1.2813,1.2969,1.3125,1.3281,1.3438,1.3594,1.3750,1.3906,1.4063,
+        1.4219,1.4375,1.4531,1.4688,1.4844,1.5000,1.5625,1.6250,1.6875,1.7500,1.8125,1.8750,
+        1.9375,2.0000,2.0625,2.1250,2.1875,2.2500,2.3125,2.3750,2.4375,2.5000,
+      ];
+      function snapDrillDown(maxDia: number): number | null {
+        const fits = STANDARD_DRILLS_IN.filter(d => d <= maxDia);
+        return fits.length > 0 ? fits[fits.length - 1] : null;
+      }
+      const drillMaxDia = pocketCeilingDia < Infinity ? Math.min(pocketCeilingDia, maxBulkDia) : maxBulkDia;
+      const recommended_pre_drill_dia = closed_pocket
+        ? snapDrillDown(drillMaxDia * 0.99) // tiny margin so we're clearly under ceiling
+        : null;
+      // Depth = pocket depth - 10% — leaves floor stock for endmill to clean up,
+      // accommodates drill point so tip doesn't blow through the floor
+      const recommended_pre_drill_depth = closed_pocket
+        ? +( target_depth * 0.90).toFixed(4)
+        : null;
+
+      // Min clearance dia — endmill needs at least this to drop in (kept for warning logic)
       const largestBulkDia = bulk_tools.length > 0 ? bulk_tools[0].dia : null;
       const required_pre_drill_dia = closed_pocket && largestBulkDia
         ? +( largestBulkDia * 1.05).toFixed(4)
         : null;
-      // Minimum pre-drill depth = first bulk tool's first pass depth (depth_band_to of tool 1)
-      // No need to drill the full pocket — just deep enough for the first tool to start
-      const required_pre_drill_depth = closed_pocket && bulk_tools.length > 0
-        ? +bulk_tools[0].depth_band_to.toFixed(4)
-        : null;
+      const required_pre_drill_depth = null; // deprecated — use recommended_pre_drill_depth
 
       return res.json({
         ok: true,
@@ -4351,6 +4385,8 @@ ${catalogList}`
         closed_pocket,
         required_pre_drill_dia,
         required_pre_drill_depth,
+        recommended_pre_drill_dia,
+        recommended_pre_drill_depth,
       });
 
     } catch (err: any) {
