@@ -5427,12 +5427,12 @@ ${stabSection}
           {/* Mill-Turn spindle selector — only when selected machine has a sub spindle */}
           {activeMachineData && form.machine_type === "mill_turn" && activeMachineData.sub_rpm && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
-              <FieldLabel hint="This machine has both a main spindle and a sub spindle with different RPM capabilities. Select which spindle the tool will run in — the engine will use that spindle's RPM and HP limits.">Active Spindle</FieldLabel>
+              <FieldLabel hint="Sub spindles typically run faster than the main (e.g. 6,000 vs 5,000 RPM) — ideal for backworking and finishing ops where higher surface speed improves finish quality. Select which spindle this tool will run in; the engine caps RPM and HP accordingly.">Active Spindle</FieldLabel>
               <div className="flex gap-2">
                 {([
-                  { key: "main", label: "Main Spindle", rpm: activeMachineData.main_rpm, hp: activeMachineData.main_hp },
-                  { key: "sub",  label: "Sub Spindle",  rpm: activeMachineData.sub_rpm,  hp: activeMachineData.main_hp },
-                ] as const).map(({ key, label, rpm, hp }) => (
+                  { key: "main", label: "Main Spindle", sub: "Primary ops / roughing", rpm: activeMachineData.main_rpm, hp: activeMachineData.main_hp },
+                  { key: "sub",  label: "Sub Spindle",  sub: activeMachineData.sub_rpm! > activeMachineData.main_rpm ? "Backwork · finishing · higher SFM" : "Backwork / finishing", rpm: activeMachineData.sub_rpm!,  hp: activeMachineData.main_hp },
+                ] as const).map(({ key, label, sub, rpm, hp }) => (
                   <button
                     key={key}
                     type="button"
@@ -5448,7 +5448,8 @@ ${stabSection}
                     }}
                   >
                     <div>{label}</div>
-                    <div className="text-xs font-normal mt-0.5 opacity-80">{rpm.toLocaleString()} RPM · {hp} HP</div>
+                    <div className="text-xs font-normal mt-0.5 opacity-75">{sub}</div>
+                    <div className="text-xs font-bold mt-0.5">{rpm.toLocaleString()} RPM · {hp} HP</div>
                   </button>
                 ))}
               </div>
