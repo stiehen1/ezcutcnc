@@ -951,6 +951,7 @@ export default function Mentor() {
     drive: string;
   } | null>(null);
   const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub">("main");
+  const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
   const fmtMachType = (t?: string | null) => {
     if (!t) return "";
     const m: Record<string, string> = { mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", lathe: "Lathe" };
@@ -2267,6 +2268,7 @@ export default function Mentor() {
     setActiveMachineName("");
     setActiveMachineData(null);
     setSelectedSpindle("main");
+    setManualSubRpm(0);
     setMachineQuery("");
     setFormDirty(false);
     setShowRoi(false);
@@ -5424,15 +5426,22 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Mill-Turn spindle selector — only when selected machine has a sub spindle */}
-          {activeMachineData && form.machine_type === "mill_turn" && activeMachineData.sub_rpm && (
+          {/* Mill-Turn spindle selector — catalog machine OR manually entered sub RPM */}
+          {form.machine_type === "mill_turn" && (activeMachineData?.sub_rpm || manualSubRpm > 0) && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
               <FieldLabel hint="Sub spindles typically run faster than the main (e.g. 6,000 vs 5,000 RPM) — ideal for backworking and finishing ops where higher surface speed improves finish quality. Select which spindle this tool will run in; the engine caps RPM and HP accordingly.">Active Spindle</FieldLabel>
               <div className="flex gap-2">
                 {([
-                  { key: "main", label: "Main Spindle", sub: "Primary ops / roughing", rpm: activeMachineData.main_rpm, hp: activeMachineData.main_hp },
-                  { key: "sub",  label: "Sub Spindle",  sub: activeMachineData.sub_rpm! > activeMachineData.main_rpm ? "Backwork · finishing · higher SFM" : "Backwork / finishing", rpm: activeMachineData.sub_rpm!,  hp: activeMachineData.main_hp },
-                ] as const).map(({ key, label, sub, rpm, hp }) => (
+                  { key: "main" as const, label: "Main Spindle", note: "Primary ops / roughing",
+                    rpm: activeMachineData?.main_rpm ?? form.max_rpm,
+                    hp:  activeMachineData?.main_hp  ?? form.machine_hp },
+                  { key: "sub"  as const, label: "Sub Spindle",  note: "",
+                    rpm: activeMachineData?.sub_rpm  ?? manualSubRpm,
+                    hp:  activeMachineData?.main_hp  ?? form.machine_hp },
+                ].map(o => ({ ...o, note: o.key === "sub"
+                    ? ((activeMachineData?.sub_rpm ?? manualSubRpm) > (activeMachineData?.main_rpm ?? form.max_rpm)
+                        ? "Backwork · finishing · higher SFM" : "Backwork / finishing")
+                    : o.note }))).map(({ key, label, note, rpm, hp }) => (
                   <button
                     key={key}
                     type="button"
@@ -5448,7 +5457,7 @@ ${stabSection}
                     }}
                   >
                     <div>{label}</div>
-                    <div className="text-xs font-normal mt-0.5 opacity-75">{sub}</div>
+                    <div className="text-xs font-normal mt-0.5 opacity-75">{note}</div>
                     <div className="text-xs font-bold mt-0.5">{rpm.toLocaleString()} RPM · {hp} HP</div>
                   </button>
                 ))}
@@ -5458,15 +5467,42 @@ ${stabSection}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <FieldLabel hint="Spindle speed ceiling from your machine spec. The engine will not exceed this value.">Max RPM</FieldLabel>
+              <FieldLabel hint="Spindle speed ceiling from your machine spec. The engine will not exceed this value.">{form.machine_type === "mill_turn" ? "Main Spindle RPM" : "Max RPM"}</FieldLabel>
               <Input
                 type="number"
                 step="10"
                 className="no-spinners"
                 value={form.max_rpm || ""}
-                onChange={onNum("max_rpm")}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  onNum("max_rpm")(e);
+                  // If on main spindle selection, keep activeMachineData in sync
+                  if (selectedSpindle === "main" && activeMachineData) setActiveMachineData(p => p ? { ...p, main_rpm: v } : p);
+                }}
               />
             </div>
+            {form.machine_type === "mill_turn" && (
+              <div className="space-y-2">
+                <FieldLabel hint="Sub spindles typically run faster than the main spindle — ideal for backworking and finishing ops. Enter 0 or leave blank if your machine has no sub spindle.">Sub Spindle RPM</FieldLabel>
+                <Input
+                  type="number"
+                  step="10"
+                  className="no-spinners"
+                  placeholder="0 = no sub"
+                  value={activeMachineData ? (activeMachineData.sub_rpm ?? "") : (manualSubRpm || "")}
+                  onChange={e => {
+                    const v = Number(e.target.value) || 0;
+                    if (activeMachineData) {
+                      setActiveMachineData(p => p ? { ...p, sub_rpm: v || null } : p);
+                    } else {
+                      setManualSubRpm(v);
+                    }
+                    // If currently on sub spindle, update max_rpm live
+                    if (selectedSpindle === "sub") setForm(p => ({ ...p, max_rpm: v }));
+                  }}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <FieldLabel hint="Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP.">{UL("Machine HP", "Machine kW")}</FieldLabel>
               <Input
