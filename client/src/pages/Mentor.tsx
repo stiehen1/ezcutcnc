@@ -7441,7 +7441,32 @@ ${stabSection}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Wall-to-wall inside corner radius from the print (inches). The finishing tool diameter must be ≤ this × 2 to reach the corners. Roughing tools are unconstrained by this.">Wall Corner Radius (in)</FieldLabel>
+                  <FieldLabel hint={<>
+                    <div style={{ display: "inline-block", textAlign: "center" }}>
+                      <svg width="150" height="125" viewBox="0 0 150 125" style={{ display: "block" }}>
+                        <path d="M0,0 L150,0 L150,125 L0,125 Z" fill="#374151"/>
+                        <path d="M18,0 L150,0 L150,100 L66,100 A48,48 0 0,1 18,52 Z" fill="#111827"/>
+                        <line x1="18" y1="0" x2="18" y2="52" stroke="#6b7280" strokeWidth="1"/>
+                        <line x1="66" y1="100" x2="150" y2="100" stroke="#6b7280" strokeWidth="1"/>
+                        <path d="M18,52 A48,48 0 0,0 66,100" stroke="#60a5fa" fill="none" strokeWidth="2.5"/>
+                        <line x1="66" y1="52" x2="35" y2="83" stroke="#60a5fa" strokeWidth="1.2"/>
+                        <polygon points="32,86 40,82 36,78" fill="#60a5fa"/>
+                        <circle cx="66" cy="52" r="2" fill="#60a5fa"/>
+                        <text x="62" y="68" fill="#60a5fa" fontSize="13" fontFamily="monospace" fontWeight="bold">R</text>
+                        <text x="57" y="78" fill="#60a5fa" fontSize="7">← enter this</text>
+                        <circle cx="29" cy="22" r="11" fill="rgba(251,191,36,0.12)" stroke="#f59e0b" strokeWidth="1.5"/>
+                        <line x1="29" y1="11" x2="29" y2="33" stroke="#f59e0b" strokeWidth="0.6" opacity="0.5"/>
+                        <line x1="18" y1="22" x2="40" y2="22" stroke="#f59e0b" strokeWidth="0.6" opacity="0.5"/>
+                        <circle cx="29" cy="22" r="1.5" fill="#f59e0b"/>
+                        <line x1="29" y1="35" x2="29" y2="47" stroke="#f59e0b" strokeWidth="1.4" strokeDasharray="2,1.5"/>
+                        <polygon points="29,51 26,44 32,44" fill="#f59e0b"/>
+                        <text x="3" y="32" fill="#9ca3af" fontSize="7" transform="rotate(-90,8,32)">wall</text>
+                        <text x="100" y="114" fill="#9ca3af" fontSize="7">wall</text>
+                      </svg>
+                      <div style={{ fontSize: 7, color: "#94a3b8", marginTop: 2 }}>top-down view — tool OD tangent to wall</div>
+                    </div>
+                    <div style={{ marginTop: 6 }}>Tightest inside corner on your part. Tool diameter must be ≤ corner radius × 2 — the tool body must physically fit the corner. Roughing tools are unconstrained by this.</div>
+                  </>}>Wall Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.250"
                     value={dpCornerText}
@@ -7450,7 +7475,32 @@ ${stabSection}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Wall-to-floor (bottom) corner radius from the print (inches). If 0 or sharp, a square-end finishing tool can be used. If specified, the finishing tool needs a matching corner radius on the bottom cutting edge.">Floor Corner Radius (in)</FieldLabel>
+                  <FieldLabel hint={<>
+                    <div style={{ display: "inline-block", textAlign: "center" }}>
+                      <svg width="150" height="130" viewBox="0 0 150 130" style={{ display: "block" }}>
+                        <rect x="0" y="0" width="150" height="130" fill="#374151"/>
+                        <path d="M0,0 L112,0 L112,90 A12,12 0 0,1 100,102 L0,102 Z" fill="#111827"/>
+                        <line x1="112" y1="0" x2="112" y2="90" stroke="#6b7280" strokeWidth="1"/>
+                        <line x1="0" y1="102" x2="100" y2="102" stroke="#6b7280" strokeWidth="1"/>
+                        <path d="M100,102 A12,12 0 0,0 112,90" stroke="#60a5fa" fill="none" strokeWidth="2.5"/>
+                        <circle cx="112" cy="102" r="2" fill="#60a5fa"/>
+                        <line x1="112" y1="102" x2="104" y2="94" stroke="#60a5fa" strokeWidth="1.2"/>
+                        <polygon points="103,93 109,93 106,99" fill="#60a5fa"/>
+                        <text x="114" y="96" fill="#60a5fa" fontSize="11" fontFamily="monospace" fontWeight="bold">R</text>
+                        <text x="110" y="105" fill="#60a5fa" fontSize="6.5">← enter this</text>
+                        <path d="M25,0 L25,96 A6,6 0 0,0 31,102 L57,102 A6,6 0 0,0 63,96 L63,0 Z" fill="#4b5563" stroke="#f59e0b" strokeWidth="1.5"/>
+                        <line x1="33" y1="0" x2="33" y2="95" stroke="#f59e0b" strokeWidth="0.6" opacity="0.4"/>
+                        <line x1="44" y1="0" x2="44" y2="95" stroke="#f59e0b" strokeWidth="0.6" opacity="0.4"/>
+                        <line x1="55" y1="0" x2="55" y2="95" stroke="#f59e0b" strokeWidth="0.6" opacity="0.4"/>
+                        <line x1="63" y1="96" x2="74" y2="86" stroke="#f59e0b" strokeWidth="0.8"/>
+                        <text x="75" y="85" fill="#f59e0b" fontSize="7" fontFamily="monospace">CR</text>
+                        <text x="116" y="40" fill="#9ca3af" fontSize="7">wall</text>
+                        <text x="18" y="116" fill="#9ca3af" fontSize="7">floor</text>
+                      </svg>
+                      <div style={{ fontSize: 7, color: "#94a3b8", marginTop: 2 }}>side view — floor-to-wall blend</div>
+                    </div>
+                    <div style={{ marginTop: 6 }}>The blend radius where the pocket floor meets the wall. The tool's corner radius must be ≤ this value — a larger corner radius leaves too much material in the floor-to-wall transition. Enter 0 if the floor corner is sharp.</div>
+                  </>}>Floor Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="0 if sharp"
                     value={dpFloorRadiusText}
@@ -7482,7 +7532,7 @@ ${stabSection}
                   </div>
                   Thin Wall (bilateral stock strategy)
                 </button>
-                <FieldLabel hint="Turn on when milling next to a thin wall condition. Adds a wall-approach WOC taper schedule to each tool card so the programmer knows to reduce radial engagement as the tool nears the wall. Also suppresses the feed mill advisory — feed mills are open-zone tools only."> </FieldLabel>
+                <FieldLabel hint="Turn on when milling next to a thin wall condition. Adds a wall-approach WOC taper schedule to each tool card so the programmer knows to reduce radial engagement as the tool nears the wall."> </FieldLabel>
               </div>
 
               {/* Closed pocket toggle */}
@@ -8044,7 +8094,7 @@ ${stabSection}
                         {/* Feed Mill */}
                         <div className="rounded-lg border border-violet-600/30 bg-violet-900/10 px-3 py-2 space-y-1">
                           <p className="text-[10px] font-semibold text-violet-300">High Feed Mill — Fastest Axial Bulk Removal</p>
-                          <p className="text-[10px] text-zinc-300">Works entirely in the <span className="font-semibold text-white">Z direction</span> — small axial steps at very high feed rates, all cutting force directed into the spindle. No radial wall pressure, no deflection, no chatter. Rasters the pocket floor down to near-depth, then the endmill sequence finishes walls and floor.</p>
+                          <p className="text-[10px] text-zinc-300">Cuts in the <span className="font-semibold text-white">Z direction only</span> — small axial steps at very high feed rates, all force directed into the spindle. No radial wall pressure, no deflection, no chatter. Most valuable when <span className="font-semibold text-white">reach is long, material is tough, or side-cutting forces are hurting your setup</span> — stainless, titanium, alloy steel, pre-hard tool steel, and HRSA are ideal candidates. Also a strong choice on thin walls where radial force would push the wall. Rasters the pocket floor to near-depth, then the endmill sequence finishes walls and corners.</p>
                           {dpResult.feedmill_estimate && (
                             <div className="mt-1.5 space-y-1.5">
                               {[dpResult.feedmill_estimate.large, dpResult.feedmill_estimate.small].filter(Boolean).map((e: any) => (

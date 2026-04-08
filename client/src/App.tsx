@@ -508,8 +508,8 @@ function HelpButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg transition-colors"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 148px)", background: "linear-gradient(180deg,#6366f1,#4f46e5)" }}
+        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 148px)", height: 74, background: "linear-gradient(180deg,#6366f1,#4f46e5)" }}
         aria-label="Pro Tips"
       >
         Pro Tips
@@ -580,8 +580,8 @@ function WalkThruButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg transition-colors"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 74px)", background: "linear-gradient(180deg,#0ea5e9,#0284c7)" }}
+        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 74px)", height: 74, background: "linear-gradient(180deg,#fbbf24,#d97706)" }}
         aria-label="Walk-Thru"
       >
         Walk-Thru
@@ -661,8 +661,8 @@ function FeedbackButton() {
       {/* Floating tab */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg transition-colors"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 0px)", background: "linear-gradient(180deg,#10b981,#059669)" }}
+        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 0px)", height: 74, background: "linear-gradient(180deg,#10b981,#059669)" }}
         aria-label="Send feedback"
       >
         Feedback
@@ -786,8 +786,8 @@ function RegrindingTab() {
       {/* Floating tab */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 py-3 rounded-l-lg shadow-lg transition-colors"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 74px)", background: "linear-gradient(180deg,#f97316,#ea580c)" }}
+        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 74px)", height: 74, background: "linear-gradient(180deg,#f97316,#ea580c)" }}
         aria-label="Tool Regrinding Program"
       >
         Regrinding

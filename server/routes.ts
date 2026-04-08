@@ -4300,7 +4300,7 @@ ${catalogList}`
       }
 
       // Feed mill eligibility + estimated cycle time
-      const feedmill_eligible = !thin_wall;
+      const feedmill_eligible = true;
 
       // Feed mill cycle time estimate — show two sizes:
       //   Large: matches largest bulk rougher (max MRR, fewer passes, more Z force)
