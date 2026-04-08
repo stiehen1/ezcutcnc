@@ -7444,7 +7444,7 @@ ${stabSection}
                   />
                 </div>
                 <div className="flex-1 space-y-2">
-                  <FieldLabel hint="Inside corner radius of the finished pocket. Drives maximum tool diameter via the 75% engagement rule — tool diameter must be ≤ 75% of corner diameter to avoid full-engagement force spikes.">Wall-to-Wall Corner Radius (in)</FieldLabel>
+                  <FieldLabel hint="Inside corner radius of the finished pocket (in inches). Roughing tools are unconstrained by this — they rip out bulk material and leave stock at the corners. The finishing tool diameter must be ≤ wall-to-wall diameter (corner radius × 2) to reach the corners.">Wall-to-Wall Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.375"
                     value={dpCornerText}
@@ -7455,16 +7455,12 @@ ${stabSection}
               </div>
 
               {/* Corner radius advisory */}
-              {form.dp_corner_radius > 0 && (() => {
-                const maxBulkDia = form.dp_corner_radius * 2 * 0.75;
-                const maxCornerDia = form.dp_corner_radius * 2 * 0.60;
-                return (
-                  <p className="text-[10px] text-zinc-400">
-                    75% rule → bulk tool max <span className="text-white">{maxBulkDia.toFixed(4)}"</span> &nbsp;·&nbsp;
-                    60% rule → corner finish max <span className="text-white">{maxCornerDia.toFixed(4)}"</span>
-                  </p>
-                );
-              })()}
+              {form.dp_corner_radius > 0 && (
+                <p className="text-[10px] text-zinc-400">
+                  Wall-to-wall diameter: <span className="text-white">{(form.dp_corner_radius * 2).toFixed(4)}"</span>
+                  &nbsp;·&nbsp; Finishing tool must be ≤ this diameter
+                </p>
+              )}
 
               {/* Thin wall toggle */}
               <div className="flex items-center gap-3">
@@ -7730,11 +7726,13 @@ ${stabSection}
             <div key={tool.edp} className="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700"
-                style={{ backgroundColor: role === "corner_finish" ? "rgba(99,102,241,0.15)" : role === "closest_reach" ? "rgba(249,115,22,0.15)" : "rgba(249,115,22,0.10)" }}>
+                style={{ backgroundColor: role === "corner_finish" || role === "closest_reach" ? "rgba(99,102,241,0.15)" : "rgba(249,115,22,0.10)" }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest"
-                    style={{ color: role === "corner_finish" ? "#a5b4fc" : role === "closest_reach" ? "#fb923c" : "#fb923c" }}>
-                    {role === "corner_finish" ? "Corner Finishing Tool" : role === "closest_reach" ? "Closest Reach Tool" : `Tool ${idx + 1} of ${total}`}
+                    style={{ color: role === "corner_finish" || role === "closest_reach" ? "#a5b4fc" : "#fb923c" }}>
+                    {role === "corner_finish" || role === "closest_reach"
+                      ? `Finishing Tool ${idx + 1} of ${total}`
+                      : `Roughing Tool ${idx + 1} of ${total}`}
                   </span>
                   <span className="text-xs font-semibold text-white">EDP# {tool.edp}</span>
                 </div>
@@ -7747,10 +7745,17 @@ ${stabSection}
 
               {/* Tool info */}
               <div className="px-4 pt-3 pb-1 space-y-0.5">
-                <p className="text-xs text-zinc-400">{tool.description || `Ø${tool.dia.toFixed(4)}"  ·  ${tool.flutes}fl  ·  ${tool.is_rn ? `LBS ${tool.lbs_in.toFixed(3)}"` : `LOC ${tool.loc_in.toFixed(3)}"`}`}</p>
+                <p className="text-xs text-zinc-400">
+                  {tool.description || `Ø${tool.dia.toFixed(4)}"  ·  ${tool.flutes}fl`}
+                  <span className="ml-2 text-zinc-500">
+                    {tool.is_rn
+                      ? `·  LBS ${tool.lbs_in.toFixed(3)}"  ·  LOC ${tool.loc_in.toFixed(3)}"  ·  Reach ${tool.reach_in.toFixed(3)}"`
+                      : `·  LOC ${tool.loc_in.toFixed(3)}"`
+                    }
+                  </span>
+                </p>
                 <p className="text-[11px] text-zinc-500">
                   Depth band: <span className="text-zinc-300">{tool.depth_band_from.toFixed(3)}" – {tool.depth_band_to.toFixed(3)}"</span>
-                  {tool.is_rn && <span className="ml-2 text-indigo-400 text-[10px]">RN reach {tool.reach_in.toFixed(3)}"  ·  LOC {tool.loc_in.toFixed(3)}"</span>}
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
                 {tool.is_rn && ldRatio != null && ldRatio > 4 && (
@@ -7891,22 +7896,28 @@ ${stabSection}
               {dpError && (
                 <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{dpError}</div>
               )}
-              {/* Bulk sequence */}
-              {(dpResult?.bulk_tools ?? []).length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400">Bulk Removal</p>
-                  {dpResult.bulk_tools.map((tool: any, i: number) =>
-                    renderToolCard(tool, i, dpResult.bulk_tools.length, "bulk")
-                  )}
-                </div>
-              )}
+              {/* Full sequence — roughing tools + finishing tool, numbered together */}
+              {(dpResult?.bulk_tools ?? []).length > 0 && (() => {
+                const totalTools = dpResult.bulk_tools.length + (dpResult.corner_tool ? 1 : 0);
+                return (
+                  <div className="space-y-2">
+                    {dpResult.bulk_tools.map((tool: any, i: number) =>
+                      renderToolCard(tool, i, totalTools, "bulk")
+                    )}
+                  </div>
+                );
+              })()}
 
-              {/* Corner finish */}
-              {dpResult?.corner_tool && (
-                <div className="space-y-2 mt-2">
-                  {renderToolCard(dpResult.corner_tool, 0, 1, dpResult.corner_oversize ? "closest_reach" : "corner_finish")}
-                </div>
-              )}
+              {/* Finishing tool */}
+              {dpResult?.corner_tool && (() => {
+                const totalTools = (dpResult.bulk_tools?.length ?? 0) + 1;
+                const finishIdx = totalTools - 1;
+                return (
+                  <div className="space-y-2 mt-2">
+                    {renderToolCard(dpResult.corner_tool, finishIdx, totalTools, dpResult.corner_oversize ? "closest_reach" : "corner_finish")}
+                  </div>
+                );
+              })()}
 
               {/* ── Notes & Advisories ── consolidated block */}
               {dpResult && (() => {
@@ -7922,13 +7933,24 @@ ${stabSection}
                 }
 
                 if (dpResult.closed_pocket && dpResult.required_pre_drill_dia) {
+                  const userDia = form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia : null;
+                  const recDia = dpResult.recommended_pre_drill_dia;
+                  const recDepth = dpResult.recommended_pre_drill_depth;
                   notes.push({
                     color: "sky",
-                    title: "Closed Pocket — Pre-Drill Required",
+                    title: "Closed Pocket — Pre-Drill First",
                     body: <>
-                      Pre-drill to minimum <span className="font-semibold text-white">⌀{dpResult.required_pre_drill_dia.toFixed(4)}"</span> before starting the sequence. This clears the largest bulk tool ({dpResult.constraints.bulk_dia ? `⌀${dpResult.constraints.bulk_dia}"` : "selected"}) and allows helical ramp or straight-drop entry.
-                      {form.dp_pre_drill_dia > 0 && form.dp_pre_drill_dia < dpResult.required_pre_drill_dia && (
-                        <span className="block mt-1 text-amber-400">⚠ Your specified pre-drill (⌀{form.dp_pre_drill_dia.toFixed(4)}") is smaller than the largest bulk tool — helical entry will be used for that tool.</span>
+                      {userDia
+                        ? <>Pre-drilling <span className="font-semibold text-white">⌀{userDia.toFixed(4)}"</span>
+                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −5% — leaves floor stock for endmill)</> : " to full depth"}.
+                          </>
+                        : <>Pre-drill <span className="font-semibold text-white">{recDia ? `⌀${recDia.toFixed(4)}"` : `⌀${dpResult.required_pre_drill_dia.toFixed(4)}"`}</span>
+                            {recDepth ? <> × <span className="font-semibold text-white">{recDepth.toFixed(4)}" deep</span> (pocket depth −5% — leaves floor stock for endmill)</> : " to full depth"}.
+                            {" "}Drill is the fastest way to clear axial material — go as large and as deep as the pocket allows before the endmill sequence starts.
+                          </>
+                      }
+                      {userDia && userDia < dpResult.required_pre_drill_dia && (
+                        <span className="block mt-1 text-amber-400">⚠ ⌀{userDia.toFixed(4)}" is smaller than the largest bulk tool (⌀{dpResult.constraints.bulk_dia}") — helical entry will be used for that tool.</span>
                       )}
                     </>,
                   });
@@ -7953,8 +7975,15 @@ ${stabSection}
                 if (dpResult.feedmill_eligible) {
                   notes.push({
                     color: "zinc",
-                    title: "Optional — Feed Mill Bulk Removal",
-                    body: "An axial feed mill can replace Tool 1 in the bulk sequence for significantly faster open-zone stock removal in steel/cast iron. Special order only — contact Core Cutter for quote.",
+                    title: "Consider a High Feed Mill for Bulk Axial Removal",
+                    body: <>
+                      A Core Cutter high feed mill is worth considering before the endmill sequence begins. Unlike endmills, a feed mill works entirely in the <span className="text-white font-semibold">Z direction</span> — small axial steps (typically 0.020–0.060") at very high feed rates, with all cutting force directed axially into the spindle rather than radially into the workholding. This means <span className="text-white">no deflection, no chatter, and no wall pressure</span> — it simply plunges and rasters the floor down in fast Z passes until it reaches near-depth, then the endmill sequence finishes the walls and floor.
+                      <span className="block mt-1 text-zinc-400">Best in steel, stainless, cast iron, and titanium. Core Cutter feed mills are special order — contact us for a quote sized to your pocket.</span>
+                      <span className="block mt-2 text-zinc-300 font-semibold">Also consider a Z-axis plunge roughing tool.</span>
+                      <span className="block text-zinc-400">A dedicated plunge rougher is designed specifically for straight Z-axis drilling-style cuts — multiple plunge locations across the pocket floor, stepping over by ~75% of the tool diameter each pass. Like a feed mill, all force is axial with zero radial wall pressure. Ideal for deep pockets where endmill reach and deflection are the limiting factor. Core Cutter can manufacture these as specials — contact us with your pocket dimensions and material.</span>
+                      <span className="block mt-2 text-sky-300 font-semibold">Through-coolant tooling is strongly recommended for this pocket.</span>
+                      <span className="block text-zinc-400">In a closed pocket, chips have nowhere to go — they pack at the bottom, re-cut, generate heat, and kill tools fast. Through-spindle coolant forced directly to the cutting edge blasts chips up and out of the pocket on every pass. This is especially critical at depth. If your machine has through-spindle coolant, use it. Core Cutter feed mills, plunge roughers, and extended-reach endmills can all be manufactured with through-coolant as a special option.</span>
+                    </>,
                   });
                 }
 
@@ -8043,7 +8072,13 @@ ${stabSection}
                             <div className="min-w-0">
                               <p className="text-[10px] font-semibold text-zinc-300">{role}</p>
                               <p className="text-xs font-bold text-white">EDP# {tool.edp}</p>
-                              <p className="text-[10px] text-zinc-400 leading-relaxed">{tool.description}</p>
+                              <p className="text-[10px] text-zinc-400 leading-relaxed">
+                                {tool.description}
+                                {tool.is_rn
+                                  ? `  ·  LBS ${tool.lbs_in?.toFixed(3)}"  ·  LOC ${tool.loc_in?.toFixed(3)}"  ·  Reach ${tool.reach_in?.toFixed(3)}"`
+                                  : `  ·  LOC ${tool.loc_in?.toFixed(3)}"`
+                                }
+                              </p>
                             </div>
                           </div>
                         );
