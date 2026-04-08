@@ -2415,7 +2415,7 @@ export default function Mentor() {
         // Switch to normal milling mode temporarily — run the standard Mentor calc path
         // We do this by calling mentor.mutate with the current form (tool already populated from PDF)
         const specialMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
-        mentor.mutate({ ...form, mode: specialMode, operation: "milling" } as any);
+        mentor.mutate({ ...form, mode: specialMode, operation: "milling", machine_id: activeMachineId ?? undefined } as any);
         return;
       }
 
@@ -2535,6 +2535,7 @@ export default function Mentor() {
         operation: (["milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"].includes(operation) ? operation : "milling") as any,
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
         stickout: form.stickout || form.loc * 1.25,
+        machine_id: activeMachineId ?? undefined,
         debug: false,
       });
       setFormDirty(false);
@@ -10074,6 +10075,43 @@ ${stabSection}
                 />
 
                 <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
+
+                {customer.torque_avail_ftlb != null && customer.torque_req_ftlb != null && (() => {
+                  const zone = customer.torque_zone;
+                  const zoneColor = zone === "red" ? "text-red-400" : zone === "yellow" ? "text-amber-400" : "text-emerald-400";
+                  const zoneBg   = zone === "red" ? "bg-red-500/10 border-red-500/30" : zone === "yellow" ? "bg-amber-500/10 border-amber-500/30" : "bg-emerald-500/10 border-emerald-500/30";
+                  const zoneLabel = zone === "red" ? "Overloaded" : zone === "yellow" ? "Near Limit" : "In Range";
+                  const confDot   = customer.torque_curve_confidence === "high" ? "●" : customer.torque_curve_confidence === "medium" ? "◑" : "○";
+                  const confTitle = customer.torque_curve_confidence === "high" ? "High confidence — official spindle curve" : customer.torque_curve_confidence === "medium" ? "Medium confidence — family estimate" : "Low confidence — generic estimate";
+                  return (
+                    <div className={`col-span-full rounded-lg border px-3 py-2.5 ${zoneBg}`}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium text-muted-foreground">Torque Zone</span>
+                            <span title={confTitle} className="text-[10px] text-zinc-500 cursor-default">{confDot}</span>
+                          </div>
+                          <div className={`text-base font-bold ${zoneColor}`}>{zoneLabel}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">
+                            {metric
+                              ? `${(customer.torque_req_ftlb * 1.35582).toFixed(1)} / ${(customer.torque_avail_ftlb * 1.35582).toFixed(1)} N·m`
+                              : `${customer.torque_req_ftlb.toFixed(1)} / ${customer.torque_avail_ftlb.toFixed(1)} ft-lbf`}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            req / avail at {fmtNum(customer.rpm, 0)} RPM
+                          </div>
+                        </div>
+                        {customer.torque_util_pct != null && (
+                          <div className={`text-lg font-bold ${zoneColor}`}>
+                            {fmtNum(customer.torque_util_pct, 0)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Engineering */}

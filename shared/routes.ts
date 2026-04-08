@@ -70,6 +70,7 @@ export const mentorSchemas = {
     flute_wash: z.number().min(0).default(0),
 
     machine_hp: z.number().min(0).default(10),
+    machine_id: z.number().int().positive().optional(),
     stickout: z.number().min(0).default(2.0),
 
     existing_hole_dia: z.number().min(0).default(0),
@@ -150,6 +151,12 @@ export const mentorSchemas = {
       machine_hp: z.number().nullable().optional(),
       hp_util_pct: z.number().nullable().optional(),
       hp_margin_hp: z.number().nullable().optional(),
+
+      torque_avail_ftlb: z.number().nullable().optional(),
+      torque_req_ftlb: z.number().nullable().optional(),
+      torque_util_pct: z.number().nullable().optional(),
+      torque_zone: z.enum(["green", "yellow", "red"]).nullable().optional(),
+      torque_curve_confidence: z.string().nullable().optional(),
       
       fpt: z.number().optional(),
       adj_fpt: z.number().nullable().optional(),
