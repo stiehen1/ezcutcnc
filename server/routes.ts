@@ -4299,10 +4299,50 @@ ${catalogList}`
         }
       }
 
-      // Feed mill eligibility
-      // Feed mill is always worth mentioning for deep pockets — small Z steps, all axial pressure,
-      // no radial deflection. Especially powerful in steel/cast iron but viable in most materials.
-      const feedmill_eligible = !thin_wall; // show for all materials except thin wall
+      // Feed mill eligibility + estimated cycle time
+      const feedmill_eligible = !thin_wall;
+
+      // Estimated feed mill cycle time for this pocket
+      // Uses 0.625" 4-flute as reference tool (most common special size for deep pocketing)
+      const FM_DIA = 0.625;
+      const FM_FLUTES = 4;
+      const FM_CR = 0.060; // typical corner radius on feed mill (dual-radius design)
+      // DOC per pass: min(0.8×CR, 0.12×D)
+      const fmDoc = Math.min(0.8 * FM_CR, 0.12 * FM_DIA);
+      // SFM and IPT by ISO category
+      const fmParams: Record<string, { sfm: number; ipt: number }> = {
+        P: { sfm: 337, ipt: 0.010 }, // steel
+        M: { sfm: 230, ipt: 0.008 }, // stainless
+        K: { sfm: 315, ipt: 0.010 }, // cast iron
+        S: { sfm: 115, ipt: 0.005 }, // superalloy
+        H: { sfm: 200, ipt: 0.007 }, // hardened
+        N: { sfm: 850, ipt: 0.014 }, // aluminum
+      };
+      const fmMat = fmParams[(iso_category ?? "P").toUpperCase()] ?? fmParams["P"];
+      const fmRpm = (fmMat.sfm * 12) / (Math.PI * FM_DIA);
+      const fmFeed = fmRpm * FM_FLUTES * fmMat.ipt; // IPM
+      const fmWoc = FM_DIA * 0.08; // 8% WOC
+      // Drill depth = target_depth × 0.95 (leave 5% floor stock)
+      const fmDepth = target_depth * 0.95;
+      const fmZPasses = Math.ceil(fmDepth / fmDoc);
+      // XY passes per level: pocket area / (woc stepover × pocket length)
+      const fmXPasses = closed_pocket && pocket_length > 0 && pocket_width > 0
+        ? Math.ceil((pocket_width - FM_DIA) / fmWoc)
+        : Math.ceil((corner_radius * 2 * 4) / fmWoc); // rough open pocket estimate
+      const fmPassLen = closed_pocket && pocket_length > 0 ? pocket_length : corner_radius * 8;
+      // Time = (Z passes × XY passes × pass length) / feed + 10% rapids/retracts
+      const fmCutTime = (fmZPasses * fmXPasses * fmPassLen) / fmFeed * 1.10;
+      const fmMinutes = Math.round(fmCutTime);
+      const fmTimeStr = fmMinutes < 1 ? "< 1 min" : fmMinutes === 1 ? "~1 min" : `~${fmMinutes} min`;
+      const feedmill_estimate = {
+        doc_in: +fmDoc.toFixed(4),
+        z_passes: fmZPasses,
+        feed_ipm: +fmFeed.toFixed(0),
+        rpm: +fmRpm.toFixed(0),
+        est_minutes: fmMinutes,
+        est_str: fmTimeStr,
+        tool_dia: FM_DIA,
+      };
 
       // Thin wall WOC taper schedule
       const woc_taper = thin_wall ? (
@@ -4393,6 +4433,7 @@ ${catalogList}`
         corner_oversize,
         corner_oversize_note,
         feedmill_eligible,
+        feedmill_estimate,
         woc_taper,
         closed_pocket,
         required_pre_drill_dia,
