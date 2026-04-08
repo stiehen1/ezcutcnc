@@ -8241,7 +8241,7 @@ ${stabSection}
                                 </div>
                               ))}
                               <p className="text-[10px] text-zinc-500">Estimates only — add endmill finish passes separately.</p>
-                              <p className="text-[10px] text-violet-300">Once you have your Core Cutter quote and print, use the <span className="font-semibold text-white">Feed Mill</span> section to generate exact running parameters for your specific tool.</p>
+                              <p className="text-[10px] text-violet-300">Once you have your Core Cutter quote and print, use the <button type="button" onClick={() => { setOperation("feedmill"); window.scrollTo(0,0); }} className="font-semibold text-white underline decoration-dotted hover:text-violet-200 transition-colors">Feed Mill section</button> to generate exact running parameters for your specific tool.</p>
                             </div>
                           )}
                         </div>
