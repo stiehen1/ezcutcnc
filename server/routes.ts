@@ -3903,19 +3903,20 @@ ${catalogList}`
       const { pool } = await import("./db");
 
       // ── 1. Corner radius → max tool diameters ──────────────────────────────
-      // Hard material ISO categories get tighter engagement factor
-      const hardMat = ["S","H"].includes((iso_category ?? "").toUpperCase());
-      const bulkFactor   = hardMat ? 0.65 : 0.75;
-      const cornerFactor = 0.60;
-      const cornerBasedBulkDia = corner_radius * 2 * bulkFactor;
+      // Bulk roughers just need to fit inside the pocket — no corner constraint.
+      // Corner radius only limits the FINAL finishing tool (must be ≤ wall-to-wall corner dia).
+      // wall-to-wall diameter = corner_radius * 2; finishing tool must be ≤ that × cornerFactor.
+      const cornerFactor = 0.99; // finishing tool dia ≤ wall-to-wall dia (corner_radius*2), slight clearance
       const maxCornerDia = corner_radius * 2 * cornerFactor;
 
-      // For closed pockets, tool must physically fit inside — cap by pocket narrowest dim × 0.85
-      // Open pockets: tool sweeps in from open edge, no pocket-dim constraint
+      // For closed pockets, bulk tool must physically fit inside — cap by pocket narrowest dim × 0.85
+      // For open pockets with no pocket dims, no cap (tool sweeps in from open edge)
       const pocketCeilingDia = closed_pocket && pocket_length > 0 && pocket_width > 0
         ? Math.min(pocket_length, pocket_width) * 0.85
         : Infinity;
-      const maxBulkDia = Math.min(cornerBasedBulkDia, pocketCeilingDia);
+      // Bulk max = pocket ceiling for closed pockets; 2.0" practical cap for open pockets.
+      // Corner radius does NOT limit bulk roughing — only the finishing tool cares about corners.
+      const maxBulkDia = pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0;
 
       // ── Material-appropriate coating + flute filters ───────────────────────
       // ISO N (aluminum): D-Max or A-Max coating, 2–3 flutes
