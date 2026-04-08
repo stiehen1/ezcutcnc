@@ -10086,9 +10086,8 @@ ${stabSection}
                     : zone === "yellow"
                     ? "Torque demand is close to your spindle's capacity at this RPM. The machine will likely run, but leaves little headroom for workholding variability or tool wear. Consider reducing chip load 10–15%."
                     : "This cut is well within your spindle's torque capacity. The machine is not torque-limited — HP or deflection are the constraints to watch.";
-                  const confLabel = customer.torque_curve_confidence === "high" ? "official spindle curve" : customer.torque_curve_confidence === "medium" ? "family curve estimate" : "generic estimate";
                   const confDesc  = customer.torque_curve_confidence === "high"
-                    ? "Torque data sourced from the manufacturer's published spindle curve — high accuracy."
+                    ? "Based on manufacturer's published spindle curve."
                     : customer.torque_curve_confidence === "medium"
                     ? "Torque data estimated from a related machine family — moderate accuracy."
                     : "Torque data is a generic estimate based on drive type. Treat as directional only.";
@@ -10127,10 +10126,10 @@ ${stabSection}
                       </div>
                       {/* Explanation */}
                       <div className="text-xs text-zinc-300 leading-relaxed">{zoneDesc}</div>
-                      {/* Confidence footnote */}
-                      <div className="text-[10px] text-zinc-500 italic" title={confDesc}>
-                        Curve data: {confLabel} — {confDesc}
-                      </div>
+                      {/* Confidence footnote — only for high/medium */}
+                      {customer.torque_curve_confidence !== "low" && customer.torque_curve_confidence != null && (
+                        <div className="text-[10px] text-zinc-500 italic">{confDesc}</div>
+                      )}
                     </div>
                   );
                 })()}
