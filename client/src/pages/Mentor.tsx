@@ -7913,7 +7913,6 @@ ${stabSection}
                   </div>
                 );
               })()}
-              )}
 
               {/* ── Notes & Advisories ── consolidated block */}
               {dpResult && (() => {
