@@ -4102,45 +4102,46 @@ ${catalogList}`
         const MAX_TOOLS = 4;
 
         while (depthCovered < target_depth && sequence.length < MAX_TOOLS) {
-          let picked: { tool: ToolRow; reach: number; dia: number } | null = null;
+          let picked: { tool: ToolRow; reach: number; dia: number; useRn: boolean } | null = null;
+
+          const isLastSlot = sequence.length === MAX_TOOLS - 1;
 
           for (const row of candidates) {
             const dia = parseFloat(row.cutting_diameter_in);
-            const maxReach = parseFloat(row.max_reach);
-            if (maxReach <= depthCovered) continue; // doesn't extend coverage
+            const maxLoc   = parseFloat(row.max_loc   || "0"); // longest standard LOC (no LBS)
+            const maxReach = parseFloat(row.max_reach || "0"); // longest reach incl. RN/LBS
 
-            // L/D of this tool at its max reach from surface
-            const ld = maxReach / dia;
+            // For non-last slots: prefer standard LOC tool (short, stiff) — use max_loc as band ceiling
+            // For last slot: must reach full depth — allow RN/LBS
+            const effectiveReach = isLastSlot ? maxReach : (maxLoc > depthCovered ? maxLoc : maxReach);
+            if (effectiveReach <= depthCovered) continue;
 
-            // Accept if within target, OR if this is the last tool slot (must reach full depth)
-            const isLastSlot = sequence.length === MAX_TOOLS - 1;
+            const ld = effectiveReach / dia;
             const reachesAll = maxReach >= target_depth;
 
             if (isLastSlot) {
-              // Must reach full depth — pick largest dia that does, regardless of L/D
-              if (reachesAll) { picked = { tool: null as any, reach: maxReach, dia }; break; }
+              if (reachesAll) { picked = { tool: null as any, reach: maxReach, dia, useRn: true }; break; }
             } else {
-              // Prefer largest dia with acceptable L/D; also require meaningful band gain (> 10% dia)
-              const bandGain = maxReach - depthCovered;
+              const bandGain = effectiveReach - depthCovered;
               if (ld <= ldTarget && bandGain >= dia * 0.5) {
-                picked = { tool: null as any, reach: maxReach, dia }; break;
+                // Prefer standard LOC; only use RN reach if no standard LOC extends coverage
+                const useRn = maxLoc <= depthCovered;
+                picked = { tool: null as any, reach: effectiveReach, dia, useRn }; break;
               }
             }
           }
 
           if (!picked) {
             // No candidate met criteria — fall back to largest that extends coverage at all
-            const fallback = candidates.find(r => parseFloat(r.max_reach) > depthCovered && parseFloat(r.cutting_diameter_in) <= maxBulkDia);
+            const fallback = candidates.find(r => parseFloat(r.max_reach) > depthCovered);
             if (!fallback) break;
-            picked = { tool: null as any, reach: parseFloat(fallback.max_reach), dia: parseFloat(fallback.cutting_diameter_in) };
+            picked = { tool: null as any, reach: parseFloat(fallback.max_reach), dia: parseFloat(fallback.cutting_diameter_in), useRn: true };
           }
 
-          // Fetch the actual best EDP at this diameter that reaches the band end.
-          // Last slot: preferRn=true (needs deep reach of RN/LBS tool, no chipbreaker available in necked)
-          // Upper slots: preferRn=false (standard LOC, chipbreaker preferred for force reduction)
+          // Fetch actual EDP: standard LOC for upper bands, RN for last/deep bands
           const bandTo = Math.min(picked.reach, target_depth);
           const isLastBand = bandTo >= target_depth;
-          const tool = await fetchBestToolAtDia(picked.dia, bandTo, isLastBand);
+          const tool = await fetchBestToolAtDia(picked.dia, bandTo, picked.useRn || isLastBand);
           if (!tool) break;
 
           // Avoid duplicate diameter (same dia twice in a row)
