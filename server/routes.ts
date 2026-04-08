@@ -1669,7 +1669,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1751,7 +1751,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1827,7 +1827,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: customer.email,
         subject: subjectLine,
@@ -1887,7 +1887,7 @@ export async function registerRoutes(
 
       // Send results to user (including internal staff)
       await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to: email,
         subject: "Your Core Cutter Speeds & Feeds Results",
         text: [
@@ -1972,7 +1972,7 @@ export async function registerRoutes(
               auth: { user: smtpUser, pass: smtpPass },
             });
             await transporter.sendMail({
-              from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+              from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
               to: "scott@corecutterusa.com",
               subject: `New App Registration — ${name ?? email}`,
               headers: { "X-Mailin-no-track": "1" },
@@ -2056,7 +2056,7 @@ export async function registerRoutes(
       });
 
       await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "noreply@corecutterusa.com"}>`,
+        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
         to,
         replyTo: email,
         subject: `Tool Request — ${name ?? email}`,
@@ -3505,7 +3505,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
     const fromName = "CoreCutCNC by Core Cutter";
-    const fromAddr = process.env.FROM_EMAIL || "noreply@corecutterusa.com";
+    const fromAddr = process.env.FROM_EMAIL || "scott@corecutterusa.com";
     const mailOptions = {
       from: `"${fromName}" <${fromAddr}>`,
       to: email,
