@@ -11426,9 +11426,10 @@ ${stabSection}
                       <a href="/Reconditioning Brochure (260214).pdf" download className="ml-auto text-[10px] text-orange-400 hover:text-orange-300 underline underline-offset-2 whitespace-nowrap">Download Brochure</a>
                     </label>
                     {roiReconEnabled ? (
-                      <div className="space-y-1.5 pl-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap">Regrinds:</span>
+                      <div className="space-y-2 pl-1">
+                        {/* Row 1: Regrinds + price per regrind */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">Number of Regrinds:</span>
                           <select
                             value={roiReconGrinds}
                             onChange={e => setRoiReconGrinds(e.target.value)}
@@ -11437,9 +11438,15 @@ ${stabSection}
                             {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
                           </select>
                           {parseFloat(roiCcPrice) > 0 && (
-                            <span className="text-[10px] text-orange-400 whitespace-nowrap">× ${(parseFloat(roiCcPrice) * 0.5).toFixed(2)}/regrind</span>
+                            <span className="text-[10px] text-orange-400 whitespace-nowrap">
+                              @ ${(parseFloat(roiCcPrice) * 0.5).toFixed(2)}/regrind
+                              <span className="text-zinc-500 ml-1">(50% of new)</span>
+                            </span>
                           )}
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap ml-auto">Tool life/regrind:</span>
+                        </div>
+                        {/* Row 2: Tool life retention per regrind */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">Tool Life/Regrind:</span>
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
@@ -11447,9 +11454,10 @@ ${stabSection}
                               value={roiReconRetention}
                               onChange={e => setRoiReconRetention(e.target.value)}
                             />
-                            <span className="text-[10px] text-zinc-400">%</span>
+                            <span className="text-[10px] text-zinc-400">% of new</span>
                           </div>
                         </div>
+                        {/* Cost breakdown summary */}
                         {parseFloat(roiCcPrice) > 0 && (() => {
                           let previewN = 0;
                           if (roiLifeMode === "parts") previewN = parseFloat(roiCcParts) || 0;
@@ -11458,29 +11466,37 @@ ${stabSection}
                           if (previewN <= 0) return null;
                           const g = parseInt(roiReconGrinds) || 0;
                           const r = Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100;
-                          const baseN = previewN;
-                          let totalParts = baseN;
-                          const cycles: number[] = [Math.round(baseN)];
+                          const priceEach = parseFloat(roiCcPrice);
+                          const regrindPrice = priceEach * 0.5;
+                          let totalParts = previewN;
+                          const cycles: number[] = [Math.round(previewN)];
                           for (let i = 1; i <= g; i++) {
-                            const cycleN = baseN * Math.pow(r, i);
+                            const cycleN = previewN * Math.pow(r, i);
                             totalParts += cycleN;
                             cycles.push(Math.round(cycleN));
                           }
-                          const totalCost = parseFloat(roiCcPrice) * (1 + g * 0.5);
+                          const totalCost = priceEach + g * regrindPrice;
                           const effCost = totalCost / totalParts;
                           return (
-                            <div className="text-[10px] text-zinc-500 space-y-0.5">
-                              <div className="flex gap-1 flex-wrap">
+                            <div className="rounded bg-zinc-800/50 border border-zinc-700/50 px-3 py-2 space-y-1.5 text-[10px]">
+                              {/* Lifecycle chain */}
+                              <div className="flex gap-1.5 flex-wrap items-center">
                                 {cycles.map((n, i) => (
-                                  <span key={i} className={i === 0 ? "text-zinc-400" : "text-zinc-500"}>
-                                    {i === 0 ? "New" : `R${i}`}: {n}pts{i < cycles.length - 1 ? " →" : ""}
-                                  </span>
+                                  <React.Fragment key={i}>
+                                    <div className="text-center">
+                                      <div className={i === 0 ? "text-zinc-300 font-semibold" : "text-zinc-400"}>{i === 0 ? "New" : `R${i}`}</div>
+                                      <div className={i === 0 ? "text-white font-bold" : "text-zinc-300"}>{n} pts</div>
+                                      <div className={i === 0 ? "text-orange-400" : "text-zinc-500"}>${i === 0 ? priceEach.toFixed(2) : regrindPrice.toFixed(2)}</div>
+                                    </div>
+                                    {i < cycles.length - 1 && <span className="text-zinc-600 mt-1">→</span>}
+                                  </React.Fragment>
                                 ))}
                               </div>
-                              <p>
-                                <span className="text-zinc-400">{Math.round(totalParts)} total parts, ${totalCost.toFixed(2)} total cost → </span>
-                                <span className="text-green-400 font-semibold">${effCost.toFixed(4)}/part effective</span>
-                              </p>
+                              {/* Totals */}
+                              <div className="border-t border-zinc-700/50 pt-1.5 flex justify-between items-center">
+                                <span className="text-zinc-400">{Math.round(totalParts)} total parts · ${totalCost.toFixed(2)} total tool cost</span>
+                                <span className="text-green-400 font-bold">${effCost.toFixed(4)}/part</span>
+                              </div>
                             </div>
                           );
                         })()}
