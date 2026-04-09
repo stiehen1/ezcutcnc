@@ -7607,7 +7607,7 @@ ${stabSection}
                     <span className="ml-2 text-[10px] text-zinc-500">— upload your print to get running parameters for this specific tool</span>
                   </div>
                   <button type="button"
-                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) setPdfExtracted(false); }}
+                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "" })); } }}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${dpSpecialTool ? "bg-orange-500" : "bg-zinc-600"}`}>
                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${dpSpecialTool ? "translate-x-4" : "translate-x-0.5"}`} />
                   </button>
@@ -7617,7 +7617,7 @@ ${stabSection}
                     {pdfExtracted ? (
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
-                        <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
+                        <button type="button" onClick={() => { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "" })); }} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
                       </div>
                     ) : (
                       <label className="flex flex-col items-center gap-1 cursor-pointer">
@@ -7651,24 +7651,63 @@ ${stabSection}
               {dpSpecialTool && pdfExtracted && (
                 <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-3 space-y-3">
                   <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <FieldLabel hint="Depth of cut in multiples of diameter (e.g. 1.5 = 1.5×D). For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
-                      <Input type="number" step="0.1" className="no-spinners"
-                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
-                        value={form.doc_xd > 0 ? form.doc_xd : ""}
-                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <FieldLabel hint="Width of cut as % of tool diameter (e.g. 10 = 10% WOC). For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
-                      <Input type="number" step="1" className="no-spinners"
-                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 10" : "e.g. 50"}
-                        value={form.woc_pct > 0 ? form.woc_pct : ""}
-                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
-                      />
-                    </div>
-                  </div>
+                  {(() => {
+                    const spMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
+                    const wp = WOC_PRESETS[spMode];
+                    const dp = DOC_PRESETS[spMode];
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* WOC */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <FieldLabel hint="Width of cut as % of tool diameter. For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
+                            <button type="button"
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                              style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                              onClick={() => setForm(p => ({ ...p, woc_pct: wp.med }))}
+                            >Optimal</button>
+                          </div>
+                          <Input type="number" step="1" className="no-spinners"
+                            placeholder={spMode === "hem" ? "e.g. 10" : "e.g. 50"}
+                            value={form.woc_pct > 0 ? form.woc_pct : ""}
+                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
+                          />
+                          <div className="flex gap-1 mt-0.5">
+                            {(["low","med","high"] as const).map(k => (
+                              <button key={k} type="button"
+                                onClick={() => setForm(p => ({ ...p, woc_pct: wp[k] }))}
+                                className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.woc_pct||0) - wp[k]) < 0.5 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} {wp[k]}%</button>
+                            ))}
+                          </div>
+                        </div>
+                        {/* DOC */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <FieldLabel hint="Depth of cut in multiples of diameter. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
+                            <button type="button"
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                              style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                              onClick={() => setForm(p => ({ ...p, doc_xd: dp.med }))}
+                            >Optimal</button>
+                          </div>
+                          <Input type="number" step="0.1" className="no-spinners"
+                            placeholder={spMode === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
+                            value={form.doc_xd > 0 ? form.doc_xd : ""}
+                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
+                          />
+                          <div className="flex gap-1 mt-0.5">
+                            {(["low","med","high"] as const).map(k => (
+                              <button key={k} type="button"
+                                onClick={() => setForm(p => ({ ...p, doc_xd: dp[k] }))}
+                                className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.doc_xd||0) - dp[k]) < 0.05 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} {dp[k]}×</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -7678,7 +7717,7 @@ ${stabSection}
                 <div className="flex gap-2">
                   {([["hem", "HEM / Adaptive"], ["traditional", "Traditional"]] as const).map(([val, label]) => (
                     <button key={val} type="button"
-                      onClick={() => setForm(p => ({ ...p, dp_cutting_style: val }))}
+                      onClick={() => setForm(p => ({ ...p, dp_cutting_style: val, woc_pct: 0, doc_xd: 0 }))}
                       className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
                       style={{ backgroundColor: form.dp_cutting_style === val ? "#6366f1" : "transparent", borderColor: form.dp_cutting_style === val ? "#6366f1" : "#52525b", color: "#fff" }}>
                       {label}
@@ -10141,18 +10180,24 @@ ${stabSection}
                       </div>
                       {/* Explanation */}
                       <div className="text-xs text-zinc-300 leading-relaxed">{zoneDesc}</div>
-                      {/* Low-RPM / machine fit warning */}
-                      {customer.machine_max_rpm != null && customer.rpm != null && (() => {
-                        const rpmPct = (customer.rpm / customer.machine_max_rpm) * 100;
+                      {/* Low-RPM / machine fit warning — use form.max_rpm to avoid stale result from prior machine selection */}
+                      {form.max_rpm > 0 && customer.rpm != null && (() => {
+                        const machMaxRpm = form.max_rpm;
+                        const rpmPct = (customer.rpm / machMaxRpm) * 100;
                         if (rpmPct >= 20) return null;
                         const currentDia = customer.diameter ?? 1;
                         // Aluminum on high-RPM machines (Makino MAG, HSM) is intentional — 3/4"–1" 2-fl tools
                         // are correct for those machines. Only warn for ferrous/superalloy where SFM is the ceiling.
                         if (typeof customer.material === "string" && customer.material.startsWith("aluminum_")) return null;
+                        // Suppress for full-size tapers (CAT40/BT40/CV40/CAT50/BT50) — these machines aren't
+                        // high-RPM spindles; recommending 1/4"–3/8" tools on them is wrong
+                        const taper = (form.spindle_taper ?? "").toUpperCase();
+                        if (taper.includes("CAT40") || taper.includes("BT40") || taper.includes("CV40") ||
+                            taper.includes("CAT50") || taper.includes("BT50") || taper.includes("CAT30") || taper.includes("BT30")) return null;
                         // Also suppress for tools > 1.5" — large inserted/shell mills are always intentional
                         if (currentDia > 1.5) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
-                        const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
+                        const targetDia = (customer.sfm * 12) / (machMaxRpm * 0.75 * Math.PI);
 
                         if (targetDia >= 0.375 && targetDia < currentDia) {
                           // Case A: a meaningfully smaller standard tool would use the machine's speed range
@@ -10164,7 +10209,7 @@ ${stabSection}
                           return (
                             <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
                               <div><span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
-                              At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(customer.machine_max_rpm, 0)} RPM capability.
+                              At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(machMaxRpm, 0)} RPM capability.
                               {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.</div>
                               <div className="text-amber-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
                             </div>
@@ -10174,12 +10219,12 @@ ${stabSection}
                           // Always show both 1/4" and 3/8" RPM options so user can see the trade-off
                           const rpm375 = Math.round((customer.sfm * 12) / (0.375 * Math.PI));
                           const rpm250 = Math.round((customer.sfm * 12) / (0.250 * Math.PI));
-                          const pct375 = Math.round((rpm375 / customer.machine_max_rpm!) * 100);
-                          const pct250 = Math.round((rpm250 / customer.machine_max_rpm!) * 100);
+                          const pct375 = Math.round((rpm375 / machMaxRpm) * 100);
+                          const pct250 = Math.round((rpm250 / machMaxRpm) * 100);
                           return (
                             <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
                               <div><span className="font-semibold">This machine's high-RPM range is underutilized by this material.</span>{" "}
-                              {fmtNum(customer.sfm, 0)} SFM caps RPM at {fmtNum(customer.rpm, 0)} with this tool — only {fmtNum(rpmPct, 0)}% of {fmtNum(customer.machine_max_rpm, 0)} RPM max.
+                              {fmtNum(customer.sfm, 0)} SFM caps RPM at {fmtNum(customer.rpm, 0)} with this tool — only {fmtNum(rpmPct, 0)}% of {fmtNum(machMaxRpm, 0)} RPM max.
                               {" "}Smaller tools run faster in the same material:</div>
                               <div className="pl-2 space-y-0.5">
                                 <div>• <span className="font-medium">3/8"</span> → ~{fmtNum(rpm375, 0)} RPM ({pct375}% utilization)</div>
@@ -11071,10 +11116,11 @@ ${stabSection}
         const isHem   = form.mode === "hem" || form.mode === "trochoidal";
 
         // Suppress "increase diameter" suggestion when the torque card is already telling user to downsize
-        const _lowRpmTargetDia = customer?.machine_max_rpm && customer?.sfm
-          ? (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI) : 0;
-        const lowRpmWarningActive = customer?.machine_max_rpm != null && customer?.rpm != null
-          && (customer.rpm / customer.machine_max_rpm) * 100 < 20
+        const _formMaxRpm = form.max_rpm || 0;
+        const _lowRpmTargetDia = _formMaxRpm > 0 && customer?.sfm
+          ? (customer.sfm * 12) / (_formMaxRpm * 0.75 * Math.PI) : 0;
+        const lowRpmWarningActive = _formMaxRpm > 0 && customer?.rpm != null
+          && (customer.rpm / _formMaxRpm) * 100 < 20
           && _lowRpmTargetDia >= 0.375 && _lowRpmTargetDia < (customer.diameter ?? 1);
         const actionItems = stability.suggestions.filter((s: any) => s.type !== "info" && !(lowRpmWarningActive && s.type === "diameter"));
         const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
