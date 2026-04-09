@@ -10176,6 +10176,20 @@ ${stabSection}
                         }
                         return null;
                       })()}
+                      {/* High-RPM balance advisory */}
+                      {customer.rpm != null && customer.rpm >= 10000 && (() => {
+                        const isVeryHigh = customer.rpm! >= 18000;
+                        return (
+                          <div className="rounded border border-blue-500/40 bg-blue-500/8 px-2.5 py-2 text-xs text-blue-300 leading-snug space-y-1">
+                            <div><span className="font-semibold">Tool and holder balance required at {fmtNum(customer.rpm, 0)} RPM.</span>{" "}
+                            {isVeryHigh
+                              ? `At these speeds, even minor imbalance creates centrifugal forces that drive chatter, accelerate spindle bearing wear, and can damage the machine. Both the toolholder and tool assembly must be balanced to G2.5 or better — verified together after final assembly.`
+                              : `Above 10,000 RPM, imbalance forces grow with the square of speed and become a real source of chatter and premature bearing wear. Use G2.5 balanced toolholders and confirm the assembled tool+holder meets G2.5 at this RPM.`
+                            }</div>
+                            <div className="text-blue-400/70">ISO 1940-1 G2.5 = 2.5 mm/s residual velocity at max RPM. Shrink-fit and hydraulic holders maintain balance best. Weldon flat holders are asymmetric by design — avoid above 10,000 RPM.</div>
+                          </div>
+                        );
+                      })()}
                       {/* Confidence footnote — only for high/medium */}
                       {customer.torque_curve_confidence !== "low" && customer.torque_curve_confidence != null && (
                         <div className="text-[10px] text-zinc-500 italic">{confDesc}</div>
