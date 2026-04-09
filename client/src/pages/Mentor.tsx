@@ -519,7 +519,11 @@ export default function Mentor() {
     if (missing.length > 0) return;
     // Reconditioning: lifecycle units compound same as parts (substitute minutes or inches)
     const grinds = roiReconEnabled ? Math.max(0, Math.min(5, parseInt(roiReconGrinds) || 0)) : 0;
-    const retention = roiReconEnabled ? Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100 : 1;
+    // roiReconRetention is now in native units (parts/min/in) — derive ratio from base life
+    const reconNativeLife = parseFloat(roiReconRetention) || 0;
+    const retention = roiReconEnabled && reconNativeLife > 0 && ccN > 0
+      ? Math.max(0.5, Math.min(1.0, reconNativeLife / ccN))
+      : roiReconEnabled ? 0.90 : 1;
     const reconLifecycleCost = ccP * (1 + grinds * 0.5);
     let reconLifecycleUnits = ccN;
     for (let i = 1; i <= grinds; i++) reconLifecycleUnits += ccN * Math.pow(retention, i);
@@ -1909,7 +1913,7 @@ export default function Mentor() {
   const [roiMatVolPerPart, setRoiMatVolPerPart] = React.useState(""); // in³/part — optional MRR→time savings
   const [roiReconEnabled, setRoiReconEnabled] = React.useState(false);
   const [roiReconGrinds, setRoiReconGrinds] = React.useState("3");
-  const [roiReconRetention, setRoiReconRetention] = React.useState("90"); // % tool life retained per regrind
+  const [roiReconRetention, setRoiReconRetention] = React.useState(""); // tool life per regrind in native units (parts/min/in)
   const [roiMissingFields, setRoiMissingFields] = React.useState<string[]>([]);
   const [roiName, setRoiName] = React.useState("");
   const [roiSessionId, setRoiSessionId] = React.useState(() => crypto.randomUUID());
@@ -11443,17 +11447,28 @@ ${stabSection}
                             </span>
                           )}
                         </div>
-                        {/* Row 2: Tool life retention per regrind */}
+                        {/* Row 2: Tool life per regrind — same units as selected mode */}
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">Tool Life/Regrind:</span>
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">
+                            {roiLifeMode === "parts" ? "Parts/Regrind:" : roiLifeMode === "cut_time" ? "Cut Time/Regrind:" : "Linear In/Regrind:"}
+                          </span>
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
-                              className="no-spinners h-6 text-xs w-14"
+                              className="no-spinners h-6 text-xs w-20"
+                              placeholder={
+                                roiLifeMode === "parts"
+                                  ? (parseFloat(roiCcParts) > 0 ? `e.g. ${Math.round(parseFloat(roiCcParts) * 0.9)}` : "e.g. 450")
+                                  : roiLifeMode === "cut_time"
+                                  ? "e.g. mins"
+                                  : "e.g. in"
+                              }
                               value={roiReconRetention}
                               onChange={e => setRoiReconRetention(e.target.value)}
                             />
-                            <span className="text-[10px] text-zinc-400">% of new</span>
+                            <span className="text-[10px] text-zinc-400">
+                              {roiLifeMode === "parts" ? "parts" : roiLifeMode === "cut_time" ? "min" : "in"}
+                            </span>
                           </div>
                         </div>
                         {/* Cost breakdown summary */}
@@ -11466,7 +11481,11 @@ ${stabSection}
                           if (roiLifeMode === "parts") previewN = parseFloat(roiCcParts) || 0;
                           else if (roiLifeMode === "cut_time") { const ct = parseFloat(roiCcCutTime), tp = parseFloat(roiCcTime); previewN = ct > 0 && tp > 0 ? ct / tp : 0; }
                           else { const li = parseFloat(roiCcLinIn), lp = parseFloat(roiLinInPerPart); previewN = li > 0 && lp > 0 ? li / lp : 0; }
-                          const r = Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100;
+                          // roiReconRetention is now in native units (parts/min/in) — derive retention ratio from base life
+                          const reconNative = parseFloat(roiReconRetention) || 0;
+                          const r = previewN > 0 && reconNative > 0
+                            ? Math.max(0.5, Math.min(1.0, reconNative / previewN))
+                            : 0.90;
                           let totalParts = previewN;
                           const cycles: number[] = [Math.round(previewN)];
                           for (let i = 1; i <= g; i++) {
