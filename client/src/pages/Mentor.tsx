@@ -10130,9 +10130,11 @@ ${stabSection}
                       {customer.machine_max_rpm != null && customer.rpm != null && (() => {
                         const rpmPct = (customer.rpm / customer.machine_max_rpm) * 100;
                         if (rpmPct >= 20) return null;
+                        const currentDia = customer.diameter ?? 1;
+                        // Large tools on high-RPM machines (MAG, HSM, aerospace) are intentional — don't flag them
+                        if (currentDia > 1.0) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
                         const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
-                        const currentDia = customer.diameter ?? 1;
 
                         if (targetDia >= 0.375 && targetDia < currentDia) {
                           // Case A: a meaningfully smaller standard tool would use the machine's speed range
