@@ -815,7 +815,7 @@ function RegrindingTab() {
               <div className="rounded-xl bg-orange-500/10 border border-orange-500/30 p-4 text-center">
                 <p className="text-3xl font-black text-orange-400">~50%</p>
                 <p className="text-sm text-zinc-200 font-semibold mt-1">of new tool cost</p>
-                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — a properly reground edge can exceed new tool performance.</p>
+                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — a properly reground tool from us has been known to even exceed new tool performance.</p>
               </div>
 
               {/* Customer feedback stat */}
