@@ -11011,9 +11011,12 @@ ${stabSection}
         const isOver  = deflPct >= 100;
         const isHem   = form.mode === "hem" || form.mode === "trochoidal";
 
-        const actionItems = stability.suggestions.filter((s: any) => s.type !== "info");
+        // Suppress "increase diameter" suggestion when the torque card is already telling user to downsize
+        const lowRpmWarningActive = customer?.machine_max_rpm != null && customer?.rpm != null
+          && (customer.rpm / customer.machine_max_rpm) * 100 < 20;
+        const actionItems = stability.suggestions.filter((s: any) => s.type !== "info" && !(lowRpmWarningActive && s.type === "diameter"));
         const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
-        const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info");
+        const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info" && !(lowRpmWarningActive && s.type === "diameter"));
 
         const deflPctSub = stability.deflection_pct;
         const ld         = stability.l_over_d;
