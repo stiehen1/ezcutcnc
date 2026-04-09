@@ -831,7 +831,7 @@ function RegrindingTab() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Any Brand — Standard Geometry</p>
                   <p className="text-[11px] text-zinc-500 mb-2">No print required — we regrind to our engineered spec.</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {["End Mills","Chamfer Mills","Drills","Reamers","Corner Rounders","Radius Cutters","Tapered Endmills"].map(t => (
+                    {["End Mills","Chamfer Mills"].map(t => (
                       <p key={t} className="text-[11px] text-zinc-300 flex items-center gap-1.5">
                         <span className="text-orange-400">›</span>{t}
                       </p>
@@ -842,7 +842,7 @@ function RegrindingTab() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Any Brand — Special / Form Geometry</p>
                   <p className="text-[11px] text-zinc-500 mb-2">Original build print required for competitor brands.</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {["Form Tools","Key Seat Cutters","Lollipop Cutters","Dovetail Cutters","Feed Mills","Step Drills"].map(t => (
+                    {["Drills","Reamers","Corner Rounders","Radius Cutters","Tapered Endmills","Feed Mills","Form Tools","Key Seat Cutters","Lollipop Cutters","Dovetail Cutters","Step Drills"].map(t => (
                       <p key={t} className="text-[11px] text-zinc-300 flex items-center gap-1.5">
                         <span className="text-orange-400">›</span>{t}
                       </p>
