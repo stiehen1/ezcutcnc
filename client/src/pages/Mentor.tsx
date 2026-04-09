@@ -7644,8 +7644,11 @@ ${stabSection}
                   <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
                   {(() => {
                     const spMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
-                    const wp = WOC_PRESETS[spMode];
-                    const dp = DOC_PRESETS[spMode];
+                    // Must compute presets with spMode directly — form.mode is "deep_pocket" so
+                    // WOC_PRESETS/DOC_PRESETS["hem"] would use wrong dynPresets base
+                    const spPresets = getDynamicPresets(spMode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
+                    const wp = spPresets.woc;
+                    const dp = spPresets.doc;
                     return (
                       <div className="grid grid-cols-2 gap-3">
                         {/* WOC */}
