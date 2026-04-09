@@ -1366,6 +1366,19 @@ export default function Mentor() {
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
       }
+      // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style
+      {
+        const spMode = (form.dp_cutting_style ?? "hem") === "hem" ? "hem" : "traditional";
+        const newFlutes = e.flutes > 0 ? e.flutes : form.flutes;
+        const newDia    = _pdfDia > 0 ? _pdfDia : form.tool_dia;
+        const newLoc    = _pdfLoc > 0 ? _pdfLoc : form.loc;
+        // isoCategory state hasn't re-rendered yet; derive it from PDF cutting_material if present
+        const _matKey   = e.cutting_material as string | undefined;
+        const _sub      = _matKey ? ISO_SUBCATEGORIES.find(s => s.key === _matKey) : null;
+        const _iso      = (_sub?.iso ?? isoCategory) as string;
+        const spPresets = getDynamicPresets(spMode, _iso, newFlutes, newDia, newLoc, "", "standard");
+        setForm(p => ({ ...p, woc_pct: spPresets.woc.med, doc_xd: spPresets.doc.med }));
+      }
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
       setPdfConvertedFromMm(!!e._converted_from_mm);
@@ -7598,7 +7611,7 @@ ${stabSection}
                     <span className="ml-2 text-[10px] text-zinc-500">— upload your print to get running parameters for this specific tool</span>
                   </div>
                   <button type="button"
-                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "" })); } }}
+                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "", woc_pct: 0, doc_xd: 0 })); } }}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${dpSpecialTool ? "bg-orange-500" : "bg-zinc-600"}`}>
                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${dpSpecialTool ? "translate-x-4" : "translate-x-0.5"}`} />
                   </button>
@@ -7608,7 +7621,7 @@ ${stabSection}
                     {pdfExtracted ? (
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
-                        <button type="button" onClick={() => { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "" })); }} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
+                        <button type="button" onClick={() => { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "", woc_pct: 0, doc_xd: 0 })); }} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
                       </div>
                     ) : (
                       <label className="flex flex-col items-center gap-1 cursor-pointer">
