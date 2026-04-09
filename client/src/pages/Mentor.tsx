@@ -11504,7 +11504,6 @@ ${stabSection}
                     ) : (
                       <p className="text-[10px] text-zinc-600 pl-1">Up to 3-5 regrinds at ~50% of new tool cost — a properly reground tool from us has been known to even exceed new tool performance</p>
                     )}
-                    <p className="text-[10px] text-zinc-500 pt-0.5">Ship tools to: <span className="text-zinc-400">Core Cutter LLC · 120 Technology Dr · Gardiner, ME 04345</span></p>
                   </div>
 
                   {/* Additional Savings — CC side (tools eliminated, scrap savings, etc.) */}
