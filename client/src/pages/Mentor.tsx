@@ -10126,6 +10126,21 @@ ${stabSection}
                       </div>
                       {/* Explanation */}
                       <div className="text-xs text-zinc-300 leading-relaxed">{zoneDesc}</div>
+                      {/* Low-RPM / machine fit warning */}
+                      {customer.machine_max_rpm != null && customer.rpm != null && (() => {
+                        const rpmPct = (customer.rpm / customer.machine_max_rpm) * 100;
+                        if (rpmPct >= 20) return null;
+                        const idealDia = (customer.machine_max_rpm * 0.75 * Math.PI * (customer.diameter ?? 0)) / (customer.sfm * 12);
+                        // Ideal diameter to hit 75% of max RPM at this SFM
+                        const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
+                        return (
+                          <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug">
+                            <span className="font-semibold">Tool too large for this machine at this material.</span>{" "}
+                            Running at only {fmtNum(rpmPct, 0)}% of max spindle speed ({fmtNum(customer.rpm, 0)} of {fmtNum(customer.machine_max_rpm, 0)} RPM) — leaving most of this machine's speed capability unused.
+                            {" "}To maximize throughput, use a smaller tool: a {targetDia < 0.125 ? `${fmtNum(targetDia * 16, 2)}/16"` : `${fmtNum(targetDia, 3)}"`} diameter tool would run near {fmtNum(customer.machine_max_rpm * 0.75, 0)} RPM at this SFM — significantly higher MRR per pass.
+                          </div>
+                        );
+                      })()}
                       {/* Confidence footnote — only for high/medium */}
                       {customer.torque_curve_confidence !== "low" && customer.torque_curve_confidence != null && (
                         <div className="text-[10px] text-zinc-500 italic">{confDesc}</div>

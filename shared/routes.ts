@@ -157,6 +157,8 @@ export const mentorSchemas = {
       torque_util_pct: z.number().nullable().optional(),
       torque_zone: z.enum(["green", "yellow", "red"]).nullable().optional(),
       torque_curve_confidence: z.string().nullable().optional(),
+      machine_max_rpm: z.number().nullable().optional(),
+      machine_peak_torque_rpm: z.number().nullable().optional(),
       
       fpt: z.number().optional(),
       adj_fpt: z.number().nullable().optional(),
