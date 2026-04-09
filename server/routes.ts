@@ -824,12 +824,12 @@ export async function registerRoutes(
       const machineId = (parsed.data as any).machine_id;
       if (machineId) {
         const mrow = await pool.query(
-          `SELECT base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence
+          `SELECT base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, max_rpm
            FROM machines WHERE id = $1`,
           [machineId]
         );
         if (mrow.rows.length && mrow.rows[0].base_torque_ftlb) {
-          const { base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence } = mrow.rows[0];
+          const { base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, max_rpm } = mrow.rows[0];
           const recRpm = Number(customer.rpm ?? 0);
           // Two-segment torque model: flat below peak_torque_rpm, hyperbolic (HP×5252/RPM) above
           let torqueAvail: number;
@@ -854,6 +854,8 @@ export async function registerRoutes(
           customer.torque_util_pct = torqueUtilPct !== null ? Math.round(torqueUtilPct * 10) / 10 : null;
           customer.torque_zone = torqueZone;
           customer.torque_curve_confidence = curve_confidence ?? null;
+          customer.machine_max_rpm = max_rpm ? Number(max_rpm) : null;
+          customer.machine_peak_torque_rpm = peak_torque_rpm ? Number(peak_torque_rpm) : null;
         }
       }
       // Enrich flute-upgrade suggestions with matching EDP from catalog
