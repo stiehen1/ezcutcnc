@@ -1377,7 +1377,15 @@ export default function Mentor() {
         const _sub      = _matKey ? ISO_SUBCATEGORIES.find(s => s.key === _matKey) : null;
         const _iso      = (_sub?.iso ?? isoCategory) as string;
         const spPresets = getDynamicPresets(spMode, _iso, newFlutes, newDia, newLoc, "", "standard");
-        setForm(p => ({ ...p, woc_pct: spPresets.woc.med, doc_xd: spPresets.doc.med }));
+        const _wocPct = spPresets.woc.med;
+        const _locCap = newLoc > 0 ? newLoc / newDia : 99;
+        const _isHem  = spMode === "hem";
+        const _docXd  = Math.min(_locCap, Math.max(spPresets.doc.low, _isHem ? spPresets.doc.high : spPresets.doc.med));
+        setForm(p => ({ ...p, woc_pct: _wocPct, doc_xd: _docXd }));
+        setWocText(((_wocPct / 100) * newDia).toFixed(4));
+        setDocText((_docXd * newDia).toFixed(3));
+        setWocPreset("med");
+        setDocPreset(_isHem ? "high" : "med");
       }
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
@@ -7651,7 +7659,7 @@ ${stabSection}
                 )}
               </div>
 
-              {/* Special tool mode — DOC / WOC inputs */}
+              {/* Special tool mode — DOC / WOC inputs — identical UX to standard engagement section */}
               {dpSpecialTool && pdfExtracted && (
                 <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-3 space-y-3">
                   <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
@@ -7662,54 +7670,122 @@ ${stabSection}
                     const spPresets = getDynamicPresets(spMode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
                     const wp = spPresets.woc;
                     const dp = spPresets.doc;
+                    const dia = form.tool_dia || 0.5;
                     return (
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* WOC */}
-                        <div className="space-y-1">
+                      <div className="flex gap-3 items-start">
+                        {/* WOC — same as standard section */}
+                        <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
                           <div className="flex items-center justify-between">
-                            <FieldLabel hint="Width of cut as % of tool diameter. For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
+                            <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
                             <button type="button"
                               className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
-                              style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
-                              onClick={() => setForm(p => ({ ...p, woc_pct: wp.med }))}
+                              style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                              onClick={() => {
+                                setForm(p => ({ ...p, woc_pct: wp.med }));
+                                setWocText(((wp.med / 100) * dia).toFixed(4));
+                                const match = (["low","med","high"] as const).find(k => Math.abs(wp[k] - wp.med) < 0.5);
+                                setWocPreset(match ?? "optimal");
+                              }}
                             >Optimal</button>
                           </div>
-                          <Input type="number" step="1" className="no-spinners"
-                            placeholder={spMode === "hem" ? "e.g. 10" : "e.g. 50"}
-                            value={form.woc_pct > 0 ? form.woc_pct : ""}
-                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
-                          />
-                          <div className="flex gap-1 mt-0.5">
+                          <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                            <input type="text" inputMode="decimal" placeholder="set after setup"
+                              className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                              value={wocText}
+                              onChange={e => setWocText(e.target.value)}
+                              onBlur={() => {
+                                const raw = wocText.trim();
+                                const hasPercent = raw.includes("%");
+                                const n = parseFloat(raw.replace(/[^\d.]/g, ""));
+                                if (Number.isFinite(n) && n > 0) {
+                                  const pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
+                                  setForm(p => ({ ...p, woc_pct: pct }));
+                                  setWocText(((pct / 100) * dia).toFixed(4));
+                                  setWocPreset(null);
+                                } else {
+                                  setWocText(((form.woc_pct / 100) * dia).toFixed(4));
+                                }
+                              }}
+                            />
+                            <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{form.woc_pct ? `${form.woc_pct.toFixed(1)}%` : ""}</span>
+                          </div>
+                          <div className="flex gap-1 mt-1">
                             {(["low","med","high"] as const).map(k => (
                               <button key={k} type="button"
-                                onClick={() => setForm(p => ({ ...p, woc_pct: wp[k] }))}
-                                className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.woc_pct||0) - wp[k]) < 0.5 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
-                              >{k.charAt(0).toUpperCase() + k.slice(1)} {wp[k]}%</button>
+                                onClick={() => {
+                                  setForm(p => ({ ...p, woc_pct: wp[k] }));
+                                  setWocText(((wp[k] / 100) * dia).toFixed(4));
+                                  setWocPreset(k);
+                                }}
+                                className="flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight"
+                                style={{
+                                  background: wocPreset === k ? "#eab308" : "transparent",
+                                  borderColor: wocPreset === k ? "#eab308" : "rgba(255,255,255,0.25)",
+                                  color: wocPreset === k ? "#000" : "rgba(255,255,255,0.6)",
+                                }}
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} <span className="opacity-75">{wp[k]}%</span></button>
                             ))}
                           </div>
                         </div>
-                        {/* DOC — input in inches, stored as ×D */}
-                        <div className="space-y-1">
+                        {/* DOC — same as standard section */}
+                        <div className="flex-1 min-w-0 space-y-2">
                           <div className="flex items-center justify-between">
-                            <FieldLabel hint="Depth of cut in inches. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (in)</FieldLabel>
+                            <FieldLabel hint="Axial depth of cut — also known as Depth of Cut or Z-depth. Enter as a decimal inch value or with xD suffix (1.5xD = 1.5× tool diameter).">DOC <span className="font-normal text-zinc-500">(Axial)</span></FieldLabel>
                             <button type="button"
                               className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
-                              style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
-                              onClick={() => setForm(p => ({ ...p, doc_xd: dp.med }))}
+                              style={docPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                              onClick={() => {
+                                const locCap = form.loc > 0 ? form.loc / dia : 99;
+                                const isHem = spMode === "hem";
+                                const optXd = Math.min(locCap, Math.max(dp.low, isHem ? dp.high : dp.med));
+                                const optIn = optXd * dia;
+                                setForm(p => ({ ...p, doc_xd: optXd }));
+                                setDocText(optIn.toFixed(3));
+                                const match = (["low","med","high"] as const).find(k => Math.abs(dp[k] - optXd) < 0.05);
+                                setDocPreset(match ?? "optimal");
+                              }}
                             >Optimal</button>
                           </div>
-                          <Input type="number" step="0.01" className="no-spinners"
-                            placeholder={form.tool_dia > 0 ? (spMode === "hem" ? (dp.med * form.tool_dia).toFixed(3) : (dp.med * form.tool_dia).toFixed(3)) : "e.g. 0.500"}
-                            value={form.doc_xd > 0 && form.tool_dia > 0 ? (form.doc_xd * form.tool_dia).toFixed(3) : ""}
-                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 && form.tool_dia > 0 ? Math.round((n / form.tool_dia) * 1000) / 1000 : 0 })); }}
-                          />
-                          {form.doc_xd > 0 && <p className="text-[10px] text-zinc-500">{form.doc_xd.toFixed(2)}×D</p>}
-                          <div className="flex gap-1 mt-0.5">
+                          <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                            <input type="text" inputMode="decimal" placeholder="set after setup"
+                              className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                              value={docText}
+                              onChange={e => setDocText(e.target.value)}
+                              onBlur={() => {
+                                const n = parseFloat(docText);
+                                if (Number.isFinite(n) && n > 0) {
+                                  const clamped = form.loc > 0 ? Math.min(n, form.loc) : n;
+                                  const xd = clamped / dia;
+                                  setForm(p => ({ ...p, doc_xd: xd }));
+                                  setDocText(clamped.toFixed(3));
+                                  setDocPreset(null);
+                                } else {
+                                  setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
+                                }
+                              }}
+                            />
+                            <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                              {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
+                            </span>
+                          </div>
+                          <div className="flex gap-1 mt-1">
                             {(["low","med","high"] as const).map(k => (
                               <button key={k} type="button"
-                                onClick={() => setForm(p => ({ ...p, doc_xd: dp[k] }))}
-                                className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.doc_xd||0) - dp[k]) < 0.05 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
-                              >{k.charAt(0).toUpperCase() + k.slice(1)} {form.tool_dia > 0 ? (dp[k] * form.tool_dia).toFixed(3) + '"' : dp[k] + "×"}</button>
+                                onClick={() => {
+                                  const rawIn = dp[k] * dia;
+                                  const clampedIn = form.loc > 0 ? Math.min(rawIn, form.loc) : rawIn;
+                                  const clampedXd = Math.round((clampedIn / dia) * 1000) / 1000;
+                                  setForm(p => ({ ...p, doc_xd: clampedXd }));
+                                  setDocText(clampedIn.toFixed(3));
+                                  setDocPreset(clampedXd < dp[k] - 0.001 ? null : k);
+                                }}
+                                className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
+                                style={{
+                                  background: docPreset === k ? "#eab308" : "transparent",
+                                  borderColor: docPreset === k ? "#eab308" : "rgba(255,255,255,0.25)",
+                                  color: docPreset === k ? "#000" : "rgba(255,255,255,0.6)",
+                                }}
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} <span className="opacity-75">{dp[k]}xD</span></button>
                             ))}
                           </div>
                         </div>
