@@ -877,8 +877,8 @@ export default function Mentor() {
   <div class="section-label">Reconditioning Program</div>
   <div class="recon-box">
     <div>
-      <strong>Up to ${roiResult.reconGrinds} regrinds</strong> at 50% of new tool price
-      <div style="font-size:11px;color:#92400e;margin-top:2px">Extends tool lifecycle · slight LOC/diameter reduction per regrind</div>
+      <strong>Up to ${roiResult.reconGrinds} regrinds</strong> at ~50% of new tool price
+      <div style="font-size:11px;color:#92400e;margin-top:2px">Properly reground edge can exceed new tool performance · slight LOC/diameter reduction per regrind</div>
     </div>
     <div class="val">+$${fmtI(roiResult.reconSavingsPerPart * parseFloat(roiAnnualVol))}/yr</div>
   </div>` : ""}
@@ -11485,7 +11485,7 @@ ${stabSection}
                         })()}
                       </div>
                     ) : (
-                      <p className="text-[10px] text-zinc-600 pl-1">Up to 3-5 regrinds at approximately half the cost of a new tool</p>
+                      <p className="text-[10px] text-zinc-600 pl-1">Up to 3-5 regrinds at ~50% of new tool cost — a properly reground edge can exceed new tool performance</p>
                     )}
                   </div>
 
@@ -11800,7 +11800,7 @@ ${stabSection}
                       <div>
                         <span className="text-orange-300 font-semibold">Reconditioning program</span>
                         <span className="text-zinc-500 ml-1.5">({roiResult.reconGrinds} regrind{roiResult.reconGrinds > 1 ? "s" : ""})</span>
-                        <p className="text-zinc-500 text-[10px] mt-0.5">50% regrind price × {roiResult.reconGrinds} — same tool, extended lifecycle</p>
+                        <p className="text-zinc-500 text-[10px] mt-0.5">~50% of new tool price × {roiResult.reconGrinds} — properly reground edge can exceed new tool performance</p>
                       </div>
                       <span className="text-green-400 font-bold shrink-0 ml-3">
                         +${(roiResult.reconSavingsPerPart * parseFloat(roiAnnualVol)).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
