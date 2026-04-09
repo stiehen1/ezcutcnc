@@ -7688,27 +7688,28 @@ ${stabSection}
                             ))}
                           </div>
                         </div>
-                        {/* DOC */}
+                        {/* DOC — input in inches, stored as ×D */}
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <FieldLabel hint="Depth of cut in multiples of diameter. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
+                            <FieldLabel hint="Depth of cut in inches. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (in)</FieldLabel>
                             <button type="button"
                               className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
                               style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
                               onClick={() => setForm(p => ({ ...p, doc_xd: dp.med }))}
                             >Optimal</button>
                           </div>
-                          <Input type="number" step="0.1" className="no-spinners"
-                            placeholder={spMode === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
-                            value={form.doc_xd > 0 ? form.doc_xd : ""}
-                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
+                          <Input type="number" step="0.01" className="no-spinners"
+                            placeholder={form.tool_dia > 0 ? (spMode === "hem" ? (dp.med * form.tool_dia).toFixed(3) : (dp.med * form.tool_dia).toFixed(3)) : "e.g. 0.500"}
+                            value={form.doc_xd > 0 && form.tool_dia > 0 ? (form.doc_xd * form.tool_dia).toFixed(3) : ""}
+                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 && form.tool_dia > 0 ? Math.round((n / form.tool_dia) * 1000) / 1000 : 0 })); }}
                           />
+                          {form.doc_xd > 0 && <p className="text-[10px] text-zinc-500">{form.doc_xd.toFixed(2)}×D</p>}
                           <div className="flex gap-1 mt-0.5">
                             {(["low","med","high"] as const).map(k => (
                               <button key={k} type="button"
                                 onClick={() => setForm(p => ({ ...p, doc_xd: dp[k] }))}
                                 className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.doc_xd||0) - dp[k]) < 0.05 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
-                              >{k.charAt(0).toUpperCase() + k.slice(1)} {dp[k]}×</button>
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} {form.tool_dia > 0 ? (dp[k] * form.tool_dia).toFixed(3) + '"' : dp[k] + "×"}</button>
                             ))}
                           </div>
                         </div>
