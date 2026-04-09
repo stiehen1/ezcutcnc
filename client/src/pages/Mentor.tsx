@@ -11444,43 +11444,36 @@ ${stabSection}
                           </select>
                         </div>
                         {/* Row 2: Price per regrind */}
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">Price/Regrind:</span>
+                        {/* Price/regrind + tool life on same row */}
+                        <div className="flex items-center gap-4 flex-wrap">
                           <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-zinc-400 whitespace-nowrap">Price/Regrind:</span>
                             <span className="text-[10px] text-zinc-400">$</span>
                             <Input
                               type="number"
-                              className="no-spinners h-6 text-xs w-20"
+                              className="no-spinners h-6 text-xs w-16"
                               placeholder={parseFloat(roiCcPrice) > 0 ? `~${(parseFloat(roiCcPrice) * 0.5).toFixed(2)}` : "e.g. 22.50"}
                               value={roiReconPrice}
                               onChange={e => setRoiReconPrice(e.target.value)}
                             />
                           </div>
-                          {parseFloat(roiCcPrice) > 0 && !roiReconPrice && (
-                            <span className="text-[10px] text-zinc-500">defaults to 50% of new</span>
-                          )}
-                        </div>
-                        {/* Row 2: Tool life per regrind — same units as selected mode */}
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">
-                            {roiLifeMode === "parts" ? "Parts/Regrind:" : roiLifeMode === "cut_time" ? "Cut Time/Regrind:" : "Linear In/Regrind:"}
-                          </span>
                           <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-zinc-400 whitespace-nowrap">
+                              {roiLifeMode === "parts" ? "Parts/Regrind:" : roiLifeMode === "cut_time" ? "Cut Time/Regrind:" : "Linear In/Regrind:"}
+                            </span>
                             <Input
                               type="number"
-                              className="no-spinners h-6 text-xs w-20"
+                              className="no-spinners h-6 text-xs w-16"
                               placeholder={
                                 roiLifeMode === "parts"
-                                  ? (parseFloat(roiCcParts) > 0 ? `e.g. ${Math.round(parseFloat(roiCcParts) * 0.9)}` : "e.g. 450")
-                                  : roiLifeMode === "cut_time"
-                                  ? "e.g. mins"
-                                  : "e.g. in"
+                                  ? (parseFloat(roiCcParts) > 0 ? `${Math.round(parseFloat(roiCcParts) * 0.9)}` : "e.g. 450")
+                                  : roiLifeMode === "cut_time" ? "mins" : "in"
                               }
                               value={roiReconRetention}
                               onChange={e => setRoiReconRetention(e.target.value)}
                             />
                             <span className="text-[10px] text-zinc-400">
-                              {roiLifeMode === "parts" ? "parts" : roiLifeMode === "cut_time" ? "min" : "in"}
+                              {roiLifeMode === "parts" ? "pts" : roiLifeMode === "cut_time" ? "min" : "in"}
                             </span>
                           </div>
                         </div>
