@@ -10132,9 +10132,10 @@ ${stabSection}
                       </div>
                       {/* Explanation */}
                       <div className="text-xs text-zinc-300 leading-relaxed">{zoneDesc}</div>
-                      {/* Low-RPM / machine fit warning */}
-                      {customer.machine_max_rpm != null && customer.rpm != null && (() => {
-                        const rpmPct = (customer.rpm / customer.machine_max_rpm) * 100;
+                      {/* Low-RPM / machine fit warning — use form.max_rpm to avoid stale result from prior machine selection */}
+                      {form.max_rpm > 0 && customer.rpm != null && (() => {
+                        const machMaxRpm = form.max_rpm;
+                        const rpmPct = (customer.rpm / machMaxRpm) * 100;
                         if (rpmPct >= 20) return null;
                         const currentDia = customer.diameter ?? 1;
                         // Aluminum on high-RPM machines (Makino MAG, HSM) is intentional — 3/4"–1" 2-fl tools
@@ -10143,7 +10144,7 @@ ${stabSection}
                         // Also suppress for tools > 1.5" — large inserted/shell mills are always intentional
                         if (currentDia > 1.5) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
-                        const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
+                        const targetDia = (customer.sfm * 12) / (machMaxRpm * 0.75 * Math.PI);
 
                         if (targetDia >= 0.375 && targetDia < currentDia) {
                           // Case A: a meaningfully smaller standard tool would use the machine's speed range
@@ -10155,7 +10156,7 @@ ${stabSection}
                           return (
                             <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
                               <div><span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
-                              At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(customer.machine_max_rpm, 0)} RPM capability.
+                              At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(machMaxRpm, 0)} RPM capability.
                               {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.</div>
                               <div className="text-amber-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
                             </div>
@@ -10165,12 +10166,12 @@ ${stabSection}
                           // Always show both 1/4" and 3/8" RPM options so user can see the trade-off
                           const rpm375 = Math.round((customer.sfm * 12) / (0.375 * Math.PI));
                           const rpm250 = Math.round((customer.sfm * 12) / (0.250 * Math.PI));
-                          const pct375 = Math.round((rpm375 / customer.machine_max_rpm!) * 100);
-                          const pct250 = Math.round((rpm250 / customer.machine_max_rpm!) * 100);
+                          const pct375 = Math.round((rpm375 / machMaxRpm) * 100);
+                          const pct250 = Math.round((rpm250 / machMaxRpm) * 100);
                           return (
                             <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
                               <div><span className="font-semibold">This machine's high-RPM range is underutilized by this material.</span>{" "}
-                              {fmtNum(customer.sfm, 0)} SFM caps RPM at {fmtNum(customer.rpm, 0)} with this tool — only {fmtNum(rpmPct, 0)}% of {fmtNum(customer.machine_max_rpm, 0)} RPM max.
+                              {fmtNum(customer.sfm, 0)} SFM caps RPM at {fmtNum(customer.rpm, 0)} with this tool — only {fmtNum(rpmPct, 0)}% of {fmtNum(machMaxRpm, 0)} RPM max.
                               {" "}Smaller tools run faster in the same material:</div>
                               <div className="pl-2 space-y-0.5">
                                 <div>• <span className="font-medium">3/8"</span> → ~{fmtNum(rpm375, 0)} RPM ({pct375}% utilization)</div>
@@ -11062,10 +11063,11 @@ ${stabSection}
         const isHem   = form.mode === "hem" || form.mode === "trochoidal";
 
         // Suppress "increase diameter" suggestion when the torque card is already telling user to downsize
-        const _lowRpmTargetDia = customer?.machine_max_rpm && customer?.sfm
-          ? (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI) : 0;
-        const lowRpmWarningActive = customer?.machine_max_rpm != null && customer?.rpm != null
-          && (customer.rpm / customer.machine_max_rpm) * 100 < 20
+        const _formMaxRpm = form.max_rpm || 0;
+        const _lowRpmTargetDia = _formMaxRpm > 0 && customer?.sfm
+          ? (customer.sfm * 12) / (_formMaxRpm * 0.75 * Math.PI) : 0;
+        const lowRpmWarningActive = _formMaxRpm > 0 && customer?.rpm != null
+          && (customer.rpm / _formMaxRpm) * 100 < 20
           && _lowRpmTargetDia >= 0.375 && _lowRpmTargetDia < (customer.diameter ?? 1);
         const actionItems = stability.suggestions.filter((s: any) => s.type !== "info" && !(lowRpmWarningActive && s.type === "diameter"));
         const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
