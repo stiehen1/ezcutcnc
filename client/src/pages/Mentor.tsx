@@ -11458,15 +11458,15 @@ ${stabSection}
                         </div>
                         {/* Cost breakdown summary */}
                         {parseFloat(roiCcPrice) > 0 && (() => {
+                          const g = parseInt(roiReconGrinds) || 0;
+                          const priceEach = parseFloat(roiCcPrice);
+                          const regrindPrice = priceEach * 0.5;
+                          const totalCost = priceEach + g * regrindPrice;
                           let previewN = 0;
                           if (roiLifeMode === "parts") previewN = parseFloat(roiCcParts) || 0;
                           else if (roiLifeMode === "cut_time") { const ct = parseFloat(roiCcCutTime), tp = parseFloat(roiCcTime); previewN = ct > 0 && tp > 0 ? ct / tp : 0; }
                           else { const li = parseFloat(roiCcLinIn), lp = parseFloat(roiLinInPerPart); previewN = li > 0 && lp > 0 ? li / lp : 0; }
-                          if (previewN <= 0) return null;
-                          const g = parseInt(roiReconGrinds) || 0;
                           const r = Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100;
-                          const priceEach = parseFloat(roiCcPrice);
-                          const regrindPrice = priceEach * 0.5;
                           let totalParts = previewN;
                           const cycles: number[] = [Math.round(previewN)];
                           for (let i = 1; i <= g; i++) {
@@ -11474,27 +11474,28 @@ ${stabSection}
                             totalParts += cycleN;
                             cycles.push(Math.round(cycleN));
                           }
-                          const totalCost = priceEach + g * regrindPrice;
-                          const effCost = totalCost / totalParts;
+                          const effCost = totalParts > 0 ? totalCost / totalParts : null;
                           return (
                             <div className="rounded bg-zinc-800/50 border border-zinc-700/50 px-3 py-2 space-y-1.5 text-[10px]">
-                              {/* Lifecycle chain */}
+                              {/* Cost chain — always shown when price is set */}
                               <div className="flex gap-1.5 flex-wrap items-center">
-                                {cycles.map((n, i) => (
+                                {[...Array(g + 1)].map((_, i) => (
                                   <React.Fragment key={i}>
                                     <div className="text-center">
                                       <div className={i === 0 ? "text-zinc-300 font-semibold" : "text-zinc-400"}>{i === 0 ? "New" : `R${i}`}</div>
-                                      <div className={i === 0 ? "text-white font-bold" : "text-zinc-300"}>{n} pts</div>
-                                      <div className={i === 0 ? "text-orange-400" : "text-zinc-500"}>${i === 0 ? priceEach.toFixed(2) : regrindPrice.toFixed(2)}</div>
+                                      {previewN > 0 && <div className={i === 0 ? "text-white font-bold" : "text-zinc-300"}>{cycles[i] ?? 0} pts</div>}
+                                      <div className={i === 0 ? "text-orange-400 font-semibold" : "text-orange-300"}>${i === 0 ? priceEach.toFixed(2) : regrindPrice.toFixed(2)}</div>
                                     </div>
-                                    {i < cycles.length - 1 && <span className="text-zinc-600 mt-1">→</span>}
+                                    {i < g && <span className="text-zinc-600 mt-1">→</span>}
                                   </React.Fragment>
                                 ))}
                               </div>
                               {/* Totals */}
                               <div className="border-t border-zinc-700/50 pt-1.5 flex justify-between items-center">
-                                <span className="text-zinc-400">{Math.round(totalParts)} total parts · ${totalCost.toFixed(2)} total tool cost</span>
-                                <span className="text-green-400 font-bold">${effCost.toFixed(4)}/part</span>
+                                <span className="text-zinc-400">
+                                  {previewN > 0 ? `${Math.round(totalParts)} total parts · ` : ""}${totalCost.toFixed(2)} total tool cost
+                                </span>
+                                {effCost !== null && <span className="text-green-400 font-bold">${effCost.toFixed(4)}/part</span>}
                               </div>
                             </div>
                           );
