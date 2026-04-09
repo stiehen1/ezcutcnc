@@ -815,7 +815,7 @@ function RegrindingTab() {
               <div className="rounded-xl bg-orange-500/10 border border-orange-500/30 p-4 text-center">
                 <p className="text-3xl font-black text-orange-400">~50%</p>
                 <p className="text-sm text-zinc-200 font-semibold mt-1">of new tool cost</p>
-                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — with performance to match.</p>
+                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — a properly reground edge can exceed new tool performance.</p>
               </div>
 
               {/* Customer feedback stat */}
@@ -897,6 +897,22 @@ function RegrindingTab() {
                     <span className="text-orange-400 shrink-0">·</span>{note}
                   </p>
                 ))}
+              </div>
+
+              {/* Brochure download */}
+              <a
+                href="/Reconditioning Brochure (260214).pdf"
+                download
+                className="flex items-center justify-center gap-2 w-full text-center border border-orange-500/50 text-orange-400 hover:text-orange-300 hover:border-orange-400 font-semibold text-sm rounded-xl py-2.5 transition-colors"
+              >
+                ⬇ Download Reconditioning Brochure (PDF)
+              </a>
+
+              {/* Ship to address */}
+              <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-4 py-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Ship Tools To</p>
+                <p className="text-xs text-zinc-200 font-semibold">Core Cutter LLC</p>
+                <p className="text-[11px] text-zinc-400">120 Technology Dr · Gardiner, ME 04345</p>
               </div>
 
               {/* CTA */}
