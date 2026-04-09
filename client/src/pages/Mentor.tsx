@@ -7644,19 +7644,19 @@ ${stabSection}
                   <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <FieldLabel hint="Depth of cut in multiples of diameter (e.g. 1.5 = 1.5×D). For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
-                      <Input type="number" step="0.1" className="no-spinners"
-                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
-                        value={form.doc_xd > 0 ? form.doc_xd : ""}
-                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <FieldLabel hint="Width of cut as % of tool diameter (e.g. 10 = 10% WOC). For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
+                      <FieldLabel hint="Width of cut as % of tool diameter. For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
                       <Input type="number" step="1" className="no-spinners"
                         placeholder={form.dp_cutting_style === "hem" ? "e.g. 10" : "e.g. 50"}
                         value={form.woc_pct > 0 ? form.woc_pct : ""}
                         onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <FieldLabel hint="Depth of cut in multiples of diameter. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
+                      <Input type="number" step="0.1" className="no-spinners"
+                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
+                        value={form.doc_xd > 0 ? form.doc_xd : ""}
+                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
                       />
                     </div>
                   </div>
@@ -7669,7 +7669,7 @@ ${stabSection}
                 <div className="flex gap-2">
                   {([["hem", "HEM / Adaptive"], ["traditional", "Traditional"]] as const).map(([val, label]) => (
                     <button key={val} type="button"
-                      onClick={() => setForm(p => ({ ...p, dp_cutting_style: val }))}
+                      onClick={() => setForm(p => ({ ...p, dp_cutting_style: val, woc_pct: 0, doc_xd: 0 }))}
                       className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
                       style={{ backgroundColor: form.dp_cutting_style === val ? "#6366f1" : "transparent", borderColor: form.dp_cutting_style === val ? "#6366f1" : "#52525b", color: "#fff" }}>
                       {label}
