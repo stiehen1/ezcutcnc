@@ -7642,24 +7642,63 @@ ${stabSection}
               {dpSpecialTool && pdfExtracted && (
                 <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-3 space-y-3">
                   <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <FieldLabel hint="Width of cut as % of tool diameter. For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
-                      <Input type="number" step="1" className="no-spinners"
-                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 10" : "e.g. 50"}
-                        value={form.woc_pct > 0 ? form.woc_pct : ""}
-                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <FieldLabel hint="Depth of cut in multiples of diameter. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
-                      <Input type="number" step="0.1" className="no-spinners"
-                        placeholder={form.dp_cutting_style === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
-                        value={form.doc_xd > 0 ? form.doc_xd : ""}
-                        onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
-                      />
-                    </div>
-                  </div>
+                  {(() => {
+                    const spMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
+                    const wp = WOC_PRESETS[spMode];
+                    const dp = DOC_PRESETS[spMode];
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* WOC */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <FieldLabel hint="Width of cut as % of tool diameter. For HEM: 8–15%. For traditional: 40–65%.">WOC (%)</FieldLabel>
+                            <button type="button"
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                              style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                              onClick={() => setForm(p => ({ ...p, woc_pct: wp.med }))}
+                            >Optimal</button>
+                          </div>
+                          <Input type="number" step="1" className="no-spinners"
+                            placeholder={spMode === "hem" ? "e.g. 10" : "e.g. 50"}
+                            value={form.woc_pct > 0 ? form.woc_pct : ""}
+                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, woc_pct: n > 0 ? n : 0 })); }}
+                          />
+                          <div className="flex gap-1 mt-0.5">
+                            {(["low","med","high"] as const).map(k => (
+                              <button key={k} type="button"
+                                onClick={() => setForm(p => ({ ...p, woc_pct: wp[k] }))}
+                                className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.woc_pct||0) - wp[k]) < 0.5 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} {wp[k]}%</button>
+                            ))}
+                          </div>
+                        </div>
+                        {/* DOC */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <FieldLabel hint="Depth of cut in multiples of diameter. For HEM: 1.0–3.0×D. For traditional: 0.25–1.0×D.">DOC (×D)</FieldLabel>
+                            <button type="button"
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                              style={{ borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                              onClick={() => setForm(p => ({ ...p, doc_xd: dp.med }))}
+                            >Optimal</button>
+                          </div>
+                          <Input type="number" step="0.1" className="no-spinners"
+                            placeholder={spMode === "hem" ? "e.g. 1.5" : "e.g. 0.5"}
+                            value={form.doc_xd > 0 ? form.doc_xd : ""}
+                            onChange={e => { const n = parseFloat(e.target.value); setForm(p => ({ ...p, doc_xd: n > 0 ? n : 0 })); }}
+                          />
+                          <div className="flex gap-1 mt-0.5">
+                            {(["low","med","high"] as const).map(k => (
+                              <button key={k} type="button"
+                                onClick={() => setForm(p => ({ ...p, doc_xd: dp[k] }))}
+                                className={`flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight ${Math.abs((form.doc_xd||0) - dp[k]) < 0.05 ? "border-sky-400 bg-sky-400/20 text-sky-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
+                              >{k.charAt(0).toUpperCase() + k.slice(1)} {dp[k]}×</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
