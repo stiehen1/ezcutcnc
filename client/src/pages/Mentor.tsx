@@ -10132,19 +10132,22 @@ ${stabSection}
                         if (rpmPct >= 20) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
                         const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
-                        // Only show warning if the suggested tool is meaningfully smaller AND still practical (>= 1/4")
+                        // Only show if suggested tool is meaningfully smaller AND >= 3/8"
                         if (targetDia < 0.375 || targetDia >= (customer.diameter ?? 1)) return null;
-                        // Snap to nearest common tool size (inches)
+                        // Snap to nearest standard size >= 3/8"
                         const commonSizes = [0.375, 0.500, 0.625, 0.750, 1.000, 1.250, 1.500];
                         const snapped = commonSizes.reduce((prev, cur) => Math.abs(cur - targetDia) < Math.abs(prev - targetDia) ? cur : prev);
-                        const fracMap: Record<number, string> = { 0.0625: '1/16"', 0.125: '1/8"', 0.1875: '3/16"', 0.250: '1/4"', 0.3125: '5/16"', 0.375: '3/8"', 0.500: '1/2"', 0.625: '5/8"', 0.750: '3/4"', 1.000: '1"', 1.250: '1-1/4"', 1.500: '1-1/2"' };
+                        const fracMap: Record<number, string> = { 0.375: '3/8"', 0.500: '1/2"', 0.625: '5/8"', 0.750: '3/4"', 1.000: '1"', 1.250: '1-1/4"', 1.500: '1-1/2"' };
                         const diaLabel = fracMap[snapped] ?? `${snapped.toFixed(3)}"`;
                         const targetRpm = Math.round((customer.sfm * 12) / (snapped * Math.PI));
+                        // Check if geometry also suits QTR3 range (feature / pocket work at this machine's RPM)
+                        const qtr3Range = targetDia < 0.375;
                         return (
-                          <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug">
-                            <span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
+                          <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
+                            <div><span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
                             At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(customer.machine_max_rpm, 0)} RPM capability.
-                            {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.
+                            {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.</div>
+                            <div className="text-amber-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
                           </div>
                         );
                       })()}
