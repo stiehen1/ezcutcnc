@@ -815,7 +815,7 @@ function RegrindingTab() {
               <div className="rounded-xl bg-orange-500/10 border border-orange-500/30 p-4 text-center">
                 <p className="text-3xl font-black text-orange-400">~50%</p>
                 <p className="text-sm text-zinc-200 font-semibold mt-1">of new tool cost</p>
-                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — with performance to match.</p>
+                <p className="text-[11px] text-zinc-400 mt-1">Reconditioned tools typically cost half the price of new — a properly reground tool from us has been known to even exceed new tool performance.</p>
               </div>
 
               {/* Customer feedback stat */}
@@ -826,14 +826,28 @@ function RegrindingTab() {
               </div>
 
               {/* What we recondition */}
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">Any Brand · Any of These Tool Types</p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {["Corner Rounders","Dovetail Cutters","Drills","End Mills","Feed Mills","Form Tools","Key Seat Cutters","Lollipop Cutters","Radius Cutters","Reamers","Step Drills","Tapered Endmills"].map(t => (
-                    <p key={t} className="text-[11px] text-zinc-300 flex items-center gap-1.5">
-                      <span className="text-orange-400">›</span>{t}
-                    </p>
-                  ))}
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-orange-400 mb-1">Any Brand — Standard Geometry</p>
+                  <p className="text-[11px] text-zinc-500 mb-2">No print required — we regrind to our engineered spec.</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {["End Mills","Chamfer Mills"].map(t => (
+                      <p key={t} className="text-[11px] text-zinc-300 flex items-center gap-1.5">
+                        <span className="text-orange-400">›</span>{t}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-orange-400 mb-1">Any Brand — Special / Form Geometry</p>
+                  <p className="text-[11px] text-zinc-500 mb-2">Original build print required for competitor brands.</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {["Drills","Reamers","Corner Rounders","Radius Cutters","Tapered Endmills","Feed Mills","Form Tools","Key Seat Cutters","Lollipop Cutters","Dovetail Cutters","Step Drills"].map(t => (
+                      <p key={t} className="text-[11px] text-zinc-300 flex items-center gap-1.5">
+                        <span className="text-orange-400">›</span>{t}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -897,6 +911,22 @@ function RegrindingTab() {
                     <span className="text-orange-400 shrink-0">·</span>{note}
                   </p>
                 ))}
+              </div>
+
+              {/* Brochure download */}
+              <a
+                href="/Reconditioning Brochure (260214).pdf"
+                download
+                className="flex items-center justify-center gap-2 w-full text-center border border-orange-500/50 text-orange-400 hover:text-orange-300 hover:border-orange-400 font-semibold text-sm rounded-xl py-2.5 transition-colors"
+              >
+                ⬇ Download Reconditioning Brochure (PDF)
+              </a>
+
+              {/* Ship to address */}
+              <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-4 py-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Ship Tools To</p>
+                <p className="text-xs text-zinc-200 font-semibold">Core Cutter LLC</p>
+                <p className="text-[11px] text-zinc-400">120 Technology Dr · Gardiner, ME 04345</p>
               </div>
 
               {/* CTA */}

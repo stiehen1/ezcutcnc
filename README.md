@@ -6,6 +6,39 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ---
 
+## Recent Updates (April 2026)
+
+### Torque Zone Card
+- **Spindle HP/torque database audit** — corrected ~80+ machines where peak/S6 ratings were stored as continuous (S1). Affected machines: all 51 Haas mills (21 HP → 30 HP corrected), Fanuc Robodrill MiB5 series, Brother Speedio, Yasda, Grob G750, Heller MCH 350/400, B+W MCX, DMG Mori NTX mill-turn series, and all 218.8 ft-lb placeholder values on machining centers.
+- **Two-segment torque model** — flat constant-torque zone below `peak_torque_rpm`, hyperbolic falloff above. `base_torque_ftlb` sanity-checked against expected value at rated RPM.
+- **`machine_max_rpm` and `machine_peak_torque_rpm`** added to response schema and passed through to UI.
+- **Torque curve confidence footnote** — shown only for `high` and `medium` confidence; hidden for `low`.
+
+### Low-RPM Machine Fit Warning (Torque Card)
+Fires when the recommended RPM is < 20% of the machine's max RPM, tool ≤ 1.5", and material is not aluminum.
+
+- **Case A** (targetDia ≥ 3/8"): suggests a specific smaller standard tool size with RPM and utilization % at that size.
+- **Case B** (targetDia < 3/8", SFM ceiling constraint): shows both 3/8" and 1/4" RPM and utilization % so the user can see the trade-off. Explains the machine's sweet spot is higher-SFM materials.
+- Aluminum suppressed — high-RPM machines (Makino MAG, etc.) running 3/4"–1" 2-flute aluminum tools are intentional.
+- Tools > 1.5" suppressed — large inserted/shell mills are always intentional.
+- **Stability advisor diameter suggestion suppressed** when Case A low-RPM warning is active, to avoid conflicting advice ("downsize" vs "increase diameter").
+
+### High-RPM Balance Advisory (Torque Card)
+- Fires at **≥ 10,000 RPM** — shown in blue (informational).
+- Standard language (10k–17,999 RPM): G2.5 balanced toolholders required, confirm assembled tool+holder meets G2.5 at this RPM.
+- Escalated language (≥ 18,000 RPM): both holder and tool must be balanced together after final assembly.
+- Notes Weldon flat holders are asymmetric by design and should be avoided above 10,000 RPM.
+
+### Stale Results Notification
+- **Floating yellow pill** (fixed bottom-center, z-50) appears when form inputs change after a calculation. Shows "Inputs changed" with a Re-run button. Disappears while a calculation is pending.
+
+### Reconditioning / ROI Tab
+- Regrind messaging updated: "~50% of new tool price — a properly reground edge can **exceed** new tool performance" (not just match).
+- **Download Brochure** link added inline — serves `Reconditioning Brochure (260214).pdf` from `client/public/`.
+- **Shipping address** shown below the reconditioning section: Core Cutter LLC · 120 Technology Dr · Gardiner, ME 04345.
+
+---
+
 ## Table of Contents
 
 1. [Tech Stack](#tech-stack)

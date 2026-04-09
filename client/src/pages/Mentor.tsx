@@ -527,8 +527,13 @@ export default function Mentor() {
     if (missing.length > 0) return;
     // Reconditioning: lifecycle units compound same as parts (substitute minutes or inches)
     const grinds = roiReconEnabled ? Math.max(0, Math.min(5, parseInt(roiReconGrinds) || 0)) : 0;
-    const retention = roiReconEnabled ? Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100 : 1;
-    const reconLifecycleCost = ccP * (1 + grinds * 0.5);
+    // roiReconRetention is now in native units (parts/min/in) — derive ratio from base life
+    const reconNativeLife = parseFloat(roiReconRetention) || 0;
+    const retention = roiReconEnabled && reconNativeLife > 0 && ccN > 0
+      ? Math.max(0.5, Math.min(1.0, reconNativeLife / ccN))
+      : roiReconEnabled ? 0.90 : 1;
+    const regrindUnitPrice = parseFloat(roiReconPrice) > 0 ? parseFloat(roiReconPrice) : ccP * 0.5;
+    const reconLifecycleCost = ccP + grinds * regrindUnitPrice;
     let reconLifecycleUnits = ccN;
     for (let i = 1; i <= grinds; i++) reconLifecycleUnits += ccN * Math.pow(retention, i);
     // Cost per native unit ($/part | $/min | $/inch)
@@ -873,7 +878,7 @@ export default function Mentor() {
     </thead>
     <tbody>
       ${(parseFloat(roiCcMrr) > 0 || parseFloat(roiCompMrr) > 0) ? `<tr class="mrr-row"><td>Material Removal Rate</td><td class="cc-val">${parseFloat(roiCcMrr) > 0 ? parseFloat(roiCcMrr).toFixed(3) + " in³/min" : "—"}</td><td class="comp-val">${parseFloat(roiCompMrr) > 0 ? parseFloat(roiCompMrr).toFixed(3) + " in³/min" : "—"}</td></tr>` : ""}
-      <tr><td>Tool Price</td><td class="cc-val">$${fmtD(parseFloat(roiCcPrice))}${roiReconEnabled ? `<br><span style="font-size:10px;font-weight:400">${roiReconGrinds} regrinds @ $${fmtD(parseFloat(roiCcPrice)*0.5)}</span>` : ""}</td><td class="comp-val">$${fmtD(parseFloat(roiCompPrice))}</td></tr>
+      <tr><td>Tool Price</td><td class="cc-val">$${fmtD(parseFloat(roiCcPrice))}${roiReconEnabled ? `<br><span style="font-size:10px;font-weight:400">${roiReconGrinds} regrinds @ $${fmtD(parseFloat(roiReconPrice) > 0 ? parseFloat(roiReconPrice) : parseFloat(roiCcPrice)*0.5)}/regrind</span>` : ""}</td><td class="comp-val">$${fmtD(parseFloat(roiCompPrice))}</td></tr>
       <tr><td>${roiLifeMode === "cut_time" ? "Cut Time per Tool (min)" : roiLifeMode === "linear_in" ? "Linear Inches per Tool" : `Parts per Tool${roiReconEnabled ? " (lifecycle)" : ""}`}</td><td class="cc-val">${roiLifeMode === "cut_time" ? roiCcCutTime : roiLifeMode === "linear_in" ? roiCcLinIn : roiReconEnabled ? Math.round((() => { const g = parseInt(roiReconGrinds)||0; const r = (parseFloat(roiReconRetention)||90)/100; let t = parseFloat(roiCcParts); for(let i=1;i<=g;i++) t+=parseFloat(roiCcParts)*Math.pow(r,i); return t; })()) : roiCcParts}</td><td class="comp-val">${roiLifeMode === "cut_time" ? roiCompCutTime : roiLifeMode === "linear_in" ? roiCompLinIn : roiCompParts}</td></tr>
       <tr><td>${roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccToolCost)}</td><td class="comp-val">$${fmtC(roiResult.compToolCost)}</td></tr>
       <tr class="total-row"><td>${roiLifeMode === "cut_time" ? "Total Cost / Min" : roiLifeMode === "linear_in" ? "Total Cost / Inch" : "Total Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccTotalCost)}</td><td class="comp-val">$${fmtC(roiResult.compTotalCost)}</td></tr>
@@ -1917,7 +1922,8 @@ export default function Mentor() {
   const [roiMatVolPerPart, setRoiMatVolPerPart] = React.useState(""); // in³/part — optional MRR→time savings
   const [roiReconEnabled, setRoiReconEnabled] = React.useState(false);
   const [roiReconGrinds, setRoiReconGrinds] = React.useState("3");
-  const [roiReconRetention, setRoiReconRetention] = React.useState("90"); // % tool life retained per regrind
+  const [roiReconRetention, setRoiReconRetention] = React.useState(""); // tool life per regrind in native units (parts/min/in)
+  const [roiReconPrice, setRoiReconPrice] = React.useState(""); // price per regrind (entered by rep — varies by condition)
   const [roiMissingFields, setRoiMissingFields] = React.useState<string[]>([]);
   const [roiName, setRoiName] = React.useState("");
   const [roiSessionId, setRoiSessionId] = React.useState(() => crypto.randomUUID());
@@ -11434,12 +11440,12 @@ ${stabSection}
                         className="accent-orange-500 w-3.5 h-3.5"
                       />
                       <span className="text-xs text-zinc-300 font-semibold">Reconditioning Program Option</span>
-                      <a href="/Reconditioning Brochure (260214).pdf" download className="ml-auto text-[10px] text-orange-400 hover:text-orange-300 underline underline-offset-2 whitespace-nowrap">Download Brochure</a>
                     </label>
                     {roiReconEnabled ? (
-                      <div className="space-y-1.5 pl-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap">Regrinds:</span>
+                      <div className="space-y-2 pl-1">
+                        {/* Row 1: Regrinds count */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap w-28">Number of Regrinds:</span>
                           <select
                             value={roiReconGrinds}
                             onChange={e => setRoiReconGrinds(e.target.value)}
@@ -11447,59 +11453,93 @@ ${stabSection}
                           >
                             {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
                           </select>
-                          {parseFloat(roiCcPrice) > 0 && (
-                            <span className="text-[10px] text-orange-400 whitespace-nowrap">× ${(parseFloat(roiCcPrice) * 0.5).toFixed(2)}/regrind</span>
-                          )}
-                          <span className="text-[10px] text-zinc-400 whitespace-nowrap ml-auto">Tool life/regrind:</span>
+                        </div>
+                        {/* Row 2: Price per regrind */}
+                        {/* Price/regrind + tool life on same row */}
+                        <div className="flex items-center gap-6 flex-wrap">
                           <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-zinc-400 whitespace-nowrap">Price/Regrind:</span>
+                            <span className="text-[10px] text-zinc-400">$</span>
                             <Input
                               type="number"
-                              className="no-spinners h-6 text-xs w-14"
+                              className="no-spinners h-6 text-xs w-16"
+                              placeholder={parseFloat(roiCcPrice) > 0 ? `~${(parseFloat(roiCcPrice) * 0.5).toFixed(2)}` : "e.g. 22.50"}
+                              value={roiReconPrice}
+                              onChange={e => setRoiReconPrice(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-zinc-400 whitespace-nowrap">
+                              {roiLifeMode === "parts" ? "Parts/Regrind:" : roiLifeMode === "cut_time" ? "Cut Time/Regrind:" : "Linear In/Regrind:"}
+                            </span>
+                            <Input
+                              type="number"
+                              className="no-spinners h-6 text-xs w-16"
+                              placeholder={
+                                roiLifeMode === "parts"
+                                  ? (parseFloat(roiCcParts) > 0 ? `${Math.round(parseFloat(roiCcParts) * 0.9)}` : "e.g. 450")
+                                  : roiLifeMode === "cut_time" ? "mins" : "in"
+                              }
                               value={roiReconRetention}
                               onChange={e => setRoiReconRetention(e.target.value)}
                             />
-                            <span className="text-[10px] text-zinc-400">%</span>
+                            <span className="text-[10px] text-zinc-400">
+                              {roiLifeMode === "parts" ? "pts" : roiLifeMode === "cut_time" ? "min" : "in"}
+                            </span>
                           </div>
                         </div>
+                        {/* Cost breakdown summary */}
                         {parseFloat(roiCcPrice) > 0 && (() => {
+                          const g = parseInt(roiReconGrinds) || 0;
+                          const priceEach = parseFloat(roiCcPrice);
+                          const regrindPrice = parseFloat(roiReconPrice) > 0 ? parseFloat(roiReconPrice) : priceEach * 0.5;
+                          const totalCost = priceEach + g * regrindPrice;
                           let previewN = 0;
                           if (roiLifeMode === "parts") previewN = parseFloat(roiCcParts) || 0;
                           else if (roiLifeMode === "cut_time") { const ct = parseFloat(roiCcCutTime), tp = parseFloat(roiCcTime); previewN = ct > 0 && tp > 0 ? ct / tp : 0; }
                           else { const li = parseFloat(roiCcLinIn), lp = parseFloat(roiLinInPerPart); previewN = li > 0 && lp > 0 ? li / lp : 0; }
-                          if (previewN <= 0) return null;
-                          const g = parseInt(roiReconGrinds) || 0;
-                          const r = Math.max(50, Math.min(100, parseFloat(roiReconRetention) || 90)) / 100;
-                          const baseN = previewN;
-                          let totalParts = baseN;
-                          const cycles: number[] = [Math.round(baseN)];
+                          // roiReconRetention is now in native units (parts/min/in) — derive retention ratio from base life
+                          const reconNative = parseFloat(roiReconRetention) || 0;
+                          const r = previewN > 0 && reconNative > 0
+                            ? Math.max(0.5, Math.min(1.0, reconNative / previewN))
+                            : 0.90;
+                          let totalParts = previewN;
+                          const cycles: number[] = [Math.round(previewN)];
                           for (let i = 1; i <= g; i++) {
-                            const cycleN = baseN * Math.pow(r, i);
+                            const cycleN = previewN * Math.pow(r, i);
                             totalParts += cycleN;
                             cycles.push(Math.round(cycleN));
                           }
-                          const totalCost = parseFloat(roiCcPrice) * (1 + g * 0.5);
-                          const effCost = totalCost / totalParts;
+                          const effCost = totalParts > 0 ? totalCost / totalParts : null;
                           return (
-                            <div className="text-[10px] text-zinc-500 space-y-0.5">
-                              <div className="flex gap-1 flex-wrap">
-                                {cycles.map((n, i) => (
-                                  <span key={i} className={i === 0 ? "text-zinc-400" : "text-zinc-500"}>
-                                    {i === 0 ? "New" : `R${i}`}: {n}pts{i < cycles.length - 1 ? " →" : ""}
-                                  </span>
+                            <div className="rounded bg-zinc-800/50 border border-zinc-700/50 px-3 py-2 space-y-1.5 text-[10px]">
+                              {/* Cost chain — always shown when price is set */}
+                              <div className="flex gap-1.5 flex-wrap items-center">
+                                {[...Array(g + 1)].map((_, i) => (
+                                  <React.Fragment key={i}>
+                                    <div className="text-center">
+                                      <div className={i === 0 ? "text-zinc-300 font-semibold" : "text-zinc-400"}>{i === 0 ? "New" : `R${i}`}</div>
+                                      {previewN > 0 && <div className={i === 0 ? "text-white font-bold" : "text-zinc-300"}>{cycles[i] ?? 0} pts</div>}
+                                      <div className={i === 0 ? "text-orange-400 font-semibold" : "text-orange-300"}>${i === 0 ? priceEach.toFixed(2) : regrindPrice.toFixed(2)}</div>
+                                    </div>
+                                    {i < g && <span className="text-zinc-600 mt-1">→</span>}
+                                  </React.Fragment>
                                 ))}
                               </div>
-                              <p>
-                                <span className="text-zinc-400">{Math.round(totalParts)} total parts, ${totalCost.toFixed(2)} total cost → </span>
-                                <span className="text-green-400 font-semibold">${effCost.toFixed(4)}/part effective</span>
-                              </p>
+                              {/* Totals */}
+                              <div className="border-t border-zinc-700/50 pt-1.5 flex justify-between items-center">
+                                <span className="text-zinc-400">
+                                  {previewN > 0 ? `${Math.round(totalParts)} total parts · ` : ""}${totalCost.toFixed(2)} total tool cost
+                                </span>
+                                {effCost !== null && <span className="text-green-400 font-bold">${effCost.toFixed(4)}/part</span>}
+                              </div>
                             </div>
                           );
                         })()}
                       </div>
                     ) : (
-                      <p className="text-[10px] text-zinc-600 pl-1">Up to 3-5 regrinds at ~50% of new tool cost — a properly reground edge can exceed new tool performance</p>
+                      <p className="text-[10px] text-zinc-600 pl-1">Up to 3-5 regrinds at ~50% of new tool cost — a properly reground tool from us has been known to even exceed new tool performance</p>
                     )}
-                    <p className="text-[10px] text-zinc-500 pt-0.5">Ship tools to: <span className="text-zinc-400">Core Cutter LLC · 120 Technology Dr · Gardiner, ME 04345</span></p>
                   </div>
 
                   {/* Additional Savings — CC side (tools eliminated, scrap savings, etc.) */}
@@ -11813,7 +11853,7 @@ ${stabSection}
                       <div>
                         <span className="text-orange-300 font-semibold">Reconditioning program</span>
                         <span className="text-zinc-500 ml-1.5">({roiResult.reconGrinds} regrind{roiResult.reconGrinds > 1 ? "s" : ""})</span>
-                        <p className="text-zinc-500 text-[10px] mt-0.5">~50% of new tool price × {roiResult.reconGrinds} — properly reground edge can exceed new tool performance</p>
+                        <p className="text-zinc-500 text-[10px] mt-0.5">${parseFloat(roiReconPrice) > 0 ? parseFloat(roiReconPrice).toFixed(2) : (parseFloat(roiCcPrice)*0.5).toFixed(2)}/regrind × {roiResult.reconGrinds} — a properly reground tool from us has been known to even exceed new tool performance</p>
                       </div>
                       <span className="text-green-400 font-bold shrink-0 ml-3">
                         +${(roiResult.reconSavingsPerPart * parseFloat(roiAnnualVol)).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
