@@ -10132,24 +10132,41 @@ ${stabSection}
                         if (rpmPct >= 20) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
                         const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
-                        // Only show if suggested tool is meaningfully smaller AND >= 3/8"
-                        if (targetDia < 0.375 || targetDia >= (customer.diameter ?? 1)) return null;
-                        // Snap to nearest standard size >= 3/8"
-                        const commonSizes = [0.375, 0.500, 0.625, 0.750, 1.000, 1.250, 1.500];
-                        const snapped = commonSizes.reduce((prev, cur) => Math.abs(cur - targetDia) < Math.abs(prev - targetDia) ? cur : prev);
-                        const fracMap: Record<number, string> = { 0.375: '3/8"', 0.500: '1/2"', 0.625: '5/8"', 0.750: '3/4"', 1.000: '1"', 1.250: '1-1/4"', 1.500: '1-1/2"' };
-                        const diaLabel = fracMap[snapped] ?? `${snapped.toFixed(3)}"`;
-                        const targetRpm = Math.round((customer.sfm * 12) / (snapped * Math.PI));
-                        // Check if geometry also suits QTR3 range (feature / pocket work at this machine's RPM)
-                        const qtr3Range = targetDia < 0.375;
-                        return (
-                          <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
-                            <div><span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
-                            At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(customer.machine_max_rpm, 0)} RPM capability.
-                            {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.</div>
-                            <div className="text-amber-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
-                          </div>
-                        );
+                        const currentDia = customer.diameter ?? 1;
+
+                        if (targetDia >= 0.375 && targetDia < currentDia) {
+                          // Case A: a meaningfully smaller standard tool would use the machine's speed range
+                          const commonSizes = [0.375, 0.500, 0.625, 0.750, 1.000, 1.250, 1.500];
+                          const snapped = commonSizes.reduce((prev, cur) => Math.abs(cur - targetDia) < Math.abs(prev - targetDia) ? cur : prev);
+                          const fracMap: Record<number, string> = { 0.375: '3/8"', 0.500: '1/2"', 0.625: '5/8"', 0.750: '3/4"', 1.000: '1"', 1.250: '1-1/4"', 1.500: '1-1/2"' };
+                          const diaLabel = fracMap[snapped] ?? `${snapped.toFixed(3)}"`;
+                          const targetRpm = Math.round((customer.sfm * 12) / (snapped * Math.PI));
+                          return (
+                            <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
+                              <div><span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
+                              At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(customer.machine_max_rpm, 0)} RPM capability.
+                              {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.</div>
+                              <div className="text-amber-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
+                            </div>
+                          );
+                        } else if (targetDia < 0.375) {
+                          // Case B: material SFM ceiling means even a tiny tool won't reach this machine's sweet spot
+                          // Still recommend the smallest practical size (3/8" or 1/4") to maximize RPM utilization
+                          const currentDia2 = customer.diameter ?? 1;
+                          const practicalMin = currentDia2 <= 0.375 ? 0.250 : 0.375;
+                          const practicalLabel = practicalMin === 0.375 ? '3/8"' : '1/4"';
+                          const practicalRpm = Math.round((customer.sfm * 12) / (practicalMin * Math.PI));
+                          const practicalPct = Math.round((practicalRpm / customer.machine_max_rpm!) * 100);
+                          return (
+                            <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
+                              <div><span className="font-semibold">This machine's high-RPM range is underutilized by this material.</span>{" "}
+                              {fmtNum(customer.sfm, 0)} SFM in this material caps RPM at {fmtNum(customer.rpm, 0)} — only {fmtNum(rpmPct, 0)}% of {fmtNum(customer.machine_max_rpm, 0)} RPM max.
+                              {" "}To maximize throughput, drop to a {practicalLabel} tool — that runs at ~{fmtNum(practicalRpm, 0)} RPM ({practicalPct}% utilization) with more passes at lighter radial load.</div>
+                              <div className="text-amber-400/70">This machine excels at aluminum, plastics, and light alloys where it can run at full speed. For smaller features in this material, Core Cutter's QTR3 series (1/16"–1/4") offers variable pitch+helix stability at high RPM with minimal stickout.</div>
+                            </div>
+                          );
+                        }
+                        return null;
                       })()}
                       {/* Confidence footnote — only for high/medium */}
                       {customer.torque_curve_confidence !== "low" && customer.torque_curve_confidence != null && (
