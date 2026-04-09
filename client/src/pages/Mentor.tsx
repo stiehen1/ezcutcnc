@@ -10130,14 +10130,19 @@ ${stabSection}
                       {customer.machine_max_rpm != null && customer.rpm != null && (() => {
                         const rpmPct = (customer.rpm / customer.machine_max_rpm) * 100;
                         if (rpmPct >= 20) return null;
-                        const idealDia = (customer.machine_max_rpm * 0.75 * Math.PI * (customer.diameter ?? 0)) / (customer.sfm * 12);
-                        // Ideal diameter to hit 75% of max RPM at this SFM
+                        // Ideal diameter to run at 75% of machine max RPM at this SFM
                         const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
+                        // Snap to nearest common tool size (inches)
+                        const commonSizes = [0.0625, 0.125, 0.1875, 0.250, 0.3125, 0.375, 0.500, 0.625, 0.750, 1.000, 1.250, 1.500];
+                        const snapped = commonSizes.reduce((prev, cur) => Math.abs(cur - targetDia) < Math.abs(prev - targetDia) ? cur : prev);
+                        const fracMap: Record<number, string> = { 0.0625: '1/16"', 0.125: '1/8"', 0.1875: '3/16"', 0.250: '1/4"', 0.3125: '5/16"', 0.375: '3/8"', 0.500: '1/2"', 0.625: '5/8"', 0.750: '3/4"', 1.000: '1"', 1.250: '1-1/4"', 1.500: '1-1/2"' };
+                        const diaLabel = fracMap[snapped] ?? `${snapped.toFixed(3)}"`;
+                        const targetRpm = Math.round((customer.sfm * 12) / (snapped * Math.PI));
                         return (
                           <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug">
-                            <span className="font-semibold">Tool too large for this machine at this material.</span>{" "}
-                            Running at only {fmtNum(rpmPct, 0)}% of max spindle speed ({fmtNum(customer.rpm, 0)} of {fmtNum(customer.machine_max_rpm, 0)} RPM) — leaving most of this machine's speed capability unused.
-                            {" "}To maximize throughput, use a smaller tool: a {targetDia < 0.125 ? `${fmtNum(targetDia * 16, 2)}/16"` : `${fmtNum(targetDia, 3)}"`} diameter tool would run near {fmtNum(customer.machine_max_rpm * 0.75, 0)} RPM at this SFM — significantly higher MRR per pass.
+                            <span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
+                            At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(customer.machine_max_rpm, 0)} RPM capability.
+                            {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.
                           </div>
                         );
                       })()}
