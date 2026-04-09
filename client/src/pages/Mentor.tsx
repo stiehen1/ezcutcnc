@@ -11423,6 +11423,7 @@ ${stabSection}
                         className="accent-orange-500 w-3.5 h-3.5"
                       />
                       <span className="text-xs text-zinc-300 font-semibold">Reconditioning Program Option</span>
+                      <a href="/Reconditioning Brochure (260214).pdf" download className="ml-auto text-[10px] text-orange-400 hover:text-orange-300 underline underline-offset-2 whitespace-nowrap">Download Brochure</a>
                     </label>
                     {roiReconEnabled ? (
                       <div className="space-y-1.5 pl-1">
