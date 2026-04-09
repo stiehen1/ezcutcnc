@@ -10141,6 +10141,11 @@ ${stabSection}
                         // Aluminum on high-RPM machines (Makino MAG, HSM) is intentional — 3/4"–1" 2-fl tools
                         // are correct for those machines. Only warn for ferrous/superalloy where SFM is the ceiling.
                         if (typeof customer.material === "string" && customer.material.startsWith("aluminum_")) return null;
+                        // Suppress for full-size tapers (CAT40/BT40/CV40/CAT50/BT50) — these machines aren't
+                        // high-RPM spindles; recommending 1/4"–3/8" tools on them is wrong
+                        const taper = (form.spindle_taper ?? "").toUpperCase();
+                        if (taper.includes("CAT40") || taper.includes("BT40") || taper.includes("CV40") ||
+                            taper.includes("CAT50") || taper.includes("BT50") || taper.includes("CAT30") || taper.includes("BT30")) return null;
                         // Also suppress for tools > 1.5" — large inserted/shell mills are always intentional
                         if (currentDia > 1.5) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
