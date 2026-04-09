@@ -7598,7 +7598,7 @@ ${stabSection}
                     <span className="ml-2 text-[10px] text-zinc-500">— upload your print to get running parameters for this specific tool</span>
                   </div>
                   <button type="button"
-                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) setPdfExtracted(false); }}
+                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "" })); } }}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${dpSpecialTool ? "bg-orange-500" : "bg-zinc-600"}`}>
                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${dpSpecialTool ? "translate-x-4" : "translate-x-0.5"}`} />
                   </button>
@@ -7608,7 +7608,7 @@ ${stabSection}
                     {pdfExtracted ? (
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
-                        <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
+                        <button type="button" onClick={() => { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "" })); }} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
                       </div>
                     ) : (
                       <label className="flex flex-col items-center gap-1 cursor-pointer">
