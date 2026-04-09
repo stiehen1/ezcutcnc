@@ -10131,8 +10131,11 @@ ${stabSection}
                         const rpmPct = (customer.rpm / customer.machine_max_rpm) * 100;
                         if (rpmPct >= 20) return null;
                         const currentDia = customer.diameter ?? 1;
-                        // Large tools on high-RPM machines (MAG, HSM, aerospace) are intentional — don't flag them
-                        if (currentDia > 1.0) return null;
+                        // Aluminum on high-RPM machines (Makino MAG, HSM) is intentional — 3/4"–1" 2-fl tools
+                        // are correct for those machines. Only warn for ferrous/superalloy where SFM is the ceiling.
+                        if (typeof customer.material === "string" && customer.material.startsWith("aluminum_")) return null;
+                        // Also suppress for tools > 1.5" — large inserted/shell mills are always intentional
+                        if (currentDia > 1.5) return null;
                         // Ideal diameter to run at 75% of machine max RPM at this SFM
                         const targetDia = (customer.sfm * 12) / (customer.machine_max_rpm * 0.75 * Math.PI);
 
