@@ -11445,7 +11445,7 @@ ${stabSection}
                         </div>
                         {/* Row 2: Price per regrind */}
                         {/* Price/regrind + tool life on same row */}
-                        <div className="flex items-center gap-4 flex-wrap">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <div className="flex items-center gap-1">
                             <span className="text-[10px] text-zinc-400 whitespace-nowrap">Price/Regrind:</span>
                             <span className="text-[10px] text-zinc-400">$</span>
