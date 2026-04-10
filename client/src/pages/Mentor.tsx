@@ -3669,6 +3669,12 @@ ${stabSection}
       setIsoCategory(extras.isoMat.toUpperCase() as IsoCategory);
       setForm(p => ({ ...p, material: "" }));
     }
+    toast({
+      title: "Tool loaded into Milling Calculator",
+      description: `${tool.edp ?? tool.sku ?? "Tool"} has been transferred — select your process, material, and cut parameters to get started.`,
+      duration: 4000,
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   // ── Shared tab bar used by Tool Finder and Calculators views ─────────────
