@@ -410,14 +410,6 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
 };
 MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
 
-function cleanEmail(raw: string): string {
-  const angleMatch = raw.match(/<([^>]+)>/);
-  let e = angleMatch ? angleMatch[1] : raw;
-  e = e.replace(/[<>]/g, "").trim();
-  e = e.replace(/[.,;:]+$/, "");
-  return e;
-}
-
 export default function Mentor() {
   const { toast } = useToast();
   const mentor = useMentor();
@@ -435,7 +427,7 @@ export default function Mentor() {
   const [tbSaving, setTbSaving] = React.useState(false);
   const [tbSaved, setTbSaved] = React.useState(false);
   const [tbShowModal, setTbShowModal] = React.useState(false);
-  const [tbEmail, setTbEmail] = React.useState(() => cleanEmail(localStorage.getItem("tb_email") || ""));
+  const [tbEmail, setTbEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [tbToken, setTbToken] = React.useState(() => localStorage.getItem("tb_token") || "");
   const [tbStep, setTbStep] = React.useState<"email" | "code" | "saving">(
     localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "saving" : "email"
@@ -447,7 +439,7 @@ export default function Mentor() {
   const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
 
   // ── Email results (lead capture) ──────────────────────────────────────────
-  const [erEmail, setErEmail] = React.useState(() => cleanEmail(localStorage.getItem("er_email") || localStorage.getItem("tb_email") || ""));
+  const [erEmail, setErEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [erStatus, setErStatus] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
   const [erError, setErError] = React.useState("");
 
@@ -932,13 +924,13 @@ export default function Mentor() {
   const [erGateOpen, setErGateOpen] = React.useState(false);
   const [erGatePending, setErGatePending] = React.useState<"copy" | "print" | "pdf" | "stp" | null>(null);
   const [erGateStpUrl, setErGateStpUrl] = React.useState("");
-  const [erGateInput, setErGateInput] = React.useState(() => cleanEmail(localStorage.getItem("er_email") || localStorage.getItem("tb_email") || ""));
+  const [erGateInput, setErGateInput] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [erGateError, setErGateError] = React.useState("");
 
   // ── Contact modal ("Don't know which tool?") ──────────────────────────
   const [showContactModal, setShowContactModal] = React.useState(false);
   const [contactName, setContactName] = React.useState("");
-  const [contactEmail, setContactEmail] = React.useState(() => cleanEmail(localStorage.getItem("er_email") || localStorage.getItem("tb_email") || ""));
+  const [contactEmail, setContactEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [contactMsg, setContactMsg] = React.useState("");
   const [contactStatus, setContactStatus] = React.useState<"idle" | "sending" | "sent">("idle");
 
@@ -1980,8 +1972,8 @@ export default function Mentor() {
     if (!showRoi || !erEmail || roiRepVerified !== null) return;
     fetch(`/api/sales-rep/verify?email=${encodeURIComponent(erEmail)}`)
       .then(r => r.json())
-      .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : { name: erEmail, repId: "" }))
-      .catch(() => setRoiRepVerified({ name: erEmail, repId: "" }));
+      .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : false))
+      .catch(() => setRoiRepVerified(false));
   }, [showRoi, erEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cross-device session recovery: when panel opens with a named ROI, check if DB has a session for
@@ -3621,7 +3613,7 @@ ${stabSection}
         setErStatus("error");
       } else {
         setErStatus("sent");
-        localStorage.setItem("er_email", cleanEmail(erEmail).toLowerCase());
+        localStorage.setItem("er_email", erEmail.trim().toLowerCase());
       }
     } catch {
       setErError("Network error — check your connection.");
@@ -3656,10 +3648,9 @@ ${stabSection}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: contactName.trim(), email: contactEmail.trim(), message: contactMsg.trim() }),
       });
-      const cleanedContact = cleanEmail(contactEmail).toLowerCase();
-      localStorage.setItem("er_email", cleanedContact);
-      setErEmail(cleanedContact);
-      setErGateInput(cleanedContact);
+      localStorage.setItem("er_email", contactEmail.trim().toLowerCase());
+      setErEmail(contactEmail.trim().toLowerCase());
+      setErGateInput(contactEmail.trim().toLowerCase());
       setContactStatus("sent");
     } catch {
       setContactStatus("idle");
@@ -4577,7 +4568,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -4720,7 +4711,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -6227,7 +6218,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -6820,7 +6811,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -6920,7 +6911,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -8916,7 +8907,7 @@ ${stabSection}
                             </div>
                             <div className="col-span-2 space-y-1">
                               <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
-                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                              <input required type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs text-zinc-400">Quantity</label>
@@ -9274,7 +9265,7 @@ ${stabSection}
                             </div>
                             <div className="col-span-2 space-y-1">
                               <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
-                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                              <input required type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs text-zinc-400">Quantity</label>
@@ -9591,7 +9582,7 @@ ${stabSection}
                             </div>
                             <div className="col-span-2 space-y-1">
                               <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
-                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                              <input required type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs text-zinc-400">Quantity</label>
@@ -11443,12 +11434,10 @@ ${stabSection}
 
               {roiRepVerified && (
               <>
-              {/* Rep identity banner — only shown for authorized sales reps */}
-              {(roiRepVerified as any).repId && (
+              {/* Rep identity banner */}
               <div className="text-[10px] text-zinc-500">
                 Test recorded by: <span className="text-zinc-300 font-semibold">{(roiRepVerified as any).name}</span> <span className="text-zinc-600">({erEmail})</span>
               </div>
-              )}
 
               {roiDraftLoaded && !mentor.data && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
@@ -11471,7 +11460,7 @@ ${stabSection}
                 </div>
                 <div className="space-y-1">
                   <RoiLabel hint="Email address for the end user contact. Used to send them a copy of the ROI report.">End User Contact Email</RoiLabel>
-                  <Input type="email" className="h-7 text-xs"
+                  <Input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" className="h-7 text-xs"
                     placeholder="e.g. john@acmemachining.com"
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
@@ -12163,10 +12152,11 @@ ${stabSection}
               <input
                 type="text"
                 inputMode="email"
-                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
                 placeholder="your@email.com"
                 value={erEmail}
-                onChange={e => { setErEmail(cleanEmail(e.target.value)); setErError(""); setErStatus("idle"); }}
+                onChange={e => { setErEmail(e.target.value); setErError(""); setErStatus("idle"); }}
                 onKeyDown={e => { if (e.key === "Enter") emailResults(); }}
                 className="w-52 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
                 disabled={erStatus === "sending"}
@@ -12189,7 +12179,7 @@ ${stabSection}
             <span className="text-base">✓</span>
             <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
           </div>
-          <button onClick={() => { setErStatus("idle"); setErEmail(""); setErError(""); }} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
+          <button onClick={() => setErStatus("idle")} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
         </div>
       )}
 
@@ -12266,10 +12256,11 @@ ${stabSection}
               <input
                 type="text"
                 inputMode="email"
-                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
                 placeholder="you@company.com"
                 value={welcomeEmail}
-                onChange={e => setWelcomeEmail(cleanEmail(e.target.value))}
+                onChange={e => setWelcomeEmail(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && submitWelcome()}
                 className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
               />
@@ -12299,11 +12290,12 @@ ${stabSection}
           <input
             type="text"
             inputMode="email"
-            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
             className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
             placeholder="your@email.com"
             value={erGateInput}
-            onChange={e => { setErGateInput(cleanEmail(e.target.value)); setErGateError(""); }}
+            onChange={e => { setErGateInput(e.target.value); setErGateError(""); }}
             onKeyDown={e => {
               if (e.key === "Enter") {
                 const v = erGateInput.trim();
@@ -12357,7 +12349,7 @@ ${stabSection}
               <div className="space-y-2">
                 <input type="text" placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
-                <input type="text" inputMode="email" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(cleanEmail(e.target.value))}
+                <input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
                 <textarea placeholder="What are you trying to cut? Material, depth, finish requirements…" value={contactMsg} onChange={e => setContactMsg(e.target.value)} rows={3}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500 resize-none" />
@@ -12394,7 +12386,10 @@ ${stabSection}
               onChange={e => setTbTitle(e.target.value)}
             />
             <input
-              type="email"
+              type="text"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
               className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
               placeholder="your@email.com"
               value={tbInputEmail}
@@ -12524,7 +12519,7 @@ ${stabSection}
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-[10px] text-zinc-400 uppercase tracking-widest">Your Email</label>
-              <input type="email" placeholder="you@company.com"
+              <input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" placeholder="you@company.com"
                 className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
                 value={quoteEmail}
                 onChange={e => setQuoteEmail(e.target.value)}
