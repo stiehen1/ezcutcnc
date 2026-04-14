@@ -101,7 +101,7 @@ function BrevoNudge() {
             <p className="text-[11px] text-zinc-400 mb-2">Drop your email for updates &amp; tips from the Core Cutter team.</p>
             <form onSubmit={submit} className="flex gap-2">
               <input
-                type="email"
+                type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="your@email.com"
@@ -736,7 +736,7 @@ function FeedbackButton() {
                 <div>
                   <label className="text-[11px] text-zinc-400 mb-1 block">Your email <span className="text-zinc-600">(optional)</span></label>
                   <input
-                    type="email"
+                    type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="so we can follow up"
@@ -960,7 +960,7 @@ function RegrindingTab() {
             <div className="space-y-3">
               <div className="space-y-1">
                 <label className="text-[10px] text-zinc-400 uppercase tracking-widest">Your Email</label>
-                <input type="email" placeholder="you@company.com"
+                <input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" placeholder="you@company.com"
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-400"
                   value={email} onChange={e => setEmail(e.target.value)} />
               </div>

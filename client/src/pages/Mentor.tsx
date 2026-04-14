@@ -4568,7 +4568,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -4711,7 +4711,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -6218,7 +6218,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -6811,7 +6811,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -6911,7 +6911,7 @@ ${stabSection}
                 {stepReqOpen && !stepReqSent && (
                   <div className="mt-2 flex items-center gap-1.5 w-full max-w-xs">
                     <input
-                      type="email"
+                      type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                       placeholder="your@email.com"
                       value={stepReqEmail}
                       onChange={e => setStepReqEmail(e.target.value)}
@@ -8907,7 +8907,7 @@ ${stabSection}
                             </div>
                             <div className="col-span-2 space-y-1">
                               <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
-                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                              <input required type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs text-zinc-400">Quantity</label>
@@ -9265,7 +9265,7 @@ ${stabSection}
                             </div>
                             <div className="col-span-2 space-y-1">
                               <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
-                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                              <input required type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs text-zinc-400">Quantity</label>
@@ -9582,7 +9582,7 @@ ${stabSection}
                             </div>
                             <div className="col-span-2 space-y-1">
                               <label className="text-xs text-zinc-400">Email <span className="text-red-400">*</span></label>
-                              <input required type="email" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
+                              <input required type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" value={qf.email} onChange={e => setQf({ email: e.target.value })} className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500" placeholder="you@company.com" />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs text-zinc-400">Quantity</label>
@@ -11460,7 +11460,7 @@ ${stabSection}
                 </div>
                 <div className="space-y-1">
                   <RoiLabel hint="Email address for the end user contact. Used to send them a copy of the ROI report.">End User Contact Email</RoiLabel>
-                  <Input type="email" className="h-7 text-xs"
+                  <Input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" className="h-7 text-xs"
                     placeholder="e.g. john@acmemachining.com"
                     value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
                 </div>
@@ -12150,7 +12150,10 @@ ${stabSection}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <input
-                type="email"
+                type="text"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
                 placeholder="your@email.com"
                 value={erEmail}
                 onChange={e => { setErEmail(e.target.value); setErError(""); setErStatus("idle"); }}
@@ -12251,7 +12254,10 @@ ${stabSection}
             <div>
               <label className="text-xs text-zinc-400 mb-1 block">Email Address <span className="text-red-400">*</span></label>
               <input
-                type="email"
+                type="text"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
                 placeholder="you@company.com"
                 value={welcomeEmail}
                 onChange={e => setWelcomeEmail(e.target.value)}
@@ -12282,7 +12288,10 @@ ${stabSection}
             {" "}One-time per device — auto-fills after.
           </p>
           <input
-            type="email"
+            type="text"
+            inputMode="email"
+            autoCapitalize="none"
+            autoCorrect="off"
             className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
             placeholder="your@email.com"
             value={erGateInput}
@@ -12340,7 +12349,7 @@ ${stabSection}
               <div className="space-y-2">
                 <input type="text" placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
-                <input type="email" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+                <input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" placeholder="your@email.com *" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500" />
                 <textarea placeholder="What are you trying to cut? Material, depth, finish requirements…" value={contactMsg} onChange={e => setContactMsg(e.target.value)} rows={3}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500 resize-none" />
@@ -12377,7 +12386,10 @@ ${stabSection}
               onChange={e => setTbTitle(e.target.value)}
             />
             <input
-              type="email"
+              type="text"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
               className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
               placeholder="your@email.com"
               value={tbInputEmail}
@@ -12507,7 +12519,7 @@ ${stabSection}
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-[10px] text-zinc-400 uppercase tracking-widest">Your Email</label>
-              <input type="email" placeholder="you@company.com"
+              <input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" placeholder="you@company.com"
                 className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
                 value={quoteEmail}
                 onChange={e => setQuoteEmail(e.target.value)}
