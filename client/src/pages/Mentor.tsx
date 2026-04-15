@@ -453,6 +453,8 @@ export default function Mentor() {
   const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
   const [welcomeLastName, setWelcomeLastName] = React.useState("");
   const [welcomeEmail, setWelcomeEmail] = React.useState("");
+  const [welcomeCompany, setWelcomeCompany] = React.useState("");
+  const [welcomeZip, setWelcomeZip] = React.useState("");
   const [welcomeError, setWelcomeError] = React.useState("");
   const [welcomeValidating, setWelcomeValidating] = React.useState(false);
 
@@ -478,6 +480,8 @@ export default function Mentor() {
     localStorage.setItem("cc_first_name", welcomeFirstName.trim());
     localStorage.setItem("cc_last_name", welcomeLastName.trim());
     localStorage.setItem("er_email", welcomeEmail.trim().toLowerCase());
+    if (welcomeCompany.trim()) localStorage.setItem("cc_company", welcomeCompany.trim());
+    if (welcomeZip.trim()) localStorage.setItem("cc_zip", welcomeZip.trim());
     setErEmail(welcomeEmail.trim().toLowerCase());
     setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
@@ -485,7 +489,7 @@ export default function Mentor() {
     fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase() }),
+      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase(), company: welcomeCompany.trim() || undefined, zip: welcomeZip.trim() || undefined }),
     }).catch(() => {});
   }
 
@@ -1509,6 +1513,7 @@ export default function Mentor() {
     machine_hp: 0,
     spindle_drive: "belt" as "direct" | "belt" | "gear",
     stickout: 0,
+    part_stickout: 0,
 
     existing_hole_dia: 0,
     target_hole_dia: 0,
@@ -6072,6 +6077,28 @@ ${stabSection}
               </div>
             </div>
           </div>
+
+          {/* Part Stickout — shown when workholding is a chuck or trunnion */}
+          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"] as string[]).includes(form.workholding) && (
+            <div className="mt-3">
+              <FieldLabel hint="Distance from the chuck jaw face (or trunnion fixture face) to the cut location. Longer part overhang adds compliance — a long part sticking out of a chuck deflects far more than a stubby one. Leave blank if the cut is close to the jaws.">Part Overhang Past Jaws (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 2.500"
+                value={form.part_stickout > 0 ? form.part_stickout.toFixed(3) : ""}
+                onChange={e => {
+                  const n = parseFloat(e.target.value);
+                  setForm(p => ({ ...p, part_stickout: Number.isFinite(n) && n >= 0 ? n : 0 }));
+                }}
+                onBlur={e => {
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, part_stickout: parseFloat(n.toFixed(3)) }));
+                  else setForm(p => ({ ...p, part_stickout: 0 }));
+                }}
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">Used to adjust workholding compliance in the stability model — longer overhang increases chatter risk.</p>
+            </div>
+          )}
 
           {/* Tool Geometry — adapts per operation */}
           {operation !== "threadmilling" && operation !== "keyseat" && operation !== "dovetail" && form.mode !== "deep_pocket" && (
@@ -12247,6 +12274,28 @@ ${stabSection}
                 placeholder="you@company.com"
                 value={welcomeEmail}
                 onChange={e => setWelcomeEmail(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submitWelcome()}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Company</label>
+              <input
+                type="text"
+                placeholder="Your shop or company name"
+                value={welcomeCompany}
+                onChange={e => setWelcomeCompany(e.target.value)}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Zip / Postal Code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="e.g. 04401"
+                value={welcomeZip}
+                onChange={e => setWelcomeZip(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && submitWelcome()}
                 className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
               />

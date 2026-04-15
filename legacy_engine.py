@@ -3241,6 +3241,7 @@ def run(payload=None):
     _drive_eff = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     data.setdefault("machine_hp", float(payload.get("machine_hp", 10.0)) * _drive_eff)
     data.setdefault("stickout", float(payload.get("stickout", 2.0)))
+    data["part_stickout"] = float(payload.get("part_stickout", 0) or 0)
     data.setdefault("coolant", payload.get("coolant", "flood"))
     data.setdefault("geometry", payload.get("geometry", "standard"))
 
@@ -3525,6 +3526,9 @@ def run(payload=None):
     # Cap upside at +5% (conservative — rigidity gain is already captured in stability score).
     _wh_key_feed = str(data.get("workholding", "vise") or "vise")
     _wh_factor_feed = WORKHOLDING_COMPLIANCE.get(_wh_key_feed, 1.0)
+    _part_so_feed = float(data.get("part_stickout", 0) or 0)
+    if _part_so_feed > 0 and _wh_key_feed in {"trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}:
+        _wh_factor_feed *= min(1.50, 1.0 + 0.06 * _part_so_feed)
     _wh_feed_mult = max(0.70, min(1.05, 1.0 / _wh_factor_feed))
     ipt *= _wh_feed_mult
     # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
@@ -3571,7 +3575,11 @@ def run(payload=None):
     if _mode_eff in ("hem", "trochoidal") and _woc_eff < 15.0:
         _base_dlim *= 2.0
     _wh_key_sol = str(data.get("workholding", "vise") or "vise")
-    _base_dlim /= WORKHOLDING_COMPLIANCE.get(_wh_key_sol, 1.0)
+    _wh_factor_sol = WORKHOLDING_COMPLIANCE.get(_wh_key_sol, 1.0)
+    _part_so_sol = float(data.get("part_stickout", 0) or 0)
+    if _part_so_sol > 0 and _wh_key_sol in {"trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}:
+        _wh_factor_sol *= min(1.50, 1.0 + 0.06 * _part_so_sol)
+    _base_dlim /= _wh_factor_sol
     deflection_limit = _base_dlim
     current_doc = doc  # current axial depth of cut
 
@@ -4949,6 +4957,17 @@ def run(payload=None):
     # wh_factor > 1.0 = weaker than vise  → _dlim decreases (divide by larger number)
     _wh_key    = str(data.get("workholding", "vise") or "vise")
     _wh_factor = WORKHOLDING_COMPLIANCE.get(_wh_key, 1.0)
+
+    # Part overhang penalty: when the part sticks out beyond the chuck jaws or trunnion
+    # face, it acts as a second cantilever that adds system compliance on top of the
+    # workholding type.  Applies only to chuck/trunnion workholding types.
+    # Scale: +6% per inch of overhang, capped at ×1.50 additional factor.
+    _chuck_wh_keys = {"trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}
+    _part_so = float(data.get("part_stickout", 0) or 0)
+    if _part_so > 0 and _wh_key in _chuck_wh_keys:
+        _part_so_mult = min(1.50, 1.0 + 0.06 * _part_so)
+        _wh_factor *= _part_so_mult
+
     _dlim /= _wh_factor
 
     _defl_pct = round(_defl / _dlim * 100, 1) if _dlim > 0 else 0.0

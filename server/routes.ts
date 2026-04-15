@@ -306,6 +306,8 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip TEXT`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS postal TEXT`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS zip TEXT`);
   } catch (err: any) {
     console.warn("[Leads migration]", err?.message ?? err);
   }
@@ -1986,7 +1988,7 @@ export async function registerRoutes(
   // ── Welcome modal registration (geo capture, no email sent) ──────────────
   app.post("/api/register", async (req, res) => {
     try {
-      const { name, email } = (req.body ?? {}) as { name?: string; email?: string };
+      const { name, email, company, zip } = (req.body ?? {}) as { name?: string; email?: string; company?: string; zip?: string };
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: "Valid email required" });
       }
@@ -1994,12 +1996,17 @@ export async function registerRoutes(
       const geo = await geoFromIp(clientIp);
       const { pool } = await import("./db");
       const isNew = await pool.query(
-        `INSERT INTO leads (email, operation, name, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (email) DO NOTHING RETURNING id`,
-        [email.toLowerCase().trim(), "tool_request", name ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
+        `INSERT INTO leads (email, operation, name, company, zip, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (email) DO UPDATE SET
+           name    = COALESCE(EXCLUDED.name, leads.name),
+           company = COALESCE(EXCLUDED.company, leads.company),
+           zip     = COALESCE(EXCLUDED.zip, leads.zip)
+         RETURNING id, (xmax = 0) AS is_new`,
+        [email.toLowerCase().trim(), "tool_request", name ?? null, company ?? null, zip ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
       );
       // Send registration notification to Scott for new users only (not duplicates)
-      if (isNew.rowCount && isNew.rowCount > 0) {
+      const isNewRow = isNew.rows[0]?.is_new === true;
+      if (isNewRow) {
         const newId = isNew.rows[0]?.id;
         const smtpUser = process.env.SMTP_USER || "";
         const smtpPass = process.env.SMTP_PASS || "";
@@ -2021,6 +2028,8 @@ export async function registerRoutes(
               text: [
                 `Name:     ${name ?? "—"}`,
                 `Email:    ${email}`,
+                `Company:  ${company ?? "—"}`,
+                `Zip:      ${zip ?? "—"}`,
                 `Location: ${[geo.city, geo.region, geo.country].filter(Boolean).join(", ") || "Unknown"}`,
                 ``,
                 `— CoreCutCNC App`,
