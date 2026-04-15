@@ -171,6 +171,56 @@ function Result({
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Shared WOC input — accepts decimal inches or % of diameter
+// ─────────────────────────────────────────────────────────────────
+function WocInput({ dia, value, onChange, metric, hint }: {
+  dia: number; value: string; onChange: (raw: string, parsed: number) => void;
+  metric?: boolean; hint?: string;
+}) {
+  const dU = metric ? "mm" : "in";
+  const [text, setText] = React.useState(value);
+  // keep external resets in sync
+  React.useEffect(() => { if (!value) setText(""); }, [value]);
+
+  const parse = (raw: string): number => {
+    const t = raw.trim();
+    if (!t) return 0;
+    if (t.endsWith("%")) return (parseFloat(t) / 100) * dia;
+    const v = parseFloat(t);
+    if (isNaN(v)) return 0;
+    if (v >= 1.5) return (v / 100) * dia; // bare number ≥1.5 treated as %
+    return metric ? v / 25.4 : v;
+  };
+
+  const handleBlur = () => {
+    if (!text.trim() || dia <= 0) return;
+    const parsed = parse(text);
+    if (parsed > 0) {
+      const pct = (parsed / dia) * 100;
+      const display = `${pct.toFixed(1)}%`;
+      setText(display);
+      onChange(display, parsed);
+    }
+  };
+
+  return (
+    <Row label="Radial WOC" hint={hint ?? "Enter as decimal (0.125) or percentage (20% or 20)."}>
+      <div className="relative flex-1">
+        <input
+          type="text" inputMode="decimal"
+          className="w-full bg-[#1a1a2e] border border-[#2d2d4a] rounded px-2 py-1 text-sm text-white pr-12"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onBlur={handleBlur}
+          placeholder={metric ? "e.g. 20% or 3.175" : "e.g. 20% or 0.125"}
+        />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">%/{dU}</span>
+      </div>
+    </Row>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // 1. RPM ↔ SFM
 // ─────────────────────────────────────────────────────────────────
 function RpmSfm() {
@@ -188,25 +238,27 @@ function RpmSfm() {
   const calcSfm = d > 0 && n(rpm) > 0 ? (n(rpm) * d) / 3.8197 : null;
   const calcSfmDisplay = calcSfm !== null ? (metric ? calcSfm * 0.3048 : calcSfm) : null;
 
+  // Cross-fill: computed result populates the opposing field
+  const rpmFieldValue = rpm !== "" ? rpm : (calcRpm !== null ? String(Math.round(calcRpm)) : "");
+  const sfmFieldValue = sfm !== "" ? sfm : (calcSfmDisplay !== null ? String(Math.round(calcSfmDisplay)) : "");
+
   const printRows: PrintRow[] = [];
-  if (dia) printRows.push({ label: `Tool Diameter (${dU})`, value: dia });
+  if (dia) printRows.push({ label: `Cutting Diameter (${dU})`, value: dia });
   if (calcRpm !== null) { printRows.push({ label: `Surface Speed (${sU})`, value: sfm }); printRows.push({ label: "RPM", value: Math.round(calcRpm).toLocaleString(), highlight: true }); }
   if (calcSfmDisplay !== null) { printRows.push({ label: "Spindle Speed (RPM)", value: rpm }); printRows.push({ label: `Surface Speed (${sU})`, value: Math.round(calcSfmDisplay).toLocaleString(), highlight: true }); }
   usePrintRegister("RPM ↔ SFM", "Speed & Feed", printRows.length > 1 ? printRows : null);
 
   return (
     <CalcCard title="RPM ↔ SFM" category="Speed & Feed" onClear={() => { setDia(""); setSfm(""); setRpm(""); }}>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool — not the shank diameter."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-      <div className="border-t border-[#2d2d4a] pt-2">
-        <p className="text-[10px] text-gray-500 mb-2">Enter {sU} → get RPM</p>
-        <Row label="Surface Speed" hint="How fast the cutting edge moves across the workpiece. Also called SFM (surface feet per minute) or m/min."><NumIn value={sfm} onChange={setSfm} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
-        {calcRpm !== null && <Result label="RPM" value={Math.round(calcRpm).toLocaleString()} highlight />}
-      </div>
-      <div className="border-t border-[#2d2d4a] pt-2">
-        <p className="text-[10px] text-gray-500 mb-2">Enter RPM → get {sU}</p>
-        <Row label="Spindle Speed"><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
-        {calcSfmDisplay !== null && <Result label={sU} value={Math.round(calcSfmDisplay).toLocaleString()} highlight />}
-      </div>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool — not the shank diameter.">
+        <NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
+      </Row>
+      <Row label="Surface Speed" hint="Enter SFM to calculate RPM, or leave blank and enter RPM below.">
+        <NumIn value={sfmFieldValue} onChange={v => { setSfm(v); setRpm(""); }} unit={sU} placeholder={metric ? "60" : "200"} />
+      </Row>
+      <Row label="Spindle Speed" hint="Enter RPM to calculate SFM, or leave blank and enter SFM above.">
+        <NumIn value={rpmFieldValue} onChange={v => { setRpm(v); setSfm(""); }} unit="RPM" placeholder="3500" />
+      </Row>
     </CalcCard>
   );
 }
@@ -246,23 +298,27 @@ function IpmCalc() {
   const calcFpt = R > 0 && F > 0 && ipm_in > 0 ? ipm_in / (R * F) : null;
   const calcFptDisplay = calcFpt !== null ? (metric ? calcFpt * 25.4 : calcFpt) : null;
 
+  // Cross-fill: show computed result in the opposing field (read-only appearance via placeholder-style)
+  const ipmFieldValue = ipm !== "" ? ipm : (calcIpmDisplay !== null ? calcIpmDisplay.toFixed(metric ? 2 : 1) : "");
+  const fptFieldValue = fpt !== "" ? fpt : (calcFptDisplay !== null ? calcFptDisplay.toFixed(metric ? 3 : 4) : "");
+
   const printRows: PrintRow[] = [];
   if (sfm) printRows.push({ label: `Surface Speed (${sU})`, value: sfm });
-  if (dia) printRows.push({ label: `Tool Diameter (${dU})`, value: dia });
+  if (dia) printRows.push({ label: `Cutting Diameter (${dU})`, value: dia });
   if (rpm) printRows.push({ label: "Spindle Speed (RPM)", value: rpm });
   if (flutes) printRows.push({ label: "Flutes", value: flutes });
   if (calcIpmDisplay !== null) { printRows.push({ label: `Feed / Tooth (${dU})`, value: fpt }); printRows.push({ label: `Feed Rate (${fU})`, value: calcIpmDisplay.toFixed(metric ? 2 : 1), highlight: true }); }
-  if (calcFptDisplay !== null) { printRows.push({ label: `Feed Rate (${fU})`, value: ipm }); printRows.push({ label: `Feed / Tooth (${dU})`, value: calcFptDisplay.toFixed(metric ? 4 : 5), highlight: true }); }
+  if (calcFptDisplay !== null) { printRows.push({ label: `Feed Rate (${fU})`, value: ipm }); printRows.push({ label: `Feed / Tooth (${dU})`, value: calcFptDisplay.toFixed(metric ? 3 : 4), highlight: true }); }
   usePrintRegister("Feed Rate ↔ FPT", "Speed & Feed", printRows.length > 2 ? printRows : null);
 
   return (
     <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setSfm(""); setDia(""); setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
-      {/* Spindle speed — SFM+dia fills RPM field; RPM fills SFM field */}
-      <Row label={`Surface Speed (${sU})`} hint="Enter SFM to auto-fill RPM below (requires diameter).">
-        <NumIn value={sfm} onChange={v => { setSfm(v); }} unit={sU} placeholder={metric ? "60" : "200"} />
-      </Row>
-      <Row label="Tool Diameter" hint="Required when entering SFM.">
+      <Row label="Cutting Diameter" hint="Required when entering SFM.">
         <NumIn value={dia} onChange={v => { setDia(v); }} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
+      </Row>
+      <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
+      <Row label={`Surface Speed (${sU})`} hint="Enter SFM + diameter to auto-fill RPM below.">
+        <NumIn value={sfm} onChange={v => { setSfm(v); }} unit={sU} placeholder={metric ? "60" : "200"} />
       </Row>
       <Row label="Spindle Speed" hint="Enter RPM directly, or it auto-fills from SFM + diameter above.">
         <NumIn value={rpm || (rpmFromSfm > 0 ? String(Math.round(rpmFromSfm)) : "")}
@@ -275,16 +331,23 @@ function IpmCalc() {
           {dia_in > 0 ? "" : " (enter diameter to calculate SFM)"}
         </p>
       )}
-      <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <div className="border-t border-[#2d2d4a] pt-2">
-        <p className="text-[10px] text-gray-500 mb-2">Enter FPT → get {fU}</p>
-        <Row label="Feed / Tooth" hint="Chip load per flute per revolution."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
-        {calcIpmDisplay !== null && <Result label="Feed Rate" value={`${calcIpmDisplay.toFixed(metric ? 2 : 1)} ${fU}`} highlight />}
-      </div>
-      <div className="border-t border-[#2d2d4a] pt-2">
-        <p className="text-[10px] text-gray-500 mb-2">Enter {fU} → get FPT</p>
-        <Row label="Feed Rate" hint="Table feed rate."><NumIn value={ipm} onChange={setIpm} unit={fU} placeholder={metric ? "500" : "20.0"} /></Row>
-        {calcFptDisplay !== null && <Result label="Feed / Tooth" value={`${calcFptDisplay.toFixed(metric ? 4 : 5)} ${dU}`} highlight />}
+        <Row label="Feed / Tooth" hint="Enter FPT to get Feed Rate, or enter Feed Rate below to get FPT.">
+          <NumIn
+            value={fptFieldValue}
+            onChange={v => { setFpt(v); setIpm(""); }}
+            unit={dU}
+            placeholder={metric ? "0.127" : "0.0050"}
+          />
+        </Row>
+        <Row label="Feed Rate" hint="Enter Feed Rate to get FPT, or enter FPT above to get Feed Rate.">
+          <NumIn
+            value={ipmFieldValue}
+            onChange={v => { setIpm(v); setFpt(""); }}
+            unit={fU}
+            placeholder={metric ? "500" : "20.0"}
+          />
+        </Row>
       </div>
     </CalcCard>
   );
@@ -296,14 +359,29 @@ function IpmCalc() {
 function ChipThinning() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
+  const fU = metric ? "mm/min" : "IPM";
 
-  const [dia, setDia]    = React.useState("");
-  const [woc, setWoc]    = React.useState("");
-  const [fpt, setFpt]    = React.useState("");
+  const [dia,     setDia]     = React.useState("");
+  const [woc,     setWoc]     = React.useState("");
+  const [fpt,     setFpt]     = React.useState("");
+  const [ipm,     setIpm]     = React.useState("");
+  const [rpm,     setRpm]     = React.useState("");
+  const [flutes,  setFlutes]  = React.useState("");
 
-  const D = metric ? n(dia)/25.4 : n(dia);
-  const ae = metric ? n(woc)/25.4 : n(woc);
-  const fz = metric ? n(fpt)/25.4 : n(fpt);
+  const D  = metric ? n(dia)/25.4 : n(dia);
+
+  const ae = n(woc) > 0 ? (metric ? n(woc) / 25.4 : n(woc)) : 0;
+  const R  = n(rpm);
+  const F  = n(flutes);
+
+  // Cross-fill FPT ↔ IPM
+  const fz_entered = metric ? n(fpt)/25.4 : n(fpt);
+  const ipm_entered = metric ? n(ipm)/25.4 : n(ipm);
+  const calcFptFromIpm = R > 0 && F > 0 && ipm_entered > 0 ? ipm_entered / (R * F) : null;
+  const calcIpmFromFpt = R > 0 && F > 0 && fz_entered > 0  ? fz_entered  * R * F  : null;
+  const fz = fpt !== "" ? fz_entered : (calcFptFromIpm ?? 0);
+  const fptFieldValue = fpt !== "" ? fpt : (calcFptFromIpm !== null ? (metric ? calcFptFromIpm * 25.4 : calcFptFromIpm).toFixed(metric ? 4 : 5) : "");
+  const ipmFieldValue = ipm !== "" ? ipm : (calcIpmFromFpt !== null ? (metric ? calcIpmFromFpt * 25.4 : calcIpmFromFpt).toFixed(metric ? 2 : 1) : "");
 
   let result = null;
   if (D > 0 && ae > 0 && ae <= D && fz > 0) {
@@ -312,38 +390,67 @@ function ChipThinning() {
     const hex = fz * sinAngle;
     const ctFactor = sinAngle;
     const corrFpt = ae < D / 2 ? fz / sinAngle : fz;
-    result = { hex, ctFactor, corrFpt };
+    const progIpm  = R > 0 && F > 0 ? fz      * R * F : null;
+    const actualIpm = R > 0 && F > 0 ? hex     * R * F : null;
+    const adjIpm   = R > 0 && F > 0 ? corrFpt * R * F : null;
+    result = { hex, ctFactor, corrFpt, progIpm, actualIpm, adjIpm };
   }
 
   const IN = metric ? 25.4 : 1;
 
   usePrintRegister("Chip Thinning", "Speed & Feed", result ? [
-    { label: `Tool Diameter (${dU})`, value: dia },
+    { label: `Cutting Diameter (${dU})`, value: dia },
     { label: `Radial WOC (${dU})`, value: woc },
     { label: `Programmed FPT (${dU})`, value: fpt },
-    { label: "Chip Thin Factor", value: result.ctFactor.toFixed(4) },
+    ...(rpm ? [{ label: "Spindle Speed (RPM)", value: rpm }] : []),
+    ...(flutes ? [{ label: "Flutes", value: flutes }] : []),
     { label: `Actual Chip Thickness (${dU})`, value: (result.hex * IN).toFixed(metric ? 4 : 5) },
-    ...(ae < D / 2 ? [{ label: `Corrected FPT to Maintain Chip (${dU})`, value: (result.corrFpt * IN).toFixed(metric ? 4 : 5), highlight: true }] : []),
+    ...(ae < D / 2 ? [{ label: `Adj FPT to Maintain Proper Chip Thickness (${dU})`, value: (result.corrFpt * IN).toFixed(metric ? 4 : 5), highlight: true }] : []),
+    ...(result.adjIpm !== null ? [{ label: `Adj Feed Rate (${fU})`, value: (metric ? result.adjIpm * 25.4 : result.adjIpm).toFixed(metric ? 2 : 1), highlight: true }] : []),
   ] : null);
 
   return (
-    <CalcCard title="Chip Thinning" category="Speed & Feed" onClear={() => { setDia(""); setWoc(""); setFpt(""); }}>
+    <CalcCard title="Chip Thinning" category="Speed & Feed" onClear={() => { setDia(""); setWoc(""); setFpt(""); setIpm(""); setRpm(""); setFlutes(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         At WOC &lt; 50% diameter, programmed FPT over-estimates chip thickness.
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-      <Row label="Radial WOC" hint="Width of cut — how far the tool steps over radially. At less than 50% diameter, chip thinning occurs and programmed FPT overstates actual chip thickness."><NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
-      <Row label="Programmed FPT" hint="The feed per tooth value programmed in CAM or at the control. This may need to be increased to compensate for chip thinning."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Flutes" hint="Optional — enter with RPM to see feed rates."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
+      <Row label="Spindle Speed" hint="Optional — enter with flutes to see feed rates."><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
+      <WocInput dia={D} value={woc} metric={metric} hint="At less than 50% diameter, chip thinning occurs and programmed FPT overstates actual chip thickness." onChange={(_, parsed) => setWoc(String(parsed))} />
+      <Row label="Programmed FPT" hint="Enter FPT to calculate feed rate, or enter feed rate below."><NumIn value={fptFieldValue} onChange={v => { setFpt(v); setIpm(""); }} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
+      <Row label="Programmed Feed Rate" hint="Enter feed rate to calculate FPT, or enter FPT above."><NumIn value={ipmFieldValue} onChange={v => { setIpm(v); setFpt(""); }} unit={fU} placeholder={metric ? "500" : "20.0"} /></Row>
       {result && <>
         <Result label="Engagement" value={`${(ae / D * 100).toFixed(1)}% dia`} />
-        <Result label="Chip Thin Factor" value={result.ctFactor.toFixed(4)} />
-        <Result label="Actual Chip Thickness" value={`${(result.hex * IN).toFixed(metric ? 4 : 5)} ${dU} (${(result.ctFactor * 100).toFixed(1)}% of FPT)`} />
-        {ae < D / 2 && (
-          <Result label="FPT to Maintain Target Chip" value={`${(result.corrFpt * IN).toFixed(metric ? 4 : 5)} ${dU}`} highlight />
+        {result.progIpm !== null && (
+          <Result label="Programmed Feed Rate"
+            value={`${fz * IN > 0 ? (fz * IN).toFixed(metric ? 4 : 5) : ""} ${dU}  (${(metric ? result.progIpm * 25.4 : result.progIpm).toFixed(metric ? 2 : 1)} ${fU})`} />
         )}
+        <Result label="Actual Chip Thickness"
+          value={result.actualIpm !== null
+            ? `${(result.hex * IN).toFixed(metric ? 4 : 5)} ${dU}  (${(metric ? result.actualIpm * 25.4 : result.actualIpm).toFixed(metric ? 2 : 1)} ${fU})`
+            : `${(result.hex * IN).toFixed(metric ? 4 : 5)} ${dU}`} />
+        {ae < D / 2 && (() => {
+          const corrFptDisplay = (result.corrFpt * IN).toFixed(metric ? 4 : 5);
+          const adjIpmDisplay  = result.adjIpm !== null
+            ? (metric ? result.adjIpm * 25.4 : result.adjIpm).toFixed(metric ? 2 : 1)
+            : null;
+          return (
+            <Result
+              label="Adj FPT to Maintain Proper Chip Thickness"
+              value={adjIpmDisplay !== null
+                ? `${corrFptDisplay} ${dU}  (${adjIpmDisplay} ${fU})`
+                : `${corrFptDisplay} ${dU}`}
+              highlight
+            />
+          );
+        })()}
         {ae >= D / 2 && (
           <div className="text-[11px] text-emerald-400 px-1">✓ WOC ≥ 50% — no chip thinning correction needed.</div>
         )}
+        <p className="text-[10px] text-gray-500 px-1 pt-1 border-t border-[#2d2d4a] mt-1">
+          Note: adjusted feed is a geometric correction only. Final feed rate should also account for material type, hardness, and toolpath being used.
+        </p>
       </>}
     </CalcCard>
   );
@@ -369,7 +476,7 @@ function CuspHeight() {
   }
 
   usePrintRegister("Cusp Height — Ball End", "Surface Finish", h !== null ? [
-    { label: `Tool Diameter (${dU})`, value: dia },
+    { label: `Cutting Diameter (${dU})`, value: dia },
     { label: `Step-Over (${dU})`, value: stepover },
     { label: `Cusp Height (${dU})`, value: metric ? (h * 25.4).toFixed(4) : h.toFixed(5), highlight: true },
     { label: metric ? "Theoretical Ra (µm)" : "Theoretical Ra (µin)", value: metric ? `~${(ra! * 25400).toFixed(3)}` : `~${(ra! * 1000).toFixed(3)}` },
@@ -381,7 +488,7 @@ function CuspHeight() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Scallop height left between passes when 3D surfacing with a ball end mill.
       </p>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Step-Over"><NumIn value={stepover} onChange={setStepover} unit={dU} placeholder={metric ? "0.508" : "0.0200"} /></Row>
       {h !== null && <>
         <Result label="Cusp Height" value={metric ? `${(h * 25.4).toFixed(4)} mm` : `${h.toFixed(5)}"`} highlight />
@@ -417,7 +524,7 @@ function EffectiveDia() {
   }
 
   usePrintRegister("Effective Dia — Ball End", "Surface Finish", deff !== null ? [
-    { label: `Tool Diameter (${dU})`, value: dia },
+    { label: `Cutting Diameter (${dU})`, value: dia },
     { label: `Axial DOC (${dU})`, value: ap },
     { label: `Effective Diameter (${dU})`, value: metric ? (deff * 25.4).toFixed(4) : deff.toFixed(5), highlight: true },
     { label: "SFM Correction", value: `${(sCorrect! * 100).toFixed(1)}% of nominal` },
@@ -429,7 +536,7 @@ function EffectiveDia() {
         At shallow DOC, a ball end mill's effective diameter is less than its nominal size —
         use Deff for accurate SFM.
       </p>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Axial DOC (ap)"><NumIn value={ap} onChange={setAp} unit={dU} placeholder={metric ? "0.254" : "0.0100"} /></Row>
       {deff !== null && <>
         <Result label="Effective Dia" value={metric ? `${(deff * 25.4).toFixed(4)} mm` : `${deff.toFixed(5)}"`} highlight />
@@ -465,7 +572,7 @@ function FeedArcCorrection() {
       </p>
       <Row label="Programmed Feed" hint="The feed rate programmed in CAM along the tool centerline path."><NumIn value={feed} onChange={setFeed} unit={metric ? "mm/min" : "IPM"} placeholder={metric ? "500" : "20.0"} /></Row>
       <Row label="Arc Radius (part)" hint="The radius of the arc feature on the part — not the tool radius."><NumIn value={arcR} onChange={setArcR} unit={metric ? "mm" : "in"} placeholder={metric ? "25.4" : "1.000"} /></Row>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool. Used to calculate centerline offset from the part arc."><NumIn value={toolDia} onChange={setToolDia} unit={metric ? "mm" : "in"} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool. Used to calculate centerline offset from the part arc."><NumIn value={toolDia} onChange={setToolDia} unit={metric ? "mm" : "in"} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       {inside !== null && <>
         <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
           <p className="text-[10px] text-orange-400 font-semibold">Inside Arc (concave — pocket corner)</p>
@@ -753,7 +860,7 @@ function SurfaceFinishFlat() {
   }
 
   usePrintRegister("Surface Finish (Step-Over)", "Surface Finish", ra_cusp !== null ? [
-    { label: `Tool Diameter (${dU})`, value: dia },
+    { label: `Cutting Diameter (${dU})`, value: dia },
     { label: `Step-Over (${dU})`, value: stepover },
     { label: `Step / Dia`, value: `${((ae / D) * 100).toFixed(1)}%` },
     { label: metric ? "Theoretical Ra (µm)" : "Theoretical Ra (µin)", value: metric ? `~${(ra_cusp * 25400 / 4).toFixed(3)}` : `~${(ra_cusp * 250000).toFixed(1)}`, highlight: true },
@@ -764,7 +871,7 @@ function SurfaceFinishFlat() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Theoretical Ra from radial step-over cusps on a flat end mill floor pass.
       </p>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Step-Over"><NumIn value={stepover} onChange={setStepover} unit={dU} placeholder={metric ? "0.508" : "0.020"} /></Row>
       {ra_cusp !== null && <>
         <Result label="Cusp Height" value={metric ? `${(ra_cusp * 25400).toFixed(3)} µm` : `${ra_cusp.toFixed(6)}"`} />
@@ -999,7 +1106,7 @@ function BallNoseVelocity() {
   const tiltBtns = [0, 10, 15, 20, 30];
 
   usePrintRegister("Ball Nose Velocity", "Surface Finish", result ? [
-    { label: `Tool Diameter (${dU})`, value: dia },
+    { label: `Cutting Diameter (${dU})`, value: dia },
     { label: `Axial DOC (${dU})`, value: ap },
     { label: `Programmed ${sU}`, value: sfm },
     { label: "Tilt Angle", value: `${tilt}°` },
@@ -1019,7 +1126,7 @@ function BallNoseVelocity() {
         dramatically increasing actual SFM at the cut.
       </p>
 
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Axial DOC (ap)"><NumIn value={ap}  onChange={setAp}  unit={dU} placeholder={metric ? "0.254" : "0.0100"} /></Row>
       <Row label={`Programmed ${sU}`}><NumIn value={sfm} onChange={setSfm} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
 
@@ -1256,7 +1363,7 @@ function EngagementAngle() {
   const [fpt,    setFpt]    = React.useState("");
 
   const D  = metric ? n(dia)/25.4 : n(dia);
-  const ae = metric ? n(woc)/25.4 : n(woc);
+  const ae = n(woc); // stored in inches by WocInput
   const fz = metric ? n(fpt)/25.4 : n(fpt);
   const z  = Math.max(1, Math.round(n(flutes)));
 
@@ -1290,7 +1397,7 @@ function EngagementAngle() {
     : null;
 
   usePrintRegister("Engagement Angle", "Speed & Feed", result ? [
-    { label: `Tool Diameter (${dU})`, value: dia },
+    { label: `Cutting Diameter (${dU})`, value: dia },
     { label: `WOC (${dU})`, value: woc },
     { label: "Engagement Angle", value: `${result.theta_deg.toFixed(1)}°`, highlight: true },
     { label: "% Revolution in Cut", value: `${result.pct_in_cut.toFixed(1)}%` },
@@ -1305,8 +1412,8 @@ function EngagementAngle() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Arc of contact between tool and workpiece. Drives heat per tooth, chip load, and cutting forces.
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-      <Row label="Radial WOC" hint="Width of cut — how far the tool steps into the material radially."><NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <WocInput dia={D} value={woc} metric={metric} onChange={(_, parsed) => setWoc(String(parsed))} />
       <Row label="Flutes" hint="Number of cutting edges. Used to calculate simultaneous teeth in cut."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <Row label="Feed / Tooth" hint="Optional — enter to calculate mean chip thickness across the engagement arc."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.005"} /></Row>
       {result && <>
@@ -1334,26 +1441,25 @@ function MinChipThickness() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
 
-  const [edgeRad, setEdgeRad]   = React.useState(""); // edge radius in μin or μm
   const [toolDia, setToolDia]   = React.useState("");
   const [woc,     setWoc]       = React.useState("");
   const [fpt,     setFpt]       = React.useState("");
 
-  const er_in  = metric ? n(edgeRad) / 1000 / 25.4 : n(edgeRad) / 1e6; // convert μin→in or μm→in
+  // Fixed edge radius: 0.0003" (typical honed carbide edge prep, midpoint of 0.0002–0.0004" range)
+  const er_in  = 0.0003;
   const td     = metric ? n(toolDia) / 25.4 : n(toolDia);
-  const woc_in = metric ? n(woc) / 25.4 : n(woc);
+  const woc_in = n(woc); // stored in inches by WocInput
   const fpt_in = metric ? n(fpt) / 25.4 : n(fpt);
 
   const wocFrac = td > 0 && woc_in > 0 ? woc_in / td : 0;
   const chipThinFactor = wocFrac > 0 ? Math.sqrt(wocFrac / (2 - wocFrac)) : null;
 
   // Min chip thickness = 20–30% of edge radius (use 25% as midpoint)
-  const minChip_in   = er_in > 0 ? 0.25 * er_in : null;
-  const minFpt_in    = minChip_in !== null && chipThinFactor !== null && chipThinFactor > 0
+  const minChip_in   = 0.25 * er_in;
+  const minFpt_in    = chipThinFactor !== null && chipThinFactor > 0
     ? minChip_in / chipThinFactor : null;
 
-  const disp = (v: number | null) => {
-    if (v === null) return null;
+  const disp = (v: number) => {
     return metric ? (v * 25400).toFixed(2) + " μm" : (v * 1e6).toFixed(1) + " μin";
   };
   const dispIn = (v: number | null) => {
@@ -1361,44 +1467,40 @@ function MinChipThickness() {
     return metric ? (v * 25.4).toFixed(4) + " mm" : v.toFixed(5) + '"';
   };
 
+  const hasInputs = td > 0 && woc_in > 0;
   const rubbing = fpt_in > 0 && minFpt_in !== null ? fpt_in < minFpt_in : null;
 
-  usePrintRegister("Min Chip Thickness", "Speed & Feed", minChip_in !== null ? [
-    { label: `Edge Radius (${metric ? "μm" : "μin"})`, value: edgeRad },
-    { label: `Tool Diameter (${dU})`, value: toolDia },
+  usePrintRegister("Min Chip Thickness", "Speed & Feed", hasInputs ? [
+    { label: `Cutting Diameter (${dU})`, value: toolDia },
     { label: "Radial WOC", value: woc },
-    { label: "Min Chip Thickness", value: disp(minChip_in) ?? "" },
+    { label: "Min Chip Thickness", value: disp(minChip_in) },
     ...(minFpt_in !== null ? [{ label: "Min FPT to avoid rubbing", value: dispIn(minFpt_in) ?? "" }] : []),
     ...(fpt_in > 0 && rubbing !== null ? [{ label: "Current FPT status", value: rubbing ? "⚠ Below min — tool is rubbing" : "✓ Above min — cutting" }] : []),
   ] : null);
 
   return (
     <CalcCard title="Min Chip Thickness" category="Speed & Feed"
-      onClear={() => { setEdgeRad(""); setToolDia(""); setWoc(""); setFpt(""); }}>
+      onClear={() => { setToolDia(""); setWoc(""); setFpt(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Chip must be ≥20–30% of the cutting edge radius or the tool rubs instead of cuts — accelerating wear.
+        Based on a standard honed edge prep of 0.0003".
       </p>
-      <Row label={`Edge Radius (${metric ? "μm" : "μin"})`} hint="Cutting edge hone radius from tool spec sheet. Typical uncoated carbide: 20–50 μin. Coated/honed: 50–200 μin. Ask your tool rep if unsure.">
-        <NumIn value={edgeRad} onChange={setEdgeRad} placeholder={metric ? "e.g. 5" : "e.g. 100"} />
-      </Row>
-      <Row label={`Tool Diameter (${dU})`} hint="Cutting diameter of the endmill.">
+      <Row label={`Cutting Diameter (${dU})`} hint="Cutting diameter of the endmill.">
         <NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
       </Row>
-      <Row label={`Radial WOC (${dU})`} hint="Width of cut — used to calculate chip thinning factor.">
-        <NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} />
-      </Row>
+      <WocInput dia={td} value={woc} metric={metric} hint="Width of cut — used to calculate chip thinning factor." onChange={(_, parsed) => setWoc(String(parsed))} />
       <Row label={`Current FPT (${dU})`} hint="Optional — enter your programmed feed per tooth to check if you're above the minimum.">
         <NumIn value={fpt} onChange={setFpt} unit={dU} placeholder="optional" />
       </Row>
-      {minChip_in !== null && (
+      {hasInputs && (
         <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
-          <Result label={`Min Chip Thickness`} value={disp(minChip_in) ?? ""} highlight />
+          <Result label={`Min Chip Thickness`} value={disp(minChip_in)} highlight />
           {chipThinFactor !== null && <Result label="Chip Thinning Factor" value={chipThinFactor.toFixed(3)} />}
           {minFpt_in !== null && <Result label={`Min FPT to cut (not rub)`} value={dispIn(minFpt_in) ?? ""} highlight />}
           {fpt_in > 0 && rubbing !== null && (
             <p className={`text-[10px] px-1 font-semibold ${rubbing ? "text-red-400" : "text-emerald-400"}`}>
               {rubbing
-                ? `⚠ Current FPT is below minimum — tool is rubbing, not cutting. Increase feed or reduce edge radius.`
+                ? `⚠ Current FPT is below minimum — tool is rubbing, not cutting. Increase feed.`
                 : `✓ Current FPT exceeds minimum — tool is cutting properly.`}
             </p>
           )}
@@ -1441,7 +1543,7 @@ function HelixEntry() {
   const minDia = td > 0 ? td * 1.1 : null; // minimum helix dia (10% over tool)
 
   usePrintRegister("Helix Entry", "Arcs & Contours", (calcPitchDisplay !== null || calcAngle !== null) ? [
-    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: `Cutting Diameter (${dU})`, value: toolDia },
     { label: `Helix Diameter (${dU})`, value: helixDia },
     ...(calcPitchDisplay !== null ? [
       { label: "Ramp Angle (°)", value: rampAngle },
@@ -1459,7 +1561,7 @@ function HelixEntry() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Helical interpolation entry into a pocket. Helix dia = bore dia minus tool dia (clearance needed).
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool entering the pocket."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool entering the pocket."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Helix Diameter" hint="Diameter of the circular path the tool center follows. Must be larger than the tool diameter. Typically: bore diameter minus tool diameter."><NumIn value={helixDia} onChange={setHelixDia} unit={dU} placeholder={metric ? "19.050" : "0.7500"} /></Row>
       {minDia && hd > 0 && hd < td * 1.001 && (
         <p className="text-[11px] text-red-400">⚠ Helix dia must be larger than tool dia.</p>
@@ -1509,7 +1611,7 @@ function NoMiddlePost() {
 
   usePrintRegister("No Middle Post", "Arcs & Contours", bd > 0 && td > 0 ? [
     { label: `Bore / Pocket Dia (${dU})`, value: boreDia },
-    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: `Cutting Diameter (${dU})`, value: toolDia },
     { label: "Post Diameter", value: hasPost ? `${postDisplay!.toFixed(dec)} ${dU} — POST EXISTS` : "None — tool passes center", highlight: true },
     ...(hasPost && minToolDisplay !== null ? [{ label: `Min Tool to Clear Post (${dU})`, value: minToolDisplay.toFixed(dec), highlight: true }] : []),
   ] : null);
@@ -1521,7 +1623,7 @@ function NoMiddlePost() {
         When helically entering solid stock, a tool smaller than half the bore diameter leaves a standing core post in the center that cannot be removed. Enter bore and tool diameters to check.
       </p>
       <Row label="Bore / Pocket Dia" hint="Final bore or pocket diameter being machined."><NumIn value={boreDia} onChange={setBoreDia} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
-      <Row label="Tool Diameter" hint="Cutting diameter of the endmill being used for helical entry."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the endmill being used for helical entry."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       {bd > 0 && td > 0 && td >= bd && (
         <p className="text-[11px] text-red-400">⚠ Tool diameter cannot exceed bore diameter.</p>
       )}
@@ -1820,7 +1922,7 @@ function BoreEnlargement() {
   const displayWoc = wocRaw > 0 ? wocRaw : autoWoc;
 
   usePrintRegister("Bore Enlargement", "Arcs & Contours", passes.length > 0 ? [
-    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: `Cutting Diameter (${dU})`, value: toolDia },
     { label: `Existing Hole Dia (${dU})`, value: existingDia },
     { label: `Target Hole Dia (${dU})`, value: targetDia },
     { label: `WOC per Pass (${dU})`, value: displayWoc ? (metric ? (displayWoc*25.4).toFixed(3) : displayWoc.toFixed(4)) : "—" },
@@ -1834,7 +1936,7 @@ function BoreEnlargement() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Circular interpolation bore enlargement. Shows arc engagement and feed multiplier per radial pass.
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the end mill used for circular interpolation."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Cutting Diameter" hint="Cutting diameter of the end mill used for circular interpolation."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Existing Hole Ø" hint="Diameter of the existing pre-drilled or bored hole the tool enters. Must be larger than the tool diameter."><NumIn value={existingDia} onChange={setExistingDia} unit={dU} placeholder={metric ? "19.050" : "0.7500"} /></Row>
       <Row label="Target Hole Ø" hint="Final bore diameter needed after circular interpolation."><NumIn value={targetDia} onChange={setTargetDia} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
       <Row label="WOC per Pass" hint="Radial step (width of cut) per circular orbit. Leave blank to use auto (6% of tool dia — light engagement)."><NumIn value={wocPerPass} onChange={setWocPerPass} unit={dU} placeholder="auto" /></Row>
@@ -1904,9 +2006,9 @@ function CornerClearance() {
 
   usePrintRegister("Corner Clearance", "Arcs & Contours", cr > 0 && td > 0 ? [
     { label: `Part Corner Radius (${dU})`, value: partCr },
-    { label: `Tool Diameter (${dU})`, value: toolDia },
+    { label: `Cutting Diameter (${dU})`, value: toolDia },
     { label: "Tool Fits Corner", value: fits ? "Yes ✓" : "No — tool too large", highlight: true },
-    { label: `Max Tool Diameter (${dU})`, value: maxDisplay?.toFixed(metric?3:5) ?? "" },
+    { label: `Max Cutting Diameter (${dU})`, value: maxDisplay?.toFixed(metric?3:5) ?? "" },
     ...(clearDisplay !== null ? [{ label: `Radial Clearance (${dU})`, value: clearDisplay.toFixed(metric?4:5) }] : []),
   ] : null);
 
@@ -1917,8 +2019,8 @@ function CornerClearance() {
         Checks if a tool fits a part corner radius and shows the maximum allowable tool diameter.
       </p>
       <Row label="Part Corner Radius" hint="The inside corner radius on the part drawing. The tool radius must be equal to or smaller than this value to fit."><NumIn value={partCr} onChange={setPartCr} unit={dU} placeholder={metric ? "6.350" : "0.2500"} /></Row>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool you plan to use. Tool radius = diameter ÷ 2."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-      {maxDisplay !== null && <Result label={`Max Tool Diameter (${dU})`} value={maxDisplay.toFixed(metric?3:5)} />}
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool you plan to use. Tool radius = diameter ÷ 2."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      {maxDisplay !== null && <Result label={`Max Cutting Diameter (${dU})`} value={maxDisplay.toFixed(metric?3:5)} />}
       {fits !== null && (
         <div className={`flex items-center justify-between px-3 py-2 rounded font-semibold text-sm`}
           style={{ background: fits ? "#052e16" : "#450a0a", color: fits ? "#4ade80" : "#f87171" }}>
@@ -1947,7 +2049,7 @@ function EntryLoadSpike() {
   const [leadRadius, setLeadRadius] = React.useState("");
 
   const D  = metric ? n(dia) / 25.4 : n(dia);
-  const ae = metric ? n(woc) / 25.4 : n(woc);
+  const ae = n(woc); // stored in inches by WocInput
   const lr = metric ? n(leadRadius) / 25.4 : n(leadRadius);
   const IN = metric ? 25.4 : 1;
 
@@ -1987,7 +2089,7 @@ function EntryLoadSpike() {
   const recLeadRad = D > 0 ? D * 0.10 : 0;   // ~10% of tool dia keeps spike < 1.2× with arc entry
 
   usePrintRegister("Entry Load Spike", "Arcs & Contours", valid ? [
-    { label: `Tool Diameter (${dU})`, value: (D * IN).toFixed(metric?3:4) },
+    { label: `Cutting Diameter (${dU})`, value: (D * IN).toFixed(metric?3:4) },
     { label: `WOC (${dU})`,           value: (ae * IN).toFixed(metric?3:4) },
     { label: "Entry Type",            value: { radial:"Straight Radial", ramp:"Ramp", arc:"Sweep / Roll-in" }[entryType] },
     { label: "Engagement Angle",      value: `${engDeg.toFixed(1)}°` },
@@ -2003,12 +2105,10 @@ function EntryLoadSpike() {
         When a tool first contacts material, instantaneous load spikes above steady-state. Entry method and arc lead-in radius determine how severe the spike is.
       </p>
 
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool.">
+      <Row label="Cutting Diameter" hint="Cutting diameter of the tool.">
         <NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric?"12.7":"0.500"} />
       </Row>
-      <Row label="Radial WOC" hint="Width of cut the tool will be at once in full engagement. Determines steady-state engagement angle and the load the tool ramps into at entry.">
-        <NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric?"3.175":"0.125"} />
-      </Row>
+      <WocInput dia={D} value={woc} metric={metric} hint="Width of cut the tool will be at once in full engagement. Determines steady-state engagement angle and the load the tool ramps into at entry." onChange={(_, parsed) => setWoc(String(parsed))} />
       {ae > D && D > 0 && <p className="text-[11px] text-red-400">⚠ WOC cannot exceed tool diameter.</p>}
 
       {valid && (
