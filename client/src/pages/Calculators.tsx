@@ -2132,6 +2132,11 @@ function CornerClearance() {
               <span className="font-semibold text-white">{idealEng.theta.toFixed(1)}° ({idealEng.wocPct.toFixed(1)}% dia)</span>
             </div>
           )}
+          {!ccSameAsIdeal && (
+            <p className="text-[10px] text-amber-400 pt-1 border-t border-[#2d2d4a] mt-1">
+              Not a standard stocked size — Core Cutter can produce this as a special order with quick delivery. Contact your rep.
+            </p>
+          )}
         </div>
       )}
 
