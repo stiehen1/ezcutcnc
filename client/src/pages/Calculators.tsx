@@ -217,14 +217,24 @@ function RpmSfm() {
 function IpmCalc() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
+  const sU = metric ? "m/min" : "SFM";
   const fU = metric ? "mm/min" : "IPM";
 
-  const [rpm, setRpm]    = React.useState("");
+  const [sfm,    setSfm]    = React.useState("");
+  const [dia,    setDia]    = React.useState("");
+  const [rpm,    setRpm]    = React.useState("");
   const [flutes, setFlutes] = React.useState("");
-  const [fpt, setFpt]    = React.useState("");
-  const [ipm, setIpm]    = React.useState("");
+  const [fpt,    setFpt]    = React.useState("");
+  const [ipm,    setIpm]    = React.useState("");
 
-  const R = n(rpm); const F = n(flutes);
+  const sfm_in = metric ? n(sfm) / 0.3048 : n(sfm);
+  const dia_in = metric ? n(dia) / 25.4    : n(dia);
+
+  // SFM+dia → RPM, or RPM → SFM+dia display
+  const rpmFromSfm  = sfm_in > 0 && dia_in > 0 ? (sfm_in * 3.8197) / dia_in : 0;
+  const sfmFromRpm  = n(rpm) > 0 && dia_in > 0  ? (n(rpm) * dia_in) / 3.8197  : 0;
+  const R = n(rpm) > 0 ? n(rpm) : rpmFromSfm;
+  const F = n(flutes);
 
   // FPT → IPM
   const fpt_in = metric ? n(fpt) / 25.4 : n(fpt);
@@ -237,15 +247,34 @@ function IpmCalc() {
   const calcFptDisplay = calcFpt !== null ? (metric ? calcFpt * 25.4 : calcFpt) : null;
 
   const printRows: PrintRow[] = [];
+  if (sfm) printRows.push({ label: `Surface Speed (${sU})`, value: sfm });
+  if (dia) printRows.push({ label: `Tool Diameter (${dU})`, value: dia });
   if (rpm) printRows.push({ label: "Spindle Speed (RPM)", value: rpm });
   if (flutes) printRows.push({ label: "Flutes", value: flutes });
   if (calcIpmDisplay !== null) { printRows.push({ label: `Feed / Tooth (${dU})`, value: fpt }); printRows.push({ label: `Feed Rate (${fU})`, value: calcIpmDisplay.toFixed(metric ? 2 : 1), highlight: true }); }
   if (calcFptDisplay !== null) { printRows.push({ label: `Feed Rate (${fU})`, value: ipm }); printRows.push({ label: `Feed / Tooth (${dU})`, value: calcFptDisplay.toFixed(metric ? 4 : 5), highlight: true }); }
-  usePrintRegister(`Feed Rate ↔ FPT`, "Speed & Feed", printRows.length > 2 ? printRows : null);
+  usePrintRegister("Feed Rate ↔ FPT", "Speed & Feed", printRows.length > 2 ? printRows : null);
 
   return (
-    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
-      <Row label="Spindle Speed" hint="Rotational speed of the spindle in revolutions per minute. Use the RPM↔SFM calculator above to convert from SFM first if needed."><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
+    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setSfm(""); setDia(""); setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
+      {/* Spindle speed — SFM+dia fills RPM field; RPM fills SFM field */}
+      <Row label={`Surface Speed (${sU})`} hint="Enter SFM to auto-fill RPM below (requires diameter).">
+        <NumIn value={sfm} onChange={v => { setSfm(v); }} unit={sU} placeholder={metric ? "60" : "200"} />
+      </Row>
+      <Row label="Tool Diameter" hint="Required when entering SFM.">
+        <NumIn value={dia} onChange={v => { setDia(v); }} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
+      </Row>
+      <Row label="Spindle Speed" hint="Enter RPM directly, or it auto-fills from SFM + diameter above.">
+        <NumIn value={rpm || (rpmFromSfm > 0 ? String(Math.round(rpmFromSfm)) : "")}
+          onChange={v => { setRpm(v); }}
+          unit="RPM" placeholder="3500" />
+      </Row>
+      {n(rpm) > 0 && sfmFromRpm > 0 && !sfm && (
+        <p className="text-[10px] text-gray-500 -mt-1 mb-1 pl-1">
+          {sU}: {metric ? (sfmFromRpm * 0.3048).toFixed(1) : Math.round(sfmFromRpm).toLocaleString()} {sU}
+          {dia_in > 0 ? "" : " (enter diameter to calculate SFM)"}
+        </p>
+      )}
       <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Enter FPT → get {fU}</p>
@@ -745,59 +774,6 @@ function SurfaceFinishFlat() {
           <p className="text-[11px] text-amber-400">⚠ Stepover &gt; 50% — formula less accurate at high engagement.</p>
         )}
       </>}
-    </CalcCard>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// 12. Peripheral Feed Rate
-// ─────────────────────────────────────────────────────────────────
-function PeripheralFeed() {
-  const metric = useMetric();
-  const dU = metric ? "mm" : "in";
-  const sU = metric ? "m/min" : "SFM";
-  const fU = metric ? "mm/min" : "IPM";
-
-  const [sfm,    setSfm]    = React.useState("");
-  const [dia,    setDia]    = React.useState("");
-  const [rpm,    setRpm]    = React.useState("");
-  const [flutes, setFlutes] = React.useState("");
-  const [fpt,    setFpt]    = React.useState("");
-
-  const sfm_in = metric ? n(sfm) / 0.3048 : n(sfm);
-  const dia_in = metric ? n(dia) / 25.4    : n(dia);
-  const fpt_in = metric ? n(fpt) / 25.4    : n(fpt);
-
-  // Effective RPM — direct entry wins, otherwise derive from SFM + dia
-  const rpmFromSfm = sfm_in > 0 && dia_in > 0 ? (sfm_in * 3.8197) / dia_in : 0;
-  const R = n(rpm) > 0 ? n(rpm) : rpmFromSfm;
-
-  const ipm_in = R * n(flutes) * fpt_in;
-  const feed_display = metric ? ipm_in * 25.4 : ipm_in;
-  const valid = R > 0 && n(flutes) > 0 && fpt_in > 0;
-
-  const printRows: PrintRow[] = [];
-  if (n(rpm) > 0) printRows.push({ label: "Spindle Speed (RPM)", value: rpm });
-  else if (sfm) { printRows.push({ label: `Surface Speed (${sU})`, value: sfm }); if (dia) printRows.push({ label: `Tool Diameter (${dU})`, value: dia }); }
-  if (rpmFromSfm > 0 && !n(rpm)) printRows.push({ label: "RPM", value: Math.round(rpmFromSfm).toLocaleString() });
-  if (flutes) printRows.push({ label: "Flutes", value: flutes });
-  if (fpt) printRows.push({ label: `Feed / Tooth (${dU})`, value: fpt });
-  if (valid) printRows.push({ label: `Feed Rate (${fU})`, value: feed_display.toFixed(metric ? 2 : 1), highlight: true });
-  usePrintRegister("Feed Rate Chain", "Speed & Feed", printRows.length > 2 ? printRows : null);
-
-  return (
-    <CalcCard title="Feed Rate Chain" category="Speed & Feed" onClear={() => { setSfm(""); setDia(""); setRpm(""); setFlutes(""); setFpt(""); }}>
-      <p className="text-[10px] text-gray-500 -mt-1">Full speed &amp; feed chain — enter SFM or RPM, add flutes + FPT.</p>
-      <div className="border-b border-[#2d2d4a] pb-2 mb-1">
-        <p className="text-[10px] text-gray-500 mb-2">Enter {sU} + diameter <span className="text-[#4a4a6a]">or</span> enter RPM directly</p>
-        <Row label={`Surface Speed (${sU})`}><NumIn value={sfm} onChange={v => { setSfm(v); if (v) setRpm(""); }} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
-        <Row label="Tool Diameter" hint="Required when entering SFM."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-        <Row label="Spindle Speed" hint="Enter RPM directly — overrides SFM."><NumIn value={rpm} onChange={v => { setRpm(v); if (v) { setSfm(""); setDia(""); } }} unit="RPM" placeholder="3500" /></Row>
-        {rpmFromSfm > 0 && !n(rpm) && <Result label="RPM" value={Math.round(rpmFromSfm).toLocaleString()} />}
-      </div>
-      <Row label="Flutes"><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
-      <Row label="Feed / Tooth"><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
-      {valid && <Result label="Feed Rate" value={`${feed_display.toFixed(metric ? 2 : 1)} ${fU}`} highlight />}
     </CalcCard>
   );
 }
@@ -2311,7 +2287,7 @@ function ChamferMill() {
 // Main page
 // ─────────────────────────────────────────────────────────────────
 const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
-  { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","peripheral","chip-thin","engagement","min-chip"] },
+  { heading: "Speed & Feed",    color: "#6366f1", ids: ["rpm-sfm","ipm","chip-thin","engagement","min-chip"] },
   { heading: "Surface Finish",  color: "#10b981", ids: ["cusp","eff-dia","surf-finish","ballnose-vel"] },
   { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","no-middle-post","bolt-circle","chord-sag","corner-clear","chamfer-mill","entry-spike"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
@@ -2323,7 +2299,6 @@ const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
 const CALC_MAP: Record<string, React.ReactNode> = {
   "rpm-sfm":     <RpmSfm />,
   "ipm":         <IpmCalc />,
-  "peripheral":  <PeripheralFeed />,
   "chip-thin":   <ChipThinning />,
   "engagement":  <EngagementAngle />,
   "min-chip":    <MinChipThickness />,
