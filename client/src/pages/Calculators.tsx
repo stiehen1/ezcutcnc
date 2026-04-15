@@ -1987,18 +1987,26 @@ function BoreEnlargement() {
 // ─────────────────────────────────────────────────────────────────
 // Corner Radius Clearance
 // ─────────────────────────────────────────────────────────────────
-// Common stocked carbide end mill cutting diameters (inches) — 1/8" increments + key small sizes
-const STD_DIAMETERS_IN = [
-  1/32, 1/16, 3/32, 1/8, 5/32, 3/16, 7/32, 1/4, 5/16, 3/8, 7/16, 1/2, 5/8, 3/4, 7/8, 1.0,
+// Generic 1/16" step diameters — for geometric "ideal next size" recommendation
+const GENERIC_DIAMETERS_IN = [
+  0.0625, 0.1250, 0.1875, 0.2500, 0.3125, 0.3750, 0.4375,
+  0.5000, 0.5625, 0.6250, 0.7500, 0.8750, 1.0000,
+];
+
+// Core Cutter stocked cutting diameters (inches) — from SKU catalog
+const CC_DIAMETERS_IN = [
+  0.0625, 0.0781, 0.0938, 0.1094, 0.1250, 0.1563, 0.1875, 0.2188, 0.2500,
+  0.3125, 0.3750, 0.5000, 0.6250, 0.7500, 1.0000,
 ];
 
 function fmtDia(d: number, metric: boolean) {
   if (metric) return `${(d * 25.4).toFixed(3)} mm`;
   // Express as fraction if it lines up cleanly, else decimal
   const fracs: [number, string][] = [
-    [1/32,"1/32"],[1/16,"1/16"],[3/32,"3/32"],[1/8,"1/8"],[5/32,"5/32"],
-    [3/16,"3/16"],[7/32,"7/32"],[1/4,"1/4"],[5/16,"5/16"],[3/8,"3/8"],
-    [7/16,"7/16"],[1/2,"1/2"],[5/8,"5/8"],[3/4,"3/4"],[7/8,"7/8"],[1.0,'1"'],
+    [0.0625,'1/16"'],[0.0781,'5/64"'],[0.0938,'3/32"'],[0.1094,'7/64"'],
+    [0.1250,'1/8"'],[0.1563,'5/32"'],[0.1875,'3/16"'],[0.2188,'7/32"'],
+    [0.2500,'1/4"'],[0.3125,'5/16"'],[0.3750,'3/8"'],[0.5000,'1/2"'],
+    [0.6250,'5/8"'],[0.7500,'3/4"'],[1.0000,'1"'],
   ];
   const match = fracs.find(([v]) => Math.abs(v - d) < 0.00005);
   return match ? match[1] : d.toFixed(4) + '"';
@@ -2022,18 +2030,40 @@ function CornerClearance() {
   const clearance = (fits && cr > 0 && td > 0) ? (cr - toolR) : null;
   const clearDisplay = clearance !== null ? (metric ? clearance * 25.4 : clearance) : null;
 
-  // Next smaller standard diameter below maxToolDia (strict — must be meaningfully smaller)
-  const suggestedDia = maxToolDia !== null
-    ? STD_DIAMETERS_IN.filter(d => d < maxToolDia - 0.00005).slice(-1)[0] ?? null
+  // Geometric ideal — next 1/16" step below max
+  const idealDia = maxToolDia !== null
+    ? GENERIC_DIAMETERS_IN.filter(d => d < maxToolDia - 0.00005).slice(-1)[0] ?? null
     : null;
-  const suggestedCr = suggestedDia !== null ? suggestedDia / 2 : null;
+  const idealCr = idealDia !== null ? idealDia / 2 : null;
+
+  // Core Cutter stocked — nearest stocked size at or below ideal (may equal ideal if we stock it)
+  const ccDia = idealDia !== null
+    ? CC_DIAMETERS_IN.filter(d => d <= idealDia + 0.00005).slice(-1)[0] ?? null
+    : null;
+  const ccCr = ccDia !== null ? ccDia / 2 : null;
+  const ccSameAsIdeal = idealDia !== null && ccDia !== null && Math.abs(ccDia - idealDia) < 0.00005;
+
+  // Engagement angle when tool traces the corner arc (WOC = part corner radius)
+  const engAngle = (toolD: number) => {
+    if (toolD <= 0 || cr <= 0) return null;
+    const woc = cr; // tool centerline offset = partCR, so WOC into corner = partCR
+    const wocPct = woc / toolD;
+    if (wocPct > 1) return null;
+    const theta = Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocPct))) * 180 / Math.PI;
+    return { theta, wocPct: wocPct * 100 };
+  };
+  const enteredEng = td > 0 ? engAngle(td) : null;
+  const idealEng   = idealDia ? engAngle(idealDia) : null;
+  const ccEng      = ccDia ? engAngle(ccDia) : null;
 
   usePrintRegister("Corner Clearance", "Arcs & Contours", cr > 0 ? [
     { label: `Part Corner Radius (${dU})`, value: partCr },
     ...(td > 0 ? [{ label: `Cutting Diameter (${dU})`, value: toolDia }] : []),
     { label: `Max Cutting Diameter`, value: maxDisplay !== null ? `${maxDisplay.toFixed(metric?3:4)} ${dU}` : "" },
-    ...(suggestedDia !== null ? [{ label: "Recommended Standard Dia", value: fmtDia(suggestedDia, metric), highlight: true }] : []),
-    ...(suggestedCr !== null ? [{ label: "Resulting Corner Radius", value: metric ? `${(suggestedCr*25.4).toFixed(3)} mm` : `${suggestedCr.toFixed(4)}"` }] : []),
+    ...(idealDia !== null ? [{ label: "Ideal Next Size", value: fmtDia(idealDia, metric) }] : []),
+    ...(idealCr !== null ? [{ label: "Ideal Resulting Corner Radius", value: metric ? `${(idealCr*25.4).toFixed(3)} mm` : `${idealCr.toFixed(4)}"` }] : []),
+    ...(ccDia !== null ? [{ label: "Core Cutter Stocked Size", value: fmtDia(ccDia, metric), highlight: true }] : []),
+    ...(ccCr !== null ? [{ label: "CC Resulting Corner Radius", value: metric ? `${(ccCr*25.4).toFixed(3)} mm` : `${ccCr.toFixed(4)}"` }] : []),
     ...(td > 0 && fits !== null ? [{ label: "Tool Fits Corner", value: fits ? "Yes ✓" : "No — tool too large" }] : []),
     ...(clearDisplay !== null ? [{ label: `Radial Clearance (${dU})`, value: clearDisplay.toFixed(metric?4:5) }] : []),
   ] : null);
@@ -2073,27 +2103,58 @@ function CornerClearance() {
               </span>
             </div>
           )}
+          {enteredEng !== null && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray-400">Corner Engagement</span>
+              <span className="font-semibold" style={{ color: atMax ? "#fb923c" : "#4ade80" }}>
+                {enteredEng.theta.toFixed(1)}° ({enteredEng.wocPct.toFixed(1)}% dia)
+              </span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Recommended tool section */}
-      {suggestedDia !== null && suggestedCr !== null && (
-        <div className="border border-emerald-800 rounded px-3 py-2 mt-1 space-y-1" style={{ background: "#052e16" }}>
-          <p className="text-[10px] text-emerald-400 font-semibold mb-1">Recommended standard size (lower engagement):</p>
+      {/* Geometric ideal — next 1/16" step */}
+      {idealDia !== null && idealCr !== null && (
+        <div className="border border-[#2d2d4a] rounded px-3 py-2 mt-1 space-y-1">
+          <p className="text-[10px] text-gray-400 font-semibold mb-1">Ideal next size down (lower engagement):</p>
           <div className="flex justify-between text-[11px]">
-            <span className="text-gray-300">Standard Diameter</span>
-            <span className="font-semibold text-emerald-300">{fmtDia(suggestedDia, metric)}</span>
+            <span className="text-gray-400">Diameter</span>
+            <span className="font-semibold text-white">{fmtDia(idealDia, metric)}</span>
           </div>
           <div className="flex justify-between text-[11px]">
-            <span className="text-gray-300">Fits corner?</span>
-            <span className="font-semibold text-emerald-300">Yes ✓</span>
+            <span className="text-gray-400">Resulting Corner Radius</span>
+            <span className="font-semibold text-white">{metric ? `${(idealCr*25.4).toFixed(3)} mm` : `${idealCr.toFixed(4)}"`}</span>
+          </div>
+          {idealEng !== null && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray-400">Corner Engagement</span>
+              <span className="font-semibold text-white">{idealEng.theta.toFixed(1)}° ({idealEng.wocPct.toFixed(1)}% dia)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Core Cutter stocked option */}
+      {ccDia !== null && ccCr !== null && (
+        <div className="border border-emerald-800 rounded px-3 py-2 mt-1 space-y-1" style={{ background: "#052e16" }}>
+          <p className="text-[10px] text-emerald-400 font-semibold mb-1">
+            {ccSameAsIdeal ? "✓ Core Cutter stocks this size:" : "✓ Nearest Core Cutter stocked size:"}
+          </p>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-300">Standard Diameter</span>
+            <span className="font-semibold text-emerald-300">{fmtDia(ccDia, metric)}</span>
           </div>
           <div className="flex justify-between text-[11px]">
             <span className="text-gray-300">Resulting Corner Radius</span>
-            <span className="font-semibold text-white">
-              {metric ? `${(suggestedCr*25.4).toFixed(3)} mm` : `${suggestedCr.toFixed(4)}"`}
-            </span>
+            <span className="font-semibold text-white">{metric ? `${(ccCr*25.4).toFixed(3)} mm` : `${ccCr.toFixed(4)}"`}</span>
           </div>
+          {ccEng !== null && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray-300">Corner Engagement</span>
+              <span className="font-semibold text-emerald-300">{ccEng.theta.toFixed(1)}° ({ccEng.wocPct.toFixed(1)}% dia)</span>
+            </div>
+          )}
         </div>
       )}
     </CalcCard>
