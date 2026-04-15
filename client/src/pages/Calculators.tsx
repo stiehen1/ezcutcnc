@@ -217,22 +217,14 @@ function RpmSfm() {
 function IpmCalc() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
-  const sU = metric ? "m/min" : "SFM";
   const fU = metric ? "mm/min" : "IPM";
 
-  const [dia, setDia]    = React.useState("");
-  const [sfm, setSfm]    = React.useState("");
   const [rpm, setRpm]    = React.useState("");
   const [flutes, setFlutes] = React.useState("");
   const [fpt, setFpt]    = React.useState("");
   const [ipm, setIpm]    = React.useState("");
 
-  // Resolve effective RPM — direct RPM entry wins; otherwise derive from SFM + dia
-  const d_in = metric ? n(dia) / 25.4 : n(dia);
-  const s_in = metric ? n(sfm) / 0.3048 : n(sfm);
-  const rpmFromSfm = d_in > 0 && s_in > 0 ? (s_in * 3.8197) / d_in : 0;
-  const R = n(rpm) > 0 ? n(rpm) : rpmFromSfm;
-  const F = n(flutes);
+  const R = n(rpm); const F = n(flutes);
 
   // FPT → IPM
   const fpt_in = metric ? n(fpt) / 25.4 : n(fpt);
@@ -244,24 +236,16 @@ function IpmCalc() {
   const calcFpt = R > 0 && F > 0 && ipm_in > 0 ? ipm_in / (R * F) : null;
   const calcFptDisplay = calcFpt !== null ? (metric ? calcFpt * 25.4 : calcFpt) : null;
 
-  const rpmLabel = n(rpm) > 0 ? rpm : (rpmFromSfm > 0 ? Math.round(rpmFromSfm).toString() : "");
   const printRows: PrintRow[] = [];
-  if (rpmLabel) printRows.push({ label: "Spindle Speed (RPM)", value: rpmLabel });
+  if (rpm) printRows.push({ label: "Spindle Speed (RPM)", value: rpm });
   if (flutes) printRows.push({ label: "Flutes", value: flutes });
   if (calcIpmDisplay !== null) { printRows.push({ label: `Feed / Tooth (${dU})`, value: fpt }); printRows.push({ label: `Feed Rate (${fU})`, value: calcIpmDisplay.toFixed(metric ? 2 : 1), highlight: true }); }
   if (calcFptDisplay !== null) { printRows.push({ label: `Feed Rate (${fU})`, value: ipm }); printRows.push({ label: `Feed / Tooth (${dU})`, value: calcFptDisplay.toFixed(metric ? 4 : 5), highlight: true }); }
   usePrintRegister(`Feed Rate ↔ FPT`, "Speed & Feed", printRows.length > 2 ? printRows : null);
 
   return (
-    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setDia(""); setSfm(""); setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
-      {/* Spindle speed — enter SFM+dia OR RPM directly */}
-      <div className="border-b border-[#2d2d4a] pb-2 mb-1">
-        <p className="text-[10px] text-gray-500 mb-2">Enter {sU} + diameter  <span className="text-[#4a4a6a]">or</span>  enter RPM directly</p>
-        <Row label="Tool Diameter" hint="Required only when entering SFM — not needed if entering RPM directly."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-        <Row label={`Surface Speed (${sU})`} hint={`Cutting speed at the tool OD. Enter this + diameter to auto-calculate RPM.`}><NumIn value={sfm} onChange={v => { setSfm(v); if (v) setRpm(""); }} unit={sU} /></Row>
-        <Row label="Spindle Speed" hint="Enter RPM directly — overrides SFM + diameter if both are filled."><NumIn value={rpm} onChange={v => { setRpm(v); if (v) { setSfm(""); setDia(""); } }} unit="RPM" /></Row>
-        {rpmFromSfm > 0 && !n(rpm) && <Result label="RPM (from SFM)" value={Math.round(rpmFromSfm).toLocaleString()} />}
-      </div>
+    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
+      <Row label="Spindle Speed" hint="Rotational speed of the spindle in revolutions per minute. Use the RPM↔SFM calculator above to convert from SFM first if needed."><NumIn value={rpm} onChange={setRpm} unit="RPM" /></Row>
       <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Enter FPT → get {fU}</p>
