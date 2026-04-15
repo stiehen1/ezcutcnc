@@ -222,30 +222,41 @@ function IpmCalc() {
   const [rpm, setRpm] = React.useState("");
   const [flutes, setFlutes] = React.useState("");
   const [fpt, setFpt] = React.useState("");
+  const [ipm, setIpm] = React.useState("");
 
+  const R = n(rpm); const F = n(flutes);
+
+  // FPT → IPM
   const fpt_in = metric ? n(fpt) / 25.4 : n(fpt);
-  const ipm_in = n(rpm) * n(flutes) * fpt_in;
-  const feed_display = metric ? ipm_in * 25.4 : ipm_in;
-  const fpr_display  = metric ? n(flutes) * fpt_in * 25.4 : n(flutes) * fpt_in;
-  const valid = n(rpm) > 0 && n(flutes) > 0 && n(fpt) > 0;
+  const calcIpm = R > 0 && F > 0 && fpt_in > 0 ? R * F * fpt_in : null;
+  const calcIpmDisplay = calcIpm !== null ? (metric ? calcIpm * 25.4 : calcIpm) : null;
 
-  usePrintRegister(`Feed Rate (${fU})`, "Speed & Feed", valid ? [
-    { label: "Spindle Speed (RPM)", value: rpm },
-    { label: "Flutes", value: flutes },
-    { label: `Feed / Tooth (${dU})`, value: fpt },
-    { label: `Feed Rate (${fU})`, value: feed_display.toFixed(metric ? 2 : 1), highlight: true },
-    { label: `Feed / Rev (${dU}/rev)`, value: fpr_display.toFixed(metric ? 4 : 5) },
-  ] : null);
+  // IPM → FPT
+  const ipm_in = metric ? n(ipm) / 25.4 : n(ipm);
+  const calcFpt = R > 0 && F > 0 && ipm_in > 0 ? ipm_in / (R * F) : null;
+  const calcFptDisplay = calcFpt !== null ? (metric ? calcFpt * 25.4 : calcFpt) : null;
+
+  const printRows: PrintRow[] = [];
+  if (rpm) printRows.push({ label: "Spindle Speed (RPM)", value: rpm });
+  if (flutes) printRows.push({ label: "Flutes", value: flutes });
+  if (calcIpmDisplay !== null) { printRows.push({ label: `Feed / Tooth (${dU})`, value: fpt }); printRows.push({ label: `Feed Rate (${fU})`, value: calcIpmDisplay.toFixed(metric ? 2 : 1), highlight: true }); }
+  if (calcFptDisplay !== null) { printRows.push({ label: `Feed Rate (${fU})`, value: ipm }); printRows.push({ label: `Feed / Tooth (${dU})`, value: calcFptDisplay.toFixed(metric ? 4 : 5), highlight: true }); }
+  usePrintRegister(`Feed Rate ↔ FPT`, "Speed & Feed", printRows.length > 2 ? printRows : null);
 
   return (
-    <CalcCard title={`Feed Rate (${fU})`} category="Speed & Feed" onClear={() => { setRpm(""); setFlutes(""); setFpt(""); }}>
+    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
       <Row label="Spindle Speed" hint="Rotational speed of the spindle in revolutions per minute."><NumIn value={rpm} onChange={setRpm} unit="RPM" /></Row>
-      <Row label="Flutes" hint="Number of cutting edges on the tool. More flutes = more cuts per revolution but less chip room."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
-      <Row label="Feed / Tooth" hint="Chip load — how much material each flute removes per revolution. Too low causes rubbing; too high breaks tools."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
-      {valid && <>
-        <Result label="Feed Rate" value={`${feed_display.toFixed(metric ? 2 : 1)} ${fU}`} highlight />
-        <Result label={`Feed / Rev`} value={`${fpr_display.toFixed(metric ? 4 : 5)} ${dU}/rev`} />
-      </>}
+      <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
+      <div className="border-t border-[#2d2d4a] pt-2">
+        <p className="text-[10px] text-gray-500 mb-2">Enter FPT → get {fU}</p>
+        <Row label="Feed / Tooth" hint="Chip load — how much material each flute removes per revolution. Too low causes rubbing; too high breaks tools."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
+        {calcIpmDisplay !== null && <Result label={`Feed Rate`} value={`${calcIpmDisplay.toFixed(metric ? 2 : 1)} ${fU}`} highlight />}
+      </div>
+      <div className="border-t border-[#2d2d4a] pt-2">
+        <p className="text-[10px] text-gray-500 mb-2">Enter {fU} → get FPT</p>
+        <Row label="Feed Rate" hint="Table feed rate — how fast the tool moves through the material."><NumIn value={ipm} onChange={setIpm} unit={fU} placeholder={metric ? "500" : "20.0"} /></Row>
+        {calcFptDisplay !== null && <Result label="Feed / Tooth" value={`${calcFptDisplay.toFixed(metric ? 4 : 5)} ${dU}`} highlight />}
+      </div>
     </CalcCard>
   );
 }
