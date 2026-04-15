@@ -760,41 +760,44 @@ function PeripheralFeed() {
 
   const [sfm,    setSfm]    = React.useState("");
   const [dia,    setDia]    = React.useState("");
+  const [rpm,    setRpm]    = React.useState("");
   const [flutes, setFlutes] = React.useState("");
   const [fpt,    setFpt]    = React.useState("");
 
   const sfm_in = metric ? n(sfm) / 0.3048 : n(sfm);
   const dia_in = metric ? n(dia) / 25.4    : n(dia);
   const fpt_in = metric ? n(fpt) / 25.4    : n(fpt);
-  const rpm = dia_in > 0 ? (sfm_in * 3.8197) / dia_in : 0;
-  const ipm_in = rpm * n(flutes) * fpt_in;
-  const feed_display = metric ? ipm_in * 25.4 : ipm_in;
-  const fpr_display  = metric ? n(flutes) * fpt_in * 25.4 : n(flutes) * fpt_in;
-  const valid = sfm_in > 0 && dia_in > 0 && n(flutes) > 0 && fpt_in > 0;
 
-  usePrintRegister(`Feed from ${sU}`, "Speed & Feed", valid ? [
-    { label: `Surface Speed (${sU})`, value: sfm },
-    { label: `Tool Diameter (${dU})`, value: dia },
-    { label: "Flutes", value: flutes },
-    { label: `Feed / Tooth (${dU})`, value: fpt },
-    { label: "RPM", value: Math.round(rpm).toLocaleString() },
-    { label: `Feed Rate (${fU})`, value: feed_display.toFixed(metric ? 2 : 1), highlight: true },
-  ] : null);
+  // Effective RPM — direct entry wins, otherwise derive from SFM + dia
+  const rpmFromSfm = sfm_in > 0 && dia_in > 0 ? (sfm_in * 3.8197) / dia_in : 0;
+  const R = n(rpm) > 0 ? n(rpm) : rpmFromSfm;
+
+  const ipm_in = R * n(flutes) * fpt_in;
+  const feed_display = metric ? ipm_in * 25.4 : ipm_in;
+  const valid = R > 0 && n(flutes) > 0 && fpt_in > 0;
+
+  const printRows: PrintRow[] = [];
+  if (n(rpm) > 0) printRows.push({ label: "Spindle Speed (RPM)", value: rpm });
+  else if (sfm) { printRows.push({ label: `Surface Speed (${sU})`, value: sfm }); if (dia) printRows.push({ label: `Tool Diameter (${dU})`, value: dia }); }
+  if (rpmFromSfm > 0 && !n(rpm)) printRows.push({ label: "RPM", value: Math.round(rpmFromSfm).toLocaleString() });
+  if (flutes) printRows.push({ label: "Flutes", value: flutes });
+  if (fpt) printRows.push({ label: `Feed / Tooth (${dU})`, value: fpt });
+  if (valid) printRows.push({ label: `Feed Rate (${fU})`, value: feed_display.toFixed(metric ? 2 : 1), highlight: true });
+  usePrintRegister("Feed Rate Chain", "Speed & Feed", printRows.length > 2 ? printRows : null);
 
   return (
-    <CalcCard title={`Feed from ${sU}`} category="Speed & Feed" onClear={() => { setSfm(""); setDia(""); setFlutes(""); setFpt(""); }}>
-      <p className="text-[10px] text-gray-500 -mt-1">
-        Full speed &amp; feed chain from surface footage to table feed.
-      </p>
-      <Row label="Surface Speed"><NumIn value={sfm} onChange={setSfm} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+    <CalcCard title="Feed Rate Chain" category="Speed & Feed" onClear={() => { setSfm(""); setDia(""); setRpm(""); setFlutes(""); setFpt(""); }}>
+      <p className="text-[10px] text-gray-500 -mt-1">Full speed &amp; feed chain — enter SFM or RPM, add flutes + FPT.</p>
+      <div className="border-b border-[#2d2d4a] pb-2 mb-1">
+        <p className="text-[10px] text-gray-500 mb-2">Enter {sU} + diameter <span className="text-[#4a4a6a]">or</span> enter RPM directly</p>
+        <Row label={`Surface Speed (${sU})`}><NumIn value={sfm} onChange={v => { setSfm(v); if (v) setRpm(""); }} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
+        <Row label="Tool Diameter" hint="Required when entering SFM."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+        <Row label="Spindle Speed" hint="Enter RPM directly — overrides SFM."><NumIn value={rpm} onChange={v => { setRpm(v); if (v) { setSfm(""); setDia(""); } }} unit="RPM" placeholder="3500" /></Row>
+        {rpmFromSfm > 0 && !n(rpm) && <Result label="RPM" value={Math.round(rpmFromSfm).toLocaleString()} />}
+      </div>
       <Row label="Flutes"><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <Row label="Feed / Tooth"><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
-      {valid && <>
-        <Result label="RPM" value={Math.round(rpm).toLocaleString()} />
-        <Result label="Feed Rate" value={`${feed_display.toFixed(metric ? 2 : 1)} ${fU}`} highlight />
-        <Result label="Feed / Rev" value={`${fpr_display.toFixed(metric ? 4 : 5)} ${dU}/rev`} />
-      </>}
+      {valid && <Result label="Feed Rate" value={`${feed_display.toFixed(metric ? 2 : 1)} ${fU}`} highlight />}
     </CalcCard>
   );
 }
