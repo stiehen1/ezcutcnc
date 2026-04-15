@@ -1987,6 +1987,23 @@ function BoreEnlargement() {
 // ─────────────────────────────────────────────────────────────────
 // Corner Radius Clearance
 // ─────────────────────────────────────────────────────────────────
+// Common stocked carbide end mill cutting diameters (inches) — 1/8" increments + key small sizes
+const STD_DIAMETERS_IN = [
+  1/32, 1/16, 3/32, 1/8, 5/32, 3/16, 7/32, 1/4, 5/16, 3/8, 7/16, 1/2, 5/8, 3/4, 7/8, 1.0,
+];
+
+function fmtDia(d: number, metric: boolean) {
+  if (metric) return `${(d * 25.4).toFixed(3)} mm`;
+  // Express as fraction if it lines up cleanly, else decimal
+  const fracs: [number, string][] = [
+    [1/32,"1/32"],[1/16,"1/16"],[3/32,"3/32"],[1/8,"1/8"],[5/32,"5/32"],
+    [3/16,"3/16"],[7/32,"7/32"],[1/4,"1/4"],[5/16,"5/16"],[3/8,"3/8"],
+    [7/16,"7/16"],[1/2,"1/2"],[5/8,"5/8"],[3/4,"3/4"],[7/8,"7/8"],[1.0,'1"'],
+  ];
+  const match = fracs.find(([v]) => Math.abs(v - d) < 0.00005);
+  return match ? match[1] : d.toFixed(4) + '"';
+}
+
 function CornerClearance() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
@@ -1999,16 +2016,25 @@ function CornerClearance() {
   const toolR = td / 2;
 
   const fits = cr > 0 && td > 0 ? toolR <= cr : null;
+  const atMax = cr > 0 && td > 0 ? Math.abs(toolR - cr) < 0.00005 : false; // tool exactly at max — high engagement
   const maxToolDia = cr > 0 ? cr * 2 : null;
   const maxDisplay = maxToolDia !== null ? (metric ? maxToolDia * 25.4 : maxToolDia) : null;
   const clearance = (fits && cr > 0 && td > 0) ? (cr - toolR) : null;
   const clearDisplay = clearance !== null ? (metric ? clearance * 25.4 : clearance) : null;
 
-  usePrintRegister("Corner Clearance", "Arcs & Contours", cr > 0 && td > 0 ? [
+  // Next smaller standard diameter below maxToolDia (strict — must be meaningfully smaller)
+  const suggestedDia = maxToolDia !== null
+    ? STD_DIAMETERS_IN.filter(d => d < maxToolDia - 0.00005).slice(-1)[0] ?? null
+    : null;
+  const suggestedCr = suggestedDia !== null ? suggestedDia / 2 : null;
+
+  usePrintRegister("Corner Clearance", "Arcs & Contours", cr > 0 ? [
     { label: `Part Corner Radius (${dU})`, value: partCr },
-    { label: `Cutting Diameter (${dU})`, value: toolDia },
-    { label: "Tool Fits Corner", value: fits ? "Yes ✓" : "No — tool too large", highlight: true },
-    { label: `Max Cutting Diameter (${dU})`, value: maxDisplay?.toFixed(metric?3:5) ?? "" },
+    ...(td > 0 ? [{ label: `Cutting Diameter (${dU})`, value: toolDia }] : []),
+    { label: `Max Cutting Diameter`, value: maxDisplay !== null ? `${maxDisplay.toFixed(metric?3:4)} ${dU}` : "" },
+    ...(suggestedDia !== null ? [{ label: "Recommended Standard Dia", value: fmtDia(suggestedDia, metric), highlight: true }] : []),
+    ...(suggestedCr !== null ? [{ label: "Resulting Corner Radius", value: metric ? `${(suggestedCr*25.4).toFixed(3)} mm` : `${suggestedCr.toFixed(4)}"` }] : []),
+    ...(td > 0 && fits !== null ? [{ label: "Tool Fits Corner", value: fits ? "Yes ✓" : "No — tool too large" }] : []),
     ...(clearDisplay !== null ? [{ label: `Radial Clearance (${dU})`, value: clearDisplay.toFixed(metric?4:5) }] : []),
   ] : null);
 
@@ -2016,21 +2042,59 @@ function CornerClearance() {
     <CalcCard title="Corner Clearance" category="Arcs & Contours"
       onClear={() => { setPartCr(""); setToolDia(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
-        Checks if a tool fits a part corner radius and shows the maximum allowable tool diameter.
+        Checks if a tool fits a part corner radius and recommends the next smaller standard diameter.
       </p>
-      <Row label="Part Corner Radius" hint="The inside corner radius on the part drawing. The tool radius must be equal to or smaller than this value to fit."><NumIn value={partCr} onChange={setPartCr} unit={dU} placeholder={metric ? "6.350" : "0.2500"} /></Row>
-      <Row label="Cutting Diameter" hint="Cutting diameter of the tool you plan to use. Tool radius = diameter ÷ 2."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
-      {maxDisplay !== null && <Result label={`Max Cutting Diameter (${dU})`} value={maxDisplay.toFixed(metric?3:5)} />}
-      {fits !== null && (
-        <div className={`flex items-center justify-between px-3 py-2 rounded font-semibold text-sm`}
-          style={{ background: fits ? "#052e16" : "#450a0a", color: fits ? "#4ade80" : "#f87171" }}>
-          <span className="text-[11px]">Tool fits corner?</span>
-          <span>{fits ? "Yes ✓" : "No — too large"}</span>
+      <Row label="Part Corner Radius" hint="The inside corner radius on the part drawing. The tool radius must be equal to or smaller than this value to fit.">
+        <NumIn value={partCr} onChange={setPartCr} unit={dU} placeholder={metric ? "6.350" : "0.2500"} />
+      </Row>
+      <Row label="Cutting Diameter" hint="Optional — check if a specific tool fits this corner.">
+        <NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
+      </Row>
+
+      {maxDisplay !== null && (
+        <Result label="Max Cutting Diameter" value={`${maxDisplay.toFixed(metric?3:4)} ${dU}`} />
+      )}
+
+      {/* Entered tool section */}
+      {td > 0 && fits !== null && (
+        <div className="border border-[#2d2d4a] rounded px-3 py-2 mt-1 space-y-1">
+          <p className="text-[10px] text-gray-400 mb-1">Entered tool ({fmtDia(td, metric)}):</p>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-400">Fits corner?</span>
+            <span className="font-semibold" style={{ color: atMax ? "#fb923c" : fits ? "#4ade80" : "#f87171" }}>
+              {atMax ? "Yes — but high engagement ⚠" : fits ? "Yes ✓" : "No — too large"}
+            </span>
+          </div>
+          {clearDisplay !== null && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray-400">Radial Clearance</span>
+              <span className="font-semibold" style={{ color: atMax ? "#fb923c" : "#4ade80" }}>
+                {clearDisplay.toFixed(metric?4:5)} {dU}
+              </span>
+            </div>
+          )}
         </div>
       )}
-      {clearDisplay !== null && <Result label={`Radial Clearance (${dU})`} value={clearDisplay.toFixed(metric?4:5)} />}
-      {fits === false && maxDisplay !== null && (
-        <p className="text-[11px] text-amber-400">Max tool for this corner: {maxDisplay.toFixed(metric?3:4)} {dU}</p>
+
+      {/* Recommended tool section */}
+      {suggestedDia !== null && suggestedCr !== null && (
+        <div className="border border-emerald-800 rounded px-3 py-2 mt-1 space-y-1" style={{ background: "#052e16" }}>
+          <p className="text-[10px] text-emerald-400 font-semibold mb-1">Recommended standard size (lower engagement):</p>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-300">Standard Diameter</span>
+            <span className="font-semibold text-emerald-300">{fmtDia(suggestedDia, metric)}</span>
+          </div>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-300">Fits corner?</span>
+            <span className="font-semibold text-emerald-300">Yes ✓</span>
+          </div>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-gray-300">Resulting Corner Radius</span>
+            <span className="font-semibold text-white">
+              {metric ? `${(suggestedCr*25.4).toFixed(3)} mm` : `${suggestedCr.toFixed(4)}"`}
+            </span>
+          </div>
+        </div>
       )}
     </CalcCard>
   );
