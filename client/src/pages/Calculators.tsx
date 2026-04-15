@@ -2134,7 +2134,7 @@ function CornerClearance() {
           )}
           {!ccSameAsIdeal && (
             <p className="text-[10px] text-amber-400 pt-1 border-t border-[#2d2d4a] mt-1">
-              Not a standard stocked size — Core Cutter can produce this as a special order with quick delivery. Contact your rep.
+              Not a standard stocked size — Core Cutter can produce this as a special order with quick delivery. Contact us at 207-588-7519 or sales@corecutterusa.com
             </p>
           )}
         </div>
