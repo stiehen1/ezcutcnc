@@ -429,11 +429,10 @@ export default function Mentor() {
   const [tbShowModal, setTbShowModal] = React.useState(false);
   const [tbEmail, setTbEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [tbToken, setTbToken] = React.useState(() => localStorage.getItem("tb_token") || "");
-  const [tbStep, setTbStep] = React.useState<"email" | "code" | "saving">(
+  const [tbStep, setTbStep] = React.useState<"email" | "saving">(
     localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "saving" : "email"
   );
-  const [tbInputEmail, setTbInputEmail] = React.useState("");
-  const [tbInputCode, setTbInputCode] = React.useState("");
+  const [tbInputEmail, setTbInputEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
   const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
@@ -454,6 +453,8 @@ export default function Mentor() {
   const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
   const [welcomeLastName, setWelcomeLastName] = React.useState("");
   const [welcomeEmail, setWelcomeEmail] = React.useState("");
+  const [welcomeCompany, setWelcomeCompany] = React.useState("");
+  const [welcomeZip, setWelcomeZip] = React.useState("");
   const [welcomeError, setWelcomeError] = React.useState("");
   const [welcomeValidating, setWelcomeValidating] = React.useState(false);
 
@@ -479,15 +480,34 @@ export default function Mentor() {
     localStorage.setItem("cc_first_name", welcomeFirstName.trim());
     localStorage.setItem("cc_last_name", welcomeLastName.trim());
     localStorage.setItem("er_email", welcomeEmail.trim().toLowerCase());
+    if (welcomeCompany.trim()) localStorage.setItem("cc_company", welcomeCompany.trim());
+    if (welcomeZip.trim()) localStorage.setItem("cc_zip", welcomeZip.trim());
     setErEmail(welcomeEmail.trim().toLowerCase());
     setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
     setShowWelcomeModal(false);
+    const _regEmail = welcomeEmail.trim().toLowerCase();
+    // Register lead (fire-and-forget)
     fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase() }),
+      body: JSON.stringify({ name: fullName, email: _regEmail, company: welcomeCompany.trim() || undefined, zip: welcomeZip.trim() || undefined }),
     }).catch(() => {});
+    // Auto-auth toolbox immediately so they don't have to reload
+    fetch("/api/toolbox/auto-auth", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: _regEmail }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.ok && d.token) {
+          localStorage.setItem("tb_email", _regEmail);
+          localStorage.setItem("tb_token", d.token);
+          setTbEmail(_regEmail);
+          setTbToken(d.token);
+        }
+      })
+      .catch(() => {});
   }
 
   // ── ROI Calculator functions ───────────────────────────────────────────────
@@ -976,21 +996,23 @@ export default function Mentor() {
   const [editMaintenanceDate, setEditMaintenanceDate] = React.useState("");
   const [activeJobNo, setActiveJobNo] = React.useState("");
 
-  // Auto-auth Toolbox for users who already registered via welcome modal
+  // Auto-auth Toolbox for users who already registered via welcome modal or have a known email
   React.useEffect(() => {
-    const erEmail = localStorage.getItem("er_email");
     const hasTbToken = localStorage.getItem("tb_token");
-    if (!erEmail || hasTbToken) return;
+    if (hasTbToken) return; // already authenticated
+    // Try er_email (welcome modal registration) first, then tb_email (previously used toolbox)
+    const emailToTry = localStorage.getItem("er_email") || localStorage.getItem("tb_email");
+    if (!emailToTry) return;
     fetch("/api/toolbox/auto-auth", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: erEmail }),
+      body: JSON.stringify({ email: emailToTry }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.ok && d.token) {
-          localStorage.setItem("tb_email", erEmail.toLowerCase());
+          localStorage.setItem("tb_email", emailToTry.toLowerCase());
           localStorage.setItem("tb_token", d.token);
-          setTbEmail(erEmail.toLowerCase());
+          setTbEmail(emailToTry.toLowerCase());
           setTbToken(d.token);
         }
       })
@@ -1154,42 +1176,35 @@ export default function Mentor() {
     } finally { setTbSaving(false); }
   }
 
-  async function tbSendCode() {
+  async function tbSignIn() {
     setTbError("");
     setTbSaving(true);
     try {
-      const r = await fetch("/api/toolbox/send-code", {
+      const r = await fetch("/api/toolbox/auto-auth", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: tbInputEmail }),
       });
       const d = await r.json();
-      if (!r.ok) { setTbError(d.error || "Failed"); return; }
-      setTbStep("code");
-    } catch { setTbError("Network error"); }
-    finally { setTbSaving(false); }
-  }
-
-  async function tbVerifyCode() {
-    setTbError("");
-    setTbSaving(true);
-    try {
-      const r = await fetch("/api/toolbox/verify-code", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: tbInputEmail, code: tbInputCode }),
-      });
-      const d = await r.json();
-      if (!r.ok) { setTbError(d.error || "Invalid code"); return; }
-      localStorage.setItem("tb_email", tbInputEmail.toLowerCase());
+      if (!r.ok) { setTbError(d.error || "Unable to sign in — please contact sales@corecutterusa.com"); return; }
+      const _tbEmail = tbInputEmail.toLowerCase();
+      localStorage.setItem("tb_email", _tbEmail);
       localStorage.setItem("tb_token", d.token);
-      setTbEmail(tbInputEmail.toLowerCase());
+      setTbEmail(_tbEmail);
       setTbToken(d.token);
+      // Capture lead if not already registered via welcome modal
+      if (!localStorage.getItem("cc_user_name")) {
+        fetch("/api/register", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: _tbEmail }),
+        }).catch(() => {});
+      }
       setTbStep("saving");
       // now save
       const title = tbTitle || `${form.operation} — ${form.material} — Ø${form.tool_dia}"`;
       await fetch("/api/toolbox/save", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: tbInputEmail.toLowerCase(), token: d.token,
+          email: _tbEmail, token: d.token,
           type: "result", title,
           data: { inputs: form, customer: result?.customer, engineering: result?.engineering, operation, isoCategory, edpText, skuDescription, activeMachineId, activeMachineName },
         }),
@@ -1523,6 +1538,7 @@ export default function Mentor() {
     machine_hp: 0,
     spindle_drive: "belt" as "direct" | "belt" | "gear",
     stickout: 0,
+    part_stickout: 0,
 
     existing_hole_dia: 0,
     target_hole_dia: 0,
@@ -3636,6 +3652,38 @@ ${stabSection}
       setErGatePending(action);
       if (stpHref) setErGateStpUrl(stpHref);
       setErGateOpen(true);
+    }
+  }
+
+  function submitErGate() {
+    const v = erGateInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
+    localStorage.setItem("er_email", v);
+    setErEmail(v);
+    setErGateOpen(false);
+    if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
+    setErGatePending(null);
+    // Register lead (fire-and-forget — captures emails that never went through welcome modal)
+    fetch("/api/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: v }),
+    }).catch(() => {});
+    // Attempt toolbox auto-auth so they don't have to sign in again to save
+    if (!localStorage.getItem("tb_token")) {
+      fetch("/api/toolbox/auto-auth", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: v }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.ok && d.token) {
+            localStorage.setItem("tb_email", v);
+            localStorage.setItem("tb_token", d.token);
+            setTbEmail(v);
+            setTbToken(d.token);
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -6086,6 +6134,28 @@ ${stabSection}
               </div>
             </div>
           </div>
+
+          {/* Part Stickout — shown when workholding is a chuck or trunnion */}
+          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"] as string[]).includes(form.workholding) && (
+            <div className="mt-3">
+              <FieldLabel hint="Distance from the chuck jaw face (or trunnion fixture face) to the cut location. Longer part overhang adds compliance — a long part sticking out of a chuck deflects far more than a stubby one. Leave blank if the cut is close to the jaws.">Part Overhang Past Jaws (in)</FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 2.500"
+                value={form.part_stickout > 0 ? form.part_stickout.toFixed(3) : ""}
+                onChange={e => {
+                  const n = parseFloat(e.target.value);
+                  setForm(p => ({ ...p, part_stickout: Number.isFinite(n) && n >= 0 ? n : 0 }));
+                }}
+                onBlur={e => {
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, part_stickout: parseFloat(n.toFixed(3)) }));
+                  else setForm(p => ({ ...p, part_stickout: 0 }));
+                }}
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">Used to adjust workholding compliance in the stability model — longer overhang increases chatter risk.</p>
+            </div>
+          )}
 
           {/* Tool Geometry — adapts per operation */}
           {operation !== "threadmilling" && operation !== "keyseat" && operation !== "dovetail" && form.mode !== "deep_pocket" && (
@@ -12265,6 +12335,28 @@ ${stabSection}
                 className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
               />
             </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Company</label>
+              <input
+                type="text"
+                placeholder="Your shop or company name"
+                value={welcomeCompany}
+                onChange={e => setWelcomeCompany(e.target.value)}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Zip / Postal Code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="e.g. 04401"
+                value={welcomeZip}
+                onChange={e => setWelcomeZip(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submitWelcome()}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              />
+            </div>
             {welcomeError && <p className="text-xs text-red-400">{welcomeError}</p>}
           </div>
           <button
@@ -12296,32 +12388,14 @@ ${stabSection}
             placeholder="your@email.com"
             value={erGateInput}
             onChange={e => { setErGateInput(e.target.value); setErGateError(""); }}
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const v = erGateInput.trim();
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
-                localStorage.setItem("er_email", v.toLowerCase());
-                setErEmail(v.toLowerCase());
-                setErGateOpen(false);
-                if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
-                setErGatePending(null);
-              }
-            }}
+            onKeyDown={e => { if (e.key === "Enter") submitErGate(); }}
             autoFocus
           />
           {erGateError && <p className="text-xs text-red-400 mt-1">{erGateError}</p>}
           <div className="flex gap-2 mt-3">
             <button
               className="flex-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-medium"
-              onClick={() => {
-                const v = erGateInput.trim();
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
-                localStorage.setItem("er_email", v.toLowerCase());
-                setErEmail(v.toLowerCase());
-                setErGateOpen(false);
-                if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
-                setErGatePending(null);
-              }}
+              onClick={submitErGate}
             >
               Continue
             </button>
@@ -12376,7 +12450,7 @@ ${stabSection}
         <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
           <h2 className="text-base font-semibold text-white mb-1">🧰 Save to Toolbox</h2>
           {tbStep === "email" && (<>
-            <p className="text-xs text-zinc-400 mb-1">Enter your email to save this result. We'll send you a quick verification code.</p>
+            <p className="text-xs text-zinc-400 mb-1">Enter your email to save this result.</p>
             <p className="text-xs text-indigo-400 mb-3">✦ Sign in with the same email on any device — phone, tablet, or desktop — to access all your saved setups and machines.</p>
             <input
               type="text"
@@ -12394,32 +12468,13 @@ ${stabSection}
               placeholder="your@email.com"
               value={tbInputEmail}
               onChange={e => setTbInputEmail(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") tbSendCode(); }}
+              onKeyDown={e => { if (e.key === "Enter") tbSignIn(); }}
               autoFocus
             />
             {tbError && <p className="text-xs text-red-400 mt-1">{tbError}</p>}
             <div className="flex gap-2 mt-3">
-              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbSendCode} disabled={tbSaving || !tbInputEmail}>{tbSaving ? "Sending…" : "Send Code"}</button>
+              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbSignIn} disabled={tbSaving || !tbInputEmail}>{tbSaving ? "Signing in…" : "Sign In & Save"}</button>
               <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setTbShowModal(false)}>Cancel</button>
-            </div>
-          </>)}
-          {tbStep === "code" && (<>
-            <p className="text-xs text-zinc-400 mb-3">Enter the 6-digit code sent to <span className="text-white">{tbInputEmail}</span></p>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white text-center tracking-widest text-lg placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
-              placeholder="000000"
-              value={tbInputCode}
-              onChange={e => setTbInputCode(e.target.value.replace(/\D/g, ""))}
-              onKeyDown={e => { if (e.key === "Enter" && tbInputCode.length === 6) tbVerifyCode(); }}
-              autoFocus
-            />
-            {tbError && <p className="text-xs text-red-400 mt-1">{tbError}</p>}
-            <div className="flex gap-2 mt-3">
-              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbVerifyCode} disabled={tbSaving || tbInputCode.length !== 6}>{tbSaving ? "Verifying…" : "Verify & Save"}</button>
-              <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setTbStep("email"); setTbError(""); setTbInputCode(""); }}>← Back</button>
             </div>
           </>)}
           {tbStep === "saving" && (
