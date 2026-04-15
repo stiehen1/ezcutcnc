@@ -432,7 +432,7 @@ export default function Mentor() {
   const [tbStep, setTbStep] = React.useState<"email" | "saving">(
     localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "saving" : "email"
   );
-  const [tbInputEmail, setTbInputEmail] = React.useState("");
+  const [tbInputEmail, setTbInputEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
   const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
@@ -486,11 +486,28 @@ export default function Mentor() {
     setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
     setShowWelcomeModal(false);
+    const _regEmail = welcomeEmail.trim().toLowerCase();
+    // Register lead (fire-and-forget)
     fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fullName, email: welcomeEmail.trim().toLowerCase(), company: welcomeCompany.trim() || undefined, zip: welcomeZip.trim() || undefined }),
+      body: JSON.stringify({ name: fullName, email: _regEmail, company: welcomeCompany.trim() || undefined, zip: welcomeZip.trim() || undefined }),
     }).catch(() => {});
+    // Auto-auth toolbox immediately so they don't have to reload
+    fetch("/api/toolbox/auto-auth", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: _regEmail }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.ok && d.token) {
+          localStorage.setItem("tb_email", _regEmail);
+          localStorage.setItem("tb_token", d.token);
+          setTbEmail(_regEmail);
+          setTbToken(d.token);
+        }
+      })
+      .catch(() => {});
   }
 
   // ── ROI Calculator functions ───────────────────────────────────────────────
@@ -1169,17 +1186,25 @@ export default function Mentor() {
       });
       const d = await r.json();
       if (!r.ok) { setTbError(d.error || "Unable to sign in — please contact sales@corecutterusa.com"); return; }
-      localStorage.setItem("tb_email", tbInputEmail.toLowerCase());
+      const _tbEmail = tbInputEmail.toLowerCase();
+      localStorage.setItem("tb_email", _tbEmail);
       localStorage.setItem("tb_token", d.token);
-      setTbEmail(tbInputEmail.toLowerCase());
+      setTbEmail(_tbEmail);
       setTbToken(d.token);
+      // Capture lead if not already registered via welcome modal
+      if (!localStorage.getItem("cc_user_name")) {
+        fetch("/api/register", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: _tbEmail }),
+        }).catch(() => {});
+      }
       setTbStep("saving");
       // now save
       const title = tbTitle || `${form.operation} — ${form.material} — Ø${form.tool_dia}"`;
       await fetch("/api/toolbox/save", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: tbInputEmail.toLowerCase(), token: d.token,
+          email: _tbEmail, token: d.token,
           type: "result", title,
           data: { inputs: form, customer: result?.customer, engineering: result?.engineering, operation, isoCategory, edpText, skuDescription, activeMachineId, activeMachineName },
         }),
@@ -3627,6 +3652,38 @@ ${stabSection}
       setErGatePending(action);
       if (stpHref) setErGateStpUrl(stpHref);
       setErGateOpen(true);
+    }
+  }
+
+  function submitErGate() {
+    const v = erGateInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
+    localStorage.setItem("er_email", v);
+    setErEmail(v);
+    setErGateOpen(false);
+    if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
+    setErGatePending(null);
+    // Register lead (fire-and-forget — captures emails that never went through welcome modal)
+    fetch("/api/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: v }),
+    }).catch(() => {});
+    // Attempt toolbox auto-auth so they don't have to sign in again to save
+    if (!localStorage.getItem("tb_token")) {
+      fetch("/api/toolbox/auto-auth", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: v }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.ok && d.token) {
+            localStorage.setItem("tb_email", v);
+            localStorage.setItem("tb_token", d.token);
+            setTbEmail(v);
+            setTbToken(d.token);
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -12331,32 +12388,14 @@ ${stabSection}
             placeholder="your@email.com"
             value={erGateInput}
             onChange={e => { setErGateInput(e.target.value); setErGateError(""); }}
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const v = erGateInput.trim();
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
-                localStorage.setItem("er_email", v.toLowerCase());
-                setErEmail(v.toLowerCase());
-                setErGateOpen(false);
-                if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
-                setErGatePending(null);
-              }
-            }}
+            onKeyDown={e => { if (e.key === "Enter") submitErGate(); }}
             autoFocus
           />
           {erGateError && <p className="text-xs text-red-400 mt-1">{erGateError}</p>}
           <div className="flex gap-2 mt-3">
             <button
               className="flex-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-medium"
-              onClick={() => {
-                const v = erGateInput.trim();
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
-                localStorage.setItem("er_email", v.toLowerCase());
-                setErEmail(v.toLowerCase());
-                setErGateOpen(false);
-                if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
-                setErGatePending(null);
-              }}
+              onClick={submitErGate}
             >
               Continue
             </button>
