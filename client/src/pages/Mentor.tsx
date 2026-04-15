@@ -976,21 +976,23 @@ export default function Mentor() {
   const [editMaintenanceDate, setEditMaintenanceDate] = React.useState("");
   const [activeJobNo, setActiveJobNo] = React.useState("");
 
-  // Auto-auth Toolbox for users who already registered via welcome modal
+  // Auto-auth Toolbox for users who already registered via welcome modal or have a known email
   React.useEffect(() => {
-    const erEmail = localStorage.getItem("er_email");
     const hasTbToken = localStorage.getItem("tb_token");
-    if (!erEmail || hasTbToken) return;
+    if (hasTbToken) return; // already authenticated
+    // Try er_email (welcome modal registration) first, then tb_email (previously used toolbox)
+    const emailToTry = localStorage.getItem("er_email") || localStorage.getItem("tb_email");
+    if (!emailToTry) return;
     fetch("/api/toolbox/auto-auth", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: erEmail }),
+      body: JSON.stringify({ email: emailToTry }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.ok && d.token) {
-          localStorage.setItem("tb_email", erEmail.toLowerCase());
+          localStorage.setItem("tb_email", emailToTry.toLowerCase());
           localStorage.setItem("tb_token", d.token);
-          setTbEmail(erEmail.toLowerCase());
+          setTbEmail(emailToTry.toLowerCase());
           setTbToken(d.token);
         }
       })
