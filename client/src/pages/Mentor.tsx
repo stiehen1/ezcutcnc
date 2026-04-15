@@ -429,11 +429,10 @@ export default function Mentor() {
   const [tbShowModal, setTbShowModal] = React.useState(false);
   const [tbEmail, setTbEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [tbToken, setTbToken] = React.useState(() => localStorage.getItem("tb_token") || "");
-  const [tbStep, setTbStep] = React.useState<"email" | "code" | "saving">(
+  const [tbStep, setTbStep] = React.useState<"email" | "saving">(
     localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "saving" : "email"
   );
   const [tbInputEmail, setTbInputEmail] = React.useState("");
-  const [tbInputCode, setTbInputCode] = React.useState("");
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
   const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
@@ -1156,31 +1155,16 @@ export default function Mentor() {
     } finally { setTbSaving(false); }
   }
 
-  async function tbSendCode() {
+  async function tbSignIn() {
     setTbError("");
     setTbSaving(true);
     try {
-      const r = await fetch("/api/toolbox/send-code", {
+      const r = await fetch("/api/toolbox/auto-auth", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: tbInputEmail }),
       });
       const d = await r.json();
-      if (!r.ok) { setTbError(d.error || "Failed"); return; }
-      setTbStep("code");
-    } catch { setTbError("Network error"); }
-    finally { setTbSaving(false); }
-  }
-
-  async function tbVerifyCode() {
-    setTbError("");
-    setTbSaving(true);
-    try {
-      const r = await fetch("/api/toolbox/verify-code", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: tbInputEmail, code: tbInputCode }),
-      });
-      const d = await r.json();
-      if (!r.ok) { setTbError(d.error || "Invalid code"); return; }
+      if (!r.ok) { setTbError(d.error || "Unable to sign in — please contact sales@corecutterusa.com"); return; }
       localStorage.setItem("tb_email", tbInputEmail.toLowerCase());
       localStorage.setItem("tb_token", d.token);
       setTbEmail(tbInputEmail.toLowerCase());
@@ -12378,7 +12362,7 @@ ${stabSection}
         <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
           <h2 className="text-base font-semibold text-white mb-1">🧰 Save to Toolbox</h2>
           {tbStep === "email" && (<>
-            <p className="text-xs text-zinc-400 mb-1">Enter your email to save this result. We'll send you a quick verification code.</p>
+            <p className="text-xs text-zinc-400 mb-1">Enter your email to save this result.</p>
             <p className="text-xs text-indigo-400 mb-3">✦ Sign in with the same email on any device — phone, tablet, or desktop — to access all your saved setups and machines.</p>
             <input
               type="text"
@@ -12396,32 +12380,13 @@ ${stabSection}
               placeholder="your@email.com"
               value={tbInputEmail}
               onChange={e => setTbInputEmail(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") tbSendCode(); }}
+              onKeyDown={e => { if (e.key === "Enter") tbSignIn(); }}
               autoFocus
             />
             {tbError && <p className="text-xs text-red-400 mt-1">{tbError}</p>}
             <div className="flex gap-2 mt-3">
-              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbSendCode} disabled={tbSaving || !tbInputEmail}>{tbSaving ? "Sending…" : "Send Code"}</button>
+              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbSignIn} disabled={tbSaving || !tbInputEmail}>{tbSaving ? "Signing in…" : "Sign In & Save"}</button>
               <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setTbShowModal(false)}>Cancel</button>
-            </div>
-          </>)}
-          {tbStep === "code" && (<>
-            <p className="text-xs text-zinc-400 mb-3">Enter the 6-digit code sent to <span className="text-white">{tbInputEmail}</span></p>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white text-center tracking-widest text-lg placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
-              placeholder="000000"
-              value={tbInputCode}
-              onChange={e => setTbInputCode(e.target.value.replace(/\D/g, ""))}
-              onKeyDown={e => { if (e.key === "Enter" && tbInputCode.length === 6) tbVerifyCode(); }}
-              autoFocus
-            />
-            {tbError && <p className="text-xs text-red-400 mt-1">{tbError}</p>}
-            <div className="flex gap-2 mt-3">
-              <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50" onClick={tbVerifyCode} disabled={tbSaving || tbInputCode.length !== 6}>{tbSaving ? "Verifying…" : "Verify & Save"}</button>
-              <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => { setTbStep("email"); setTbError(""); setTbInputCode(""); }}>← Back</button>
             </div>
           </>)}
           {tbStep === "saving" && (
