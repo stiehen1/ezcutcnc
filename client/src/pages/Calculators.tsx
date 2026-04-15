@@ -199,12 +199,12 @@ function RpmSfm() {
       <Row label="Tool Diameter" hint="Cutting diameter of the tool — not the shank diameter."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Enter {sU} → get RPM</p>
-        <Row label="Surface Speed" hint="How fast the cutting edge moves across the workpiece. Also called SFM (surface feet per minute) or m/min."><NumIn value={sfm} onChange={setSfm} unit={sU} /></Row>
+        <Row label="Surface Speed" hint="How fast the cutting edge moves across the workpiece. Also called SFM (surface feet per minute) or m/min."><NumIn value={sfm} onChange={setSfm} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
         {calcRpm !== null && <Result label="RPM" value={Math.round(calcRpm).toLocaleString()} highlight />}
       </div>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Enter RPM → get {sU}</p>
-        <Row label="Spindle Speed"><NumIn value={rpm} onChange={setRpm} unit="RPM" /></Row>
+        <Row label="Spindle Speed"><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
         {calcSfmDisplay !== null && <Result label={sU} value={Math.round(calcSfmDisplay).toLocaleString()} highlight />}
       </div>
     </CalcCard>
@@ -245,7 +245,7 @@ function IpmCalc() {
 
   return (
     <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
-      <Row label="Spindle Speed" hint="Rotational speed of the spindle in revolutions per minute. Use the RPM↔SFM calculator above to convert from SFM first if needed."><NumIn value={rpm} onChange={setRpm} unit="RPM" /></Row>
+      <Row label="Spindle Speed" hint="Rotational speed of the spindle in revolutions per minute. Use the RPM↔SFM calculator above to convert from SFM first if needed."><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
       <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Enter FPT → get {fU}</p>
@@ -302,8 +302,8 @@ function ChipThinning() {
       <p className="text-[10px] text-gray-500 -mt-1">
         At WOC &lt; 50% diameter, programmed FPT over-estimates chip thickness.
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
-      <Row label="Radial WOC" hint="Width of cut — how far the tool steps over radially. At less than 50% diameter, chip thinning occurs and programmed FPT overstates actual chip thickness."><NumIn value={woc} onChange={setWoc} unit={dU} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Radial WOC" hint="Width of cut — how far the tool steps over radially. At less than 50% diameter, chip thinning occurs and programmed FPT overstates actual chip thickness."><NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
       <Row label="Programmed FPT" hint="The feed per tooth value programmed in CAM or at the control. This may need to be increased to compensate for chip thinning."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
       {result && <>
         <Result label="Engagement" value={`${(ae / D * 100).toFixed(1)}% dia`} />
@@ -352,7 +352,7 @@ function CuspHeight() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Scallop height left between passes when 3D surfacing with a ball end mill.
       </p>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
+      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Step-Over"><NumIn value={stepover} onChange={setStepover} unit={dU} placeholder={metric ? "0.508" : "0.0200"} /></Row>
       {h !== null && <>
         <Result label="Cusp Height" value={metric ? `${(h * 25.4).toFixed(4)} mm` : `${h.toFixed(5)}"`} highlight />
@@ -400,7 +400,7 @@ function EffectiveDia() {
         At shallow DOC, a ball end mill's effective diameter is less than its nominal size —
         use Deff for accurate SFM.
       </p>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
+      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Axial DOC (ap)"><NumIn value={ap} onChange={setAp} unit={dU} placeholder={metric ? "0.254" : "0.0100"} /></Row>
       {deff !== null && <>
         <Result label="Effective Dia" value={metric ? `${(deff * 25.4).toFixed(4)} mm` : `${deff.toFixed(5)}"`} highlight />
@@ -434,9 +434,9 @@ function FeedArcCorrection() {
         CAM programs the tool centerline. Adjust programmed feed to maintain
         consistent chip load around inside (concave) and outside (convex) arcs.
       </p>
-      <Row label="Programmed Feed" hint="The feed rate programmed in CAM along the tool centerline path."><NumIn value={feed} onChange={setFeed} unit={metric ? "mm/min" : "IPM"} /></Row>
-      <Row label="Arc Radius (part)" hint="The radius of the arc feature on the part — not the tool radius."><NumIn value={arcR} onChange={setArcR} unit={metric ? "mm" : "in"} /></Row>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool. Used to calculate centerline offset from the part arc."><NumIn value={toolDia} onChange={setToolDia} unit={metric ? "mm" : "in"} /></Row>
+      <Row label="Programmed Feed" hint="The feed rate programmed in CAM along the tool centerline path."><NumIn value={feed} onChange={setFeed} unit={metric ? "mm/min" : "IPM"} placeholder={metric ? "500" : "20.0"} /></Row>
+      <Row label="Arc Radius (part)" hint="The radius of the arc feature on the part — not the tool radius."><NumIn value={arcR} onChange={setArcR} unit={metric ? "mm" : "in"} placeholder={metric ? "25.4" : "1.000"} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the tool. Used to calculate centerline offset from the part arc."><NumIn value={toolDia} onChange={setToolDia} unit={metric ? "mm" : "in"} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       {inside !== null && <>
         <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
           <p className="text-[10px] text-orange-400 font-semibold">Inside Arc (concave — pocket corner)</p>
@@ -537,7 +537,7 @@ function DrillPointDepth() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Extra depth to add for the drill tip when drilling to a full-diameter depth.
       </p>
-      <Row label="Drill Diameter"><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
+      <Row label="Drill Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Point Angle">
         <div className="flex gap-1 flex-1">
           {[118, 135, 140].map((a) => (
@@ -609,8 +609,8 @@ function DrillingTorque() {
       {/* Inch: HP + RPM → Torque */}
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">HP + RPM → Torque</p>
-        <Row label="Spindle Power" hint="Available spindle horsepower at the cut — derate nameplate HP by drive efficiency (~92–96%)."><NumIn value={hp} onChange={setHp} unit="HP" /></Row>
-        <Row label="Spindle Speed" hint="Drilling RPM for the operation."><NumIn value={rpm} onChange={setRpm} unit="RPM" /></Row>
+        <Row label="Spindle Power" hint="Available spindle horsepower at the cut — derate nameplate HP by drive efficiency (~92–96%)."><NumIn value={hp} onChange={setHp} unit="HP" placeholder="20" /></Row>
+        <Row label="Spindle Speed" hint="Drilling RPM for the operation."><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
         {calcTorque !== null && <>
           <Result label="Torque" value={`${calcTorque.toFixed(2)} in-lbs`} highlight />
           <Result label="Torque (metric)" value={`${calcTorqueNm!.toFixed(3)} N-m`} />
@@ -683,9 +683,9 @@ function MRR() {
 
   return (
     <CalcCard title="MRR & HP Estimate" category="Power & MRR" onClear={() => { setWoc(""); setDoc(""); setIpm(""); }}>
-      <Row label="WOC (radial)" hint="Radial width of cut — how far the tool engages the workpiece side-to-side."><NumIn value={woc} onChange={setWoc} unit={dU} /></Row>
-      <Row label="DOC (axial)" hint="Axial depth of cut — how deep the tool plunges into the material."><NumIn value={doc} onChange={setDoc} unit={dU} /></Row>
-      <Row label="Feed Rate" hint="Table feed — how fast the tool moves through the material."><NumIn value={ipm} onChange={setIpm} unit={fU} /></Row>
+      <Row label="WOC (radial)" hint="Radial width of cut — how far the tool engages the workpiece side-to-side."><NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
+      <Row label="DOC (axial)" hint="Axial depth of cut — how deep the tool plunges into the material."><NumIn value={doc} onChange={setDoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
+      <Row label="Feed Rate" hint="Table feed — how fast the tool moves through the material."><NumIn value={ipm} onChange={setIpm} unit={fU} placeholder={metric ? "500" : "20.0"} /></Row>
       {valid && <>
         <Result label="Metal Removal Rate" value={metric ? `${mrr_display.toFixed(2)} cm³/min` : `${mrr_display.toFixed(3)} in³/min`} highlight />
         <div className="border-t border-[#2d2d4a] pt-2">
@@ -735,8 +735,8 @@ function SurfaceFinishFlat() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Theoretical Ra from radial step-over cusps on a flat end mill floor pass.
       </p>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
-      <Row label="Step-Over"><NumIn value={stepover} onChange={setStepover} unit={dU} /></Row>
+      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Step-Over"><NumIn value={stepover} onChange={setStepover} unit={dU} placeholder={metric ? "0.508" : "0.020"} /></Row>
       {ra_cusp !== null && <>
         <Result label="Cusp Height" value={metric ? `${(ra_cusp * 25400).toFixed(3)} µm` : `${ra_cusp.toFixed(6)}"`} />
         <Result label="Theoretical Ra" value={metric ? `~${(ra_cusp * 25400 / 4).toFixed(3)} µm` : `~${(ra_cusp * 250000).toFixed(1)} µin`} highlight />
@@ -786,8 +786,8 @@ function PeripheralFeed() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Full speed &amp; feed chain from surface footage to table feed.
       </p>
-      <Row label="Surface Speed"><NumIn value={sfm} onChange={setSfm} unit={sU} /></Row>
-      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
+      <Row label="Surface Speed"><NumIn value={sfm} onChange={setSfm} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
+      <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Flutes"><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <Row label="Feed / Tooth"><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.0050"} /></Row>
       {valid && <>
@@ -1042,7 +1042,7 @@ function BallNoseVelocity() {
 
       <Row label="Tool Diameter"><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       <Row label="Axial DOC (ap)"><NumIn value={ap}  onChange={setAp}  unit={dU} placeholder={metric ? "0.254" : "0.0100"} /></Row>
-      <Row label={`Programmed ${sU}`}><NumIn value={sfm} onChange={setSfm} unit={sU} /></Row>
+      <Row label={`Programmed ${sU}`}><NumIn value={sfm} onChange={setSfm} unit={sU} placeholder={metric ? "60" : "200"} /></Row>
 
       {/* Tilt angle buttons */}
       <div className="space-y-1">
@@ -1326,8 +1326,8 @@ function EngagementAngle() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Arc of contact between tool and workpiece. Drives heat per tooth, chip load, and cutting forces.
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} /></Row>
-      <Row label="Radial WOC" hint="Width of cut — how far the tool steps into the material radially."><NumIn value={woc} onChange={setWoc} unit={dU} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the tool."><NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Radial WOC" hint="Width of cut — how far the tool steps into the material radially."><NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
       <Row label="Flutes" hint="Number of cutting edges. Used to calculate simultaneous teeth in cut."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <Row label="Feed / Tooth" hint="Optional — enter to calculate mean chip thickness across the engagement arc."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.005"} /></Row>
       {result && <>
@@ -1403,10 +1403,10 @@ function MinChipThickness() {
         <NumIn value={edgeRad} onChange={setEdgeRad} placeholder={metric ? "e.g. 5" : "e.g. 100"} />
       </Row>
       <Row label={`Tool Diameter (${dU})`} hint="Cutting diameter of the endmill.">
-        <NumIn value={toolDia} onChange={setToolDia} unit={dU} />
+        <NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
       </Row>
       <Row label={`Radial WOC (${dU})`} hint="Width of cut — used to calculate chip thinning factor.">
-        <NumIn value={woc} onChange={setWoc} unit={dU} />
+        <NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} />
       </Row>
       <Row label={`Current FPT (${dU})`} hint="Optional — enter your programmed feed per tooth to check if you're above the minimum.">
         <NumIn value={fpt} onChange={setFpt} unit={dU} placeholder="optional" />
@@ -1480,8 +1480,8 @@ function HelixEntry() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Helical interpolation entry into a pocket. Helix dia = bore dia minus tool dia (clearance needed).
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool entering the pocket."><NumIn value={toolDia} onChange={setToolDia} unit={dU} /></Row>
-      <Row label="Helix Diameter" hint="Diameter of the circular path the tool center follows. Must be larger than the tool diameter. Typically: bore diameter minus tool diameter."><NumIn value={helixDia} onChange={setHelixDia} unit={dU} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the tool entering the pocket."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Helix Diameter" hint="Diameter of the circular path the tool center follows. Must be larger than the tool diameter. Typically: bore diameter minus tool diameter."><NumIn value={helixDia} onChange={setHelixDia} unit={dU} placeholder={metric ? "19.050" : "0.7500"} /></Row>
       {minDia && hd > 0 && hd < td * 1.001 && (
         <p className="text-[11px] text-red-400">⚠ Helix dia must be larger than tool dia.</p>
       )}
@@ -1493,7 +1493,7 @@ function HelixEntry() {
       </div>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Enter Pitch → get Ramp Angle</p>
-        <Row label={`Pitch per Rev`}><NumIn value={pitch} onChange={setPitch} unit={dU} /></Row>
+        <Row label={`Pitch per Rev`}><NumIn value={pitch} onChange={setPitch} unit={dU} placeholder={metric ? "0.254" : "0.0100"} /></Row>
         {calcAngle !== null && <Result label="Ramp Angle" value={`${calcAngle.toFixed(2)}°`} highlight />}
       </div>
       {(n(rampAngle) > 5 || calcAngle !== null && calcAngle > 5) && (
@@ -1541,8 +1541,8 @@ function NoMiddlePost() {
       <p className="text-[10px] text-gray-500 -mt-1">
         When helically entering solid stock, a tool smaller than half the bore diameter leaves a standing core post in the center that cannot be removed. Enter bore and tool diameters to check.
       </p>
-      <Row label="Bore / Pocket Dia" hint="Final bore or pocket diameter being machined."><NumIn value={boreDia} onChange={setBoreDia} unit={dU} /></Row>
-      <Row label="Tool Diameter" hint="Cutting diameter of the endmill being used for helical entry."><NumIn value={toolDia} onChange={setToolDia} unit={dU} /></Row>
+      <Row label="Bore / Pocket Dia" hint="Final bore or pocket diameter being machined."><NumIn value={boreDia} onChange={setBoreDia} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the endmill being used for helical entry."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       {bd > 0 && td > 0 && td >= bd && (
         <p className="text-[11px] text-red-400">⚠ Tool diameter cannot exceed bore diameter.</p>
       )}
@@ -1639,7 +1639,7 @@ function BoltCircle() {
       <p className="text-[10px] text-gray-500 -mt-1">X/Y coordinates for equally-spaced holes on a bolt circle.</p>
       <Row label={`Center X (${dU})`}><NumIn value={cx} onChange={setCx} unit={dU} placeholder="0" /></Row>
       <Row label={`Center Y (${dU})`}><NumIn value={cy} onChange={setCy} unit={dU} placeholder="0" /></Row>
-      <Row label={`BCD Radius (${dU})`} hint="Bolt circle diameter radius — distance from the circle center to each hole center."><NumIn value={bcr} onChange={setBcr} unit={dU} /></Row>
+      <Row label={`BCD Radius (${dU})`} hint="Bolt circle diameter radius — distance from the circle center to each hole center."><NumIn value={bcr} onChange={setBcr} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
       <Row label="# Holes" hint="Total number of equally-spaced holes around the bolt circle."><NumIn value={holes} onChange={setHoles} placeholder="6" /></Row>
       <Row label="Start Angle (°)" hint="Angle of the first hole from 3 o'clock (0°) counterclockwise. 90° = 12 o'clock."><NumIn value={startAngle} onChange={setStartAngle} unit="°" placeholder="0" /></Row>
 
@@ -1773,10 +1773,10 @@ function ChordSagitta() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Sagitta = arc height above the chord. Useful for understanding depth of curved surfaces.
       </p>
-      <Row label={`Arc Radius (${dU})`}><NumIn value={radius} onChange={setRadius} unit={dU} /></Row>
+      <Row label={`Arc Radius (${dU})`}><NumIn value={radius} onChange={setRadius} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Chord → Sagitta</p>
-        <Row label={`Chord Length (${dU})`}><NumIn value={chord} onChange={setChord} unit={dU} /></Row>
+        <Row label={`Chord Length (${dU})`}><NumIn value={chord} onChange={setChord} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
         {calcSagDisplay !== null && <>
           <Result label={`Sagitta / Arc Height (${dU})`} value={calcSagDisplay.toFixed(metric?4:5)} highlight />
           {calcArcDisplay !== null && <Result label={`Arc Length (${dU})`} value={calcArcDisplay.toFixed(metric?3:5)} />}
@@ -1784,7 +1784,7 @@ function ChordSagitta() {
       </div>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Sagitta → Chord</p>
-        <Row label={`Sagitta (${dU})`}><NumIn value={sagitta} onChange={setSagitta} unit={dU} /></Row>
+        <Row label={`Sagitta (${dU})`}><NumIn value={sagitta} onChange={setSagitta} unit={dU} placeholder={metric ? "2.540" : "0.1000"} /></Row>
         {calcChordDisplay !== null && <Result label={`Chord Length (${dU})`} value={calcChordDisplay.toFixed(metric?4:5)} highlight />}
       </div>
     </CalcCard>
@@ -1855,9 +1855,9 @@ function BoreEnlargement() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Circular interpolation bore enlargement. Shows arc engagement and feed multiplier per radial pass.
       </p>
-      <Row label="Tool Diameter" hint="Cutting diameter of the end mill used for circular interpolation."><NumIn value={toolDia} onChange={setToolDia} unit={dU} /></Row>
-      <Row label="Existing Hole Ø" hint="Diameter of the existing pre-drilled or bored hole the tool enters. Must be larger than the tool diameter."><NumIn value={existingDia} onChange={setExistingDia} unit={dU} /></Row>
-      <Row label="Target Hole Ø" hint="Final bore diameter needed after circular interpolation."><NumIn value={targetDia} onChange={setTargetDia} unit={dU} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the end mill used for circular interpolation."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
+      <Row label="Existing Hole Ø" hint="Diameter of the existing pre-drilled or bored hole the tool enters. Must be larger than the tool diameter."><NumIn value={existingDia} onChange={setExistingDia} unit={dU} placeholder={metric ? "19.050" : "0.7500"} /></Row>
+      <Row label="Target Hole Ø" hint="Final bore diameter needed after circular interpolation."><NumIn value={targetDia} onChange={setTargetDia} unit={dU} placeholder={metric ? "25.4" : "1.0000"} /></Row>
       <Row label="WOC per Pass" hint="Radial step (width of cut) per circular orbit. Leave blank to use auto (6% of tool dia — light engagement)."><NumIn value={wocPerPass} onChange={setWocPerPass} unit={dU} placeholder="auto" /></Row>
 
       {totalStock !== null && (
@@ -1937,8 +1937,8 @@ function CornerClearance() {
       <p className="text-[10px] text-gray-500 -mt-1">
         Checks if a tool fits a part corner radius and shows the maximum allowable tool diameter.
       </p>
-      <Row label="Part Corner Radius" hint="The inside corner radius on the part drawing. The tool radius must be equal to or smaller than this value to fit."><NumIn value={partCr} onChange={setPartCr} unit={dU} /></Row>
-      <Row label="Tool Diameter" hint="Cutting diameter of the tool you plan to use. Tool radius = diameter ÷ 2."><NumIn value={toolDia} onChange={setToolDia} unit={dU} /></Row>
+      <Row label="Part Corner Radius" hint="The inside corner radius on the part drawing. The tool radius must be equal to or smaller than this value to fit."><NumIn value={partCr} onChange={setPartCr} unit={dU} placeholder={metric ? "6.350" : "0.2500"} /></Row>
+      <Row label="Tool Diameter" hint="Cutting diameter of the tool you plan to use. Tool radius = diameter ÷ 2."><NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} /></Row>
       {maxDisplay !== null && <Result label={`Max Tool Diameter (${dU})`} value={maxDisplay.toFixed(metric?3:5)} />}
       {fits !== null && (
         <div className={`flex items-center justify-between px-3 py-2 rounded font-semibold text-sm`}
@@ -2292,7 +2292,7 @@ function ChamferMill() {
             <NumIn value={flutes} onChange={setFlutes} placeholder="2" />
           </Row>
           <Row label="Spindle Speed" hint="RPM — use the RPM↔SFM calculator above if needed.">
-            <NumIn value={rpm} onChange={setRpm} unit="RPM" />
+            <NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" />
           </Row>
           {hasIpm && <>
             <Result label={`Programmed IPM (at entered FPT)`} value={`${(ipmProgrammed * IN).toFixed(metric ? 2 : 1)} ${metric ? "mm/min" : "IPM"}`} />
