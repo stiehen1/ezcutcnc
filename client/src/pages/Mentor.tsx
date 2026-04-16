@@ -6182,11 +6182,19 @@ ${stabSection}
                   : form.machine_type === "mill_turn"
                   ? (selectedSpindle === "mill"
                     ? ([
-                        /* Part is held in A-axis chuck — these describe that holding condition */
-                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        /* Part stays in A-axis chuck while B-axis mills — describe that holding condition */
+                        /* Primary chuck */
                         { key: "soft_jaws",           label: "Soft Jaws"            },
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
                         { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "hydraulic_chuck",     label: "Hydraulic Chuck"      },
+                        { key: "power_chuck",         label: "Power Chuck"          },
+                        /* Custom jawing */
+                        { key: "form_jaws",           label: "Form Jaws"            },
+                        { key: "step_jaws",           label: "Step Jaws"            },
+                        { key: "pie_jaws",            label: "Pie Jaws"             },
+                        /* Mandrel / fixture */
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
                         { key: "dovetail",            label: "Dovetail"             },
                         { key: "rigid_fixture",       label: "Rigid Fixture"        },
