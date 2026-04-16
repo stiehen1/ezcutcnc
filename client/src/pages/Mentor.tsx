@@ -3375,6 +3375,10 @@ ${stabSection}
       tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
       rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
       "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
+      hydraulic_chuck: "Hydraulic Chuck", power_chuck: "Power Chuck",
+      form_jaws: "Form Jaws", step_jaws: "Step Jaws", pie_jaws: "Pie Jaws",
+      steady_rest: "Steady Rest", secondary_op_vise: "Secondary Op Vise",
+      modular_quickchange: "Modular Quick-Change",
       ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
       zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
     };
@@ -5638,7 +5642,7 @@ ${stabSection}
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
                         // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
-                        const bAxisIncompat = ["sub_spindle", "tailstock_supported"] as string[];
+                        const bAxisIncompat = ["sub_spindle", "tailstock_supported", "tombstone", "5th_axis_vise", "vise", "toe_clamps"] as string[];
                         const aAxisIncompat = ["sub_spindle"] as string[];
                         const newWH = key === "sub"  ? "sub_spindle" as typeof p.workholding
                                     : key === "mill" && bAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
@@ -6139,8 +6143,8 @@ ${stabSection}
                   ? (selectedSpindle === "sub"
                     ? "C-axis / sub-spindle selected — part is transferred for back-side ops. Workholding is fixed to Sub-Spindle. Switch to A-axis or B-axis spindle to change workholding."
                     : selectedSpindle === "mill"
-                    ? "B-axis milling spindle active — full milling workholding applies. Tailstock and sub-spindle hidden (conflict with B-axis swing). Most rigid to least rigid: Rigid Fixture → Dovetail → 5th-Axis Vise → Collet Chuck → Vise / Soft Jaws → Chuck options → Expanding Mandrel."
-                    : "A-axis turning spindle active. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support. Collet chuck is best for bar work and precision; 6-jaw reduces distortion on thin-wall parts.")
+                    ? "B-axis milling spindle active. Most rigid to least rigid: Dovetail → Rigid Fixture → Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Steady Rest. Custom jawing (form, step, pie) for complex profiles. Modular quick-change for high-mix production."
+                    : "A-axis turning spindle active. Most rigid to least rigid: Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Tailstock Support → Steady Rest. Collet chuck for bar work and precision; 6-jaw for thin-wall; hydraulic/power chuck for repeatability and high-volume; form/step/pie jaws for complex profiles.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
@@ -6164,28 +6168,46 @@ ${stabSection}
                       ] as const)
                     : selectedSpindle === "mill"
                     ? ([
+                        /* Primary chuck / bar work */
                         { key: "collet_chuck",      label: "Collet Chuck"      },
                         { key: "soft_jaws",         label: "Soft Jaws"         },
                         { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"   },
                         { key: "6_jaw_chuck",       label: "6-Jaw Chuck"       },
+                        { key: "hydraulic_chuck",   label: "Hydraulic Chuck"   },
+                        { key: "power_chuck",       label: "Power Chuck"       },
+                        /* Custom jawing */
+                        { key: "form_jaws",         label: "Form Jaws"         },
+                        { key: "step_jaws",         label: "Step Jaws"         },
+                        { key: "pie_jaws",          label: "Pie Jaws"          },
+                        /* Mandrel / support */
                         { key: "expanding_mandrel", label: "Expanding Mandrel" },
-                        { key: "rigid_fixture",     label: "Rigid Fixture"     },
+                        { key: "steady_rest",       label: "Steady Rest"       },
+                        /* Fixture-style (secondary ops / milled faces) */
                         { key: "dovetail",          label: "Dovetail"          },
-                        { key: "5th_axis_vise",     label: "5th-Axis Vise"     },
-                        { key: "vise",              label: "Vise"              },
-                        { key: "tombstone",         label: "Tombstone"         },
+                        { key: "rigid_fixture",     label: "Rigid Fixture"     },
+                        { key: "modular_quickchange", label: "Modular Quick-Change" },
+                        { key: "secondary_op_vise", label: "Secondary Op Vise" },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
                         ] : []),
                       ] as const)
                     : /* main / A-axis */ ([
+                        /* Primary chuck / bar work */
                         { key: "collet_chuck",        label: "Collet Chuck"         },
                         { key: "soft_jaws",           label: "Soft Jaws"            },
                         { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "hydraulic_chuck",     label: "Hydraulic Chuck"      },
+                        { key: "power_chuck",         label: "Power Chuck"          },
+                        /* Custom jawing */
+                        { key: "form_jaws",           label: "Form Jaws"            },
+                        { key: "step_jaws",           label: "Step Jaws"            },
+                        { key: "pie_jaws",            label: "Pie Jaws"             },
+                        /* Mandrel / support */
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
+                        { key: "steady_rest",         label: "Steady Rest"          },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
