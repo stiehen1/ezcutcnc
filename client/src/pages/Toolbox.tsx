@@ -7,6 +7,8 @@ type ToolboxItem = {
   title: string;
   data: any;
   notes: string;
+  job_no: string;
+  part_name: string;
   created_at: string;
 };
 
@@ -79,6 +81,11 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   const [expanded, setExpanded] = React.useState<number | null>(null);
   const [renamingId, setRenamingId] = React.useState<number | null>(null);
   const [renameText, setRenameText] = React.useState("");
+  const [jobFilter, setJobFilter] = React.useState("");
+  const [partFilter, setPartFilter] = React.useState("");
+  const [editingTagId, setEditingTagId] = React.useState<number | null>(null);
+  const [editJobNo, setEditJobNo] = React.useState("");
+  const [editPartName, setEditPartName] = React.useState("");
   const [roiItems, setRoiItems] = React.useState<any[]>([]);
   const [roiDraft, setRoiDraft] = React.useState<any>(null);
   const [roiExpanded, setRoiExpanded] = React.useState<number | null>(null);
@@ -193,6 +200,19 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     }
   }
 
+  async function saveItemTags(id: number, job_no: string, part_name: string) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    const r = await fetch(`/api/toolbox/items/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t, job_no, part_name }),
+    });
+    if (r.ok) {
+      setItems(prev => prev.map(i => i.id === id ? { ...i, job_no, part_name } : i));
+      setEditingTagId(null);
+    }
+  }
+
   // ── Favorites ─────────────────────────────────────────────────────────────
   async function removeFavorite(id: number, edp: string) {
     const e = localStorage.getItem("tb_email");
@@ -288,6 +308,12 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white truncate">{item.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {item.job_no && (
+                      <span className="text-[10px] font-semibold text-amber-300 bg-amber-900/30 border border-amber-700/40 rounded px-1.5 py-0.5">Job #{item.job_no}</span>
+                    )}
+                    {item.part_name && (
+                      <span className="text-[10px] text-cyan-300 bg-cyan-900/20 border border-cyan-700/30 rounded px-1.5 py-0.5">{item.part_name}</span>
+                    )}
                     {d?.inputs?.material && (
                       <span className="text-[10px] text-zinc-400 bg-zinc-800 rounded px-1.5 py-0.5">{d.inputs.material}</span>
                     )}
@@ -306,6 +332,10 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
               </div>
               <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                 <button
+                  className="text-[11px] text-zinc-500 hover:text-amber-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+                  onClick={e => { e.stopPropagation(); setEditingTagId(editingTagId === item.id ? null : item.id); setEditJobNo(item.job_no || ""); setEditPartName(item.part_name || ""); setExpanded(item.id); }}
+                >Tag</button>
+                <button
                   className="text-[11px] text-zinc-500 hover:text-indigo-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
                   onClick={e => { e.stopPropagation(); setRenamingId(item.id); setRenameText(item.title); }}
                 >Rename</button>
@@ -316,6 +346,34 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 <span className="text-zinc-600 text-xs px-1">{isExpanded ? "▲" : "▼"}</span>
               </div>
             </div>
+
+            {isExpanded && editingTagId === item.id && (
+              <div className="border-t border-zinc-800 px-4 py-3 bg-amber-950/20">
+                <p className="text-[10px] font-semibold text-amber-300 uppercase tracking-widest mb-2">Job / Part Tags</p>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    placeholder="Job #"
+                    value={editJobNo}
+                    onChange={e => setEditJobNo(e.target.value)}
+                    className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Part name"
+                    value={editPartName}
+                    onChange={e => setEditPartName(e.target.value)}
+                    className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => saveItemTags(item.id, editJobNo, editPartName)}
+                    className="flex-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold py-1.5">Save Tags</button>
+                  <button onClick={() => setEditingTagId(null)}
+                    className="flex-1 rounded border border-zinc-700 text-zinc-400 hover:text-white text-xs py-1.5">Cancel</button>
+                </div>
+              </div>
+            )}
 
             {isExpanded && d && (
               <div className="border-t border-zinc-800 px-4 py-3 bg-zinc-950/60">
@@ -365,6 +423,13 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const savedApps = items.filter(i => i.type !== "favorite");
+  const filteredApps = savedApps.filter(i => {
+    const jf = jobFilter.trim().toLowerCase();
+    const pf = partFilter.trim().toLowerCase();
+    if (jf && !(i.job_no || "").toLowerCase().includes(jf)) return false;
+    if (pf && !(i.part_name || "").toLowerCase().includes(pf)) return false;
+    return true;
+  });
   const hasContent = savedApps.length > 0 || favorites.length > 0 || specials.length > 0 || roiItems.length > 0 || !!roiDraft;
 
   return (
@@ -465,7 +530,35 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                           <Link href="/" className="mt-3 inline-block text-xs text-indigo-400 hover:text-indigo-300">Go to Calculator →</Link>
                         </div>
                       ) : (
-                        savedApps.map(item => <SavedAppCard key={item.id} item={item} />)
+                        <>
+                          {/* Filter bar */}
+                          <div className="flex gap-2 mb-1">
+                            <div className="relative flex-1">
+                              <input
+                                type="text"
+                                placeholder="Filter by job #…"
+                                value={jobFilter}
+                                onChange={e => setJobFilter(e.target.value)}
+                                className="w-full rounded-lg border border-indigo-800/40 bg-zinc-800/60 px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                              />
+                              {jobFilter && <button onClick={() => setJobFilter("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-[10px]">✕</button>}
+                            </div>
+                            <div className="relative flex-1">
+                              <input
+                                type="text"
+                                placeholder="Filter by part name…"
+                                value={partFilter}
+                                onChange={e => setPartFilter(e.target.value)}
+                                className="w-full rounded-lg border border-indigo-800/40 bg-zinc-800/60 px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                              />
+                              {partFilter && <button onClick={() => setPartFilter("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-[10px]">✕</button>}
+                            </div>
+                          </div>
+                          {filteredApps.length === 0 && (jobFilter || partFilter) && (
+                            <p className="text-xs text-zinc-600 text-center py-4">No results match your filter.</p>
+                          )}
+                          {filteredApps.map(item => <SavedAppCard key={item.id} item={item} />)}
+                        </>
                       )}
                     </div>
                   )}
