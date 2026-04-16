@@ -59,27 +59,28 @@ export const MATERIAL_NOTES: Record<string, string> = {
 };
 
 export const ISO_CATEGORIES = [
-  { iso: "N", label: "Non-Ferrous",    color: "#8BC34A" },
-  { iso: "P", label: "Steel",          color: "#90CAF9" },
-  { iso: "M", label: "Stainless",      color: "#FDD835" },
-  { iso: "K", label: "Cast Iron",      color: "#EF5350" },
-  { iso: "S", label: "Superalloys",    color: "#FFA726" },
-  { iso: "H", label: "Hardened Steel / Armor Plate", color: "#BDBDBD" },
-  { iso: "O", label: "Plastics & Composites", color: "#26C6DA" },
+  { iso: "N1", label: "Non-Ferrous",                   color: "#8BC34A" },
+  { iso: "N2", label: "Abrasive Non-Ferrous",          color: "#558B2F" },
+  { iso: "P",  label: "Steel",                         color: "#90CAF9" },
+  { iso: "M",  label: "Stainless",                     color: "#FDD835" },
+  { iso: "K",  label: "Cast Iron",                     color: "#EF5350" },
+  { iso: "S",  label: "Superalloys",                   color: "#FFA726" },
+  { iso: "H",  label: "Hardened Steel / Armor Plate",  color: "#BDBDBD" },
+  { iso: "O",  label: "Plastics & Composites",         color: "#26C6DA" },
 ] as const;
 
 export type IsoCategory = (typeof ISO_CATEGORIES)[number]["iso"];
 
 export const ISO_SUBCATEGORIES = [
-  // N — Non-Ferrous (hardness not applicable)
-  { iso: "N" as IsoCategory, key: "aluminum_wrought",      label: "Wrought Aluminum — General (6061, 6082, 5052, 6xxx/5xxx)", hardness: { value: 0,  scale: "hrb" as const } },
-  { iso: "N" as IsoCategory, key: "aluminum_wrought_hs",   label: "Wrought Aluminum — High Strength (7075, 2024, 7xxx/2xxx)", hardness: { value: 0,  scale: "hrb" as const } },
-  { iso: "N" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A356, A380, A390, high-Si)", hardness: { value: 0,  scale: "hrb" as const } },
-  { iso: "N" as IsoCategory, key: "non_ferrous",           label: "Copper / Free-Cutting Brass / Leaded Bronze", hardness: { value: 0,  scale: "hrb" as const } },
-  // N — Abrasive Non-Ferrous (listed under P for tooling routing — ISO N by composition but needs steel-grade tools)
-  { iso: "P" as IsoCategory, key: "manganese_bronze",     label: "Manganese Bronze (C86300, C86500) — Abrasive", hardness: { value: 75, scale: "hrb" as const } },
-  { iso: "P" as IsoCategory, key: "silicon_bronze",       label: "Silicon Bronze (C65500, C64200) — Abrasive",   hardness: { value: 70, scale: "hrb" as const } },
-  { iso: "P" as IsoCategory, key: "copper_beryllium",     label: "Beryllium Copper (C17200, C17300) — Abrasive / Hazmat", hardness: { value: 36, scale: "hrc" as const } },
+  // N1 — Non-Ferrous (hardness not applicable)
+  { iso: "N1" as IsoCategory, key: "aluminum_wrought",      label: "Wrought Aluminum — General (6061, 6082, 5052, 6xxx/5xxx)", hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N1" as IsoCategory, key: "aluminum_wrought_hs",   label: "Wrought Aluminum — High Strength (7075, 2024, 7xxx/2xxx)", hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N1" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A356, A380, A390, high-Si)", hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N1" as IsoCategory, key: "non_ferrous",           label: "Copper / Free-Cutting Brass / Leaded Bronze", hardness: { value: 0,  scale: "hrb" as const } },
+  // N2 — Abrasive Non-Ferrous (ISO N by composition but requires steel-grade tooling — P-Max coating, steel flute geometry)
+  { iso: "N2" as IsoCategory, key: "manganese_bronze",     label: "Manganese Bronze (C86300, C86500)",            hardness: { value: 75, scale: "hrb" as const } },
+  { iso: "N2" as IsoCategory, key: "silicon_bronze",       label: "Silicon Bronze (C65500, C64200)",              hardness: { value: 70, scale: "hrb" as const } },
+  { iso: "N2" as IsoCategory, key: "copper_beryllium",     label: "Beryllium Copper (C17200, C17300) — Hazmat",   hardness: { value: 36, scale: "hrc" as const } },
   // P — Steel
   { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
