@@ -1027,6 +1027,7 @@ export default function Mentor() {
     main_rpm: number; main_hp: number;
     sub_rpm: number | null;
     live_rpm: number | null; live_hp: number | null;
+    live_connection: string | null; live_drive: string | null;
     mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;
     drive: string;
     brand: string | null;
@@ -1156,6 +1157,8 @@ export default function Mentor() {
       sub_rpm: m.sub_spindle_rpm ?? null,
       live_rpm: m.live_tool_max_rpm ?? null,
       live_hp: m.live_tool_hp ? Number(m.live_tool_hp) : null,
+      live_connection: typeof m.live_tool_connection === "string" ? m.live_tool_connection : null,
+      live_drive: typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type : null,
       mill_rpm: m.mill_spindle_max_rpm ?? null,
       mill_hp: m.mill_spindle_hp ? Number(m.mill_spindle_hp) : null,
       mill_taper: millTaper,
@@ -1229,6 +1232,14 @@ export default function Mentor() {
           drive_type: form.spindle_drive,
           dual_contact: form.dual_contact,
           machine_type: form.machine_type,
+          sub_spindle_rpm: activeMachineData?.sub_rpm ?? null,
+          live_tool_max_rpm: activeMachineData?.live_rpm ?? null,
+          live_tool_hp: activeMachineData?.live_hp ?? null,
+          live_tool_connection: activeMachineData?.live_connection ?? null,
+          live_tool_drive_type: activeMachineData?.live_drive ?? null,
+          mill_spindle_max_rpm: activeMachineData?.mill_rpm ?? null,
+          mill_spindle_hp: activeMachineData?.mill_hp ?? null,
+          mill_spindle_taper: activeMachineData?.mill_taper ?? null,
         }),
       });
       if (res.ok) {
@@ -1475,6 +1486,12 @@ export default function Mentor() {
         // Variable pitch/helix from print notes
         if (e.variable_pitch === true) next.variable_pitch = true;
         if (e.variable_helix === true) next.variable_helix = true;
+        // Series from print notes (e.g. "QTR3-STYLE" → "QTR3") — drives DOC/WOC preset tables
+        if (e.tool_series) {
+          next.tool_series = e.tool_series;
+        } else if (_isReducedShank && e.flutes === 3 && e.variable_pitch && e.variable_helix) {
+          next.tool_series = "QTR3"; // infer for reduced-shank 3-fl var pitch+helix specials
+        }
         // Coolant-fed detection
         if (e.coolant_fed === true) {
           if (tt === "drill" || tt === "step_drill") next.drill_coolant_fed = true;
@@ -2058,7 +2075,7 @@ export default function Mentor() {
     finish:      { low: 1.0, med: 2.0, high: Math.min(3.0, form.loc > 0 && form.tool_dia > 0 ? Math.floor((form.loc / form.tool_dia) * 100) / 100 : 3.0) },
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
-    slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
+    slot:        dynPresets.doc,
     circ_interp: { low: 0.05, med: 0.10, high: 0.25 },
   };
   const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>(null);
@@ -2394,20 +2411,21 @@ export default function Mentor() {
     // In slot mode, pre-fill WOC=100% and DOC=med immediately on SKU select
     const _isSlotMode = (form.mode as string) === "slot";
     const _slotDia = Number(sku.cutting_diameter_in);
-    const _slotDocMed = sku.flutes === 5 ? 0.30 : 0.5;
     if (_isSlotMode) {
+      const _slotPresets = getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
+      const _slotDocLow = _slotPresets.doc.low;
       setWocText(_slotDia.toFixed(4));
       setWocPreset("med");
-      setDocText((_slotDocMed * _slotDia).toFixed(3));
-      setDocPreset("med");
+      setDocText((_slotDocLow * _slotDia).toFixed(3));
+      setDocPreset("low");
     }
     setForm((p) => ({
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: _slotDia,
-      // Slot mode: pre-fill WOC/DOC; otherwise leave blank for user to set.
+      // Slot mode: pre-fill WOC/DOC (low = conservative default); otherwise leave blank.
       woc_pct: _isSlotMode ? 100 : 0,
-      doc_xd: _isSlotMode ? _slotDocMed : 0,
+      doc_xd: _isSlotMode ? getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard").doc.low : 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -4202,7 +4220,9 @@ ${stabSection}
                   const faceStepover = mode === "face" ? Math.max(0, (dia - 2 * cr) * 0.75) : null;
                   const faceWocPct   = faceStepover !== null && dia > 0 ? (faceStepover / dia) * 100 : wp.med;
 
-                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : "med";
+                  // Slot: default to low (conservative starting point — user adjusts up)
+                  // HEM/trochoidal: high (full LOC is the point). Everything else: med.
+                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : mode === "slot" ? "low" : "med";
                   const hasDia = form.tool_dia > 0;
                   setForm((p) => ({
                     ...p,
