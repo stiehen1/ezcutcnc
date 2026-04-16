@@ -103,24 +103,38 @@ _MICRO_OP_FACTOR = {
 # Caps the 1/sin(arccos(...)) boost to prevent absurd feed jumps on tiny tools.
 _MICRO_MAX_CTF = {
     # band: {op_bucket: max_ctf}
-    "A": {"hem_rough": 1.15, "traditional": 1.08, "profile": 1.08, "floor_finish": 1.05, "slot": 0.95, "finish_wall": 1.00},
-    "B": {"hem_rough": 1.28, "traditional": 1.18, "profile": 1.18, "floor_finish": 1.10, "slot": 1.00, "finish_wall": 1.08},
-    "C": {"hem_rough": 1.42, "traditional": 1.30, "profile": 1.28, "floor_finish": 1.18, "slot": 1.08, "finish_wall": 1.15},
-    "D": {"hem_rough": 1.60, "traditional": 1.45, "profile": 1.40, "floor_finish": 1.28, "slot": 1.15, "finish_wall": 1.22},
+    # CTF cap = max allowed chip-thinning multiplier (chip_factor × HEM_mult).
+    # HEM at low WOC (5–15%) generates real chip thinning that must be honoured.
+    # Caps prevent absurd CT boosts from micro-vibration amplification at high RPM.
+    # At low RPM (machine-limited), the rpm_ratio < 0.25 path bypasses most of the
+    # practicality stack so only this CTF cap matters — keep it honest.
+    "A": {"hem_rough": 1.30, "traditional": 1.10, "profile": 1.10, "floor_finish": 1.05, "slot": 0.95, "finish_wall": 1.00},
+    "B": {"hem_rough": 1.55, "traditional": 1.22, "profile": 1.22, "floor_finish": 1.12, "slot": 1.02, "finish_wall": 1.10},
+    "C": {"hem_rough": 1.80, "traditional": 1.38, "profile": 1.32, "floor_finish": 1.22, "slot": 1.10, "finish_wall": 1.18},
+    "D": {"hem_rough": 2.10, "traditional": 1.55, "profile": 1.48, "floor_finish": 1.32, "slot": 1.18, "finish_wall": 1.26},
 }
 
 # RPM ratio factor — penalises when machine can't reach target SFM RPM
+# KEY: when RPM is genuinely machine-limited (ratio < 0.25), the low SFM already
+# gives the tool more thermal margin — don't stack an additional runout/vibration
+# penalty. The resonance risk model only applies in the 0.25–0.90 range where
+# the spindle is spinning fast enough for vibration to matter but not fast enough
+# for correct chip formation.
 def _micro_rpm_factor(rpm_ratio: float, iso_bucket: str) -> float:
     if rpm_ratio >= 0.90:
         f = 1.00
     elif rpm_ratio >= 0.70:
-        f = 0.90
+        f = 0.95
     elif rpm_ratio >= 0.50:
-        f = 0.78
+        f = 0.88
+    elif rpm_ratio >= 0.25:
+        f = 0.82
     else:
-        f = 0.65
-    # Tighter materials are less forgiving at low RPM
-    if iso_bucket in ("M", "S") and rpm_ratio < 0.70:
+        # Machine-limited (lathe live tool, low-RPM spindle) — SFM is already
+        # conservative; no additional RPM penalty. Feed is correct for actual RPM.
+        f = 1.00
+    # Tighter materials are less forgiving at low RPM (only in the penalised range)
+    if iso_bucket in ("M", "S") and 0.25 <= rpm_ratio < 0.70:
         f *= 0.92
     return f
 
@@ -132,13 +146,16 @@ _MICRO_SETUP_FACTOR = {
     "poor":      0.62,
 }
 
-# L:D factor
+# L:D factor — penalises long stickout for deflection/chatter risk
+# Floor raised from 0.45 → 0.55: at very high L:D the stability advisor already
+# flags deflection and suggests shorter stickout. Crushing feed to 45% on top
+# of all other penalties is double-counting the same risk.
 def _micro_ld_factor(ld: float) -> float:
     if ld <= 2.5:  return 1.00
-    if ld <= 4.0:  return 0.88
-    if ld <= 6.0:  return 0.72
-    if ld <= 8.0:  return 0.58
-    return 0.45
+    if ld <= 4.0:  return 0.90
+    if ld <= 6.0:  return 0.78
+    if ld <= 8.0:  return 0.65
+    return 0.55
 
 # Series/geometry bonus
 def _micro_series_factor(tool_series: str, variable_pitch: bool, variable_helix: bool) -> float:
@@ -198,9 +215,16 @@ def micro_tool_feed_limit(
     iso = _MICRO_ISO_BUCKET.get(material_group, "P")
 
     # 1. Cap chip-thinning multiplier
+    # feed_ctf_cap = what feed_physics WOULD be if CTF were capped at max_ctf.
+    # Use feed_physics / chip_thinning_factor_raw to recover the pre-CT base,
+    # then re-apply the capped CTF. This correctly handles machine-limited RPM
+    # (where feed_physics is already low) without re-deriving from base_ipt×RPM.
     max_ctf = _MICRO_MAX_CTF.get(band, _MICRO_MAX_CTF["D"]).get(op_bucket, 1.40)
-    ctf_used = min(chip_thinning_factor_raw, max_ctf)
-    feed_ctf_cap = rpm_actual * flutes * base_ipt * ctf_used
+    ctf_raw = max(chip_thinning_factor_raw, 1e-6)
+    if ctf_raw > max_ctf:
+        feed_ctf_cap = feed_physics * (max_ctf / ctf_raw)
+    else:
+        feed_ctf_cap = feed_physics  # CT is already within limits; no CTF cap needed
 
     # 2. Build practicality multiplier
     rpm_ratio = (rpm_actual / rpm_target) if rpm_target > 1e-6 else 1.0
@@ -218,6 +242,15 @@ def micro_tool_feed_limit(
         * _micro_ld_factor(ld_ratio)
         * _micro_series_factor(tool_series, variable_pitch, variable_helix)
     )
+    # When the machine is genuinely RPM-limited (live-tool lathe, low-speed spindle),
+    # feed_physics is already correct for the actual RPM — the CTF cap above is the
+    # right control. Don't further reduce with practicality multiplier stacking.
+    # Threshold: rpm_ratio < 0.25 means spindle is running at <25% of target SFM.
+    if rpm_ratio < 0.25:
+        practicality = max(practicality, 0.85)
+    else:
+        # Normal case: combined floor prevents extreme penalty stacking
+        practicality = max(practicality, 0.42)
 
     feed_practical = feed_ctf_cap * practicality
 
