@@ -1131,6 +1131,9 @@ export default function Mentor() {
       spindle_drive: effectiveDrive as any,
       dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
+      mill_spindle_rpm: _machData.mill_rpm ?? 0,
+      mill_spindle_hp:  _machData.mill_hp  ?? 0,
+      sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
     }));
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
@@ -1566,6 +1569,9 @@ export default function Mentor() {
 
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
     machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
+    mill_spindle_rpm: 0,   // B-axis mill spindle RPM (mill_turn only)
+    mill_spindle_hp: 0,    // B-axis mill spindle HP (mill_turn only)
+    sub_spindle_rpm: 0,    // C-axis sub spindle RPM (mill_turn only)
     toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
     dual_contact: false,
     holder_gage_length: 0,
@@ -5607,17 +5613,17 @@ ${stabSection}
               <div className="flex gap-2 flex-wrap">
                 {([
                   { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
-                    rpm: activeMachineDataRef.current?.main_rpm ?? activeMachineData?.main_rpm ?? form.max_rpm,
-                    hp:  activeMachineDataRef.current?.main_hp  ?? activeMachineData?.main_hp  ?? form.machine_hp,
+                    rpm: activeMachineData?.main_rpm ?? form.max_rpm,
+                    hp:  activeMachineData?.main_hp  ?? form.machine_hp,
                     show: true },
                   { key: "mill" as const, label: "B-Axis Spindle", note: "High-speed milling head",
-                    rpm: activeMachineDataRef.current?.mill_rpm ?? activeMachineData?.mill_rpm ?? 0,
-                    hp:  activeMachineDataRef.current?.mill_hp  ?? activeMachineData?.mill_hp  ?? form.machine_hp,
-                    show: !!(activeMachineDataRef.current?.mill_rpm ?? activeMachineData?.mill_rpm) },
+                    rpm: form.mill_spindle_rpm || activeMachineData?.mill_rpm || 0,
+                    hp:  form.mill_spindle_hp  || activeMachineData?.mill_hp  || form.machine_hp,
+                    show: !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm) },
                   { key: "sub"  as const, label: "C-Axis Spindle", note: "Sub spindle / backwork",
-                    rpm: activeMachineDataRef.current?.sub_rpm  ?? activeMachineData?.sub_rpm  ?? manualSubRpm,
-                    hp:  activeMachineDataRef.current?.main_hp  ?? activeMachineData?.main_hp  ?? form.machine_hp,
-                    show: !!(activeMachineDataRef.current?.sub_rpm ?? activeMachineData?.sub_rpm ?? (manualSubRpm > 0 ? manualSubRpm : null)) },
+                    rpm: form.sub_spindle_rpm  || activeMachineData?.sub_rpm  || manualSubRpm,
+                    hp:  activeMachineData?.main_hp ?? form.machine_hp,
+                    show: !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0) },
                 ].filter(o => o.show)).map(({ key, label, note, rpm, hp }) => (
                   <button
                     key={key}
