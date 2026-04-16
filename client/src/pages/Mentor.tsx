@@ -2438,6 +2438,10 @@ export default function Mentor() {
     setTmNeckText("");
     setTmGcodeExpanded(false);
     clearSku();
+    setPdfExtracted(false);
+    setPdfToolNumber(null);
+    setPdfConvertedFromMm(false);
+    setDpSpecialTool(false);
     setMatSearchInput("");
     setMatMatchResult(null);
     setMatMatchError(null);
