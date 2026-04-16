@@ -1564,7 +1564,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -3363,6 +3363,7 @@ ${stabSection}
       rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
       "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
       ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
+      zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
     };
     if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
     if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
@@ -6129,7 +6130,7 @@ ${stabSection}
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
-                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Rigid Fixture → 5th-Axis Vise → Dovetail → Vise → Soft Jaws."
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Zero-Point / RockLock → Rigid Fixture → Pyramid Fixture → Dovetail → 5th-Axis Vise → Vise → Soft Jaws. Zero-point systems give rigid-fixture rigidity with sub-second changeover."
                   : /* vmc default */ "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for VMC: Rigid Fixture → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Toe Clamps → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
@@ -6190,11 +6191,13 @@ ${stabSection}
                     ] as const)
                   : form.machine_type === "5axis"
                   ? ([
-                      { key: "rigid_fixture", label: "Rigid Fixture"  },
-                      { key: "5th_axis_vise", label: "5th-Axis Vise"  },
-                      { key: "dovetail",      label: "Dovetail"       },
-                      { key: "vise",          label: "Vise"           },
-                      { key: "soft_jaws",     label: "Soft Jaws"      },
+                      { key: "zero_point",    label: "Zero-Point / RockLock" },
+                      { key: "rigid_fixture", label: "Rigid Fixture"         },
+                      { key: "pyramid",       label: "Pyramid Fixture"       },
+                      { key: "dovetail",      label: "Dovetail"              },
+                      { key: "5th_axis_vise", label: "5th-Axis Vise"         },
+                      { key: "vise",          label: "Vise"                  },
+                      { key: "soft_jaws",     label: "Soft Jaws"             },
                     ] as const)
                   : /* vmc default */ ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
@@ -6227,6 +6230,8 @@ ${stabSection}
                     "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts.",
                     ijaw:        "DMG MORI iJAW — sensor-driven intelligent clamping with real-time clamping force monitoring. Detects workpiece slip and misloads before the cut starts. Best for high-value parts or unattended operation.",
                     autochuck:   "DMG MORI autoCHUCK 2.0 — automated rapid jaw-change system that eliminates manual jaw swaps between jobs. Reduces setup time significantly in high-mix production. Standard chuck rigidity.",
+                    zero_point:  "Zero-point / pallet system (RockLock, EROWA, Schunk VERO-S) — founding plate with precision receiver bores allows sub-second fixture swap at micron-level repeatability. Rigidity equivalent to a rigid fixture. Best choice for 5-axis high-mix or lights-out production.",
+                    pyramid:     "Pyramid fixture — 3 or 4-sided multi-face mount that loads multiple small parts per cycle. Maximizes spindle utilization on small components. Rigidity depends on how securely parts are clamped to the pyramid faces.",
                   };
                   const tooltip = WH_TOOLTIPS[key];
                   const btn = (
