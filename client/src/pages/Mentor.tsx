@@ -3777,7 +3777,11 @@ ${stabSection}
       if (em) {
         lines.push("ENTRY MOVES");
         lines.push(DIV);
-        lines.push(L("Entry Type",    "Helical / Ramp"));
+        lines.push(L("Entry Type", (() => {
+          const labelMap: Record<string, string> = { sweep: "Sweep / Roll-in", ramp: "Straight Ramp", helical: "Helical", straight: "Straight Plunge" };
+          const selected = entryTypes.filter(k => labelMap[k]);
+          return selected.length > 0 ? selected.map(k => labelMap[k]).join(" / ") : "Helical / Ramp";
+        })()));
         lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
         lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
         lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
