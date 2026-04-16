@@ -265,6 +265,14 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS machine_status TEXT DEFAULT 'operational'`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS status_note TEXT`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS maintenance_date DATE`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS sub_spindle_rpm INTEGER`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_max_rpm INTEGER`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_hp NUMERIC(6,2)`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_connection TEXT`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_drive_type TEXT`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS mill_spindle_max_rpm INTEGER`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS mill_spindle_hp NUMERIC(6,2)`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS mill_spindle_taper TEXT`);
   } catch (err: any) {
     console.warn("[user_machines migration]", err?.message ?? err);
   }
@@ -4136,7 +4144,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   app.post("/api/user-machines", async (req, res) => {
     const { email, token, nickname, shop_machine_no, serial_number, machine_id,
             brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact,
-            coolant_types, tsc_psi, machine_type, control, notes } = req.body;
+            coolant_types, tsc_psi, machine_type, control, notes,
+            sub_spindle_rpm, live_tool_max_rpm, live_tool_hp, live_tool_connection, live_tool_drive_type,
+            mill_spindle_max_rpm, mill_spindle_hp, mill_spindle_taper } = req.body;
     if (!email || !token || !nickname) return res.status(400).json({ error: "Missing required fields" });
     const { pool } = await import("./db");
     const auth = await pool.query(
@@ -4148,14 +4158,19 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const result = await pool.query(
       `INSERT INTO user_machines (email, nickname, shop_machine_no, serial_number, machine_id,
          brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact,
-         coolant_types, tsc_psi, machine_type, control, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         coolant_types, tsc_psi, machine_type, control, notes,
+         sub_spindle_rpm, live_tool_max_rpm, live_tool_hp, live_tool_connection, live_tool_drive_type,
+         mill_spindle_max_rpm, mill_spindle_hp, mill_spindle_taper)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        RETURNING id`,
       [dataEmail, nickname, shop_machine_no || null, serial_number || null,
        machine_id || null, brand || null, model || null, max_rpm || null,
        spindle_hp || null, taper || null, drive_type || null,
        dual_contact ?? false, coolant_types || null, tsc_psi || null,
-       machine_type || null, control || null, notes || null]
+       machine_type || null, control || null, notes || null,
+       sub_spindle_rpm || null, live_tool_max_rpm || null, live_tool_hp || null,
+       live_tool_connection || null, live_tool_drive_type || null,
+       mill_spindle_max_rpm || null, mill_spindle_hp || null, mill_spindle_taper || null]
     );
     res.json({ ok: true, id: result.rows[0].id });
   });

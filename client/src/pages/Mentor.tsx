@@ -1027,6 +1027,7 @@ export default function Mentor() {
     main_rpm: number; main_hp: number;
     sub_rpm: number | null;
     live_rpm: number | null; live_hp: number | null;
+    live_connection: string | null; live_drive: string | null;
     mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;
     drive: string;
     brand: string | null;
@@ -1156,6 +1157,8 @@ export default function Mentor() {
       sub_rpm: m.sub_spindle_rpm ?? null,
       live_rpm: m.live_tool_max_rpm ?? null,
       live_hp: m.live_tool_hp ? Number(m.live_tool_hp) : null,
+      live_connection: typeof m.live_tool_connection === "string" ? m.live_tool_connection : null,
+      live_drive: typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type : null,
       mill_rpm: m.mill_spindle_max_rpm ?? null,
       mill_hp: m.mill_spindle_hp ? Number(m.mill_spindle_hp) : null,
       mill_taper: millTaper,
@@ -1229,6 +1232,14 @@ export default function Mentor() {
           drive_type: form.spindle_drive,
           dual_contact: form.dual_contact,
           machine_type: form.machine_type,
+          sub_spindle_rpm: activeMachineData?.sub_rpm ?? null,
+          live_tool_max_rpm: activeMachineData?.live_rpm ?? null,
+          live_tool_hp: activeMachineData?.live_hp ?? null,
+          live_tool_connection: activeMachineData?.live_connection ?? null,
+          live_tool_drive_type: activeMachineData?.live_drive ?? null,
+          mill_spindle_max_rpm: activeMachineData?.mill_rpm ?? null,
+          mill_spindle_hp: activeMachineData?.mill_hp ?? null,
+          mill_spindle_taper: activeMachineData?.mill_taper ?? null,
         }),
       });
       if (res.ok) {
