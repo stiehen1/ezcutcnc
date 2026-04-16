@@ -6143,7 +6143,7 @@ ${stabSection}
                   ? (selectedSpindle === "sub"
                     ? "C-axis / sub-spindle selected — part is transferred for back-side ops. Workholding is fixed to Sub-Spindle. Switch to A-axis or B-axis spindle to change workholding."
                     : selectedSpindle === "mill"
-                    ? "B-axis milling spindle active. Most rigid to least rigid: Dovetail → Rigid Fixture → Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Steady Rest. Custom jawing (form, step, pie) for complex profiles. Modular quick-change for high-mix production."
+                    ? "B-axis milling spindle active — the part stays held in the A-axis chuck while the B-axis tool mills it. Select how the part is currently chucked. Most rigid to least rigid: Dovetail → Rigid Fixture → Collet Chuck → Soft Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel."
                     : "A-axis turning spindle active. Most rigid to least rigid: Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Tailstock Support → Steady Rest. Collet chuck for bar work and precision; 6-jaw for thin-wall; hydraulic/power chuck for repeatability and high-volume; form/step/pie jaws for complex profiles.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
@@ -6168,25 +6168,16 @@ ${stabSection}
                       ] as const)
                     : selectedSpindle === "mill"
                     ? ([
-                        /* Primary chuck / bar work */
-                        { key: "collet_chuck",      label: "Collet Chuck"      },
-                        { key: "soft_jaws",         label: "Soft Jaws"         },
-                        { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"   },
-                        { key: "6_jaw_chuck",       label: "6-Jaw Chuck"       },
-                        { key: "hydraulic_chuck",   label: "Hydraulic Chuck"   },
-                        { key: "power_chuck",       label: "Power Chuck"       },
-                        /* Custom jawing */
-                        { key: "form_jaws",         label: "Form Jaws"         },
-                        { key: "step_jaws",         label: "Step Jaws"         },
-                        { key: "pie_jaws",          label: "Pie Jaws"          },
-                        /* Mandrel / support */
-                        { key: "expanding_mandrel", label: "Expanding Mandrel" },
-                        { key: "steady_rest",       label: "Steady Rest"       },
-                        /* Fixture-style (secondary ops / milled faces) */
-                        { key: "dovetail",          label: "Dovetail"          },
-                        { key: "rigid_fixture",     label: "Rigid Fixture"     },
+                        /* Part is held in A-axis chuck — these describe that holding condition */
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "soft_jaws",           label: "Soft Jaws"            },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        { key: "dovetail",            label: "Dovetail"             },
+                        { key: "rigid_fixture",       label: "Rigid Fixture"        },
                         { key: "modular_quickchange", label: "Modular Quick-Change" },
-                        { key: "secondary_op_vise", label: "Secondary Op Vise" },
+                        { key: "secondary_op_vise",   label: "Secondary Op Vise"    },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
