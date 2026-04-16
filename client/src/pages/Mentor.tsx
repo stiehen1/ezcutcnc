@@ -1573,6 +1573,10 @@ export default function Mentor() {
     mill_spindle_hp: 0,         // B-axis mill spindle HP (mill_turn only)
     sub_spindle_rpm: 0,         // C-axis sub spindle RPM (mill_turn only)
     lathe_has_sub_spindle: false, // lathe sub-spindle toggle
+    speeder_enabled: false,
+    speeder_ratio: 4,
+    speeder_max_rpm: 40000,
+    speeder_max_torque_nm: 0,
     toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
     dual_contact: false,
     holder_gage_length: 0,
@@ -6085,6 +6089,97 @@ ${stabSection}
                   />
                 </div>
               </div>
+              {/* Speeder / Speed Increaser */}
+              <div className="flex items-center gap-3 pt-2 mt-1 border-t border-border flex-wrap">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-xs font-medium text-zinc-300 cursor-default">Speed Increaser (Speeder)? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-64 text-xs">
+                    A speeder multiplies spindle RPM by a gear ratio (e.g. 4:1 = 4× RPM) while dividing available torque and HP by the same ratio. The engine will cap RPM at the speeder's output limit and derate machine HP accordingly.
+                  </TooltipContent>
+                </Tooltip>
+                {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                  <button
+                    key={String(val)}
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, speeder_enabled: val }))}
+                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                      borderColor: val ? "#f59e0b" : "#52525b",
+                      color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {form.speeder_enabled && (() => {
+                const effectiveRpm = Math.min(
+                  Math.round(form.max_rpm * form.speeder_ratio),
+                  form.speeder_max_rpm
+                );
+                const hpFromRatio   = form.machine_hp / form.speeder_ratio;
+                // HP limit from torque: P(HP) = T(N·m) × RPM / 9549 × 1.341
+                const hpFromTorque  = form.speeder_max_torque_nm > 0
+                  ? (form.speeder_max_torque_nm * effectiveRpm / 9549) * 1.341
+                  : Infinity;
+                const effectiveHp   = Math.min(hpFromRatio, hpFromTorque);
+                const torqueLimited = form.speeder_max_torque_nm > 0 && hpFromTorque < hpFromRatio;
+                return (
+                  <div className="space-y-2 pt-2">
+                    {/* Row 1: Ratio / Max RPM / Effective RPM */}
+                    <div className="flex gap-3">
+                      <div className="flex-1 space-y-1">
+                        <FieldLabel hint="Gear ratio of the speeder (e.g. 4 = 4× RPM multiplication). Common ratios: 4:1, 5:1, 6:1. Check your speeder's spec sheet.">Ratio (×)</FieldLabel>
+                        <Input
+                          type="number" step="0.5" min="1" max="20" className="no-spinners"
+                          placeholder="e.g. 4"
+                          value={form.speeder_ratio || ""}
+                          onChange={e => setForm(p => ({ ...p, speeder_ratio: Math.max(1, Number(e.target.value) || 1) }))}
+                        />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <FieldLabel hint="Maximum output RPM the speeder is rated for. The engine caps RPM at this value regardless of ratio. Check your speeder's spec sheet.">Max Output RPM</FieldLabel>
+                        <Input
+                          type="number" step="1000" min="0" className="no-spinners"
+                          placeholder="e.g. 40000"
+                          value={form.speeder_max_rpm || ""}
+                          onChange={e => setForm(p => ({ ...p, speeder_max_rpm: Math.max(0, Number(e.target.value) || 0) }))}
+                        />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <FieldLabel hint="Effective RPM ceiling: min(machine RPM × ratio, speeder max RPM).">Effective RPM</FieldLabel>
+                        <div className="rounded px-3 py-2 text-sm font-semibold text-emerald-400 bg-zinc-800/60 border border-zinc-700/40">
+                          {effectiveRpm.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Row 2: Max Torque / Effective HP */}
+                    <div className="flex gap-3">
+                      <div className="flex-1 space-y-1">
+                        <FieldLabel hint="Maximum output torque the speeder head is rated for (N·m). Found on your speeder's spec sheet. Leave 0 if unknown — engine will use HP derate only.">Max Torque (N·m)</FieldLabel>
+                        <Input
+                          type="number" step="0.1" min="0" className="no-spinners"
+                          placeholder="0 = use HP only"
+                          value={form.speeder_max_torque_nm || ""}
+                          onChange={e => setForm(p => ({ ...p, speeder_max_torque_nm: Math.max(0, Number(e.target.value) || 0) }))}
+                        />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <FieldLabel hint={torqueLimited ? "Torque limit is the binding constraint at this RPM — engine caps power here." : "HP derate (machine HP ÷ ratio) is the binding constraint."}>
+                          Effective HP {torqueLimited ? <span className="text-amber-400 text-[10px] ml-1">torque-limited</span> : ""}
+                        </FieldLabel>
+                        <div className={`rounded px-3 py-2 text-sm font-semibold bg-zinc-800/60 border border-zinc-700/40 ${torqueLimited ? "text-amber-400" : "text-emerald-400"}`}>
+                          {isFinite(effectiveHp) ? effectiveHp.toFixed(1) : hpFromRatio.toFixed(1)} HP
+                        </div>
+                      </div>
+                      <div className="flex-1" /> {/* spacer */}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Coolant */}
