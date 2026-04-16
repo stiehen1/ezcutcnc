@@ -636,9 +636,14 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
         {step === "items" && (
           <div>
             {/* Top bar */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-zinc-500">{email}</p>
               <button onClick={loadItems} className="text-xs text-indigo-400 hover:text-indigo-300">↻ Refresh</button>
+            </div>
+
+            {/* Team note */}
+            <div className="mb-5 text-xs text-cyan-400/80">
+              Team toolbox sharing is available — <a href="#" onClick={e => { e.preventDefault(); (window as any).__openTeamsTab?.(); }} className="underline hover:text-cyan-300">connect your team →</a>
             </div>
 
             {loading && <p className="text-sm text-muted-foreground text-center py-12">Loading…</p>}
