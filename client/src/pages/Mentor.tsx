@@ -1502,11 +1502,14 @@ export default function Mentor() {
       if (_pdfLoc > 0 && _pdfDia > 0) {
         let _defaultSo: number;
         if (_isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0) {
-          // Try DB lookup — closest standard QTR3 by dia + loc
+          // Try DB lookup — QTR3-RN first (necked tools have lbs), then QTR3
           let dbStickout: number | null = null;
           try {
-            const _sr = await fetch(`/api/skus/stickout-lookup?series=QTR3&dia=${_pdfDia}&loc=${_pdfLoc}`);
-            if (_sr.ok) { const _sd = await _sr.json(); dbStickout = _sd.stickout ?? null; }
+            const seriesToTry = _pdfLbs > 0 ? ["QTR3-RN", "QTR3"] : ["QTR3"];
+            for (const s of seriesToTry) {
+              const _sr = await fetch(`/api/skus/stickout-lookup?series=${encodeURIComponent(s)}&dia=${_pdfDia}&loc=${_pdfLoc}`);
+              if (_sr.ok) { const _sd = await _sr.json(); if (_sd.stickout) { dbStickout = _sd.stickout; break; } }
+            }
           } catch { /* ignore */ }
           if (dbStickout != null && dbStickout > 0) {
             _defaultSo = dbStickout;
