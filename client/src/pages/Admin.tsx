@@ -57,6 +57,7 @@ export default function Admin() {
   const [password, setPassword] = React.useState("");
   const [authError, setAuthError] = React.useState("");
   const [authLoading, setAuthLoading] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
   const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access">("registrations");
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [access, setAccess] = React.useState<AccessData | null>(null);
@@ -194,15 +195,25 @@ export default function Admin() {
         <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-8 w-80 shadow-2xl">
           <h1 className="text-lg font-bold mb-1">Admin Dashboard</h1>
           <p className="text-xs text-zinc-400 mb-5">Core Cutter internal use only.</p>
-          <input
-            type="password"
-            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 mb-2"
-            placeholder="Admin password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") login(); }}
-            autoFocus
-          />
+          <div className="relative mb-2">
+            <input
+              type={showPassword ? "text" : "password"}
+              className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2.5 pr-10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+              placeholder="Admin password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") login(); }}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(p => !p)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors"
+              tabIndex={-1}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+          </div>
           {authError && <p className="text-xs text-red-400 mb-2">{authError}</p>}
           <button
             className="w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50"
