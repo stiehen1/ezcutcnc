@@ -1507,7 +1507,7 @@ export default function Mentor() {
               const radialDelta = (_pdfShankDia - _pdfDia) / 2;
               const taperLen = radialDelta / Math.tan(15 * Math.PI / 180); // 30° included = 15° half
               const taperEnd = _pdfLbs + taperLen; // distance from tip to where parallel shank begins
-              return Math.ceil((taperEnd + 0.33 * _pdfShankDia) * 200) / 200;
+              return Math.ceil((taperEnd + 0.52 * _pdfShankDia) * 200) / 200;
             })()
           : Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
