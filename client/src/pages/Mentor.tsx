@@ -1557,12 +1557,14 @@ export default function Mentor() {
         const _wocPct = spPresets.woc.med;
         const _locCap = newLoc > 0 ? newLoc / newDia : 99;
         const _isHem  = spMode === "hem";
-        const _docXd  = Math.min(_locCap, Math.max(spPresets.doc.low, _isHem ? spPresets.doc.high : spPresets.doc.med));
+        const _smallDiaPdf = newDia > 0 && newDia <= 0.125;
+        const _docLevel = _smallDiaPdf ? spPresets.doc.low : (_isHem ? spPresets.doc.high : spPresets.doc.med);
+        const _docXd  = Math.min(_locCap, Math.max(spPresets.doc.low, _docLevel));
         setForm(p => ({ ...p, woc_pct: _wocPct, doc_xd: _docXd }));
         setWocText(((_wocPct / 100) * newDia).toFixed(4));
         setDocText((_docXd * newDia).toFixed(3));
         setWocPreset("med");
-        setDocPreset(_isHem ? "high" : "med");
+        setDocPreset(_smallDiaPdf ? "low" : _isHem ? "high" : "med");
       }
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
@@ -4220,9 +4222,10 @@ ${stabSection}
                   const faceStepover = mode === "face" ? Math.max(0, (dia - 2 * cr) * 0.75) : null;
                   const faceWocPct   = faceStepover !== null && dia > 0 ? (faceStepover / dia) * 100 : wp.med;
 
-                  // Slot: default to low (conservative starting point — user adjusts up)
-                  // HEM/trochoidal: high (full LOC is the point). Everything else: med.
-                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : mode === "slot" ? "low" : "med";
+                  // Small dia (≤0.125"): always conservative — low for all modes (tools break, not bend)
+                  // Slot: low regardless of dia. HEM/trochoidal: high. Everything else: med.
+                  const _smallDia = dia > 0 && dia <= 0.125;
+                  const docLevel = _smallDia ? "low" : (mode === "hem" || mode === "trochoidal") ? "high" : mode === "slot" ? "low" : "med";
                   const hasDia = form.tool_dia > 0;
                   setForm((p) => ({
                     ...p,
