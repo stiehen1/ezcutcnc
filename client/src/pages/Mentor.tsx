@@ -6148,7 +6148,7 @@ ${stabSection}
                     ? ""
                     : selectedSpindle === "mill"
                     ? "B-axis milling spindle active — part stays in the A-axis chuck while the B-axis tool mills at compound angles. B-axis introduces angled + multi-directional loads, so conforming workholding matters most. Best choices: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet is great for finishing but low torque capacity under heavy B-axis loads. Dovetail and rigid fixture for special-access or prismatic secondary ops only."
-                    : "A-axis turning spindle active. Most rigid to least rigid: Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Tailstock Support → Steady Rest. Collet chuck for bar work and precision; 6-jaw for thin-wall; hydraulic/power chuck for repeatability and high-volume; form/step/pie jaws for complex profiles.")
+                    : "A-axis main turning spindle. Best choices for off-axis / multi-face loads: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet and 3-jaw are good for concentric bar work but watch slip under angled cuts. Tailstock, between centers, and steady rest reduce deflection on long parts — critical for shaft work.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
@@ -6204,19 +6204,20 @@ ${stabSection}
                         ] : []),
                       ] as const)
                     : /* main / A-axis */ ([
-                        /* Primary chuck / bar work */
-                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        /* Primary — best for off-axis / multi-face turning loads */
                         { key: "soft_jaws",           label: "Soft Jaws"            },
-                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "form_jaws",           label: "Form Jaws"            },
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "pie_jaws",            label: "Pie Jaws"             },
                         { key: "hydraulic_chuck",     label: "Hydraulic Chuck"      },
                         { key: "power_chuck",         label: "Power Chuck"          },
-                        /* Custom jawing */
-                        { key: "form_jaws",           label: "Form Jaws"            },
+                        /* Conditional — good for concentric / light ops */
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
                         { key: "step_jaws",           label: "Step Jaws"            },
-                        { key: "pie_jaws",            label: "Pie Jaws"             },
-                        /* Mandrel / support */
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        /* Full-access / support */
+                        { key: "dovetail",            label: "Dovetail"             },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
                         { key: "between_centers",     label: "Between Centers"      },
                         { key: "steady_rest",         label: "Steady Rest"          },
