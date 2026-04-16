@@ -74,6 +74,8 @@ export const mentorSchemas = {
     flute_wash: z.number().min(0).default(0),
 
     machine_hp: z.number().min(0).default(10),
+    live_tool_connection: z.string().default(""),
+    live_tool_hp: z.number().min(0).default(0),
     machine_id: z.number().int().positive().optional(),
     stickout: z.number().min(0).default(2.0),
 

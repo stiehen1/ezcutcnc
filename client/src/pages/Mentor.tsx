@@ -1139,6 +1139,8 @@ export default function Mentor() {
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
       sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
+      live_tool_connection: (typeof m.live_tool_connection === "string" ? m.live_tool_connection : "") || "",
+      live_tool_hp: _machData.live_hp ?? 0,
     }));
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
@@ -1600,6 +1602,8 @@ export default function Mentor() {
     doc_xd: 0,
 
     machine_hp: 0,
+    live_tool_connection: "",
+    live_tool_hp: 0,
     spindle_drive: "belt" as "direct" | "belt" | "gear",
     stickout: 0,
     part_stickout: 0,
