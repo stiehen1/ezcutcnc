@@ -6198,6 +6198,7 @@ ${stabSection}
                         /* Mandrel / support */
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
+                        { key: "between_centers",     label: "Between Centers"      },
                         { key: "steady_rest",         label: "Steady Rest"          },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
