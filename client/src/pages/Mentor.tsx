@@ -1486,6 +1486,12 @@ export default function Mentor() {
         // Variable pitch/helix from print notes
         if (e.variable_pitch === true) next.variable_pitch = true;
         if (e.variable_helix === true) next.variable_helix = true;
+        // Series from print notes (e.g. "QTR3-STYLE" → "QTR3") — drives DOC/WOC preset tables
+        if (e.tool_series) {
+          next.tool_series = e.tool_series;
+        } else if (_isReducedShank && e.flutes === 3 && e.variable_pitch && e.variable_helix) {
+          next.tool_series = "QTR3"; // infer for reduced-shank 3-fl var pitch+helix specials
+        }
         // Coolant-fed detection
         if (e.coolant_fed === true) {
           if (tt === "drill" || tt === "step_drill") next.drill_coolant_fed = true;
@@ -2069,7 +2075,7 @@ export default function Mentor() {
     finish:      { low: 1.0, med: 2.0, high: Math.min(3.0, form.loc > 0 && form.tool_dia > 0 ? Math.floor((form.loc / form.tool_dia) * 100) / 100 : 3.0) },
     face:        { low: 0.03,med: 0.08, high: 0.15 },
     trochoidal:  dynPresets.doc,
-    slot:        { low: form.flutes === 5 ? 0.15 : 0.25, med: form.flutes === 5 ? 0.30 : 0.5, high: form.flutes === 5 ? 0.5 : 1.0 },
+    slot:        dynPresets.doc,
     circ_interp: { low: 0.05, med: 0.10, high: 0.25 },
   };
   const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>(null);

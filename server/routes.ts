@@ -3671,7 +3671,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>,
   "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>,
   "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". false otherwise.>,
-  "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". false otherwise.>
+  "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". false otherwise.>,
+  "tool_series": <string or null — look in the NOTES section for a series callout like "QTR3-STYLE", "QTR3-RN", "QTR3". Return "QTR3-RN" if noted, "QTR3" if "QTR3-STYLE" or "QTR3" is noted, null otherwise.>
 }`;
 
   app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {
