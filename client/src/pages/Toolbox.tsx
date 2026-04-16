@@ -26,7 +26,7 @@ type FavoriteItem = {
 
 // ── Shared section header ─────────────────────────────────────────────────────
 function SectionHeader({
-  icon, title, count, open, onToggle, action,
+  icon, title, count, open, onToggle, action, accentColor, titleColor, bgColor, borderColor,
 }: {
   icon: string;
   title: string;
@@ -34,32 +34,33 @@ function SectionHeader({
   open: boolean;
   onToggle: () => void;
   action?: React.ReactNode;
+  accentColor: string;   // left bar: e.g. "bg-indigo-500"
+  titleColor: string;    // title text: e.g. "text-indigo-300"
+  bgColor: string;       // header bg: e.g. "bg-indigo-950/40"
+  borderColor: string;   // border: e.g. "border-indigo-800/50"
 }) {
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className={`flex items-center gap-0 rounded-xl overflow-hidden border ${borderColor} ${bgColor}`}>
+      <div className={`w-1.5 self-stretch flex-shrink-0 ${accentColor}`} />
       <button
         type="button"
         onClick={onToggle}
-        className="flex items-center gap-2 flex-1 text-left group"
+        className="flex items-center gap-2.5 flex-1 text-left px-4 py-3 group"
       >
-        <span className="text-base">{icon}</span>
-        <span className="text-sm font-bold text-white tracking-wide">{title}</span>
+        <span className="text-base leading-none">{icon}</span>
+        <span className={`text-sm font-bold tracking-wide ${titleColor}`}>{title}</span>
         {count != null && (
           <span className="text-[11px] text-zinc-500 font-normal">
-            {count} {count === 1 ? "item" : "items"}
+            ({count})
           </span>
         )}
-        <span className="text-zinc-600 text-[11px] ml-1 group-hover:text-zinc-400 transition-colors">
+        <span className="text-zinc-600 text-[10px] ml-1 group-hover:text-zinc-400 transition-colors">
           {open ? "▲" : "▼"}
         </span>
       </button>
-      {action}
+      {action && <div className="pr-3">{action}</div>}
     </div>
   );
-}
-
-function SectionDivider({ color = "border-zinc-700" }: { color?: string }) {
-  return <div className={`border-t ${color} my-1`} />;
 }
 
 export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
@@ -443,20 +444,22 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 {/* ════════════════════════════════════════════════════════
                     SECTION 1 — Previously Saved Applications
                 ════════════════════════════════════════════════════════ */}
-                <div>
-                  <SectionDivider color="border-indigo-800/60" />
+                <div className="rounded-2xl border border-indigo-900/40 bg-indigo-950/20 overflow-hidden">
                   <SectionHeader
                     icon="⚡"
                     title="Previously Saved Applications"
                     count={savedApps.length}
                     open={savedOpen}
                     onToggle={() => setSavedOpen(v => !v)}
+                    accentColor="bg-indigo-500"
+                    titleColor="text-indigo-300"
+                    bgColor="bg-indigo-950/50"
+                    borderColor="border-indigo-800/50"
                   />
-                  <SectionDivider color="border-indigo-800/60" />
                   {savedOpen && (
-                    <div className="mt-3 space-y-2">
+                    <div className="p-3 space-y-2">
                       {savedApps.length === 0 ? (
-                        <div className="text-center py-6 border border-dashed border-zinc-800 rounded-xl">
+                        <div className="text-center py-6 border border-dashed border-indigo-900/50 rounded-xl">
                           <p className="text-xs text-zinc-600">No saved applications yet.</p>
                           <p className="text-[11px] text-zinc-700 mt-1">Run a calculation and hit "Save to Toolbox".</p>
                           <Link href="/" className="mt-3 inline-block text-xs text-indigo-400 hover:text-indigo-300">Go to Calculator →</Link>
@@ -471,18 +474,20 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 {/* ════════════════════════════════════════════════════════
                     SECTION 2 — Saved Favorited Standard Tools
                 ════════════════════════════════════════════════════════ */}
-                <div>
-                  <SectionDivider color="border-amber-800/50" />
+                <div className="rounded-2xl border border-amber-900/40 bg-amber-950/10 overflow-hidden">
                   <SectionHeader
                     icon="★"
                     title="Favorited Standard Tools"
                     count={favorites.length}
                     open={favOpen}
                     onToggle={() => setFavOpen(v => !v)}
+                    accentColor="bg-amber-500"
+                    titleColor="text-amber-300"
+                    bgColor="bg-amber-950/40"
+                    borderColor="border-amber-800/50"
                   />
-                  <SectionDivider color="border-amber-800/50" />
                   {favOpen && (
-                    <div className="mt-3 space-y-2">
+                    <div className="p-3 space-y-2">
                       {favorites.length === 0 ? (
                         <div className="text-center py-6 border border-dashed border-zinc-800 rounded-xl">
                           <p className="text-xs text-zinc-600">No favorited tools yet.</p>
@@ -538,14 +543,17 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 {/* ════════════════════════════════════════════════════════
                     SECTION 3 — Saved Uploaded Special Tools
                 ════════════════════════════════════════════════════════ */}
-                <div>
-                  <SectionDivider color="border-orange-800/50" />
+                <div className="rounded-2xl border border-orange-900/40 bg-orange-950/10 overflow-hidden">
                   <SectionHeader
                     icon="🔩"
                     title="Saved Uploaded Special Tools"
                     count={specials.length}
                     open={specialsOpen}
                     onToggle={() => setSpecialsOpen(v => !v)}
+                    accentColor="bg-orange-500"
+                    titleColor="text-orange-300"
+                    bgColor="bg-orange-950/40"
+                    borderColor="border-orange-800/50"
                     action={
                       <button
                         type="button"
@@ -554,9 +562,8 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                       >+ Add Tool</button>
                     }
                   />
-                  <SectionDivider color="border-orange-800/50" />
                   {specialsOpen && (
-                    <div className="mt-3 space-y-2">
+                    <div className="p-3 space-y-2">
                       {/* Add form */}
                       {addingSpecial && (
                         <div className="border border-orange-700/50 rounded-xl p-4 bg-orange-950/15 space-y-3 mb-3">
@@ -682,18 +689,20 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                     SECTION 4 — ROI Comparisons
                 ════════════════════════════════════════════════════════ */}
                 {(roiDraft || roiItems.length > 0) && (
-                  <div>
-                    <SectionDivider color="border-green-800/50" />
+                  <div className="rounded-2xl border border-green-900/40 bg-green-950/10 overflow-hidden">
                     <SectionHeader
                       icon="📊"
                       title="ROI Comparisons"
                       count={roiItems.length + (roiDraft ? 1 : 0)}
                       open={roiOpen}
                       onToggle={() => setRoiOpen(v => !v)}
+                      accentColor="bg-green-500"
+                      titleColor="text-green-300"
+                      bgColor="bg-green-950/40"
+                      borderColor="border-green-800/50"
                     />
-                    <SectionDivider color="border-green-800/50" />
                     {roiOpen && (
-                      <div className="mt-3 space-y-2">
+                      <div className="p-3 space-y-2">
                         {roiDraft && (
                           <div className="border border-amber-600/40 rounded-xl overflow-hidden bg-amber-950/20">
                             <div className="flex items-center justify-between px-4 py-3">

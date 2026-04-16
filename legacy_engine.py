@@ -1,5 +1,6 @@
 import math
 from engine.physics import (
+    micro_tool_feed_limit,
     chip_thinning_factor,
     chip_thickness,
     effective_chip_thickness,
@@ -3237,6 +3238,30 @@ def run(payload=None):
         if "doc_xd" not in payload:
             data["doc_xd"] = default_doc
 
+    # ── Micro-tool slotting DOC cap ──────────────────────────────────────────
+    # Full 1×D slot DOC on tools ≤ 1/8" is unrealistic — deflection and chip
+    # packing will break the tool. Scale down aggressively below 3/16".
+    #   ≤ 1/16" (0.0625):  max 0.35×D
+    #   ≤ 3/32" (0.0938):  max 0.45×D
+    #   ≤ 1/8"  (0.125):   max 0.60×D
+    #   ≤ 3/16" (0.1875):  max 0.75×D
+    #   > 3/16":            no cap
+    if mode == "slot":
+        _d_for_cap = float(data.get("diameter", 0.0) or 0.0)
+        if _d_for_cap > 0:
+            if _d_for_cap <= 0.0625:
+                _slot_doc_cap = 0.35
+            elif _d_for_cap <= 0.09375:
+                _slot_doc_cap = 0.45
+            elif _d_for_cap <= 0.125:
+                _slot_doc_cap = 0.60
+            elif _d_for_cap <= 0.1875:
+                _slot_doc_cap = 0.75
+            else:
+                _slot_doc_cap = None
+            if _slot_doc_cap is not None and float(data.get("doc_xd", 1.0)) > _slot_doc_cap:
+                data["doc_xd"] = _slot_doc_cap
+
     _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
     _drive_eff = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     data.setdefault("machine_hp", float(payload.get("machine_hp", 10.0)) * _drive_eff)
@@ -3534,6 +3559,7 @@ def run(payload=None):
     # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
     # Finish mode: chip thinning NOT applied — thinner chip is intentional for surface quality;
     # boosting feed to compensate defeats the purpose and degrades finish.
+    _base_ipt_before_ct = ipt  # preserve for micro-tool limiter
     if mode == "finish":
         chip_factor = 1.0
     elif mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
@@ -3546,6 +3572,42 @@ def run(payload=None):
     if data["mode"] in ("hem", "trochoidal"):
         _hem_ipt_mult = HEM_IPT_MULT.get(_mat_key, HEM_IPT_MULT.get(material_group, 2.0))
         ipt *= _hem_ipt_mult
+
+    # ── Micro-tool feed limiter (replaces crude IPM caps) ─────────────────────
+    # For D < 1/8" (and 1/8" finish/profile/slot), cap chip-thinning-adjusted
+    # feed using a multi-factor model: material × operation × rpm_ratio ×
+    # setup_quality × L:D × tool_series. Preserves chip load physics direction
+    # but prevents unrealistically high IPM that breaks tiny tools in practice.
+    _micro_dia = float(data.get("diameter", 0.0) or 0.0)
+    if _micro_dia < 0.1876:  # apply to ≤ 3/16" (band D + finish passes at 1/8")
+        _micro_feed_physics = rpm * flutes * ipt
+        _micro_stickout = float(data.get("stickout", 0.0) or 0.0)
+        _micro_ld = (_micro_stickout / _micro_dia) if _micro_dia > 0 else 0.0
+        _micro_series = str(data.get("tool_series", "") or "")
+        _micro_vp = bool(data.get("variable_pitch", False))
+        _micro_vh = bool(data.get("variable_helix", False))
+        _micro_holder = str(data.get("toolholder", "er_collet") or "er_collet")
+        _micro_feed_limited, _micro_reason = micro_tool_feed_limit(
+            feed_physics=_micro_feed_physics,
+            base_ipt=_base_ipt_before_ct,
+            chip_thinning_factor_raw=chip_factor * (_hem_ipt_mult if data["mode"] in ("hem", "trochoidal") else 1.0),
+            rpm_actual=rpm,
+            flutes=flutes,
+            diameter=_micro_dia,
+            material_group=material_group,
+            mode=mode,
+            rpm_target=target_rpm,
+            ld_ratio=_micro_ld,
+            toolholder=_micro_holder,
+            tool_series=_micro_series,
+            variable_pitch=_micro_vp,
+            variable_helix=_micro_vh,
+        )
+        if _micro_reason:
+            print(f"⚠ {_micro_reason}")
+            # Back-solve the ipt that produces _micro_feed_limited at this rpm/flutes
+            _micro_ipt_adj = _micro_feed_limited / max(1e-9, rpm * flutes)
+            ipt = _micro_ipt_adj
 
     doc = data["doc_xd"] * data["diameter"]
     woc = (data["woc_pct"] / 100) * data["diameter"]
@@ -4396,6 +4458,9 @@ def run(payload=None):
     material = (data.get("material", "") or "").strip()
     diameter = float(data.get("diameter", 0.0) or 0.0)
     feed_ipm = state.get("feed_ipm", state.get("feed", state.get("feedrate", 0.0)))
+
+    # (micro-tool feed cap is now applied upstream at IPT level — see micro_tool_feed_limit in engine/physics.py)
+
     hp = state.get("hp", 0.0)
     spindle_load = state.get("load", 0.0) * 100.0
     stepover = state.get("stepover", state.get("woc_adjusted", state.get("woc", 0.0)))
@@ -5132,20 +5197,23 @@ def run(payload=None):
     _current_dc     = bool(data.get("dual_contact", False))
     if _defl > _dlim:
         _next_holder = next(
-            ((k, r, lbl, brands) for k, r, lbl, brands in _holder_progression if r > _current_rig + 0.01),
+            ((k, r, lbl, brands) for k, r, lbl, brands in _holder_progression
+             if r > _current_rig + 0.01 and k != _current_holder),
             None
         )
         if _next_holder:
             _nh_key, _nh_rig, _nh_lbl, _nh_brands = _next_holder
-            _nh_rig_total = _nh_rig * (1.08 if _current_dc else 1.0)
-            _nh_defl_pct  = round(_defl / _nh_rig_total * _current_rig / _dlim * 100, 1) if _dlim > 0 else 0
-            _nh_gain      = round((1.0 - _current_rig / _nh_rig) * 100)
-            _nh_label     = f"Upgrade to {_nh_lbl}" + (f" ({_nh_brands})" if _nh_brands else "")
-            _hw_suggestions.append({
-                "type": "holder",
-                "label": _nh_label,
-                "detail": f"~{_nh_gain}% stiffer grip — est. flex drops to {_nh_defl_pct}% of limit",
-            })
+            # Skip if the user already has this holder or better
+            if _nh_key != _current_holder and _nh_rig > _current_rig:
+                _nh_rig_total = _nh_rig * (1.08 if _current_dc else 1.0)
+                _nh_defl_pct  = round(_defl / _nh_rig_total * _current_rig / _dlim * 100, 1) if _dlim > 0 else 0
+                _nh_gain      = round((1.0 - _current_rig / _nh_rig) * 100)
+                _nh_label     = f"Upgrade to {_nh_lbl}" + (f" ({_nh_brands})" if _nh_brands else "")
+                _hw_suggestions.append({
+                    "type": "holder",
+                    "label": _nh_label,
+                    "detail": f"~{_nh_gain}% stiffer grip — est. flex drops to {_nh_defl_pct}% of limit",
+                })
         # Dual contact — informational only
         _taper = data.get("spindle_taper", "")
         if not _current_dc and _taper and (_taper.startswith("CAT") or _taper.startswith("BT")):
