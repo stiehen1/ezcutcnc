@@ -6107,7 +6107,7 @@ ${stabSection}
                 form.machine_type === "lathe"
                   ? "Workholding affects live tool rigidity and access. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
                   : form.machine_type === "mill_turn"
-                  ? "Mill-turn workholding affects both turning rigidity and live/B-axis milling stability. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support → Sub-Spindle. Collet chuck is best for bar work and precision; soft jaws are the best general production choice. 6-jaw reduces distortion on thin-wall parts."
+                  ? "Mill-turn workholding affects both A-axis turning rigidity and B-axis milling stability. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support → C-Axis / Sub-Spindle. Collet chuck is best for bar work and precision; soft jaws are the best general production choice. 6-jaw reduces distortion on thin-wall parts."
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
@@ -6122,7 +6122,7 @@ ${stabSection}
                       { key: "soft_jaws",         label: "Soft Jaws"        },
                       { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"  },
                       { key: "expanding_mandrel", label: "Expanding Mandrel"},
-                      { key: "sub_spindle",       label: "Sub-Spindle"      },
+                      { key: "sub_spindle",       label: "Sub-Spindle"     },
                     ] as const)
                   : form.machine_type === "mill_turn"
                   ? ([
@@ -6132,7 +6132,7 @@ ${stabSection}
                       { key: "6_jaw_chuck",         label: "6-Jaw Chuck"       },
                       { key: "expanding_mandrel",   label: "Expanding Mandrel" },
                       { key: "tailstock_supported", label: "Tailstock Support" },
-                      { key: "sub_spindle",         label: "Sub-Spindle"       },
+                      { key: "sub_spindle",         label: "C-Axis / Sub-Spindle" },
                     ] as const)
                   : form.machine_type === "hmc"
                   ? ([
@@ -6176,7 +6176,7 @@ ${stabSection}
                     "4_jaw_chuck":   "4-jaw independent chuck — each jaw adjusts separately for precise centering. More rigid than 3-jaw; better for heavy interrupted cuts.",
                     collet_chuck:      "Collet chuck (5C, dead-length, etc.) — best live tool access and concentricity. Low obstruction means radial tools reach the part cleanly. Best for small-to-medium round parts and bar-fed work.",
                     expanding_mandrel:   "ID-gripping mandrel — part is held from the bore, leaving the full OD exposed. Excellent live tool access, no jaw interference. Best when OD must stay clean or jaw distortion is a concern.",
-                    sub_spindle:         "Sub-spindle or back-working chuck/collet — part transferred for back-side ops. Usually lower confidence than main spindle; back off slightly from main-spindle live-milling parameters.",
+                    sub_spindle:         "C-axis / sub-spindle — part transferred for back-side ops. Usually lower confidence than the A-axis main spindle; back off slightly from A-axis B-axis milling parameters.",
                     "6_jaw_chuck":       "6-jaw chuck — distributes clamping force across more contact points, significantly reducing distortion on thin-wall tubes, rings, and delicate turned parts. Good for finishing ops.",
                     tailstock_supported: "Tailstock or live center supporting the far end of a long part. Improves turning rigidity on slender shafts but can limit B-axis and live tool access at that end — plan toolpath sequence carefully.",
                     between_centers:   "Part supported at both ends between a drive center and a live tailstock center. Eliminates overhang — highest rigidity for turning long shafts.",
