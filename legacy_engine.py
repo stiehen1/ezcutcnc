@@ -3237,6 +3237,30 @@ def run(payload=None):
         if "doc_xd" not in payload:
             data["doc_xd"] = default_doc
 
+    # ── Micro-tool slotting DOC cap ──────────────────────────────────────────
+    # Full 1×D slot DOC on tools ≤ 1/8" is unrealistic — deflection and chip
+    # packing will break the tool. Scale down aggressively below 3/16".
+    #   ≤ 1/16" (0.0625):  max 0.35×D
+    #   ≤ 3/32" (0.0938):  max 0.45×D
+    #   ≤ 1/8"  (0.125):   max 0.60×D
+    #   ≤ 3/16" (0.1875):  max 0.75×D
+    #   > 3/16":            no cap
+    if mode == "slot":
+        _d_for_cap = float(data.get("diameter", 0.0) or 0.0)
+        if _d_for_cap > 0:
+            if _d_for_cap <= 0.0625:
+                _slot_doc_cap = 0.35
+            elif _d_for_cap <= 0.09375:
+                _slot_doc_cap = 0.45
+            elif _d_for_cap <= 0.125:
+                _slot_doc_cap = 0.60
+            elif _d_for_cap <= 0.1875:
+                _slot_doc_cap = 0.75
+            else:
+                _slot_doc_cap = None
+            if _slot_doc_cap is not None and float(data.get("doc_xd", 1.0)) > _slot_doc_cap:
+                data["doc_xd"] = _slot_doc_cap
+
     _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
     _drive_eff = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     data.setdefault("machine_hp", float(payload.get("machine_hp", 10.0)) * _drive_eff)
@@ -4396,6 +4420,55 @@ def run(payload=None):
     material = (data.get("material", "") or "").strip()
     diameter = float(data.get("diameter", 0.0) or 0.0)
     feed_ipm = state.get("feed_ipm", state.get("feed", state.get("feedrate", 0.0)))
+
+    # ── Micro-tool absolute feed cap ─────────────────────────────────────────
+    # Physics-based chip load is correct but produces unrealistically high IPM
+    # on tiny tools — the limiting factor shifts to machine vibration, part
+    # deflection, and chip packing, not chip load math.
+    # Cap table (validated against shop experience):
+    #   ≤ 1/16"  (0.0625): 15 IPM
+    #   ≤ 3/32"  (0.0938): 22 IPM
+    #   ≤ 1/8"   (0.125):  35 IPM
+    #   ≤ 3/16"  (0.1875): 55 IPM
+    #   > 3/16":  no cap
+    _micro_ipm_cap = None
+    if diameter <= 0.0625:
+        _micro_ipm_cap = 15.0
+    elif diameter <= 0.09375:
+        _micro_ipm_cap = 22.0
+    elif diameter <= 0.125:
+        _micro_ipm_cap = 35.0
+    elif diameter <= 0.1875:
+        _micro_ipm_cap = 55.0
+
+    if _micro_ipm_cap is not None and feed_ipm > _micro_ipm_cap:
+        print(f"⚠ Micro-tool feed capped at {_micro_ipm_cap:.0f} IPM (physics calc: {feed_ipm:.1f} IPM) — "
+              f"chip load is correct but machine vibration and chip packing limit practical feed on ø{diameter:.4f}\" tools.")
+        # Scale state feed and derived values proportionally
+        _ipm_scale = _micro_ipm_cap / max(1e-6, feed_ipm)
+        feed_ipm = _micro_ipm_cap
+        state["feed"] = feed_ipm
+        state["mrr"]  = float(state.get("mrr",  0.0)) * _ipm_scale
+        state["hp"]   = float(state.get("hp",   0.0)) * _ipm_scale
+        state["load"] = float(state.get("load", 0.0)) * _ipm_scale
+
+    # ── Finish-pass wall taper warning (micro tools + chip thinning) ─────────
+    # High adj_fpt from chip thinning on a light finishing pass with a small
+    # tool produces significant cutting force variation → wall taper.
+    # Warn when: finish/profile mode, dia ≤ 1/8", woc ≤ 5%, adj_fpt > 2× fpt.
+    _adj_fpt = float(state.get("adj_fpt", state.get("ipt", 0.0)) or 0.0)
+    _base_fpt = float(state.get("fpt", state.get("base_ipt", 0.0)) or 0.0)
+    _finish_mode = (data.get("mode", "") or "").lower() in ("finish", "profile")
+    _woc_pct_now = float(data.get("woc_pct", 50.0) or 50.0)
+    if (_finish_mode and diameter <= 0.125 and _woc_pct_now <= 6.0
+            and _base_fpt > 0 and _adj_fpt > 1.8 * _base_fpt):
+        print(
+            f"⚠ Wall taper risk: chip thinning is boosting programmed feed significantly "
+            f"(base FPT {_base_fpt:.5f}\" → adj {_adj_fpt:.5f}\") on a light finishing pass "
+            f"with ø{diameter:.4f}\" tool. Consider reducing feed to {feed_ipm * 0.4:.1f}–"
+            f"{feed_ipm * 0.6:.1f} IPM for tighter wall straightness."
+        )
+
     hp = state.get("hp", 0.0)
     spindle_load = state.get("load", 0.0) * 100.0
     stepover = state.get("stepover", state.get("woc_adjusted", state.get("woc", 0.0)))
@@ -5132,20 +5205,23 @@ def run(payload=None):
     _current_dc     = bool(data.get("dual_contact", False))
     if _defl > _dlim:
         _next_holder = next(
-            ((k, r, lbl, brands) for k, r, lbl, brands in _holder_progression if r > _current_rig + 0.01),
+            ((k, r, lbl, brands) for k, r, lbl, brands in _holder_progression
+             if r > _current_rig + 0.01 and k != _current_holder),
             None
         )
         if _next_holder:
             _nh_key, _nh_rig, _nh_lbl, _nh_brands = _next_holder
-            _nh_rig_total = _nh_rig * (1.08 if _current_dc else 1.0)
-            _nh_defl_pct  = round(_defl / _nh_rig_total * _current_rig / _dlim * 100, 1) if _dlim > 0 else 0
-            _nh_gain      = round((1.0 - _current_rig / _nh_rig) * 100)
-            _nh_label     = f"Upgrade to {_nh_lbl}" + (f" ({_nh_brands})" if _nh_brands else "")
-            _hw_suggestions.append({
-                "type": "holder",
-                "label": _nh_label,
-                "detail": f"~{_nh_gain}% stiffer grip — est. flex drops to {_nh_defl_pct}% of limit",
-            })
+            # Skip if the user already has this holder or better
+            if _nh_key != _current_holder and _nh_rig > _current_rig:
+                _nh_rig_total = _nh_rig * (1.08 if _current_dc else 1.0)
+                _nh_defl_pct  = round(_defl / _nh_rig_total * _current_rig / _dlim * 100, 1) if _dlim > 0 else 0
+                _nh_gain      = round((1.0 - _current_rig / _nh_rig) * 100)
+                _nh_label     = f"Upgrade to {_nh_lbl}" + (f" ({_nh_brands})" if _nh_brands else "")
+                _hw_suggestions.append({
+                    "type": "holder",
+                    "label": _nh_label,
+                    "detail": f"~{_nh_gain}% stiffer grip — est. flex drops to {_nh_defl_pct}% of limit",
+                })
         # Dual contact — informational only
         _taper = data.get("spindle_taper", "")
         if not _current_dc and _taper and (_taper.startswith("CAT") or _taper.startswith("BT")):
