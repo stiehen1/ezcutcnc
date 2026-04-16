@@ -7009,7 +7009,7 @@ ${stabSection}
             let recGeo: "standard" | "med_helix" | "high_helix" = "standard";
             if (iso === "M") recGeo = isDeep ? "high_helix" : "med_helix";
             else if (iso === "S") recGeo = "high_helix";
-            else if (iso === "P") recGeo = isDeep ? "med_helix" : "standard";
+            else if (iso === "P" || iso === "N2") recGeo = isDeep ? "med_helix" : "standard";
             if (hasCoolant && recGeo === "high_helix" && !isVeryDeep) recGeo = "med_helix";
             else if (hasCoolant && recGeo === "med_helix" && !isDeep) recGeo = "standard";
             if (!hasCoolant && isDeep && recGeo === "standard") recGeo = "med_helix";
