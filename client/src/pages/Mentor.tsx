@@ -6531,7 +6531,7 @@ ${stabSection}
                     <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
                     <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                   </div>
-                  <div className="flex items-center gap-2 pt-1">
+                  {!(form.shank_dia > 0 && form.shank_dia > form.tool_dia * 1.05) && <div className="flex items-center gap-2 pt-1">
                     <FieldLabel hint="Flute wash is the distance from the end of the LOC to where the flutes fully disappear into the shank — this section must not slide into the toolholder. Not called out on CC prints; estimated at 20% of LOC. Measure from the physical tool and correct here if needed.">Flute Wash (in)</FieldLabel>
                     <Input type="text" inputMode="decimal" className="no-spinners w-24 h-7 text-xs"
                       placeholder="est."
@@ -6552,7 +6552,7 @@ ${stabSection}
                       }}
                     />
                     <span className="text-[10px] text-amber-400/70">estimated — verify with tool</span>
-                  </div>
+                  </div>}
                 </div>
               ) : (
                 <label className="flex flex-col items-center gap-1 cursor-pointer">
