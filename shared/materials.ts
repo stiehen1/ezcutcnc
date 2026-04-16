@@ -385,7 +385,7 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "316h": "stainless_316", "316n": "stainless_316", "316/l": "stainless_316",
   "316 stainless": "stainless_316", "316 ss": "stainless_316",
   "316 stainless steel": "stainless_316", "316l stainless": "stainless_316",
-  "316l stainless steel": "stainless_316", "316 stainless steel": "stainless_316",
+  "316l stainless steel": "stainless_316",
   "317": "stainless_316", "317l": "stainless_316",
   "1.4401": "stainless_316", "1.4404": "stainless_316", "1.4432": "stainless_316",
   "s31600": "stainless_316", "s31603": "stainless_316", "s31609": "stainless_316",
