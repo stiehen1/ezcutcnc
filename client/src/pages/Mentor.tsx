@@ -5386,15 +5386,14 @@ ${stabSection}
                   className="text-[10px] text-zinc-500 hover:text-orange-400 underline underline-offset-2"
                   onClick={() => setShowSaveMachineModal(true)}
                 >
-                  Save machine
+                  Quick save
                 </button>
               </div>
             </div>
 
-            {/* My Machines (if toolbox session active) */}
+            {/* My Machines — read-only picker */}
             {savedMachines.length > 0 && (
               <div className="mb-1 rounded-lg border border-zinc-700/60 overflow-hidden">
-                {/* Accordion header */}
                 <button
                   type="button"
                   onClick={() => setSavedMachinesOpen(p => !p)}
@@ -5402,234 +5401,54 @@ ${stabSection}
                 >
                   <span className="text-[11px] font-semibold text-zinc-300">
                     Saved Machines <span className="text-zinc-500 font-normal">({savedMachines.length})</span>
-                    {(tbEmail || localStorage.getItem("tb_email")) && (
-                      <span className="ml-2 text-[10px] font-normal text-zinc-500">— {tbEmail || localStorage.getItem("tb_email")}</span>
-                    )}
                   </span>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={e => { e.stopPropagation(); setSavedMachinesOpen(true); setShowManageMachines(p => !p); setEditingMachineId(null); }}
-                      className="text-[10px] text-zinc-500 hover:text-orange-400 underline underline-offset-2"
-                    >
-                      {showManageMachines ? "Done" : "Manage"}
-                    </button>
+                    <a href="/toolbox" className="text-[10px] text-zinc-500 hover:text-sky-400 underline underline-offset-2" onClick={e => e.stopPropagation()}>Manage →</a>
                     <span className="text-zinc-500 text-xs">{savedMachinesOpen ? "▲" : "▼"}</span>
                   </div>
                 </button>
-
                 {savedMachinesOpen && (
-                  <div className="px-2 pt-2 pb-2 space-y-1.5">
-                    {/* Job # filter */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-zinc-500 whitespace-nowrap">Job #:</span>
-                      <input
-                        type="text"
-                        placeholder="Filter by job number…"
-                        value={activeJobNo}
-                        onChange={e => setActiveJobNo(e.target.value)}
-                        className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
-                      />
-                      {activeJobNo && <button type="button" onClick={() => setActiveJobNo("")} className="text-[10px] text-zinc-500 hover:text-white">✕</button>}
-                    </div>
-                    <div className="space-y-1.5">
-                  {savedMachines.map(m => {
-                    const tags: {job_no: string; type: "assigned"|"excluded"}[] = Array.isArray(m.job_tags) ? m.job_tags : [];
-                    const status: string = m.machine_status || "operational";
-                    const isEditing = editingMachineId === m.id;
-                    const isActive = activeMachineName === (m.nickname || "") || activeMachineId === m.id;
-
-                    // Job filter: hide if activeJobNo set and machine has tags but none match
-                    if (activeJobNo.trim()) {
-                      const jn = activeJobNo.trim().toLowerCase();
-                      const hasMatch = tags.some(t => t.job_no.toLowerCase().includes(jn));
-                      const hasExclusion = tags.some(t => t.job_no.toLowerCase().includes(jn) && t.type === "excluded");
-                      if (!hasMatch) return null; // not tagged for this job — hide
-                      if (hasExclusion) { /* show with red warning */ }
-                    }
-
-                    const statusIcon = status === "operational" ? "✅" : status === "issue" ? "⚠️" : status === "down" ? "🔴" : "🔧";
-                    const statusColor = status === "operational" ? "text-emerald-400" : status === "issue" ? "text-amber-400" : status === "down" ? "text-red-400" : "text-blue-400";
-
-                    // Job badge for active job filter
-                    const matchedTag = activeJobNo.trim() ? tags.find(t => t.job_no.toLowerCase().includes(activeJobNo.trim().toLowerCase())) : null;
-
-                    return (
-                      <div key={m.id} className={`rounded-lg border transition-colors ${isActive ? "border-orange-500 bg-orange-500/5" : "border-zinc-700 bg-zinc-800/40"}`}>
-                        {/* Card header row */}
-                        <div className="flex items-center gap-1.5 px-2 py-1.5">
-                          <button
-                            type="button"
-                            onClick={() => applyMachineToForm(m)}
-                            className={`flex-1 text-left text-xs font-semibold truncate ${isActive ? "text-orange-400" : "text-zinc-200 hover:text-orange-400"}`}
-                          >
-                            <span className="mr-1">{statusIcon}</span>
-                            {m.nickname}{m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
-                          </button>
-                          {matchedTag && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${matchedTag.type === "assigned" ? "border-emerald-600/50 text-emerald-400 bg-emerald-500/10" : "border-red-600/50 text-red-400 bg-red-500/10"}`}>
-                              {matchedTag.type === "assigned" ? "✓ assigned" : "✗ excluded"}
+                  <div className="px-2 pt-1.5 pb-2 space-y-1">
+                    {savedMachines.map(m => {
+                      const status: string = m.machine_status || "operational";
+                      const isActive = activeMachineId === m.id;
+                      const statusIcon = status === "operational" ? "✅" : status === "issue" ? "⚠️" : status === "down" ? "🔴" : "🔧";
+                      const statusColor = status !== "operational" ? (status === "down" ? "text-red-400" : status === "issue" ? "text-amber-400" : "text-blue-400") : "";
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => applyMachineToForm(m)}
+                          className={`w-full text-left rounded-lg border px-2.5 py-2 transition-colors ${isActive ? "border-orange-500 bg-orange-500/5" : "border-zinc-700 bg-zinc-800/40 hover:border-zinc-500"}`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>{statusIcon}</span>
+                            <span className={`text-xs font-semibold truncate ${isActive ? "text-orange-400" : "text-zinc-200"}`}>
+                              {m.nickname}{m.shop_machine_no ? ` #${m.shop_machine_no}` : ""}
                             </span>
-                          )}
-                          {showManageMachines && (
-                            <div className="flex gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (isEditing) { setEditingMachineId(null); }
-                                  else {
-                                    setEditingMachineId(m.id);
-                                    setEditStatus((m.machine_status || "operational") as any);
-                                    setEditStatusNote(m.status_note || "");
-                                    setEditMaintenanceDate(m.maintenance_date ? m.maintenance_date.split("T")[0] : "");
-                                    setJobTagInput("");
-                                    setJobTagType("assigned");
-                                  }
-                                }}
-                                className="text-[10px] text-zinc-400 hover:text-white border border-zinc-600 rounded px-1.5 py-0.5"
-                              >{isEditing ? "Close" : "Edit"}</button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const e = tbEmail || localStorage.getItem("tb_email") || "";
-                                  const t = tbToken || localStorage.getItem("tb_token") || "";
-                                  if (!e || !t) return;
-                                  await fetch(`/api/user-machines/${m.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: e, token: t }) });
-                                  setSavedMachines(p => p.filter(x => x.id !== m.id));
-                                  if (activeMachineId === m.id) { setActiveMachineName(""); setActiveMachineId(null); }
-                                }}
-                                className="text-[10px] text-red-400 hover:text-red-300 border border-red-500/40 rounded px-1.5 py-0.5"
-                              >✕</button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Status note (shown when issue/down/maintenance) */}
-                        {!isEditing && status !== "operational" && m.status_note && (
-                          <div className={`px-2 pb-1.5 text-[10px] ${statusColor}`}>{m.status_note}</div>
-                        )}
-
-                        {/* Job tags row */}
-                        {!isEditing && tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 px-2 pb-1.5">
-                            {tags.map((tag, i) => (
-                              <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${tag.type === "assigned" ? "border-emerald-700/50 text-emerald-400 bg-emerald-500/10" : "border-red-700/50 text-red-400 bg-red-500/10"}`}>
-                                {tag.type === "assigned" ? "✓" : "✗"} {tag.job_no}
-                              </span>
-                            ))}
                           </div>
-                        )}
-
-                        {/* Edit panel */}
-                        {isEditing && (
-                          <div className="px-2 pb-2 space-y-2 border-t border-zinc-700/50 mt-0.5 pt-2">
-                            {/* Status */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] text-zinc-400 font-medium">Machine Status</span>
-                              <div className="flex gap-1 flex-wrap">
-                                {(["operational","issue","down","maintenance"] as const).map(s => (
-                                  <button key={s} type="button"
-                                    onClick={() => setEditStatus(s)}
-                                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${editStatus === s ? "border-orange-500 bg-orange-500/20 text-orange-300" : "border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}
-                                  >
-                                    {s === "operational" ? "✅ Operational" : s === "issue" ? "⚠️ Known Issue" : s === "down" ? "🔴 Down" : "🔧 Maintenance"}
-                                  </button>
-                                ))}
-                              </div>
-                              {editStatus !== "operational" && (
-                                <input
-                                  type="text"
-                                  placeholder={editStatus === "maintenance" ? "e.g. Scheduled PM — coolant system" : "Describe the issue…"}
-                                  value={editStatusNote}
-                                  onChange={e => setEditStatusNote(e.target.value)}
-                                  className="w-full rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
-                                />
-                              )}
-                              {editStatus === "maintenance" && (
-                                <input
-                                  type="date"
-                                  value={editMaintenanceDate}
-                                  onChange={e => setEditMaintenanceDate(e.target.value)}
-                                  className="w-full rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-xs text-white focus:outline-none focus:border-orange-500"
-                                />
-                              )}
-                            </div>
-                            {/* Job tags */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] text-zinc-400 font-medium">Job Assignments</span>
-                              {tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {tags.map((tag, i) => (
-                                    <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded border font-medium flex items-center gap-1 ${tag.type === "assigned" ? "border-emerald-700/50 text-emerald-400 bg-emerald-500/10" : "border-red-700/50 text-red-400 bg-red-500/10"}`}>
-                                      {tag.type === "assigned" ? "✓" : "✗"} {tag.job_no}
-                                      <button type="button" onClick={() => {
-                                        const newTags = tags.filter((_, j) => j !== i);
-                                        patchMachine(m.id, { job_tags: newTags });
-                                        setSavedMachines(p => p.map(x => x.id === m.id ? { ...x, job_tags: newTags } : x));
-                                      }} className="text-zinc-500 hover:text-white leading-none">×</button>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              <div className="flex gap-1">
-                                <select
-                                  value={jobTagType}
-                                  onChange={e => setJobTagType(e.target.value as any)}
-                                  className="rounded border border-zinc-600 bg-zinc-800 px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-orange-500"
-                                >
-                                  <option value="assigned">✓ Assigned</option>
-                                  <option value="excluded">✗ Excluded</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  placeholder="Job # (e.g. 2025-001)"
-                                  value={jobTagInput}
-                                  onChange={e => setJobTagInput(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === "Enter" && jobTagInput.trim()) {
-                                      const newTags = [...tags, { job_no: jobTagInput.trim(), type: jobTagType }];
-                                      patchMachine(m.id, { job_tags: newTags });
-                                      setSavedMachines(p => p.map(x => x.id === m.id ? { ...x, job_tags: newTags } : x));
-                                      setJobTagInput("");
-                                    }
-                                  }}
-                                  className="flex-1 rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!jobTagInput.trim()) return;
-                                    const newTags = [...tags, { job_no: jobTagInput.trim(), type: jobTagType }];
-                                    patchMachine(m.id, { job_tags: newTags });
-                                    setSavedMachines(p => p.map(x => x.id === m.id ? { ...x, job_tags: newTags } : x));
-                                    setJobTagInput("");
-                                  }}
-                                  className="rounded border border-zinc-600 bg-zinc-700 px-2 py-1 text-[10px] text-white hover:bg-zinc-600"
-                                >Add</button>
-                              </div>
-                            </div>
-                            {/* Save status button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                patchMachine(m.id, {
-                                  machine_status: editStatus,
-                                  status_note: editStatus !== "operational" ? editStatusNote : "",
-                                  maintenance_date: editStatus === "maintenance" ? editMaintenanceDate || null : null,
-                                });
-                                setSavedMachines(p => p.map(x => x.id === m.id ? { ...x, machine_status: editStatus, status_note: editStatus !== "operational" ? editStatusNote : "", maintenance_date: editStatus === "maintenance" ? editMaintenanceDate || null : null } : x));
-                                setEditingMachineId(null);
-                              }}
-                              className="w-full rounded border border-orange-600 bg-orange-600/20 py-1 text-[10px] font-semibold text-orange-300 hover:bg-orange-600/40"
-                            >Save Status</button>
+                          <div className="flex flex-wrap gap-x-2 mt-0.5 pl-5">
+                            {(m.brand || m.model) && <span className="text-[10px] text-zinc-500">{[m.brand, m.model].filter(Boolean).join(" ")}</span>}
+                            {m.max_rpm && <span className="text-[10px] text-zinc-600">{m.max_rpm.toLocaleString()} RPM</span>}
+                            {m.spindle_hp && <span className="text-[10px] text-zinc-600">{m.spindle_hp} HP</span>}
+                            {m.taper && <span className="text-[10px] text-zinc-600">{m.taper}</span>}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          {status !== "operational" && m.status_note && (
+                            <p className={`text-[10px] pl-5 mt-0.5 ${statusColor}`}>{m.status_note}</p>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* No machines yet — prompt to add */}
+            {savedMachines.length === 0 && (tbEmail || localStorage.getItem("tb_email")) && (
+              <div className="mb-1 rounded-lg border border-dashed border-zinc-700/50 px-3 py-2.5 text-center">
+                <p className="text-[11px] text-zinc-600">No saved machines yet.</p>
+                <a href="/toolbox" className="text-[11px] text-sky-400 hover:text-sky-300 underline underline-offset-2">Add machines in Toolbox →</a>
               </div>
             )}
 
