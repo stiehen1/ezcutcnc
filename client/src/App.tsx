@@ -1015,6 +1015,194 @@ function RegrindingTab() {
   );
 }
 
+function TeamsTab() {
+  const [open, setOpen] = React.useState(false);
+  const [showConnect, setShowConnect] = React.useState(false);
+  const [teamInput, setTeamInput] = React.useState("");
+  const [teamError, setTeamError] = React.useState("");
+  const [teamBusy, setTeamBusy] = React.useState(false);
+  const [teamEmail, setTeamEmail] = React.useState<string | null>(null);
+  const [connected, setConnected] = React.useState(false);
+
+  React.useEffect(() => {
+    const e = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) return;
+    fetch("/api/team/info", { headers: { "x-tb-email": e, "x-tb-token": t } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.team_email) { setTeamEmail(d.team_email); setConnected(true); } })
+      .catch(() => {});
+  }, [open]);
+
+  async function connect() {
+    const e = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) { setTeamError("Sign in to your Toolbox first."); return; }
+    if (!teamInput.trim()) return;
+    setTeamBusy(true); setTeamError("");
+    try {
+      const r = await fetch("/api/team/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tb-email": e, "x-tb-token": t },
+        body: JSON.stringify({ team_email: teamInput.trim().toLowerCase() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setTeamError(d.error || "Could not connect."); return; }
+      setTeamEmail(teamInput.trim().toLowerCase());
+      setConnected(true);
+      setShowConnect(false);
+      setTeamInput("");
+    } catch { setTeamError("Network error — try again."); }
+    finally { setTeamBusy(false); }
+  }
+
+  async function leave() {
+    const e = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) return;
+    await fetch("/api/team/leave", { method: "POST", headers: { "x-tb-email": e, "x-tb-token": t } });
+    setTeamEmail(null); setConnected(false);
+  }
+
+  return (
+    <>
+      {/* Floating tab */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 148px)", height: 74, background: "linear-gradient(180deg,#0891b2,#0e7490)" }}
+        aria-label="Programming Teams"
+      >
+        Teams
+      </button>
+
+      {/* Slide-in panel */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+          <div
+            className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0" style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-cyan-100">Programming Teams</p>
+                <p className="text-[11px] text-cyan-200 mt-0.5">Share machines & setups across your whole shop</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-cyan-200 hover:text-white text-lg leading-none ml-3">✕</button>
+            </div>
+
+            <div className="p-4 space-y-5 flex-1">
+
+              {/* Status banner */}
+              {connected && teamEmail ? (
+                <div className="rounded-lg bg-cyan-950/60 border border-cyan-700/50 px-3 py-2.5 flex items-start gap-2">
+                  <span className="text-cyan-400 text-base mt-0.5">🔗</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-cyan-200">Connected to team</p>
+                    <p className="text-[11px] text-cyan-400 truncate">{teamEmail}</p>
+                  </div>
+                  <button onClick={leave} className="text-[10px] text-zinc-500 hover:text-red-400 underline underline-offset-2 shrink-0 mt-0.5">Leave</button>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2.5 flex items-center gap-2">
+                  <span className="text-zinc-500 text-base">🔗</span>
+                  <p className="text-[11px] text-zinc-400">Not connected to a team yet.</p>
+                </div>
+              )}
+
+              {/* What it does */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">What Team Connect Does</p>
+                <div className="space-y-2.5">
+                  {[
+                    { icon: "🖥️", title: "Shared Machines", body: "Every programmer on the team sees the same saved machines — no more re-entering the VF-2 specs on every PC." },
+                    { icon: "🧰", title: "Shared Toolbox", body: "Saved cutting setups are visible to the whole team. One programmer builds it, everyone uses it." },
+                    { icon: "📱", title: "Any Device", body: "Works on phone, tablet, and desktop — sign in with your personal email and connect to the team email." },
+                    { icon: "🔒", title: "Your Account Stays Yours", body: "Connecting to a team doesn't change your personal email or login. Leave the team anytime." },
+                  ].map(s => (
+                    <div key={s.title} className="flex gap-3">
+                      <span className="text-lg shrink-0 mt-0.5">{s.icon}</span>
+                      <div>
+                        <p className="text-xs font-semibold text-white">{s.title}</p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">{s.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* How to set it up */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">How to Set It Up</p>
+                <div className="space-y-3">
+                  {[
+                    { n: "1", title: "Manager registers", body: "Your programming manager opens CoreCutCNC and registers with a shared department email — e.g. programming@acmemachine.com." },
+                    { n: "2", title: "Each programmer connects", body: "Every programmer clicks the Teams tab (or "connect to a team →" in the app header) and enters that shared email." },
+                    { n: "3", title: "Done — everything syncs", body: "From that point, saved machines and Toolbox setups are shared. Add a machine from any PC and the whole team sees it." },
+                  ].map(s => (
+                    <div key={s.n} className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-600 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-[10px] font-black text-white">{s.n}</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">{s.title}</p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">{s.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Connect form or button */}
+              {!connected && (
+                showConnect ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-zinc-300 font-semibold">Enter your team email</p>
+                    <input
+                      type="text"
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      placeholder="programming@yourshop.com"
+                      value={teamInput}
+                      onChange={e => { setTeamInput(e.target.value); setTeamError(""); }}
+                      onKeyDown={e => { if (e.key === "Enter") connect(); }}
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500"
+                      autoFocus
+                    />
+                    {teamError && <p className="text-xs text-red-400">{teamError}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={() => { setShowConnect(false); setTeamInput(""); setTeamError(""); }}
+                        className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
+                      <button onClick={connect} disabled={teamBusy || !teamInput.trim()}
+                        className="flex-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 py-2 text-sm font-semibold text-white">
+                        {teamBusy ? "Connecting…" : "Connect"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowConnect(true)}
+                    className="w-full rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm py-3 transition-colors"
+                  >
+                    Connect to a Team →
+                  </button>
+                )
+              )}
+
+              {connected && (
+                <p className="text-[11px] text-zinc-500 text-center">Leave the team above to disconnect and remove shared access.</p>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -1037,6 +1225,7 @@ function App() {
         <WalkThruButton />
         <FeedbackButton />
         <RegrindingTab />
+        <TeamsTab />
         <HelpButton />
         <BrevoNudge />
         <AddToHomeScreenBanner />
