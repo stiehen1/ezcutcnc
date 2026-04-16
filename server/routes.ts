@@ -3848,7 +3848,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       const lastTok = `%${tokens[tokens.length - 1]}%`;
       const lastTokStart = `${tokens[tokens.length - 1]}%`;
       const catalogRows = await pool.query(
-        `SELECT id, brand, model, max_rpm, sub_spindle_rpm, spindle_hp, live_tool_max_rpm, live_tool_hp, live_tool_drive_type, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved,
+        `SELECT id, brand, model, max_rpm, sub_spindle_rpm, spindle_hp, live_tool_max_rpm, live_tool_hp, live_tool_drive_type, mill_spindle_max_rpm, mill_spindle_hp, mill_spindle_taper, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, NULL::text AS nickname, NULL::text AS shop_machine_no, false AS _saved,
            CASE
              WHEN model ILIKE $${tokens.length + 1}        THEN 1
              WHEN model ILIKE $${tokens.length + 2}        THEN 2
@@ -3877,7 +3877,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             ).join(" AND ");
             const userParams = [email.toLowerCase(), token, ...tokens.map(t => `%${t}%`)];
             const ur = await pool.query(
-              `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, nickname, shop_machine_no, true AS _saved
+              `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, nickname, shop_machine_no, NULL::integer AS mill_spindle_max_rpm, NULL::numeric AS mill_spindle_hp, NULL::text AS mill_spindle_taper, true AS _saved
                FROM user_machines
                WHERE email = $1 AND (${userTokenConds})
                ORDER BY created_at DESC LIMIT 10`,
