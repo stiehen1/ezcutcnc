@@ -1494,15 +1494,21 @@ export default function Mentor() {
       setPdfFluteWash(_fwEst);
       setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
       // Set default stickout
-      // Reduced-shank (QTR3-style tapered neck): collet must grip on the .250 shank body,
-      // past the taper end. LBS = "clear length TSC" = taper-to-shank transition point.
-      // Add 0.75×shank_dia beyond LBS to ensure collet is fully on the parallel shank body.
+      // Reduced-shank (QTR3-style, 30° included / 15° half-angle taper):
+      // LBS = "clear length TSC" from tip to START of taper (not end).
+      // Taper axial length = radial_delta / tan(15°) where radial_delta = (shank_dia - cut_dia) / 2
+      // Collet must grip on the parallel shank body — start collet 0.33×shank_dia past taper end.
       // Standard: stickout = LOC + flute_wash + 0.33×cutting_dia
       const _pdfLbs = e.lbs > 0 ? e.lbs : 0;
       const _pdfShankDia = e.shank_dia > 0 ? e.shank_dia : 0;
       if (_pdfLoc > 0 && _pdfDia > 0) {
         const _defaultSo = _isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0
-          ? Math.ceil((_pdfLbs + 0.75 * _pdfShankDia) * 200) / 200
+          ? (() => {
+              const radialDelta = (_pdfShankDia - _pdfDia) / 2;
+              const taperLen = radialDelta / Math.tan(15 * Math.PI / 180); // 30° included = 15° half
+              const taperEnd = _pdfLbs + taperLen; // distance from tip to where parallel shank begins
+              return Math.ceil((taperEnd + 0.33 * _pdfShankDia) * 200) / 200;
+            })()
           : Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
