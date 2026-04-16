@@ -1935,7 +1935,8 @@ export default function Mentor() {
         const vxrCap = (n: number) => loc > 0 && dia > 0 ? Math.min(loc / dia, n) : n;
         hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
       } else {
-        const hemCap = iso === "H" ? 1.5 : 3.0;
+        // HEM DOC cap by flute count: 3-fl → 1.5×D, 4-fl → 2.0×D, 5+fl → 3.0×D (hardened always 1.5×D)
+        const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5 : flutes === 4 ? 2.0 : 3.0;
         const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
         const docHigh = Math.round(rawHigh * 4) / 4;
         const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
