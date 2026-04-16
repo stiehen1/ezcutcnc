@@ -8651,7 +8651,7 @@ ${stabSection}
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => copyCamParams()}
+                  onClick={() => requireEmail("copy")}
                   className="text-[10px] font-semibold px-2 py-1 rounded border transition-colors leading-tight whitespace-nowrap"
                   style={camCopied
                     ? { borderColor: "#22c55e", background: "#14532d", color: "#86efac" }
