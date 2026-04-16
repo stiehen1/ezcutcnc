@@ -3938,7 +3938,7 @@ ${stabSection}
                   <button type="button" onClick={leaveTeam} className="ml-1.5 text-[10px] text-zinc-600 hover:text-red-400 underline underline-offset-2">leave</button>
                 </span>
               : <button type="button" onClick={() => { setShowTeamModal(true); setTeamInput(""); setTeamError(""); }}
-                  className="text-[10px] text-zinc-600 hover:text-zinc-400 underline underline-offset-2">connect to a team →</button>
+                  className="text-[10px] text-cyan-500 hover:text-cyan-300 underline underline-offset-2">connect to a team →</button>
           )}
           <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
         </div>
@@ -5510,23 +5510,6 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Team connect promo — shown when logged in but not yet on a team */}
-          {localStorage.getItem("cc_first_name") && !teamEmail && (
-            <div className="mb-4 rounded-md bg-indigo-950/40 border border-indigo-800/30 px-3 py-2.5 flex items-start gap-2.5">
-              <div className="mt-0.5 text-indigo-400 text-base leading-none flex-shrink-0">🔗</div>
-              <div>
-                <div className="text-[11px] font-semibold text-indigo-200 mb-0.5">Share machines with your team</div>
-                <p className="text-[10px] text-indigo-400 leading-relaxed">
-                  Connect to a shared programming email so your whole team shares saved machines and setups across any device.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => { setShowTeamModal(true); setTeamInput(""); setTeamError(""); }}
-                  className="mt-1.5 text-[10px] text-indigo-300 hover:text-white underline underline-offset-2"
-                >Connect to a team →</button>
-              </div>
-            </div>
-          )}
 
           {/* Lathe sub-spindle toggle + selector */}
           {form.machine_type === "lathe" && (
