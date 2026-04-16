@@ -824,12 +824,21 @@ export async function registerRoutes(
       // Apply speeder transform before engine sees the payload
       const enginePayload: any = { ...parsed.data };
       if (enginePayload.speeder_enabled) {
-        const ratio      = Math.max(1, Number(enginePayload.speeder_ratio) || 1);
-        const speederMax = Math.max(0, Number(enginePayload.speeder_max_rpm) || 0);
-        enginePayload.max_rpm    = speederMax > 0
+        const ratio       = Math.max(1, Number(enginePayload.speeder_ratio) || 1);
+        const speederMax  = Math.max(0, Number(enginePayload.speeder_max_rpm) || 0);
+        const torqueNm    = Math.max(0, Number(enginePayload.speeder_max_torque_nm) || 0);
+
+        // Effective RPM: machine × ratio, capped at speeder output limit
+        const effectiveRpm = speederMax > 0
           ? Math.min(Math.round(enginePayload.max_rpm * ratio), speederMax)
           : Math.round(enginePayload.max_rpm * ratio);
-        enginePayload.machine_hp = enginePayload.machine_hp / ratio;
+        enginePayload.max_rpm = effectiveRpm;
+
+        // Effective HP: lower of (machine HP / ratio) or torque-limited HP at effective RPM
+        // P(HP) = T(N·m) × RPM / 9549 × 1.341 (converts kW → HP)
+        const hpFromRatio  = enginePayload.machine_hp / ratio;
+        const hpFromTorque = torqueNm > 0 ? (torqueNm * effectiveRpm / 9549) * 1.341 : Infinity;
+        enginePayload.machine_hp = Math.min(hpFromRatio, hpFromTorque);
       }
 
       const raw = await runMentorBridge(enginePayload);
