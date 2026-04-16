@@ -969,14 +969,21 @@ export default function Mentor() {
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
   // Mill-turn spindle selector — stores raw DB values from selected machine
-  const [activeMachineData, setActiveMachineData] = React.useState<{
+  type MachineData = {
     main_rpm: number; main_hp: number;
     sub_rpm: number | null;
     live_rpm: number | null; live_hp: number | null;
-    mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;  // B-axis / dedicated milling spindle
+    mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;
     drive: string;
     brand: string | null;
-  } | null>(null);
+  };
+  const [activeMachineData, _setActiveMachineData] = React.useState<MachineData | null>(null);
+  const activeMachineDataRef = React.useRef<MachineData | null>(null);
+  const setActiveMachineData = React.useCallback((val: MachineData | null | ((prev: MachineData | null) => MachineData | null)) => {
+    const resolved = typeof val === "function" ? val(activeMachineDataRef.current) : val;
+    activeMachineDataRef.current = resolved;
+    _setActiveMachineData(resolved);
+  }, []);
   const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub" | "mill">("main");
   const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
   const fmtMachType = (t?: string | null) => {
@@ -5600,17 +5607,17 @@ ${stabSection}
               <div className="flex gap-2 flex-wrap">
                 {([
                   { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
-                    rpm: activeMachineData?.main_rpm ?? form.max_rpm,
-                    hp:  activeMachineData?.main_hp  ?? form.machine_hp,
+                    rpm: activeMachineDataRef.current?.main_rpm ?? activeMachineData?.main_rpm ?? form.max_rpm,
+                    hp:  activeMachineDataRef.current?.main_hp  ?? activeMachineData?.main_hp  ?? form.machine_hp,
                     show: true },
                   { key: "mill" as const, label: "B-Axis Spindle", note: "High-speed milling head",
-                    rpm: activeMachineData?.mill_rpm ?? 0,
-                    hp:  activeMachineData?.mill_hp  ?? form.machine_hp,
-                    show: !!(activeMachineData?.mill_rpm) },
+                    rpm: activeMachineDataRef.current?.mill_rpm ?? activeMachineData?.mill_rpm ?? 0,
+                    hp:  activeMachineDataRef.current?.mill_hp  ?? activeMachineData?.mill_hp  ?? form.machine_hp,
+                    show: !!(activeMachineDataRef.current?.mill_rpm ?? activeMachineData?.mill_rpm) },
                   { key: "sub"  as const, label: "C-Axis Spindle", note: "Sub spindle / backwork",
-                    rpm: activeMachineData?.sub_rpm  ?? manualSubRpm,
-                    hp:  activeMachineData?.main_hp  ?? form.machine_hp,
-                    show: !!(activeMachineData?.sub_rpm || manualSubRpm > 0) },
+                    rpm: activeMachineDataRef.current?.sub_rpm  ?? activeMachineData?.sub_rpm  ?? manualSubRpm,
+                    hp:  activeMachineDataRef.current?.main_hp  ?? activeMachineData?.main_hp  ?? form.machine_hp,
+                    show: !!(activeMachineDataRef.current?.sub_rpm ?? activeMachineData?.sub_rpm ?? (manualSubRpm > 0 ? manualSubRpm : null)) },
                 ].filter(o => o.show)).map(({ key, label, note, rpm, hp }) => (
                   <button
                     key={key}
@@ -5619,8 +5626,9 @@ ${stabSection}
                       setSelectedSpindle(key);
                       setForm(p => {
                         // Taper: B-axis uses mill spindle taper, others keep current
-                        const newTaper = key === "mill" && activeMachineData?.mill_taper
-                          ? activeMachineData.mill_taper as typeof p.spindle_taper
+                        const _millTaper = activeMachineDataRef.current?.mill_taper ?? activeMachineData?.mill_taper;
+                        const newTaper = key === "mill" && _millTaper
+                          ? _millTaper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
                         // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
@@ -6160,7 +6168,7 @@ ${stabSection}
                         { key: "5th_axis_vise",     label: "5th-Axis Vise"     },
                         { key: "vise",              label: "Vise"              },
                         { key: "tombstone",         label: "Tombstone"         },
-                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                        ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
                         ] : []),
@@ -6172,7 +6180,7 @@ ${stabSection}
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
-                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                        ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
                         ] : []),
