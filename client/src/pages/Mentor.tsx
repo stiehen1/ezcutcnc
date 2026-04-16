@@ -969,14 +969,21 @@ export default function Mentor() {
   const [activeMachineId, setActiveMachineId] = React.useState<number | null>(null); // catalog id
   const [activeMachineName, setActiveMachineName] = React.useState("");
   // Mill-turn spindle selector — stores raw DB values from selected machine
-  const [activeMachineData, setActiveMachineData] = React.useState<{
+  type MachineData = {
     main_rpm: number; main_hp: number;
     sub_rpm: number | null;
     live_rpm: number | null; live_hp: number | null;
-    mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;  // B-axis / dedicated milling spindle
+    mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;
     drive: string;
     brand: string | null;
-  } | null>(null);
+  };
+  const [activeMachineData, _setActiveMachineData] = React.useState<MachineData | null>(null);
+  const activeMachineDataRef = React.useRef<MachineData | null>(null);
+  const setActiveMachineData = React.useCallback((val: MachineData | null | ((prev: MachineData | null) => MachineData | null)) => {
+    const resolved = typeof val === "function" ? val(activeMachineDataRef.current) : val;
+    activeMachineDataRef.current = resolved;
+    _setActiveMachineData(resolved);
+  }, []);
   const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub" | "mill">("main");
   const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
   const fmtMachType = (t?: string | null) => {
@@ -1124,6 +1131,9 @@ export default function Mentor() {
       spindle_drive: effectiveDrive as any,
       dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
+      mill_spindle_rpm: _machData.mill_rpm ?? 0,
+      mill_spindle_hp:  _machData.mill_hp  ?? 0,
+      sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
     }));
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
@@ -1559,6 +1569,9 @@ export default function Mentor() {
 
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
     machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
+    mill_spindle_rpm: 0,   // B-axis mill spindle RPM (mill_turn only)
+    mill_spindle_hp: 0,    // B-axis mill spindle HP (mill_turn only)
+    sub_spindle_rpm: 0,    // C-axis sub spindle RPM (mill_turn only)
     toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
     dual_contact: false,
     holder_gage_length: 0,
@@ -5593,8 +5606,8 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Mill-Turn spindle selector — catalog machine OR manually entered sub RPM */}
-          {form.machine_type === "mill_turn" && (activeMachineData?.sub_rpm || activeMachineData?.mill_rpm || manualSubRpm > 0) && (
+          {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
+          {form.machine_type === "mill_turn" && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
               <FieldLabel hint="Select which spindle this operation runs on. B-axis / milling spindle is the dedicated high-speed milling head — use this for all milling ops. A-axis / main spindle is the turning spindle (lower RPM, higher torque). C-axis / sub spindle for backwork.">Active Spindle</FieldLabel>
               <div className="flex gap-2 flex-wrap">
@@ -5604,13 +5617,13 @@ ${stabSection}
                     hp:  activeMachineData?.main_hp  ?? form.machine_hp,
                     show: true },
                   { key: "mill" as const, label: "B-Axis Spindle", note: "High-speed milling head",
-                    rpm: activeMachineData?.mill_rpm ?? 0,
-                    hp:  activeMachineData?.mill_hp  ?? form.machine_hp,
-                    show: !!(activeMachineData?.mill_rpm) },
+                    rpm: form.mill_spindle_rpm || activeMachineData?.mill_rpm || 0,
+                    hp:  form.mill_spindle_hp  || activeMachineData?.mill_hp  || form.machine_hp,
+                    show: !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm) },
                   { key: "sub"  as const, label: "C-Axis Spindle", note: "Sub spindle / backwork",
-                    rpm: activeMachineData?.sub_rpm  ?? manualSubRpm,
-                    hp:  activeMachineData?.main_hp  ?? form.machine_hp,
-                    show: !!(activeMachineData?.sub_rpm || manualSubRpm > 0) },
+                    rpm: form.sub_spindle_rpm  || activeMachineData?.sub_rpm  || manualSubRpm,
+                    hp:  activeMachineData?.main_hp ?? form.machine_hp,
+                    show: !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0) },
                 ].filter(o => o.show)).map(({ key, label, note, rpm, hp }) => (
                   <button
                     key={key}
@@ -5619,8 +5632,9 @@ ${stabSection}
                       setSelectedSpindle(key);
                       setForm(p => {
                         // Taper: B-axis uses mill spindle taper, others keep current
-                        const newTaper = key === "mill" && activeMachineData?.mill_taper
-                          ? activeMachineData.mill_taper as typeof p.spindle_taper
+                        const _millTaper = activeMachineDataRef.current?.mill_taper ?? activeMachineData?.mill_taper;
+                        const newTaper = key === "mill" && _millTaper
+                          ? _millTaper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
                         // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
@@ -6160,7 +6174,7 @@ ${stabSection}
                         { key: "5th_axis_vise",     label: "5th-Axis Vise"     },
                         { key: "vise",              label: "Vise"              },
                         { key: "tombstone",         label: "Tombstone"         },
-                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                        ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
                         ] : []),
@@ -6172,7 +6186,7 @@ ${stabSection}
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
-                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                        ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
                         ] : []),

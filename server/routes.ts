@@ -3877,10 +3877,16 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             ).join(" AND ");
             const userParams = [email.toLowerCase(), token, ...tokens.map(t => `%${t}%`)];
             const ur = await pool.query(
-              `SELECT id, brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, nickname, shop_machine_no, NULL::integer AS mill_spindle_max_rpm, NULL::numeric AS mill_spindle_hp, NULL::text AS mill_spindle_taper, true AS _saved
-               FROM user_machines
-               WHERE email = $1 AND (${userTokenConds})
-               ORDER BY created_at DESC LIMIT 10`,
+              `SELECT um.id, um.brand, um.model, um.max_rpm, um.spindle_hp, um.taper, um.drive_type, um.dual_contact, um.coolant_types, um.tsc_psi, um.machine_type, um.control, um.nickname, um.shop_machine_no,
+                      c.mill_spindle_max_rpm,
+                      c.mill_spindle_hp,
+                      c.mill_spindle_taper,
+                      c.sub_spindle_rpm,
+                      true AS _saved
+               FROM user_machines um
+               LEFT JOIN machines c ON c.id = um.machine_id
+               WHERE um.email = $1 AND (${userTokenConds})
+               ORDER BY um.created_at DESC LIMIT 10`,
               userParams
             );
             savedRows = ur.rows;
