@@ -5593,8 +5593,8 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Mill-Turn spindle selector — catalog machine OR manually entered sub RPM */}
-          {form.machine_type === "mill_turn" && (activeMachineData?.sub_rpm || activeMachineData?.mill_rpm || manualSubRpm > 0) && (
+          {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
+          {form.machine_type === "mill_turn" && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
               <FieldLabel hint="Select which spindle this operation runs on. B-axis / milling spindle is the dedicated high-speed milling head — use this for all milling ops. A-axis / main spindle is the turning spindle (lower RPM, higher torque). C-axis / sub spindle for backwork.">Active Spindle</FieldLabel>
               <div className="flex gap-2 flex-wrap">
