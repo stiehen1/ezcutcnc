@@ -6147,7 +6147,7 @@ ${stabSection}
                   ? (selectedSpindle === "sub" /* handled above — dead branch */
                     ? ""
                     : selectedSpindle === "mill"
-                    ? "B-axis milling spindle active — the part stays held in the A-axis chuck while the B-axis tool mills it. Select how the part is currently chucked. Most rigid to least rigid: Dovetail → Rigid Fixture → Collet Chuck → Soft Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel."
+                    ? "B-axis milling spindle active — part stays in the A-axis chuck while the B-axis tool mills at compound angles. B-axis introduces angled + multi-directional loads, so conforming workholding matters most. Best choices: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet is great for finishing but low torque capacity under heavy B-axis loads. Dovetail and rigid fixture for special-access or prismatic secondary ops only."
                     : "A-axis turning spindle active. Most rigid to least rigid: Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Tailstock Support → Steady Rest. Collet chuck for bar work and precision; 6-jaw for thin-wall; hydraulic/power chuck for repeatability and high-volume; form/step/pie jaws for complex profiles.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
@@ -6182,24 +6182,22 @@ ${stabSection}
                   : form.machine_type === "mill_turn"
                   ? (selectedSpindle === "mill"
                     ? ([
-                        /* Part stays in A-axis chuck while B-axis mills — describe that holding condition */
-                        /* Primary chuck */
+                        /* Tier 1 — B-axis primary (best resistance to angled multi-directional loads) */
                         { key: "soft_jaws",           label: "Soft Jaws"            },
-                        { key: "collet_chuck",        label: "Collet Chuck"         },
-                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "form_jaws",           label: "Form Jaws"            },
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "pie_jaws",            label: "Pie Jaws"             },
                         { key: "hydraulic_chuck",     label: "Hydraulic Chuck"      },
                         { key: "power_chuck",         label: "Power Chuck"          },
-                        /* Custom jawing */
-                        { key: "form_jaws",           label: "Form Jaws"            },
+                        /* Tier 2 — conditional (good for finishing / light cuts; watch torque on collet) */
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
                         { key: "step_jaws",           label: "Step Jaws"            },
-                        { key: "pie_jaws",            label: "Pie Jaws"             },
-                        /* Mandrel / fixture */
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        /* Tier 3 — special use (access / secondary-op fixture work) */
                         { key: "dovetail",            label: "Dovetail"             },
                         { key: "rigid_fixture",       label: "Rigid Fixture"        },
                         { key: "modular_quickchange", label: "Modular Quick-Change" },
-                        { key: "secondary_op_vise",   label: "Secondary Op Vise"    },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
