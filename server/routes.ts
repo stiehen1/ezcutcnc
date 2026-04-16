@@ -4149,31 +4149,79 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json(result.rows);
   });
 
-  // ── User machines: update (job tags + status) ────────────────────────────
+  // ── User machines: update ─────────────────────────────────────────────────
   app.patch("/api/user-machines/:id", async (req, res) => {
-    const { email, token, job_tags, machine_status, status_note, maintenance_date } = req.body;
+    const { email, token, job_tags, machine_status, status_note, maintenance_date,
+            nickname, shop_machine_no, serial_number, brand, model,
+            max_rpm, spindle_hp, control, notes } = req.body;
     const id = parseInt(req.params.id);
     if (!email || !token) return res.status(400).json({ error: "Missing fields" });
     const { pool } = await import("./db");
     const auth = await pool.query(
-      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      `SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`,
       [email.toLowerCase(), token]
     );
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
-    await pool.query(
-      `UPDATE user_machines SET
-         job_tags = COALESCE($3, job_tags),
-         machine_status = COALESCE($4, machine_status),
-         status_note = $5,
-         maintenance_date = $6
-       WHERE id = $1 AND email = $2`,
-      [id, email.toLowerCase(),
-       job_tags !== undefined ? JSON.stringify(job_tags) : null,
-       machine_status || null,
-       status_note ?? null,
-       maintenance_date ?? null]
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
+    const fields: string[] = [];
+    const vals: any[] = [];
+    const add = (col: string, val: any) => { fields.push(`${col} = $${fields.length + 1}`); vals.push(val); };
+    if (job_tags !== undefined) add("job_tags", JSON.stringify(job_tags));
+    if (machine_status !== undefined) add("machine_status", machine_status);
+    if (status_note !== undefined) add("status_note", status_note);
+    if (maintenance_date !== undefined) add("maintenance_date", maintenance_date);
+    if (nickname !== undefined) add("nickname", nickname);
+    if (shop_machine_no !== undefined) add("shop_machine_no", shop_machine_no || null);
+    if (serial_number !== undefined) add("serial_number", serial_number || null);
+    if (brand !== undefined) add("brand", brand || null);
+    if (model !== undefined) add("model", model || null);
+    if (max_rpm !== undefined) add("max_rpm", max_rpm || null);
+    if (spindle_hp !== undefined) add("spindle_hp", spindle_hp || null);
+    if (control !== undefined) add("control", control || null);
+    if (notes !== undefined) add("notes", notes || null);
+    if (!fields.length) return res.status(400).json({ error: "Nothing to update" });
+    vals.push(id, dataEmail);
+    const r = await pool.query(
+      `UPDATE user_machines SET ${fields.join(", ")} WHERE id = $${vals.length - 1} AND email = $${vals.length} RETURNING *`,
+      vals
     );
-    res.json({ ok: true });
+    if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(r.rows[0]);
+  });
+
+  // ── User machines: add job tag ────────────────────────────────────────────
+  app.post("/api/user-machines/:id/job-tags", async (req, res) => {
+    const { email, token, job_no, type } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token || !job_no) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
+    const row = await pool.query(`SELECT job_tags FROM user_machines WHERE id = $1 AND email = $2`, [id, dataEmail]);
+    if (!row.rows.length) return res.status(404).json({ error: "Not found" });
+    const existing: any[] = Array.isArray(row.rows[0].job_tags) ? row.rows[0].job_tags : [];
+    const updated = [...existing.filter((t: any) => t.job_no !== job_no), { job_no, type: type || "assigned" }];
+    await pool.query(`UPDATE user_machines SET job_tags = $1 WHERE id = $2 AND email = $3`, [JSON.stringify(updated), id, dataEmail]);
+    res.json({ job_tags: updated });
+  });
+
+  // ── User machines: remove job tag ─────────────────────────────────────────
+  app.delete("/api/user-machines/:id/job-tags/:job_no", async (req, res) => {
+    const { email, token } = req.body;
+    const id = parseInt(req.params.id);
+    const job_no = req.params.job_no;
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
+    const row = await pool.query(`SELECT job_tags FROM user_machines WHERE id = $1 AND email = $2`, [id, dataEmail]);
+    if (!row.rows.length) return res.status(404).json({ error: "Not found" });
+    const existing: any[] = Array.isArray(row.rows[0].job_tags) ? row.rows[0].job_tags : [];
+    const updated = existing.filter((t: any) => t.job_no !== job_no);
+    await pool.query(`UPDATE user_machines SET job_tags = $1 WHERE id = $2 AND email = $3`, [JSON.stringify(updated), id, dataEmail]);
+    res.json({ job_tags: updated });
   });
 
   // ── User machines: delete ─────────────────────────────────────────────────

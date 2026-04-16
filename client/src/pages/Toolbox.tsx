@@ -26,6 +26,27 @@ type FavoriteItem = {
   data: any;
 };
 
+type UserMachine = {
+  id: number;
+  nickname: string;
+  shop_machine_no: string | null;
+  serial_number: string | null;
+  brand: string | null;
+  model: string | null;
+  max_rpm: number | null;
+  spindle_hp: number | null;
+  taper: string | null;
+  drive_type: string | null;
+  dual_contact: boolean;
+  machine_type: string | null;
+  control: string | null;
+  notes: string | null;
+  machine_status: string;
+  status_note: string | null;
+  job_tags: { job_no: string; type: "assigned" | "excluded" }[];
+  created_at: string;
+};
+
 // ── Shared section header ─────────────────────────────────────────────────────
 function SectionHeader({
   icon, title, count, open, onToggle, action, accentColor, titleColor, bgColor, borderColor,
@@ -95,6 +116,35 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   const [favOpen, setFavOpen] = React.useState(true);
   const [specialsOpen, setSpecialsOpen] = React.useState(true);
   const [roiOpen, setRoiOpen] = React.useState(true);
+  const [machinesOpen, setMachinesOpen] = React.useState(true);
+
+  // ── Machines ──────────────────────────────────────────────────────────────
+  const [machines, setMachines] = React.useState<UserMachine[]>([]);
+  const [machineFilter, setMachineFilter] = React.useState("");
+  const [editingMachineId, setEditingMachineId] = React.useState<number | null>(null);
+  const [addingMachine, setAddingMachine] = React.useState(false);
+  // Add form state
+  const [mNickname, setMNickname] = React.useState("");
+  const [mShopNo, setMShopNo] = React.useState("");
+  const [mSerial, setMSerial] = React.useState("");
+  const [mBrand, setMBrand] = React.useState("");
+  const [mModel, setMModel] = React.useState("");
+  const [mRpm, setMRpm] = React.useState("");
+  const [mHp, setMHp] = React.useState("");
+  const [mTaper, setMTaper] = React.useState("CAT40");
+  const [mDrive, setMDrive] = React.useState("direct");
+  const [mType, setMType] = React.useState("vmc");
+  const [mControl, setMControl] = React.useState("");
+  const [mNotes, setMNotes] = React.useState("");
+  const [mSaving, setMSaving] = React.useState(false);
+  const [mError, setMError] = React.useState("");
+  // Edit state
+  const [editM, setEditM] = React.useState<Partial<UserMachine> & { job_tags?: any[] }>({});
+  const [editMStatus, setEditMStatus] = React.useState("operational");
+  const [editMStatusNote, setEditMStatusNote] = React.useState("");
+  const [editMJobInput, setEditMJobInput] = React.useState("");
+  const [editMJobType, setEditMJobType] = React.useState<"assigned"|"excluded">("assigned");
+  const [mPatchSaving, setMPatchSaving] = React.useState(false);
 
   // ── Favorites ─────────────────────────────────────────────────────────────
   const [favorites, setFavorites] = React.useState<FavoriteItem[]>([]);
@@ -143,7 +193,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     localStorage.removeItem("tb_token");
     setEmail(""); setToken(""); setStep("email");
     setItems([]); setFavorites([]); setSpecials([]);
-    setRoiItems([]); setRoiDraft(null);
+    setRoiItems([]); setRoiDraft(null); setMachines([]);
   }
 
   // ── Data loading ──────────────────────────────────────────────────────────
@@ -153,10 +203,11 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     if (!e || !t) return;
     setLoading(true);
     try {
-      const [itemsRes, favsRes, specialsRes] = await Promise.all([
+      const [itemsRes, favsRes, specialsRes, machinesRes] = await Promise.all([
         fetch(`/api/toolbox/items?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
         fetch(`/api/toolbox/favorites?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
         fetch(`/api/specials?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
+        fetch(`/api/user-machines?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
       ]);
       if (itemsRes.status === 401) { signOut(); return; }
       setItems(await itemsRes.json());
@@ -165,6 +216,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
         setFavorites(rows.map((r: any) => ({ id: r.id, edp: r.edp, data: r.data })));
       }
       if (specialsRes.ok) setSpecials(await specialsRes.json());
+      if (machinesRes.ok) setMachines(await machinesRes.json());
       const userEmail = localStorage.getItem("er_email") || e;
       try {
         const rr = await fetch(`/api/roi?email=${encodeURIComponent(userEmail)}`);
@@ -210,6 +262,103 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     if (r.ok) {
       setItems(prev => prev.map(i => i.id === id ? { ...i, job_no, part_name } : i));
       setEditingTagId(null);
+    }
+  }
+
+  // ── Machines ──────────────────────────────────────────────────────────────
+  async function addMachine() {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) return;
+    if (!mNickname.trim()) { setMError("Nickname is required."); return; }
+    setMSaving(true); setMError("");
+    try {
+      const r = await fetch("/api/user-machines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: e, token: t,
+          nickname: mNickname.trim(),
+          shop_machine_no: mShopNo.trim() || null,
+          serial_number: mSerial.trim() || null,
+          brand: mBrand.trim() || null,
+          model: mModel.trim() || null,
+          max_rpm: mRpm ? parseInt(mRpm) : null,
+          spindle_hp: mHp ? parseFloat(mHp) : null,
+          taper: mTaper || null,
+          drive_type: mDrive || null,
+          machine_type: mType || null,
+          control: mControl.trim() || null,
+          notes: mNotes.trim() || null,
+        }),
+      });
+      if (!r.ok) { const d = await r.json(); setMError(d.error || "Failed to save"); return; }
+      const saved = await r.json();
+      setMachines(prev => [{ ...saved, job_tags: [], machine_status: "operational" }, ...prev]);
+      setAddingMachine(false);
+      setMNickname(""); setMShopNo(""); setMSerial(""); setMBrand(""); setMModel("");
+      setMRpm(""); setMHp(""); setMTaper("CAT40"); setMDrive("direct"); setMType("vmc");
+      setMControl(""); setMNotes("");
+    } catch { setMError("Network error"); }
+    finally { setMSaving(false); }
+  }
+
+  async function deleteMachine(id: number) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    if (!confirm("Delete this machine? This cannot be undone.")) return;
+    await fetch(`/api/user-machines/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t }),
+    });
+    setMachines(prev => prev.filter(m => m.id !== id));
+  }
+
+  async function patchMachine(id: number, patch: Record<string, any>) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    setMPatchSaving(true);
+    try {
+      const r = await fetch(`/api/user-machines/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e, token: t, ...patch }),
+      });
+      if (r.ok) {
+        const updated = await r.json();
+        setMachines(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m));
+        setEditingMachineId(null);
+      }
+    } finally { setMPatchSaving(false); }
+  }
+
+  async function addMachineJobTag(machineId: number, job_no: string, type: "assigned"|"excluded") {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    const r = await fetch(`/api/user-machines/${machineId}/job-tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t, job_no, type }),
+    });
+    if (r.ok) {
+      const updated = await r.json();
+      setMachines(prev => prev.map(m => m.id === machineId ? { ...m, job_tags: updated.job_tags } : m));
+    }
+  }
+
+  async function removeMachineJobTag(machineId: number, job_no: string) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    const r = await fetch(`/api/user-machines/${machineId}/job-tags/${encodeURIComponent(job_no)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t }),
+    });
+    if (r.ok) {
+      setMachines(prev => prev.map(m => m.id === machineId
+        ? { ...m, job_tags: (m.job_tags || []).filter((jt: any) => jt.job_no !== job_no) }
+        : m));
     }
   }
 
@@ -779,7 +928,270 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 </div>
 
                 {/* ════════════════════════════════════════════════════════
-                    SECTION 4 — ROI Comparisons
+                    SECTION 4 — Saved Machines
+                ════════════════════════════════════════════════════════ */}
+                <div className="rounded-2xl border border-sky-900/40 bg-sky-950/10 overflow-hidden">
+                  <SectionHeader
+                    icon="🖥️"
+                    title="My Machines"
+                    count={machines.length}
+                    open={machinesOpen}
+                    onToggle={() => setMachinesOpen(v => !v)}
+                    accentColor="bg-sky-500"
+                    titleColor="text-sky-300"
+                    bgColor="bg-sky-950/50"
+                    borderColor="border-sky-800/50"
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => { setAddingMachine(v => !v); setMError(""); }}
+                        className="text-[11px] font-semibold text-sky-400 hover:text-white border border-sky-700/50 rounded-md px-2 py-1 hover:bg-sky-800/40 transition-colors"
+                      >{addingMachine ? "Cancel" : "+ Add Machine"}</button>
+                    }
+                  />
+                  {machinesOpen && (
+                    <div className="p-3 space-y-3">
+
+                      {/* Add machine form */}
+                      {addingMachine && (
+                        <div className="rounded-xl border border-sky-700/40 bg-sky-950/30 p-4 space-y-3">
+                          <p className="text-xs font-semibold text-sky-300">Add a Machine</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Nickname <span className="text-red-400">*</span></label>
+                              <input type="text" placeholder="e.g. Shop Floor VF-2" value={mNickname} onChange={e => setMNickname(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Shop Machine #</label>
+                              <input type="text" placeholder="e.g. M-12" value={mShopNo} onChange={e => setMShopNo(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Serial Number</label>
+                              <input type="text" placeholder="From nameplate" value={mSerial} onChange={e => setMSerial(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Brand</label>
+                              <input type="text" placeholder="e.g. Haas, Mazak" value={mBrand} onChange={e => setMBrand(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Model</label>
+                              <input type="text" placeholder="e.g. VF-2" value={mModel} onChange={e => setMModel(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Machine Type</label>
+                              <select value={mType} onChange={e => setMType(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
+                                <option value="vmc">VMC</option>
+                                <option value="hmc">HMC</option>
+                                <option value="5axis">5-Axis</option>
+                                <option value="lathe">Lathe</option>
+                                <option value="mill_turn">Mill-Turn</option>
+                                <option value="swiss">Swiss</option>
+                                <option value="double_column">Double Column</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Spindle Taper</label>
+                              <select value={mTaper} onChange={e => setMTaper(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
+                                {["CAT40","CAT50","BT30","BT40","BT50","HSK63","HSK100","CAPTO C6","CAPTO C8"].map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Drive Type</label>
+                              <select value={mDrive} onChange={e => setMDrive(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
+                                <option value="direct">Direct</option>
+                                <option value="belt">Belt</option>
+                                <option value="gear">Gear</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Max RPM</label>
+                              <input type="number" placeholder="e.g. 12000" value={mRpm} onChange={e => setMRpm(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Spindle HP</label>
+                              <input type="number" placeholder="e.g. 30" value={mHp} onChange={e => setMHp(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Control</label>
+                              <input type="text" placeholder="e.g. Fanuc 31i, Mazatrol" value={mControl} onChange={e => setMControl(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Notes</label>
+                              <input type="text" placeholder="Optional notes" value={mNotes} onChange={e => setMNotes(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                            </div>
+                          </div>
+                          {mError && <p className="text-xs text-red-400">{mError}</p>}
+                          <button onClick={addMachine} disabled={mSaving || !mNickname.trim()}
+                            className="w-full bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-semibold">
+                            {mSaving ? "Saving…" : "Save Machine"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Filter */}
+                      {machines.length > 3 && (
+                        <div className="relative">
+                          <input type="text" placeholder="Filter machines…" value={machineFilter} onChange={e => setMachineFilter(e.target.value)}
+                            className="w-full rounded-lg border border-sky-800/40 bg-zinc-800/60 px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                          {machineFilter && <button onClick={() => setMachineFilter("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-[10px]">✕</button>}
+                        </div>
+                      )}
+
+                      {machines.length === 0 && !addingMachine && (
+                        <div className="text-center py-6 border border-dashed border-sky-900/50 rounded-xl">
+                          <p className="text-xs text-zinc-600">No saved machines yet.</p>
+                          <p className="text-[11px] text-zinc-700 mt-1">Add a machine above or save one from the calculator.</p>
+                        </div>
+                      )}
+
+                      {/* Machine cards */}
+                      {machines
+                        .filter(m => !machineFilter || [m.nickname, m.brand, m.model, m.shop_machine_no].some(v => v?.toLowerCase().includes(machineFilter.toLowerCase())))
+                        .map(m => {
+                          const isEditing = editingMachineId === m.id;
+                          const statusIcon = m.machine_status === "operational" ? "✅" : m.machine_status === "issue" ? "⚠️" : m.machine_status === "down" ? "🔴" : "🔧";
+                          const tags: {job_no: string; type: "assigned"|"excluded"}[] = Array.isArray(m.job_tags) ? m.job_tags : [];
+                          return (
+                            <div key={m.id} className="rounded-xl border border-sky-800/30 bg-zinc-900/60 overflow-hidden">
+                              {/* Header row */}
+                              <div className="flex items-start justify-between px-3 py-2.5 gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span>{statusIcon}</span>
+                                    <span className="text-sm font-semibold text-white">{m.nickname}</span>
+                                    {m.shop_machine_no && <span className="text-[10px] text-zinc-500">#{m.shop_machine_no}</span>}
+                                    {m.machine_status !== "operational" && (
+                                      <span className="text-[10px] text-amber-400 bg-amber-900/30 rounded px-1.5 py-0.5 capitalize">{m.machine_status}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                    {(m.brand || m.model) && <span className="text-[11px] text-zinc-400">{[m.brand, m.model].filter(Boolean).join(" ")}</span>}
+                                    {m.max_rpm && <span className="text-[11px] text-zinc-500">{m.max_rpm.toLocaleString()} RPM</span>}
+                                    {m.spindle_hp && <span className="text-[11px] text-zinc-500">{m.spindle_hp} HP</span>}
+                                    {m.taper && <span className="text-[11px] text-zinc-500">{m.taper}</span>}
+                                    {m.machine_type && <span className="text-[11px] text-zinc-600 uppercase">{m.machine_type}</span>}
+                                  </div>
+                                  {m.status_note && <p className="text-[10px] text-amber-300 mt-0.5">{m.status_note}</p>}
+                                  {tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {tags.map(jt => (
+                                        <span key={jt.job_no} className={`text-[10px] rounded px-1.5 py-0.5 ${jt.type === "assigned" ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/40" : "bg-red-900/30 text-red-300 border border-red-700/30"}`}>
+                                          {jt.type === "excluded" ? "✗ " : ""}Job #{jt.job_no}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex gap-1 shrink-0">
+                                  <button onClick={() => { setEditingMachineId(isEditing ? null : m.id); setEditM({...m}); setEditMStatus(m.machine_status || "operational"); setEditMStatusNote(m.status_note || ""); setEditMJobInput(""); }}
+                                    className="text-[11px] text-zinc-500 hover:text-sky-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors">{isEditing ? "Done" : "Edit"}</button>
+                                  <button onClick={() => deleteMachine(m.id)}
+                                    className="text-[11px] text-red-500/70 hover:text-red-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors">Delete</button>
+                                </div>
+                              </div>
+
+                              {/* Edit panel */}
+                              {isEditing && (
+                                <div className="border-t border-sky-800/20 bg-zinc-950/60 px-3 py-3 space-y-3">
+                                  {/* Basic fields */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                      { label: "Nickname", val: editM.nickname ?? "", key: "nickname" },
+                                      { label: "Shop #", val: editM.shop_machine_no ?? "", key: "shop_machine_no" },
+                                      { label: "Serial #", val: editM.serial_number ?? "", key: "serial_number" },
+                                      { label: "Brand", val: editM.brand ?? "", key: "brand" },
+                                      { label: "Model", val: editM.model ?? "", key: "model" },
+                                      { label: "Max RPM", val: String(editM.max_rpm ?? ""), key: "max_rpm" },
+                                      { label: "Spindle HP", val: String(editM.spindle_hp ?? ""), key: "spindle_hp" },
+                                      { label: "Control", val: editM.control ?? "", key: "control" },
+                                    ].map(f => (
+                                      <div key={f.key} className={f.key === "nickname" || f.key === "control" ? "col-span-2" : ""}>
+                                        <label className="text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5 block">{f.label}</label>
+                                        <input type="text" value={f.val}
+                                          onChange={e => setEditM(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                          className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500" />
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {/* Status */}
+                                  <div>
+                                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1.5">Machine Status</p>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                      {(["operational","issue","down","maintenance"] as const).map(s => (
+                                        <button key={s} type="button" onClick={() => setEditMStatus(s)}
+                                          className={`text-[11px] px-2.5 py-1 rounded-md border font-semibold capitalize transition-all ${editMStatus === s ? "bg-sky-600 border-sky-500 text-white" : "bg-transparent border-zinc-600 text-zinc-400 hover:border-sky-500 hover:text-sky-300"}`}>
+                                          {s === "operational" ? "✅ OK" : s === "issue" ? "⚠️ Issue" : s === "down" ? "🔴 Down" : "🔧 Maint."}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    {editMStatus !== "operational" && (
+                                      <input type="text" placeholder="Status note (optional)" value={editMStatusNote} onChange={e => setEditMStatusNote(e.target.value)}
+                                        className="w-full mt-2 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                                    )}
+                                  </div>
+
+                                  {/* Job tags */}
+                                  <div>
+                                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1.5">Job Assignments</p>
+                                    {tags.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mb-2">
+                                        {tags.map(jt => (
+                                          <span key={jt.job_no} className={`text-[10px] flex items-center gap-1 rounded px-1.5 py-0.5 ${jt.type === "assigned" ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/40" : "bg-red-900/30 text-red-300 border border-red-700/30"}`}>
+                                            Job #{jt.job_no}
+                                            <button onClick={() => removeMachineJobTag(m.id, jt.job_no)} className="hover:text-white leading-none">✕</button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="flex gap-1.5">
+                                      <select value={editMJobType} onChange={e => setEditMJobType(e.target.value as any)}
+                                        className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500">
+                                        <option value="assigned">Assigned</option>
+                                        <option value="excluded">Excluded</option>
+                                      </select>
+                                      <input type="text" placeholder="Job #" value={editMJobInput} onChange={e => setEditMJobInput(e.target.value)}
+                                        onKeyDown={e => { if (e.key === "Enter" && editMJobInput.trim()) { addMachineJobTag(m.id, editMJobInput.trim(), editMJobType); setEditMJobInput(""); }}}
+                                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500" />
+                                      <button onClick={() => { if (editMJobInput.trim()) { addMachineJobTag(m.id, editMJobInput.trim(), editMJobType); setEditMJobInput(""); }}}
+                                        className="bg-sky-700 hover:bg-sky-600 text-white rounded px-2.5 py-1.5 text-xs font-semibold">Add</button>
+                                    </div>
+                                  </div>
+
+                                  <button onClick={() => patchMachine(m.id, {
+                                    nickname: editM.nickname, shop_machine_no: editM.shop_machine_no, serial_number: editM.serial_number,
+                                    brand: editM.brand, model: editM.model,
+                                    max_rpm: editM.max_rpm ? Number(editM.max_rpm) : null,
+                                    spindle_hp: editM.spindle_hp ? Number(editM.spindle_hp) : null,
+                                    control: editM.control,
+                                    machine_status: editMStatus, status_note: editMStatusNote,
+                                  })} disabled={mPatchSaving}
+                                    className="w-full bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-semibold">
+                                    {mPatchSaving ? "Saving…" : "Save Changes"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ════════════════════════════════════════════════════════
+                    SECTION 5 — ROI Comparisons
                 ════════════════════════════════════════════════════════ */}
                 {(roiDraft || roiItems.length > 0) && (
                   <div className="rounded-2xl border border-green-900/40 bg-green-950/10 overflow-hidden">
