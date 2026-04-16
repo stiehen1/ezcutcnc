@@ -1486,20 +1486,28 @@ export default function Mentor() {
         else if (e.shank_type === "safe_lock") next.toolholder = "shrink_fit";
         return next;
       });
-      // Flute wash: not on print — estimate 20% of LOC as conservative default
+      // Flute wash: estimate 20% of LOC, but 0 for reduced-shank tools (tapered neck — no parallel relief)
       const _pdfLoc = e.loc > 0 ? e.loc : 0;
       const _pdfDia = e.tool_dia > 0 ? e.tool_dia : 0;
-      const _fwEst = _pdfLoc > 0 ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
+      const _isReducedShank = e.shank_dia > 0 && e.shank_dia > e.tool_dia * 1.05;
+      const _fwEst = (_pdfLoc > 0 && !_isReducedShank) ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
       setPdfFluteWash(_fwEst);
       setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
-      // Set default stickout: LOC + flute_wash_est + 0.33×D
+      // Set default stickout
+      // Reduced-shank: stickout = lbs + 0.33×shank_dia (collet grips on shank body, not cutting end)
+      // Standard: stickout = LOC + flute_wash + 0.33×cutting_dia
+      const _pdfLbs = e.lbs > 0 ? e.lbs : 0;
+      const _pdfShankDia = e.shank_dia > 0 ? e.shank_dia : 0;
       if (_pdfLoc > 0 && _pdfDia > 0) {
-        const _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
+        const _defaultSo = _isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0
+          ? Math.ceil((_pdfLbs + 0.33 * _pdfShankDia) * 200) / 200
+          : Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
       }
       // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style
-      {
+      // Skip if mode is slot or face — those lock WOC to fixed values
+      if (form.mode !== "slot" && form.mode !== "face") {
         const spMode = (form.dp_cutting_style ?? "hem") === "hem" ? "hem" : "traditional";
         const newFlutes = e.flutes > 0 ? e.flutes : form.flutes;
         const newDia    = _pdfDia > 0 ? _pdfDia : form.tool_dia;
@@ -2422,6 +2430,19 @@ export default function Mentor() {
     setPdfFluteWash(0);
     setPdfFluteWashText("");
     setDpSpecialTool(false);
+    // Reset all form fields that PDF upload populates
+    setForm(p => ({
+      ...p,
+      tool_dia: 0, flutes: 4, loc: 0, lbs: 0, shank_dia: 0,
+      corner_condition: "square", corner_radius: 0, coating: "",
+      variable_pitch: false, variable_helix: false,
+      helix_angle: 0,
+    }));
+    setToolDiaText("");
+    setLocText("");
+    setLbsText("");
+    setShankDiaText("");
+    setCrText("");
   }
 
   function resetAll() {
