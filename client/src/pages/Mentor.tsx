@@ -6141,8 +6141,8 @@ ${stabSection}
               <FieldLabel hint={
                 (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? (form.machine_type === "lathe"
-                    ? "C-axis / live tool lathe — part is held in the spindle and indexed for milling. Soft jaws are the best all-around choice; collet chuck for best concentricity and high RPM; 6-jaw for thin-wall; tailstock or steady rest reduces deflection on long parts. Most rigid to least rigid: Soft Jaws → Collet → 3-Jaw → 6-Jaw → Hydraulic/Power → Form Jaws → Expanding Mandrel → Between Centers → Tailstock → Steady Rest."
-                    : "C-axis / sub-spindle active — part transferred from A-axis for backside ops. Same workholding logic as main spindle but typically smaller chuck capacity. Collet for best concentricity; soft jaws for custom OD grip; tailstock/steady rest not available on sub-spindle.")
+                    ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (great runout, watch torque capacity). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel (avoid heavy radial WOC). Add Tailstock or Steady Rest for long parts."
+                    : "C-axis / sub-spindle — part transferred for backside ops. Same tiered logic as main spindle: Soft/Form Jaws and 6-Jaw first; collet for small-diameter finish work. No tailstock or steady rest on sub-spindle.")
                   : form.machine_type === "mill_turn"
                   ? (selectedSpindle === "sub" /* handled above — dead branch */
                     ? ""
@@ -6159,24 +6159,24 @@ ${stabSection}
                 {(
                   (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? ([
-                      /* Primary chuck */
+                      /* Tier 1 — best contact/conformity under C-axis milling side loads */
                       { key: "soft_jaws",           label: "Soft Jaws"         },
-                      { key: "collet_chuck",         label: "Collet Chuck"      },
-                      { key: "3_jaw_chuck",          label: "3-Jaw Hard Jaws"   },
-                      { key: "6_jaw_chuck",          label: "6-Jaw Chuck"       },
-                      { key: "hydraulic_chuck",      label: "Hydraulic Chuck"   },
-                      { key: "power_chuck",          label: "Power Chuck"       },
-                      /* Custom jawing */
-                      { key: "form_jaws",            label: "Form Jaws"         },
-                      { key: "step_jaws",            label: "Step Jaws"         },
-                      { key: "pie_jaws",             label: "Pie Jaws"          },
-                      /* Mandrel / support */
-                      { key: "expanding_mandrel",    label: "Expanding Mandrel" },
+                      { key: "form_jaws",           label: "Form Jaws"         },
+                      { key: "6_jaw_chuck",         label: "6-Jaw Chuck"       },
+                      { key: "pie_jaws",            label: "Pie Jaws"          },
+                      /* Tier 2 — good, conditional */
+                      { key: "hydraulic_chuck",     label: "Hydraulic Chuck"   },
+                      { key: "power_chuck",         label: "Power Chuck"       },
+                      { key: "collet_chuck",        label: "Collet Chuck"      },
+                      /* Tier 3 — limited (engine penalizes slip/runout) */
+                      { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"   },
+                      { key: "step_jaws",           label: "Step Jaws"         },
+                      { key: "expanding_mandrel",   label: "Expanding Mandrel" },
                       /* Support — lathe only (sub-spindle has no tailstock/steady rest) */
                       ...(form.machine_type === "lathe" ? [
-                        { key: "tailstock_supported" as const, label: "Tailstock"        },
-                        { key: "between_centers"     as const, label: "Between Centers"  },
-                        { key: "steady_rest"         as const, label: "Steady Rest"      },
+                        { key: "tailstock_supported" as const, label: "Tailstock"       },
+                        { key: "between_centers"     as const, label: "Between Centers" },
+                        { key: "steady_rest"         as const, label: "Steady Rest"     },
                       ] : []),
                     ] as const)
                   : form.machine_type === "mill_turn"
