@@ -264,7 +264,7 @@ def micro_tool_feed_limit(
     reason = (
         f"Micro-tool practical feed cap applied (ø{diameter:.4f}\" band-{band}, "
         f"{material_group} {op_bucket}): physics {feed_physics:.1f} IPM → "
-        f"{feed_final:.1f} IPM  [CTF cap ×{ctf_used:.2f}, practicality ×{practicality:.2f}]"
+        f"{feed_final:.1f} IPM  [CTF ratio ×{(feed_ctf_cap/feed_physics if feed_physics > 1e-9 else 1.0):.2f}, practicality ×{practicality:.2f}]"
     )
     return feed_final, reason
 
