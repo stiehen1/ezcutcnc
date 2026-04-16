@@ -90,6 +90,11 @@ MATERIAL_COATING_PREF = {
     "aluminum": ["Uncoated", "D-Max"],
     "brass": ["Uncoated", "D-Max"],
     "copper": ["Uncoated", "D-Max"],
+    # Abrasive non-ferrous — micro-abrasive inclusions behave like cast iron; prefer coated steel tools
+    "abrasive non-ferrous": ["P-Max", "T-Max"],
+    "manganese_bronze": ["P-Max", "T-Max"],
+    "silicon_bronze": ["P-Max", "T-Max"],
+    "copper_beryllium": ["P-Max", "T-Max"],
 }
 
 PLATFORM_COATINGS = {
@@ -103,6 +108,7 @@ BASE_SFM = {
     # Legacy group keys (fallback)
     "Aluminum": 900,
     "Non-Ferrous": 800,
+    "Abrasive Non-Ferrous": 275,  # Group fallback — micro-abrasive Cu alloys; use per-key values preferentially
     "Plastics": 600,
     "Steel": 300,
     "Stainless": 220,
@@ -114,6 +120,10 @@ BASE_SFM = {
     "aluminum_wrought_hs": 650,   # 7075/2024/7xxx/2xxx — harder/more abrasive; practical 500–800 SFM range
     "aluminum_cast": 550,         # Cast grades (356, 380): ~30% below wrought; higher alloying & inclusions = faster wear
     "non_ferrous": 550,
+    # Abrasive non-ferrous — Cu-Zn-Mn/Fe alloys with micro-abrasive intermetallics; run ~50–65% of free brass SFM
+    "manganese_bronze": 275,  # C86300/C86500 — Mn/Fe intermetallics = abrasive wear; 240–310 SFM range
+    "silicon_bronze":   320,  # C65500/C64200 — Si particles; cleaner cut than Mn bronze but still abrasive
+    "copper_beryllium": 250,  # C17200/C17300 — extreme abrasion + carcinogenic dust; conservative SFM
     "steel_mild": 400,              # Plain low-carbon / structural (A36, 1018, 1020, 10xx series)
     "steel_free": 425,              # True free-machining (12L14, 1215, 1117 — sulfur-additive grades)
     "steel_alloy": 350,             # 4140: 350 SFM confirmed at full-slot (worst case)
@@ -172,6 +182,7 @@ HP_PER_CUIN = {
     # Legacy group keys (fallback)
     "Aluminum":   0.28,
     "Non-Ferrous": 0.35,
+    "Abrasive Non-Ferrous": 0.55,
     "Plastics":   0.20,
     "Steel":      1.00,
     "Stainless":  1.05,
@@ -186,6 +197,10 @@ HP_PER_CUIN = {
     "plastic_filled":    0.10,  # Fibers add abrasion; force higher than unfilled
     "composite_tpc":     0.14,  # Continuous fibers — highest force in this family
     "non_ferrous":      0.35,
+    # Abrasive non-ferrous — higher unit force than free brass; Mn intermetallics add resistance
+    "manganese_bronze": 0.55,  # Higher than free brass (~0.35); abrasive phases add load
+    "silicon_bronze":   0.48,
+    "copper_beryllium": 0.52,
     "steel_mild":       0.82,   # Plain low-carbon — softer than alloy, harder than free-machining
     "steel_free":       0.75,
     "steel_alloy":      1.00,  # 4140, 4340 — Machinery's Handbook C=1.0 for alloy steel
@@ -325,6 +340,10 @@ BASE_LIFE_MIN = {
     "plastic_filled":     80.0, # Glass fiber abrasion dramatically shortens tool life
     "composite_tpc":      70.0, # Continuous fibers — aggressive on edges, especially GF laminates
     "non_ferrous":      110.0,
+    # Abrasive non-ferrous — tool life much shorter than clean non-ferrous due to abrasive wear
+    "manganese_bronze":  55.0,  # Abrasive intermetallics cut tool life roughly in half vs free brass
+    "silicon_bronze":    65.0,
+    "copper_beryllium":  50.0,  # C17200 — most abrasive; also hardest of the three
     "steel_mild":       100.0,   # Plain mild steel — good tool life, predictable wear
     "steel_free":        90.0,
     "steel_alloy":       75.0,
@@ -357,6 +376,7 @@ BASE_LIFE_MIN = {
     "aluminum":  150.0,
     "hrsa":       18.0,
     "titanium_legacy": 35.0,
+    "Abrasive Non-Ferrous": 55.0,  # Group fallback
 }
 
 SPINDLE_DRIVE_EFF = {
@@ -556,6 +576,7 @@ IPT_FRAC = {
     # Legacy group keys (fallback)
     "Aluminum": 0.012,
     "Non-Ferrous": 0.008,
+    "Abrasive Non-Ferrous": 0.0055,
     "Plastics": 0.006,
     "Steel": 0.0055,
     "Stainless": 0.0035,
@@ -570,6 +591,10 @@ IPT_FRAC = {
     "plastic_filled":    0.008,  # Fiber-filled: slightly lower than unfilled — abrasion limits aggressiveness
     "composite_tpc":     0.006,  # Continuous fiber laminates: lower chip load; delamination risk at high IPT
     "non_ferrous":      0.008,
+    # Abrasive non-ferrous — ~70-85% of free-brass chip load; abrasive + adhesive wear combo limits aggressiveness
+    "manganese_bronze": 0.0055,  # 0.55%×D — reduce vs free brass; micro-abrasives + BUE tendency
+    "silicon_bronze":   0.0060,  # 0.60%×D — slightly cleaner than Mn bronze
+    "copper_beryllium": 0.0050,  # 0.50%×D — very conservative; handle as hazardous material
     "steel_mild":       0.0065,   # Plain low-carbon (1018, A36) — between free and alloy chip loads
     "steel_free":       0.007,    # True free-machining (12L14, 1215) — sulfur breaks chips cleanly
     "steel_alloy":      0.0055,   # 4140 slotting: 0.55%×D confirmed
@@ -651,6 +676,7 @@ HEM_IPT_MULT = {
     "stainless_superduplex": 1.4,   # 2507 super duplex — very conservative
     "stainless_martensitic": 2.0,   # legacy fallback
     "stainless_austenitic":  2.0,   # legacy fallback
+    "Abrasive Non-Ferrous": 1.5,   # Group fallback; moderate HEM boost only
     "Cast Iron": 1.5,
     "cast_iron_gray": 1.5,
     "cast_iron_ductile": 1.5,
@@ -673,6 +699,9 @@ HEM_IPT_MULT = {
     "hiTemp_co":   2.0,
     "hardened_lt55": 1.4,
     "hardened_gt55": 1.3,
+    "manganese_bronze": 1.5,   # Abrasive — moderate HEM boost only; chip thinning still applies but abrasion limits upside
+    "silicon_bronze":   1.6,
+    "copper_beryllium": 1.5,
     "armor_milspec": 2.0,  # HEM is the preferred strategy — constant engagement reduces shock and heat
     "armor_ar400":   2.0,  # HEM strongly recommended for all armor grades
     "armor_ar500":   2.0,
@@ -688,7 +717,8 @@ EDGE_RADIUS = {
     "Stainless": 0.00045,
     "Cast Iron": 0.0004,
     "Inconel": 0.0005,
-    "Titanium": 0.00045
+    "Titanium": 0.00045,
+    "Abrasive Non-Ferrous": 0.0004,  # Treat like cast iron — abrasive phases need modest hone for edge stability
 }
 
 
@@ -703,6 +733,9 @@ _ISO_KEY_TO_GROUP = {
     "plastic_filled":    "Plastics",
     "composite_tpc":     "Plastics",
     "non_ferrous": "Non-Ferrous",
+    "manganese_bronze":  "Abrasive Non-Ferrous",
+    "silicon_bronze":    "Abrasive Non-Ferrous",
+    "copper_beryllium":  "Abrasive Non-Ferrous",
     "steel_mild": "Steel",
     "steel_free": "Steel",
     "steel_alloy": "Steel",
@@ -1398,8 +1431,9 @@ DRILL_SFM = {
     "hardened_lt55": 50, "hardened_gt55": 30,
     "tool_steel_p20": 75, "tool_steel_a2": 60, "tool_steel_h13": 55,
     "tool_steel_s7": 60, "tool_steel_d2": 45, "cpm_10v": 30,
+    "manganese_bronze": 110, "silicon_bronze": 130, "copper_beryllium": 100,
     # Legacy group fallbacks
-    "Aluminum": 350, "Non-Ferrous": 250, "Steel": 100, "Stainless": 80,
+    "Aluminum": 350, "Non-Ferrous": 250, "Abrasive Non-Ferrous": 110, "Steel": 100, "Stainless": 80,
     "Cast Iron": 120, "Titanium": 50, "Inconel": 25, "Plastics": 150,
 }
 
@@ -1425,8 +1459,9 @@ DRILL_IPR_BASE = {
     "armor_milspec": 0.0018, "armor_ar400": 0.0015, "armor_ar500": 0.0012, "armor_ar600": 0.0008,
     "tool_steel_p20": 0.0035, "tool_steel_a2": 0.0028, "tool_steel_h13": 0.0025,
     "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022, "cpm_10v": 0.0018,
+    "manganese_bronze": 0.005, "silicon_bronze": 0.0055, "copper_beryllium": 0.0045,
     # Legacy group fallbacks
-    "Aluminum": 0.009, "Non-Ferrous": 0.007, "Steel": 0.004, "Stainless": 0.0042,
+    "Aluminum": 0.009, "Non-Ferrous": 0.007, "Abrasive Non-Ferrous": 0.005, "Steel": 0.004, "Stainless": 0.0042,
     "Cast Iron": 0.005, "Titanium": 0.003, "Inconel": 0.0015, "Plastics": 0.006,
 }
 
@@ -2418,6 +2453,9 @@ KEYSEAT_SFM = {
     "aluminum_wrought_hs": 500,   # 7075/2024 keyseat: stronger alloy, higher cutting forces
     "aluminum_cast":     400,     # Cast: more abrasive, lower full-slot SFM
     "non_ferrous":       400,
+    "manganese_bronze":  220,   # Abrasive non-ferrous — slotting SFM close to mild steel
+    "silicon_bronze":    250,
+    "copper_beryllium":  200,   # Most abrasive; also hazmat — conservative
     "plastic_unfilled":  350,   # Unfilled TPs: moderate keyseat SFM — heat is the constraint
     "plastic_filled":    275,   # Fiber-filled: lower to manage abrasion in full-slot
     "composite_tpc":     250,   # Continuous-fiber laminates: conservative; delamination risk
@@ -2490,6 +2528,9 @@ FEEDMILL_SFM = {
     "aluminum_wrought_hs":   750,   # 7075/2024: ~20% lower than 6061
     "aluminum_cast":         600,   # Cast: more abrasive
     "non_ferrous":            550,
+    "manganese_bronze":       350,   # Abrasive non-ferrous — feed mills still safer than slotting, but keep SFM down
+    "silicon_bronze":         400,
+    "copper_beryllium":       325,
     # Steel
     "Steel":                  450,
     "steel_mild":             500,

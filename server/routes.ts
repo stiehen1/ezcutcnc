@@ -903,6 +903,8 @@ export async function registerRoutes(
         // Material → ISO column map for diameter suggestions (filter out wrong-material tools)
         const MATERIAL_ISO: Record<string, string> = {
           aluminum_wrought: "iso_n", aluminum_wrought_hs: "iso_n", aluminum_cast: "iso_n", non_ferrous: "iso_n",
+          // Abrasive non-ferrous — micro-abrasive intermetallics; route to P-coat tools, not aluminum tooling
+          manganese_bronze: "iso_p", silicon_bronze: "iso_p", copper_beryllium: "iso_p",
           steel_alloy: "iso_p", steel_mild: "iso_p", steel_free: "iso_p",
           tool_steel_p20: "iso_p", tool_steel_a2: "iso_p", tool_steel_h13: "iso_p",
           tool_steel_s7: "iso_p", tool_steel_d2: "iso_p", cpm_10v: "iso_p",
