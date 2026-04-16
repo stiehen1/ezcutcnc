@@ -637,6 +637,82 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
   const [searching, setSearching] = React.useState(false);
   const [searchErr, setSearchErr] = React.useState<string | null>(null);
 
+  // ── Favorites ──────────────────────────────────────────────────────────
+  const [favEdps, setFavEdps] = React.useState<Set<string>>(new Set());
+  const [favPending, setFavPending] = React.useState<Set<string>>(new Set());
+  const [favGateEdp, setFavGateEdp] = React.useState<SkuRow | null>(null);
+  const [favGateInput, setFavGateInput] = React.useState(() => localStorage.getItem("er_email") || "");
+  const [favGateError, setFavGateError] = React.useState("");
+  const [favGateSaving, setFavGateSaving] = React.useState(false);
+
+  // Load existing favorites when auth is available
+  React.useEffect(() => {
+    const email = localStorage.getItem("tb_email");
+    const token = localStorage.getItem("tb_token");
+    if (!email || !token) return;
+    fetch(`/api/toolbox/favorites?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: { edp: string }[]) => setFavEdps(new Set(rows.map(r => r.edp))))
+      .catch(() => {});
+  }, []);
+
+  async function toggleFavorite(row: SkuRow) {
+    const email = localStorage.getItem("tb_email");
+    const token = localStorage.getItem("tb_token");
+    if (!email || !token) {
+      // Not authenticated — show email gate
+      setFavGateEdp(row);
+      return;
+    }
+    if (favPending.has(row.edp)) return;
+    setFavPending(p => new Set(p).add(row.edp));
+    try {
+      if (favEdps.has(row.edp)) {
+        await fetch("/api/toolbox/favorites", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, token, edp: row.edp }),
+        });
+        setFavEdps(p => { const s = new Set(p); s.delete(row.edp); return s; });
+      } else {
+        await fetch("/api/toolbox/favorites", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, token, edp: row.edp, sku_data: row }),
+        });
+        setFavEdps(p => new Set(p).add(row.edp));
+      }
+    } finally {
+      setFavPending(p => { const s = new Set(p); s.delete(row.edp); return s; });
+    }
+  }
+
+  async function favGateSignIn() {
+    const v = favGateInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setFavGateError("Enter a valid email address."); return; }
+    setFavGateSaving(true);
+    setFavGateError("");
+    try {
+      const r = await fetch("/api/toolbox/auto-auth", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: v }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setFavGateError(d.error || "Unable to sign in — contact sales@corecutterusa.com"); return; }
+      localStorage.setItem("tb_email", v);
+      localStorage.setItem("tb_token", d.token);
+      localStorage.setItem("er_email", v);
+      // Now save the pending favorite
+      if (favGateEdp) {
+        await fetch("/api/toolbox/favorites", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: v, token: d.token, edp: favGateEdp.edp, sku_data: favGateEdp }),
+        });
+        setFavEdps(p => new Set(p).add(favGateEdp.edp));
+      }
+      setFavGateEdp(null);
+    } catch { setFavGateError("Network error"); }
+    finally { setFavGateSaving(false); }
+  }
+
   // ── Email gate ─────────────────────────────────────────────────────────
   const [tfGateOpen, setTfGateOpen] = React.useState(false);
   const [tfGateStpUrl, setTfGateStpUrl] = React.useState("");
@@ -1568,6 +1644,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       <th className="text-center px-2 py-2 font-semibold">Tip Dia</th>
                       <th className={`text-center px-2 py-2 font-semibold ${selChamferLengths.length || reqChamferLength ? "text-amber-400" : ""}`}>Max CEL</th>
                     </>}
+                    <th className="px-2 py-2 text-center font-normal text-[10px] text-muted-foreground italic leading-tight">Favorite</th>
                     <th className="px-2 py-2 text-center font-normal text-[10px] text-muted-foreground italic leading-tight">3D Model</th>
                     <th className="px-2 py-2 text-center font-normal text-[10px] text-muted-foreground italic leading-tight">Insert into<br/>Speed &amp; Feed</th>
                   </tr>
@@ -1639,6 +1716,18 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       <td className="px-2 py-2 text-center">
                         <button
                           type="button"
+                          title={favEdps.has(row.edp) ? "Remove from favorites" : "Save to favorites"}
+                          disabled={favPending.has(row.edp)}
+                          onClick={() => toggleFavorite(row)}
+                          className="text-lg leading-none transition-colors disabled:opacity-40"
+                          style={{ color: favEdps.has(row.edp) ? "#f59e0b" : "#52525b" }}
+                        >
+                          {favEdps.has(row.edp) ? "★" : "☆"}
+                        </button>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          type="button"
                           onClick={() => tfRequireStp(stpUrl(row.edp))}
                           className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border border-emerald-600 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors whitespace-nowrap"
                           title={`Download ${row.edp} v1.step`}
@@ -1664,6 +1753,34 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
         </div>
       )}
     </div>
+    {/* Favorites auth gate modal */}
+    {favGateEdp && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setFavGateEdp(null)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">★ Save to Favorites</h2>
+          <p className="text-xs text-zinc-400 mb-1">Enter your email to save <span className="text-indigo-400 font-mono">{favGateEdp.edp}</span> to your Toolbox favorites.</p>
+          <p className="text-xs text-indigo-400 mb-3">✦ Favorites sync across all your devices.</p>
+          <input
+            type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
+            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
+            placeholder="your@email.com"
+            value={favGateInput}
+            onChange={e => { setFavGateInput(e.target.value); setFavGateError(""); }}
+            onKeyDown={e => { if (e.key === "Enter") favGateSignIn(); }}
+            autoFocus
+          />
+          {favGateError && <p className="text-xs text-red-400 mt-1">{favGateError}</p>}
+          <div className="flex gap-2 mt-3">
+            <button
+              className="flex-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50"
+              onClick={favGateSignIn} disabled={favGateSaving || !favGateInput}
+            >{favGateSaving ? "Saving…" : "Save Favorite"}</button>
+            <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setFavGateEdp(null)}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* STP Email Gate Modal */}
     {tfGateOpen && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTfGateOpen(false)}>

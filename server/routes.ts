@@ -215,6 +215,18 @@ export async function registerRoutes(
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // user_specials: repository of special/custom CC tools per user
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_specials (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        cc_number TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS user_specials_email_idx ON user_specials (email)`);
   } catch (err: any) {
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
@@ -3883,6 +3895,115 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const r = await pool.query(`UPDATE toolbox_items SET title = $1 WHERE id = $2 AND email = $3 RETURNING *`, [title.trim(), id, email.toLowerCase()]);
     if (!r.rows.length) return res.status(404).json({ error: "Not found" });
     res.json(r.rows[0]);
+  });
+
+  // ── Toolbox: toggle favorite (star) on a standard SKU ────────────────────
+  // POST /api/toolbox/favorites  { email, token, edp, sku_data }
+  //   → { ok, favorited: bool, id? }
+  // DELETE /api/toolbox/favorites  { email, token, edp }  → { ok }
+  // GET /api/toolbox/favorites?email=&token=  → [{ edp }]
+  app.get("/api/toolbox/favorites", async (req, res) => {
+    const { email, token } = req.query as { email: string; token: string };
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const rows = await pool.query(
+      `SELECT data->>'edp' AS edp, id FROM toolbox_items WHERE email = $1 AND type = 'favorite' ORDER BY created_at DESC`,
+      [email.toLowerCase()]
+    );
+    res.json(rows.rows);
+  });
+
+  app.post("/api/toolbox/favorites", async (req, res) => {
+    const { email, token, edp, sku_data } = req.body;
+    if (!email || !token || !edp) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    // Idempotent — only insert if not already favorited
+    const existing = await pool.query(
+      `SELECT id FROM toolbox_items WHERE email = $1 AND type = 'favorite' AND data->>'edp' = $2`,
+      [email.toLowerCase(), edp]
+    );
+    if (existing.rows.length > 0) {
+      return res.json({ ok: true, favorited: true, id: existing.rows[0].id });
+    }
+    const row = await pool.query(
+      `INSERT INTO toolbox_items (email, type, title, data) VALUES ($1, 'favorite', $2, $3) RETURNING id`,
+      [email.toLowerCase(), `Favorite — ${edp}`, JSON.stringify({ edp, ...sku_data })]
+    );
+    res.json({ ok: true, favorited: true, id: row.rows[0].id });
+  });
+
+  app.delete("/api/toolbox/favorites", async (req, res) => {
+    const { email, token, edp } = req.body;
+    if (!email || !token || !edp) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(
+      `DELETE FROM toolbox_items WHERE email = $1 AND type = 'favorite' AND data->>'edp' = $2`,
+      [email.toLowerCase(), edp]
+    );
+    res.json({ ok: true, favorited: false });
+  });
+
+  // ── User Specials: per-user repository of custom CC tools ─────────────────
+  // GET    /api/specials?email=&token=          → [{ id, cc_number, description, notes, created_at }]
+  // POST   /api/specials  { email, token, cc_number, description, notes }  → row
+  // DELETE /api/specials/:id  { email, token }  → { ok }
+  // PATCH  /api/specials/:id  { email, token, description?, notes? }  → row
+  app.get("/api/specials", async (req, res) => {
+    const { email, token } = req.query as { email: string; token: string };
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const rows = await pool.query(
+      `SELECT id, cc_number, description, notes, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
+      [email.toLowerCase()]
+    );
+    res.json(rows.rows);
+  });
+
+  app.post("/api/specials", async (req, res) => {
+    const { email, token, cc_number, description, notes } = req.body;
+    if (!email || !token || !cc_number?.trim()) return res.status(400).json({ error: "CC# is required" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const row = await pool.query(
+      `INSERT INTO user_specials (email, cc_number, description, notes) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [email.toLowerCase(), cc_number.trim().toUpperCase(), (description || "").trim(), (notes || "").trim()]
+    );
+    res.json(row.rows[0]);
+  });
+
+  app.delete("/api/specials/:id", async (req, res) => {
+    const { email, token } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(`DELETE FROM user_specials WHERE id = $1 AND email = $2`, [id, email.toLowerCase()]);
+    res.json({ ok: true });
+  });
+
+  app.patch("/api/specials/:id", async (req, res) => {
+    const { email, token, description, notes } = req.body;
+    const id = parseInt(req.params.id);
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const row = await pool.query(
+      `UPDATE user_specials SET description = COALESCE($1, description), notes = COALESCE($2, notes) WHERE id = $3 AND email = $4 RETURNING *`,
+      [description?.trim() ?? null, notes?.trim() ?? null, id, email.toLowerCase()]
+    );
+    if (!row.rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(row.rows[0]);
   });
 
   // ── Material match: Level 1 alias + Level 3 AI ───────────────────────────

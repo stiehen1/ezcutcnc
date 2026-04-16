@@ -10,15 +10,28 @@ type ToolboxItem = {
   created_at: string;
 };
 
+type SpecialItem = {
+  id: number;
+  cc_number: string;
+  description: string;
+  notes: string;
+  created_at: string;
+};
+
+type FavoriteItem = {
+  id: number;
+  edp: string;
+  data: any;
+};
+
 export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   const [, navigate] = useLocation();
   const [email, setEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [token, setToken] = React.useState(() => localStorage.getItem("tb_token") || "");
-  const [step, setStep] = React.useState<"email" | "code" | "items">(
+  const [step, setStep] = React.useState<"email" | "items">(
     localStorage.getItem("tb_email") && localStorage.getItem("tb_token") ? "items" : "email"
   );
-  const [inputEmail, setInputEmail] = React.useState("");
-  const [inputCode, setInputCode] = React.useState("");
+  const [inputEmail, setInputEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [items, setItems] = React.useState<ToolboxItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -29,41 +42,44 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   const [roiDraft, setRoiDraft] = React.useState<any>(null);
   const [roiExpanded, setRoiExpanded] = React.useState<number | null>(null);
 
+  // ── Favorites state ────────────────────────────────────────────────────
+  const [favorites, setFavorites] = React.useState<FavoriteItem[]>([]);
+  const [favSection, setFavSection] = React.useState(true);
+
+  // ── Specials state ─────────────────────────────────────────────────────
+  const [specials, setSpecials] = React.useState<SpecialItem[]>([]);
+  const [specialsSection, setSpecialsSection] = React.useState(true);
+  const [addingSpecial, setAddingSpecial] = React.useState(false);
+  const [spCcNumber, setSpCcNumber] = React.useState("");
+  const [spDescription, setSpDescription] = React.useState("");
+  const [spNotes, setSpNotes] = React.useState("");
+  const [spSaving, setSpSaving] = React.useState(false);
+  const [spError, setSpError] = React.useState("");
+  const [editingSpecialId, setEditingSpecialId] = React.useState<number | null>(null);
+  const [editSpDesc, setEditSpDesc] = React.useState("");
+  const [editSpNotes, setEditSpNotes] = React.useState("");
+
   // Load items on mount if already authed
   React.useEffect(() => {
     if (step === "items") loadItems();
   }, [step]);
 
-  async function sendCode() {
+  async function signIn() {
     setError("");
     setLoading(true);
     try {
-      const r = await fetch("/api/toolbox/send-code", {
+      const r = await fetch("/api/toolbox/auto-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: inputEmail }),
+        body: JSON.stringify({ email: inputEmail.trim().toLowerCase() }),
       });
       const d = await r.json();
-      if (!r.ok) { setError(d.error || "Failed to send code"); return; }
-      setStep("code");
-    } catch { setError("Network error"); }
-    finally { setLoading(false); }
-  }
-
-  async function verifyCode() {
-    setError("");
-    setLoading(true);
-    try {
-      const r = await fetch("/api/toolbox/verify-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: inputEmail, code: inputCode }),
-      });
-      const d = await r.json();
-      if (!r.ok) { setError(d.error || "Invalid code"); return; }
-      localStorage.setItem("tb_email", inputEmail.toLowerCase());
+      if (!r.ok) { setError(d.error || "Unable to sign in — contact sales@corecutterusa.com"); return; }
+      const e = inputEmail.trim().toLowerCase();
+      localStorage.setItem("tb_email", e);
       localStorage.setItem("tb_token", d.token);
-      setEmail(inputEmail.toLowerCase());
+      localStorage.setItem("er_email", e);
+      setEmail(e);
       setToken(d.token);
       setStep("items");
     } catch { setError("Network error"); }
@@ -76,10 +92,18 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     if (!e || !t) return;
     setLoading(true);
     try {
-      const r = await fetch(`/api/toolbox/items?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`);
-      if (r.status === 401) { signOut(); return; }
-      const d = await r.json();
-      setItems(d);
+      const [itemsRes, favsRes, specialsRes] = await Promise.all([
+        fetch(`/api/toolbox/items?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
+        fetch(`/api/toolbox/favorites?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
+        fetch(`/api/specials?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`),
+      ]);
+      if (itemsRes.status === 401) { signOut(); return; }
+      setItems(await itemsRes.json());
+      if (favsRes.ok) {
+        const favRows = await favsRes.json();
+        setFavorites(favRows.map((r: any) => ({ id: r.id, edp: r.edp, data: r.data })));
+      }
+      if (specialsRes.ok) setSpecials(await specialsRes.json());
       // Load completed ROIs from DB
       const userEmail = localStorage.getItem("er_email") || e;
       try {
@@ -93,6 +117,58 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
       }
     } catch { setError("Failed to load toolbox"); }
     finally { setLoading(false); }
+  }
+
+  async function removeFavorite(id: number, edp: string) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    await fetch("/api/toolbox/favorites", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t, edp }),
+    });
+    setFavorites(prev => prev.filter(f => f.id !== id));
+  }
+
+  async function addSpecial() {
+    if (!spCcNumber.trim()) { setSpError("CC# is required"); return; }
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    setSpSaving(true); setSpError("");
+    try {
+      const r = await fetch("/api/specials", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e, token: t, cc_number: spCcNumber, description: spDescription, notes: spNotes }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setSpError(d.error || "Failed to save"); return; }
+      setSpecials(prev => [d, ...prev]);
+      setSpCcNumber(""); setSpDescription(""); setSpNotes(""); setAddingSpecial(false);
+    } catch { setSpError("Network error"); }
+    finally { setSpSaving(false); }
+  }
+
+  async function deleteSpecial(id: number) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    await fetch(`/api/specials/${id}`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t }),
+    });
+    setSpecials(prev => prev.filter(s => s.id !== id));
+  }
+
+  async function saveSpecialEdit(id: number) {
+    const e = localStorage.getItem("tb_email");
+    const t = localStorage.getItem("tb_token");
+    const r = await fetch(`/api/specials/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t, description: editSpDesc, notes: editSpNotes }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setSpecials(prev => prev.map(s => s.id === id ? d : s));
+      setEditingSpecialId(null);
+    }
   }
 
   async function deleteItem(id: number) {
@@ -124,7 +200,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   function signOut() {
     localStorage.removeItem("tb_email");
     localStorage.removeItem("tb_token");
-    setEmail(""); setToken(""); setStep("email"); setItems([]);
+    setEmail(""); setToken(""); setStep("email"); setItems([]); setFavorites([]); setSpecials([]);
   }
 
   function formatDate(s: string) {
@@ -155,66 +231,31 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Email step */}
+        {/* Sign-in step */}
         {step === "email" && (
           <div className="flex flex-col items-center gap-6">
             <div className="text-center">
               <div className="text-4xl mb-3">🧰</div>
               <h2 className="text-xl font-bold mb-1">Access Your Toolbox</h2>
-              <p className="text-sm text-muted-foreground">Enter your email to save and retrieve your Speed &amp; Feed results.</p>
+              <p className="text-sm text-muted-foreground">Enter your email to access your saved setups, favorites, and special tools.</p>
             </div>
             <div className="w-full max-w-sm space-y-3">
               <input
-                type="email"
+                type="text" inputMode="email" autoCapitalize="none" autoCorrect="off"
                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
                 placeholder="your@email.com"
                 value={inputEmail}
                 onChange={e => setInputEmail(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") sendCode(); }}
+                onKeyDown={e => { if (e.key === "Enter") signIn(); }}
                 autoFocus
               />
               {error && <p className="text-xs text-red-400">{error}</p>}
               <button
                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50"
-                onClick={sendCode}
+                onClick={signIn}
                 disabled={loading || !inputEmail}
               >
-                {loading ? "Sending…" : "Send Verification Code"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Code step */}
-        {step === "code" && (
-          <div className="flex flex-col items-center gap-6">
-            <div className="text-center">
-              <div className="text-4xl mb-3">📬</div>
-              <h2 className="text-xl font-bold mb-1">Check Your Email</h2>
-              <p className="text-sm text-muted-foreground">We sent a 6-digit code to <span className="text-white">{inputEmail}</span></p>
-            </div>
-            <div className="w-full max-w-sm space-y-3">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-center tracking-widest text-lg focus:outline-none focus:border-indigo-500"
-                placeholder="000000"
-                value={inputCode}
-                onChange={e => setInputCode(e.target.value.replace(/\D/g, ""))}
-                onKeyDown={e => { if (e.key === "Enter") verifyCode(); }}
-                autoFocus
-              />
-              {error && <p className="text-xs text-red-400">{error}</p>}
-              <button
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50"
-                onClick={verifyCode}
-                disabled={loading || inputCode.length !== 6}
-              >
-                {loading ? "Verifying…" : "Open Toolbox"}
-              </button>
-              <button className="w-full text-xs text-muted-foreground hover:text-foreground" onClick={() => { setStep("email"); setError(""); setInputCode(""); }}>
-                ← Use a different email
+                {loading ? "Signing in…" : "Open Toolbox"}
               </button>
             </div>
           </div>
@@ -331,6 +372,183 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 )}
               </div>
             ))}
+
+            {/* ── Favorites Section ─────────────────────────────────── */}
+            {favorites.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <button
+                  className="flex items-center gap-2 w-full text-left"
+                  onClick={() => setFavSection(v => !v)}
+                >
+                  <span className="text-sm font-semibold text-amber-400">★ Favorited Tools</span>
+                  <span className="text-xs text-zinc-500">{favorites.length} tool{favorites.length !== 1 ? "s" : ""}</span>
+                  <span className="text-zinc-600 text-xs ml-auto">{favSection ? "▲" : "▼"}</span>
+                </button>
+                {favSection && favorites.map(fav => (
+                  <div key={fav.id} className="border border-amber-700/30 rounded-xl overflow-hidden bg-amber-950/10">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-amber-400 text-lg flex-shrink-0">★</span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-mono font-semibold text-indigo-400">{fav.edp}</div>
+                          <div className="text-[11px] text-zinc-400 truncate">
+                            {[fav.data?.series, fav.data?.description1, fav.data?.description2].filter(Boolean).join(" · ") || "—"}
+                          </div>
+                          {fav.data?.cutting_diameter_in != null && (
+                            <div className="text-[10px] text-zinc-500">
+                              Ø{Number(fav.data.cutting_diameter_in).toFixed(4)}"
+                              {fav.data?.flutes ? ` · ${fav.data.flutes}FL` : ""}
+                              {fav.data?.loc_in ? ` · LOC ${Number(fav.data.loc_in).toFixed(4)}"` : ""}
+                              {fav.data?.coating ? ` · ${fav.data.coating}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            localStorage.setItem("cc_restore_form", JSON.stringify({ inputs: { edp: fav.edp, ...fav.data } }));
+                            window.location.href = "/";
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-indigo-800/50 hover:bg-indigo-700/60 text-indigo-300 font-medium transition-colors"
+                        >Use Tool →</button>
+                        <button
+                          type="button"
+                          onClick={() => removeFavorite(fav.id, fav.edp)}
+                          className="text-[11px] px-2 py-1 rounded-md bg-red-900/40 hover:bg-red-800/60 text-red-400 font-medium transition-colors"
+                        >Remove</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── My Special Tools Section ──────────────────────────── */}
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <button
+                  className="flex items-center gap-2 flex-1 text-left"
+                  onClick={() => setSpecialsSection(v => !v)}
+                >
+                  <span className="text-sm font-semibold text-orange-300">🔩 My Special Tools</span>
+                  {specials.length > 0 && <span className="text-xs text-zinc-500">{specials.length} tool{specials.length !== 1 ? "s" : ""}</span>}
+                  <span className="text-zinc-600 text-xs ml-auto">{specialsSection ? "▲" : "▼"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAddingSpecial(v => !v); setSpError(""); }}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-orange-800/40 hover:bg-orange-700/50 text-orange-300 font-semibold border border-orange-700/40 transition-colors"
+                >+ Add</button>
+              </div>
+
+              {/* Add form */}
+              {addingSpecial && (
+                <div className="border border-orange-700/40 rounded-xl p-4 bg-orange-950/10 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-zinc-400 mb-1 block">CC# <span className="text-red-400">*</span></label>
+                      <input
+                        type="text" placeholder="e.g. CC-12345"
+                        value={spCcNumber} onChange={e => setSpCcNumber(e.target.value)}
+                        className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-400 mb-1 block">Description</label>
+                      <input
+                        type="text" placeholder="e.g. 3/8 5FL .750 LOC P-Max"
+                        value={spDescription} onChange={e => setSpDescription(e.target.value)}
+                        className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-400 mb-1 block">Notes (optional)</label>
+                    <input
+                      type="text" placeholder="e.g. For titanium bracket job, Job# 4412"
+                      value={spNotes} onChange={e => setSpNotes(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") addSpecial(); }}
+                      className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  {spError && <p className="text-xs text-red-400">{spError}</p>}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button" onClick={addSpecial} disabled={spSaving || !spCcNumber.trim()}
+                      className="flex-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-semibold"
+                    >{spSaving ? "Saving…" : "Save Special Tool"}</button>
+                    <button
+                      type="button" onClick={() => { setAddingSpecial(false); setSpCcNumber(""); setSpDescription(""); setSpNotes(""); setSpError(""); }}
+                      className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm"
+                    >Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {specialsSection && specials.length === 0 && !addingSpecial && (
+                <p className="text-xs text-zinc-600 pl-1">No special tools saved yet. Use "+ Add" to record a custom CC# tool.</p>
+              )}
+
+              {specialsSection && specials.map(sp => (
+                <div key={sp.id} className="border border-zinc-700/50 rounded-xl overflow-hidden">
+                  {editingSpecialId === sp.id ? (
+                    <div className="px-4 py-3 bg-zinc-900/80 space-y-2">
+                      <input
+                        type="text" placeholder="Description"
+                        value={editSpDesc} onChange={e => setEditSpDesc(e.target.value)}
+                        className="w-full bg-zinc-800 border border-orange-500 rounded px-2 py-1.5 text-sm text-white focus:outline-none"
+                        autoFocus
+                      />
+                      <input
+                        type="text" placeholder="Notes"
+                        value={editSpNotes} onChange={e => setEditSpNotes(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") saveSpecialEdit(sp.id); }}
+                        className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button className="text-xs text-orange-400 hover:text-orange-300 font-semibold px-2" onClick={() => saveSpecialEdit(sp.id)}>Save</button>
+                        <button className="text-xs text-zinc-500 hover:text-white px-2" onClick={() => setEditingSpecialId(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between px-4 py-3 hover:bg-zinc-900/40">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono font-bold text-orange-400">{sp.cc_number}</span>
+                          {sp.description && <span className="text-xs text-zinc-300 truncate">{sp.description}</span>}
+                        </div>
+                        {sp.notes && <div className="text-[11px] text-zinc-500 mt-0.5 truncate">{sp.notes}</div>}
+                        <div className="text-[10px] text-zinc-600 mt-0.5">{formatDate(sp.created_at)}</div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Try to load into calculator — set EDP to the CC number
+                            localStorage.setItem("cc_restore_form", JSON.stringify({ inputs: { edp: sp.cc_number } }));
+                            window.location.href = "/";
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-indigo-800/50 hover:bg-indigo-700/60 text-indigo-300 font-medium transition-colors"
+                        >Use in Calc →</button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingSpecialId(sp.id); setEditSpDesc(sp.description); setEditSpNotes(sp.notes); }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-zinc-700/50 hover:bg-zinc-600/60 text-zinc-300 font-medium transition-colors"
+                        >Edit</button>
+                        <button
+                          type="button"
+                          onClick={() => { if (confirm(`Delete ${sp.cc_number}?`)) deleteSpecial(sp.id); }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-red-900/40 hover:bg-red-800/60 text-red-400 font-medium transition-colors"
+                        >Delete</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
 
             {/* ROI Section */}
             {(roiDraft || roiItems.length > 0) && (
