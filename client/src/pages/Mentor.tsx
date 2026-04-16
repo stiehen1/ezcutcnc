@@ -2411,20 +2411,21 @@ export default function Mentor() {
     // In slot mode, pre-fill WOC=100% and DOC=med immediately on SKU select
     const _isSlotMode = (form.mode as string) === "slot";
     const _slotDia = Number(sku.cutting_diameter_in);
-    const _slotDocMed = sku.flutes === 5 ? 0.30 : 0.5;
     if (_isSlotMode) {
+      const _slotPresets = getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
+      const _slotDocLow = _slotPresets.doc.low;
       setWocText(_slotDia.toFixed(4));
       setWocPreset("med");
-      setDocText((_slotDocMed * _slotDia).toFixed(3));
-      setDocPreset("med");
+      setDocText((_slotDocLow * _slotDia).toFixed(3));
+      setDocPreset("low");
     }
     setForm((p) => ({
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: _slotDia,
-      // Slot mode: pre-fill WOC/DOC; otherwise leave blank for user to set.
+      // Slot mode: pre-fill WOC/DOC (low = conservative default); otherwise leave blank.
       woc_pct: _isSlotMode ? 100 : 0,
-      doc_xd: _isSlotMode ? _slotDocMed : 0,
+      doc_xd: _isSlotMode ? getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard").doc.low : 0,
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -4219,7 +4220,9 @@ ${stabSection}
                   const faceStepover = mode === "face" ? Math.max(0, (dia - 2 * cr) * 0.75) : null;
                   const faceWocPct   = faceStepover !== null && dia > 0 ? (faceStepover / dia) * 100 : wp.med;
 
-                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : "med";
+                  // Slot: default to low (conservative starting point — user adjusts up)
+                  // HEM/trochoidal: high (full LOC is the point). Everything else: med.
+                  const docLevel = (mode === "hem" || mode === "trochoidal") ? "high" : mode === "slot" ? "low" : "med";
                   const hasDia = form.tool_dia > 0;
                   setForm((p) => ({
                     ...p,
