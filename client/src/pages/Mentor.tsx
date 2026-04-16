@@ -5610,12 +5610,19 @@ ${stabSection}
                     onClick={() => {
                       setSelectedSpindle(key);
                       setForm(p => {
-                        // When switching to B-axis mill spindle, use its taper; switching back uses main taper
+                        // Taper: B-axis uses mill spindle taper, others keep current
                         const newTaper = key === "mill" && activeMachineData?.mill_taper
                           ? activeMachineData.mill_taper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
-                        return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual };
+                        // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
+                        const bAxisIncompat = ["sub_spindle", "tailstock_supported"] as string[];
+                        const aAxisIncompat = ["sub_spindle"] as string[];
+                        const newWH = key === "sub"  ? "sub_spindle" as typeof p.workholding
+                                    : key === "mill" && bAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
+                                    : key === "main" && aAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
+                                    : p.workholding;
+                        return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual, workholding: newWH };
                       });
                     }}
                     className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
@@ -6107,7 +6114,11 @@ ${stabSection}
                 form.machine_type === "lathe"
                   ? "Workholding affects live tool rigidity and access. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
                   : form.machine_type === "mill_turn"
-                  ? "Mill-turn workholding affects both A-axis turning rigidity and B-axis milling stability. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support → C-Axis / Sub-Spindle. Collet chuck is best for bar work and precision; soft jaws are the best general production choice. 6-jaw reduces distortion on thin-wall parts."
+                  ? (selectedSpindle === "sub"
+                    ? "C-axis / sub-spindle selected — part is transferred for back-side ops. Workholding is fixed to Sub-Spindle. Switch to A-axis or B-axis spindle to change workholding."
+                    : selectedSpindle === "mill"
+                    ? "B-axis milling spindle active. Tailstock and sub-spindle are hidden — both conflict with B-axis swing. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel."
+                    : "A-axis turning spindle active. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support. Collet chuck is best for bar work and precision; 6-jaw reduces distortion on thin-wall parts.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
@@ -6125,15 +6136,27 @@ ${stabSection}
                       { key: "sub_spindle",       label: "Sub-Spindle"     },
                     ] as const)
                   : form.machine_type === "mill_turn"
-                  ? ([
-                      { key: "collet_chuck",        label: "Collet Chuck"      },
-                      { key: "soft_jaws",           label: "Soft Jaws"         },
-                      { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"   },
-                      { key: "6_jaw_chuck",         label: "6-Jaw Chuck"       },
-                      { key: "expanding_mandrel",   label: "Expanding Mandrel" },
-                      { key: "tailstock_supported", label: "Tailstock Support" },
-                      { key: "sub_spindle",         label: "C-Axis / Sub-Spindle" },
-                    ] as const)
+                  ? (selectedSpindle === "sub"
+                    ? ([
+                        { key: "sub_spindle", label: "C-Axis / Sub-Spindle" },
+                      ] as const)
+                    : selectedSpindle === "mill"
+                    ? ([
+                        { key: "collet_chuck",      label: "Collet Chuck"      },
+                        { key: "soft_jaws",         label: "Soft Jaws"         },
+                        { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"   },
+                        { key: "6_jaw_chuck",       label: "6-Jaw Chuck"       },
+                        { key: "expanding_mandrel", label: "Expanding Mandrel" },
+                      ] as const)
+                    : /* main / A-axis */ ([
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "soft_jaws",           label: "Soft Jaws"            },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        { key: "tailstock_supported", label: "Tailstock Support"    },
+                      ] as const)
+                  )
                   : form.machine_type === "hmc"
                   ? ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
