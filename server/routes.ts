@@ -821,7 +821,18 @@ export async function registerRoutes(
     }
 
     try {
-      const raw = await runMentorBridge(parsed.data);
+      // Apply speeder transform before engine sees the payload
+      const enginePayload: any = { ...parsed.data };
+      if (enginePayload.speeder_enabled) {
+        const ratio      = Math.max(1, Number(enginePayload.speeder_ratio) || 1);
+        const speederMax = Math.max(0, Number(enginePayload.speeder_max_rpm) || 0);
+        enginePayload.max_rpm    = speederMax > 0
+          ? Math.min(Math.round(enginePayload.max_rpm * ratio), speederMax)
+          : Math.round(enginePayload.max_rpm * ratio);
+        enginePayload.machine_hp = enginePayload.machine_hp / ratio;
+      }
+
+      const raw = await runMentorBridge(enginePayload);
       // Attach HP-vs-machine metrics (customer-facing)
       const customer = ((raw as any).customer ??= {});
       const hpReq = Number(customer.hp_required ?? 0);
