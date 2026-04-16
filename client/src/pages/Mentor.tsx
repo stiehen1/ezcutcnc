@@ -3282,9 +3282,10 @@ ${stabSection}
     // ── TOOL ─────────────────────────────────
     lines.push("TOOL");
     lines.push(DIV);
+    const _edpNum = form.edp || pdfToolNumber || null;
+    if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
     lines.push(L("Brand",        "Core Cutter"));
     lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
-    if (form.edp)        lines.push(L("EDP",          skuDescription ? `${form.edp}  —  ${skuDescription}` : form.edp));
     if (form.tool_series) lines.push(L("Series",       form.tool_series));
     lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
     lines.push(L("Flutes",       String(form.flutes || "—")));
@@ -3300,6 +3301,33 @@ ${stabSection}
     lines.push(DIV);
     lines.push(L("Material",     matLabel));
     if (form.hardness_value > 0) lines.push(L("Hardness", `${form.hardness_value} ${form.hardness_scale.toUpperCase()}`));
+    lines.push("");
+
+    // ── MACHINE & SETUP ───────────────────────
+    lines.push("MACHINE & SETUP");
+    lines.push(DIV);
+    if (activeMachineName) lines.push(L("Machine",      activeMachineName));
+    if (form.machine_type) lines.push(L("Type",         fmtMachType(form.machine_type)));
+    if (form.spindle_taper) lines.push(L("Taper",       form.spindle_taper + (form.dual_contact ? " · Big-Plus Dual Contact" : "")));
+    if (form.machine_hp > 0) lines.push(L("Machine HP", `${form.machine_hp} HP`));
+    if (form.max_rpm > 0)   lines.push(L("Max RPM",     `${form.max_rpm.toLocaleString()} RPM`));
+    const whLabels: Record<string, string> = {
+      vise: "Vise", vise_soft_jaw: "Vise — Soft Jaws", vise_kurt: "Kurt Vise",
+      "3_jaw_chuck": "3-Jaw Chuck", "4_jaw_chuck": "4-Jaw Chuck", "6_jaw_chuck": "6-Jaw Chuck",
+      collet_chuck: "Collet Chuck", face_plate: "Face Plate",
+      trunnion_4th: "4th Axis Trunnion", fixture_plate: "Fixture Plate",
+      magnetic: "Magnetic Chuck", tombstone: "Tombstone",
+    };
+    if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
+    if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
+    const thLabels: Record<string, string> = {
+      er_collet: "ER Collet", hp_collet: "HP Collet", weldon: "Weldon / Set Screw",
+      milling_chuck: "Milling Chuck", hydraulic: "Hydraulic Chuck",
+      press_fit: "Press Fit", shrink_fit: "Shrink Fit", capto: "Capto / HSK",
+    };
+    if (form.toolholder) lines.push(L("Toolholder",   thLabels[form.toolholder] ?? form.toolholder.replace(/_/g, " ")));
+    if (form.stickout > 0) lines.push(L("Tool Stickout", `${form.stickout.toFixed(3)}"`));
+    if (form.coolant)   lines.push(L("Coolant",       form.coolant.replace(/_/g, " ")));
     lines.push("");
 
     if (drillResult) {
