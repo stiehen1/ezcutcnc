@@ -975,6 +975,7 @@ export default function Mentor() {
     live_rpm: number | null; live_hp: number | null;
     mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;  // B-axis / dedicated milling spindle
     drive: string;
+    brand: string | null;
   } | null>(null);
   const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub" | "mill">("main");
   const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
@@ -1055,7 +1056,7 @@ export default function Mentor() {
     // Normalize HSK variant suffixes: HSK-A63 → HSK63, HSK-A100 → HSK100, HSK-E32/T63/A50 → closest supported
     const _taperNorm = _taperRaw
       ? _taperRaw
-          .replace(/^HSK-[A-Z](\d+)$/i, (_, n) => `HSK${n}`)  // HSK-A63 → HSK63, HSK-A100 → HSK100
+          .replace(/^HSK-[A-Z](\d+)$/i, (_: string, n: string) => `HSK${n}`)  // HSK-A63 → HSK63, HSK-A100 → HSK100
           .replace(/^HSK-E32$/i, "HSK32")
           .replace(/^HSK-T63$/i, "HSK63")
           .replace(/^HSK-A50$/i, "HSK50")
@@ -1073,7 +1074,7 @@ export default function Mentor() {
     const _millTaperRaw = typeof m.mill_spindle_taper === "string" ? m.mill_spindle_taper.trim() : null;
     const _millTaperNorm = _millTaperRaw
       ? _millTaperRaw
-          .replace(/^HSK-[A-Z](\d+)$/i, (_, n) => `HSK${n}`)
+          .replace(/^HSK-[A-Z](\d+)$/i, (_: string, n: string) => `HSK${n}`)
           .replace(/^HSK-E32$/i, "HSK32")
           .replace(/^HSK-T63$/i, "HSK63")
           .replace(/^HSK-A50$/i, "HSK50")
@@ -1093,6 +1094,7 @@ export default function Mentor() {
       mill_hp: m.mill_spindle_hp ? Number(m.mill_spindle_hp) : null,
       mill_taper: millTaper,
       drive,
+      brand: typeof m.brand === "string" ? m.brand.trim() : null,
     };
     setActiveMachineData(_machData);
     // For mill_turn: default to B-axis milling spindle if present, else main
@@ -1562,7 +1564,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -3356,6 +3358,12 @@ ${stabSection}
       collet_chuck: "Collet Chuck", face_plate: "Face Plate",
       trunnion_4th: "4th Axis Trunnion", fixture_plate: "Fixture Plate",
       magnetic: "Magnetic Chuck", tombstone: "Tombstone",
+      expanding_mandrel: "Expanding Mandrel", sub_spindle: "C-Axis / Sub-Spindle",
+      tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
+      rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
+      "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
+      ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
+      zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
     };
     if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
     if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
@@ -5610,12 +5618,19 @@ ${stabSection}
                     onClick={() => {
                       setSelectedSpindle(key);
                       setForm(p => {
-                        // When switching to B-axis mill spindle, use its taper; switching back uses main taper
+                        // Taper: B-axis uses mill spindle taper, others keep current
                         const newTaper = key === "mill" && activeMachineData?.mill_taper
                           ? activeMachineData.mill_taper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
-                        return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual };
+                        // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
+                        const bAxisIncompat = ["sub_spindle", "tailstock_supported"] as string[];
+                        const aAxisIncompat = ["sub_spindle"] as string[];
+                        const newWH = key === "sub"  ? "sub_spindle" as typeof p.workholding
+                                    : key === "mill" && bAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
+                                    : key === "main" && aAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
+                                    : p.workholding;
+                        return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual, workholding: newWH };
                       });
                     }}
                     className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
@@ -6107,11 +6122,15 @@ ${stabSection}
                 form.machine_type === "lathe"
                   ? "Workholding affects live tool rigidity and access. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
                   : form.machine_type === "mill_turn"
-                  ? "Mill-turn workholding affects both turning rigidity and live/B-axis milling stability. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support → Sub-Spindle. Collet chuck is best for bar work and precision; soft jaws are the best general production choice. 6-jaw reduces distortion on thin-wall parts."
+                  ? (selectedSpindle === "sub"
+                    ? "C-axis / sub-spindle selected — part is transferred for back-side ops. Workholding is fixed to Sub-Spindle. Switch to A-axis or B-axis spindle to change workholding."
+                    : selectedSpindle === "mill"
+                    ? "B-axis milling spindle active — full milling workholding applies. Tailstock and sub-spindle hidden (conflict with B-axis swing). Most rigid to least rigid: Rigid Fixture → Dovetail → 5th-Axis Vise → Collet Chuck → Vise / Soft Jaws → Chuck options → Expanding Mandrel."
+                    : "A-axis turning spindle active. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support. Collet chuck is best for bar work and precision; 6-jaw reduces distortion on thin-wall parts.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
-                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Rigid Fixture → 5th-Axis Vise → Dovetail → Vise → Soft Jaws."
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Zero-Point / RockLock → Rigid Fixture → Pyramid Fixture → Dovetail → 5th-Axis Vise → Vise → Soft Jaws. Zero-point systems give rigid-fixture rigidity with sub-second changeover."
                   : /* vmc default */ "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for VMC: Rigid Fixture → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Toe Clamps → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
@@ -6122,18 +6141,43 @@ ${stabSection}
                       { key: "soft_jaws",         label: "Soft Jaws"        },
                       { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"  },
                       { key: "expanding_mandrel", label: "Expanding Mandrel"},
-                      { key: "sub_spindle",       label: "Sub-Spindle"      },
+                      { key: "sub_spindle",       label: "Sub-Spindle"     },
                     ] as const)
                   : form.machine_type === "mill_turn"
-                  ? ([
-                      { key: "collet_chuck",        label: "Collet Chuck"      },
-                      { key: "soft_jaws",           label: "Soft Jaws"         },
-                      { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"   },
-                      { key: "6_jaw_chuck",         label: "6-Jaw Chuck"       },
-                      { key: "expanding_mandrel",   label: "Expanding Mandrel" },
-                      { key: "tailstock_supported", label: "Tailstock Support" },
-                      { key: "sub_spindle",         label: "Sub-Spindle"       },
-                    ] as const)
+                  ? (selectedSpindle === "sub"
+                    ? ([
+                        { key: "sub_spindle", label: "C-Axis / Sub-Spindle" },
+                      ] as const)
+                    : selectedSpindle === "mill"
+                    ? ([
+                        { key: "collet_chuck",      label: "Collet Chuck"      },
+                        { key: "soft_jaws",         label: "Soft Jaws"         },
+                        { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"   },
+                        { key: "6_jaw_chuck",       label: "6-Jaw Chuck"       },
+                        { key: "expanding_mandrel", label: "Expanding Mandrel" },
+                        { key: "rigid_fixture",     label: "Rigid Fixture"     },
+                        { key: "dovetail",          label: "Dovetail"          },
+                        { key: "5th_axis_vise",     label: "5th-Axis Vise"     },
+                        { key: "vise",              label: "Vise"              },
+                        { key: "tombstone",         label: "Tombstone"         },
+                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                          { key: "ijaw" as const,      label: "iJAW"       },
+                          { key: "autochuck" as const, label: "autoCHUCK"  },
+                        ] : []),
+                      ] as const)
+                    : /* main / A-axis */ ([
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "soft_jaws",           label: "Soft Jaws"            },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        { key: "tailstock_supported", label: "Tailstock Support"    },
+                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                          { key: "ijaw" as const,      label: "iJAW"       },
+                          { key: "autochuck" as const, label: "autoCHUCK"  },
+                        ] : []),
+                      ] as const)
+                  )
                   : form.machine_type === "hmc"
                   ? ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
@@ -6147,11 +6191,13 @@ ${stabSection}
                     ] as const)
                   : form.machine_type === "5axis"
                   ? ([
-                      { key: "rigid_fixture", label: "Rigid Fixture"  },
-                      { key: "5th_axis_vise", label: "5th-Axis Vise"  },
-                      { key: "dovetail",      label: "Dovetail"       },
-                      { key: "vise",          label: "Vise"           },
-                      { key: "soft_jaws",     label: "Soft Jaws"      },
+                      { key: "zero_point",    label: "Zero-Point / RockLock" },
+                      { key: "rigid_fixture", label: "Rigid Fixture"         },
+                      { key: "pyramid",       label: "Pyramid Fixture"       },
+                      { key: "dovetail",      label: "Dovetail"              },
+                      { key: "5th_axis_vise", label: "5th-Axis Vise"         },
+                      { key: "vise",          label: "Vise"                  },
+                      { key: "soft_jaws",     label: "Soft Jaws"             },
                     ] as const)
                   : /* vmc default */ ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
@@ -6176,12 +6222,16 @@ ${stabSection}
                     "4_jaw_chuck":   "4-jaw independent chuck — each jaw adjusts separately for precise centering. More rigid than 3-jaw; better for heavy interrupted cuts.",
                     collet_chuck:      "Collet chuck (5C, dead-length, etc.) — best live tool access and concentricity. Low obstruction means radial tools reach the part cleanly. Best for small-to-medium round parts and bar-fed work.",
                     expanding_mandrel:   "ID-gripping mandrel — part is held from the bore, leaving the full OD exposed. Excellent live tool access, no jaw interference. Best when OD must stay clean or jaw distortion is a concern.",
-                    sub_spindle:         "Sub-spindle or back-working chuck/collet — part transferred for back-side ops. Usually lower confidence than main spindle; back off slightly from main-spindle live-milling parameters.",
+                    sub_spindle:         "C-axis / sub-spindle — part transferred for back-side ops. Usually lower confidence than the A-axis main spindle; back off slightly from A-axis B-axis milling parameters.",
                     "6_jaw_chuck":       "6-jaw chuck — distributes clamping force across more contact points, significantly reducing distortion on thin-wall tubes, rings, and delicate turned parts. Good for finishing ops.",
                     tailstock_supported: "Tailstock or live center supporting the far end of a long part. Improves turning rigidity on slender shafts but can limit B-axis and live tool access at that end — plan toolpath sequence carefully.",
                     between_centers:   "Part supported at both ends between a drive center and a live tailstock center. Eliminates overhang — highest rigidity for turning long shafts.",
                     face_plate:        "Part bolted directly to a face plate mounted on the spindle. Used for large or irregular parts that won't fit in a chuck.",
                     "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts.",
+                    ijaw:        "DMG MORI iJAW — sensor-driven intelligent clamping with real-time clamping force monitoring. Detects workpiece slip and misloads before the cut starts. Best for high-value parts or unattended operation.",
+                    autochuck:   "DMG MORI autoCHUCK 2.0 — automated rapid jaw-change system that eliminates manual jaw swaps between jobs. Reduces setup time significantly in high-mix production. Standard chuck rigidity.",
+                    zero_point:  "Zero-point / pallet system (RockLock, EROWA, Schunk VERO-S) — founding plate with precision receiver bores allows sub-second fixture swap at micron-level repeatability. Rigidity equivalent to a rigid fixture. Best choice for 5-axis high-mix or lights-out production.",
+                    pyramid:     "Pyramid fixture — 3 or 4-sided multi-face mount that loads multiple small parts per cycle. Maximizes spindle utilization on small components. Rigidity depends on how securely parts are clamped to the pyramid faces.",
                   };
                   const tooltip = WH_TOOLTIPS[key];
                   const btn = (
