@@ -52,15 +52,23 @@ type AccessData = {
   blocked_users: BlockedUser[];
 };
 
+type TeamMember = {
+  email: string;
+  team_email: string;
+  created_at: string;
+};
+
 export default function Admin() {
   const [authed, setAuthed] = React.useState(() => sessionStorage.getItem("admin_token") === "corecutter1");
   const [password, setPassword] = React.useState("");
   const [authError, setAuthError] = React.useState("");
   const [authLoading, setAuthLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
-  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access">("registrations");
+  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access" | "teams">("registrations");
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [access, setAccess] = React.useState<AccessData | null>(null);
+  const [teams, setTeams] = React.useState<TeamMember[] | null>(null);
+  const [teamMsg, setTeamMsg] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
   // Access form state
@@ -72,7 +80,7 @@ export default function Admin() {
   const [accessMsg, setAccessMsg] = React.useState("");
 
   React.useEffect(() => {
-    if (authed) { loadStats(); loadAccess(); }
+    if (authed) { loadStats(); loadAccess(); loadTeams(); }
   }, [authed]);
 
   const token = () => sessionStorage.getItem("admin_token") || "";
@@ -113,6 +121,24 @@ export default function Admin() {
   async function loadAccess() {
     const r = await fetch(`/api/admin/access?token=${encodeURIComponent(token())}`);
     if (r.ok) setAccess(await r.json());
+  }
+
+  async function loadTeams() {
+    const r = await fetch(`/api/admin/teams?token=${encodeURIComponent(token())}`);
+    if (r.ok) setTeams(await r.json());
+  }
+
+  async function disconnectTeamMember(email: string) {
+    const r = await fetch(`/api/admin/teams/disconnect?token=${encodeURIComponent(token())}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (r.ok) {
+      setTeamMsg(`Disconnected ${email}`);
+      setTimeout(() => setTeamMsg(""), 3000);
+      loadTeams();
+    }
   }
 
   async function addEmail() {
@@ -274,7 +300,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 border border-border">
-          {(["registrations", "users", "activity", "usage", "access"] as const).map(t => (
+          {(["registrations", "users", "activity", "usage", "access", "teams"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -283,12 +309,13 @@ export default function Admin() {
                 backgroundColor: tab === t
                   ? t === "access" ? "#7c3aed"
                   : t === "registrations" ? "#059669"
+                  : t === "teams" ? "#0369a1"
                   : "#6366f1"
                   : "transparent",
                 color: tab === t ? "#fff" : "#a1a1aa",
               }}
             >
-              {t === "registrations" ? "Registrations" : t === "users" ? "Toolbox Users" : t === "activity" ? "Activity" : t === "usage" ? "Usage" : "Access"}
+              {t === "registrations" ? "Registrations" : t === "users" ? "Toolbox Users" : t === "activity" ? "Activity" : t === "usage" ? "Usage" : t === "teams" ? "Teams" : "Access"}
             </button>
           ))}
         </div>
@@ -606,8 +633,65 @@ export default function Admin() {
           </div>
         )}
 
+        {/* Teams tab */}
+        {tab === "teams" && (
+          <div className="space-y-4">
+            <div className="bg-zinc-900 border border-sky-700/30 rounded-xl px-4 py-3 text-xs text-zinc-400 space-y-1">
+              <p className="text-sky-300 font-semibold mb-1">Programming Team Connect</p>
+              <p>Users who have connected their account to a shared team email. They share saved machines and Toolbox setups with everyone on the same team.</p>
+              <p>Use <span className="text-white">Disconnect</span> to remove a member (e.g. if they've left the company). They can reconnect anytime.</p>
+            </div>
+            {teamMsg && (
+              <div className="bg-sky-900/30 border border-sky-700/40 text-sky-300 text-xs rounded-lg px-3 py-2">{teamMsg}</div>
+            )}
+            {(!teams || teams.length === 0) ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No team connections yet.</p>
+            ) : (
+              (() => {
+                // Group by team_email
+                const grouped: Record<string, TeamMember[]> = {};
+                for (const m of teams) {
+                  if (!grouped[m.team_email]) grouped[m.team_email] = [];
+                  grouped[m.team_email].push(m);
+                }
+                return Object.entries(grouped).map(([teamEmail, members]) => (
+                  <div key={teamEmail} className="border border-border rounded-xl overflow-hidden">
+                    <div className="bg-sky-950/40 border-b border-border px-4 py-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-sky-300">{teamEmail}</span>
+                      <span className="text-[10px] text-zinc-500">{members.length} member{members.length !== 1 ? "s" : ""}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-900 border-b border-border">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-muted-foreground font-medium">Member Email</th>
+                          <th className="text-left px-4 py-2 text-muted-foreground font-medium">Connected</th>
+                          <th className="px-4 py-2" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {members.map((m, i) => (
+                          <tr key={m.email} className={i % 2 === 0 ? "bg-zinc-950/30" : ""}>
+                            <td className="px-4 py-2.5 font-medium text-white">{m.email}</td>
+                            <td className="px-4 py-2.5 text-zinc-400">{fmt(m.created_at)}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              <button
+                                onClick={() => disconnectTeamMember(m.email)}
+                                className="text-[10px] bg-red-900/30 text-red-400 hover:bg-red-800/50 rounded px-2 py-1 font-semibold"
+                              >Disconnect</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ));
+              })()
+            )}
+          </div>
+        )}
+
         <div className="text-center pt-2">
-          <button onClick={() => { loadStats(); loadAccess(); }} className="text-xs text-indigo-400 hover:text-indigo-300">Refresh data</button>
+          <button onClick={() => { loadStats(); loadAccess(); loadTeams(); }} className="text-xs text-indigo-400 hover:text-indigo-300">Refresh data</button>
         </div>
       </div>
     </div>

@@ -458,6 +458,58 @@ export default function Mentor() {
   const [welcomeError, setWelcomeError] = React.useState("");
   const [welcomeValidating, setWelcomeValidating] = React.useState(false);
 
+  // ── Team connect ──────────────────────────────────────────────────────────
+  const [teamEmail, setTeamEmail] = React.useState<string | null>(null);
+  const [showTeamModal, setShowTeamModal] = React.useState(false);
+  const [teamInput, setTeamInput] = React.useState("");
+  const [teamError, setTeamError] = React.useState("");
+  const [teamBusy, setTeamBusy] = React.useState(false);
+
+  // Load team info on mount if logged in
+  React.useEffect(() => {
+    const e = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) return;
+    fetch(`/api/team/info?email=${encodeURIComponent(e)}&token=${encodeURIComponent(t)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.team_email) setTeamEmail(d.team_email); })
+      .catch(() => {});
+  }, [tbEmail, tbToken]);
+
+  async function connectTeam() {
+    if (!teamInput.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teamInput.trim())) {
+      setTeamError("Enter a valid team email address."); return;
+    }
+    const e = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) { setTeamError("You must be signed in to connect to a team."); return; }
+    setTeamBusy(true); setTeamError("");
+    try {
+      const r = await fetch("/api/team/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e, token: t, team_email: teamInput.trim().toLowerCase() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setTeamError(d.error || "Could not connect."); return; }
+      setTeamEmail(d.team_email);
+      setShowTeamModal(false); setTeamInput("");
+    } catch { setTeamError("Network error — please try again."); }
+    finally { setTeamBusy(false); }
+  }
+
+  async function leaveTeam() {
+    const e = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+    const t = localStorage.getItem("tb_token");
+    if (!e || !t) return;
+    await fetch("/api/team/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e, token: t }),
+    });
+    setTeamEmail(null);
+  }
+
   async function submitWelcome() {
     if (!welcomeFirstName.trim() || !welcomeLastName.trim()) { setWelcomeError("Please enter your first and last name."); return; }
     if (!welcomeEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(welcomeEmail.trim())) { setWelcomeError("Please enter a valid email address."); return; }
@@ -3871,10 +3923,18 @@ ${stabSection}
                 localStorage.removeItem("cc_last_name"); localStorage.removeItem("er_email");
                 localStorage.removeItem("tb_email"); localStorage.removeItem("tb_token");
                 localStorage.removeItem("welcome_seen");
-                setTbEmail(""); setTbToken(""); setErEmail("");
+                setTbEmail(""); setTbToken(""); setErEmail(""); setTeamEmail(null);
                 setShowWelcomeModal(true); setWelcomeFirstName(""); setWelcomeLastName(""); setWelcomeEmail(""); setWelcomeError("");
               }} className="ml-1.5 text-[10px] text-zinc-600 hover:text-zinc-400 underline underline-offset-2">not you?</button>
             </span>
+          )}
+          {localStorage.getItem("cc_first_name") && (
+            teamEmail
+              ? <span className="text-[10px] text-zinc-500">Team: <span className="text-zinc-300">{teamEmail}</span>
+                  <button type="button" onClick={leaveTeam} className="ml-1.5 text-[10px] text-zinc-600 hover:text-red-400 underline underline-offset-2">leave</button>
+                </span>
+              : <button type="button" onClick={() => { setShowTeamModal(true); setTeamInput(""); setTeamError(""); }}
+                  className="text-[10px] text-zinc-600 hover:text-zinc-400 underline underline-offset-2">connect to a team →</button>
           )}
           <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
         </div>
@@ -5626,6 +5686,24 @@ ${stabSection}
               )}
             </div>
           </div>
+
+          {/* Team connect promo — shown when logged in but not yet on a team */}
+          {localStorage.getItem("cc_first_name") && !teamEmail && (
+            <div className="mb-4 rounded-md bg-indigo-950/40 border border-indigo-800/30 px-3 py-2.5 flex items-start gap-2.5">
+              <div className="mt-0.5 text-indigo-400 text-base leading-none flex-shrink-0">🔗</div>
+              <div>
+                <div className="text-[11px] font-semibold text-indigo-200 mb-0.5">Share machines with your team</div>
+                <p className="text-[10px] text-indigo-400 leading-relaxed">
+                  Connect to a shared programming email so your whole team shares saved machines and setups across any device.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setShowTeamModal(true); setTeamInput(""); setTeamError(""); }}
+                  className="mt-1.5 text-[10px] text-indigo-300 hover:text-white underline underline-offset-2"
+                >Connect to a team →</button>
+              </div>
+            </div>
+          )}
 
           {/* Lathe sub-spindle toggle + selector */}
           {form.machine_type === "lathe" && (
@@ -12701,6 +12779,9 @@ ${stabSection}
             disabled={welcomeValidating}
             className="w-full mt-5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-50 py-2.5 text-sm font-semibold text-white"
           >{welcomeValidating ? "Verifying…" : "Get Started"}</button>
+          <div className="mt-4 rounded-md bg-indigo-950/50 border border-indigo-800/40 px-3 py-2.5 text-xs text-indigo-300 text-center">
+            <span className="font-semibold text-indigo-200">Programming team?</span> After signing in, connect to a shared team email so everyone sees the same machines and saved setups.
+          </div>
           <p className="text-[10px] text-zinc-600 text-center mt-3">Your info is used to personalize your experience and may be used by Core Cutter LLC to follow up on your machining needs.</p>
         </div>
       </div>
@@ -12889,6 +12970,53 @@ ${stabSection}
               <p className="text-xs text-indigo-400">✦ Use the same email on any device to access your saved machines everywhere.</p>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {/* ── Team Connect Modal ─────────────────────────────────────────────── */}
+    {showTeamModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowTeamModal(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold text-white mb-1">Connect to a Programming Team</h2>
+          <p className="text-xs text-zinc-400 mb-1">
+            Your programming manager registers a shared team email (e.g. <span className="text-zinc-300">programming@acmemachine.com</span>).
+            Once you connect to it, your saved machines and Toolbox will be shared across the whole team — on any device.
+          </p>
+          <div className="rounded-md bg-indigo-950/60 border border-indigo-700/40 px-3 py-2 text-xs text-indigo-300 mb-4 space-y-0.5">
+            <div className="font-semibold text-indigo-200 mb-1">How it works</div>
+            <div>1. Your manager registers with a shared team email on CoreCutCNC.</div>
+            <div>2. Each programmer connects to that team email here.</div>
+            <div>3. Everyone on the team sees the same machines and saved setups.</div>
+            <div>4. You can leave and reconnect anytime — your personal email stays safe.</div>
+          </div>
+          <label className="text-xs text-zinc-400 mb-1 block">Team Email Address</label>
+          <input
+            type="text"
+            inputMode="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="programming@yourshop.com"
+            value={teamInput}
+            onChange={e => { setTeamInput(e.target.value); setTeamError(""); }}
+            onKeyDown={e => { if (e.key === "Enter") connectTeam(); }}
+            className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 mb-2"
+            autoFocus
+          />
+          {teamError && <p className="text-xs text-red-400 mb-2">{teamError}</p>}
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => setShowTeamModal(false)}
+              className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-white"
+            >Cancel</button>
+            <button
+              type="button"
+              onClick={connectTeam}
+              disabled={teamBusy || !teamInput.trim()}
+              className="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 py-2 text-sm font-semibold text-white"
+            >{teamBusy ? "Connecting…" : "Connect to Team"}</button>
+          </div>
         </div>
       </div>
     )}

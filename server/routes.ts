@@ -3435,6 +3435,29 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ── Admin: team management ────────────────────────────────────────────────
+  app.get("/api/admin/teams", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    // Return all users who are connected to a team, grouped by team_email
+    const r = await pool.query(`
+      SELECT email, team_email, created_at
+      FROM toolbox_sessions
+      WHERE team_email IS NOT NULL AND team_email <> ''
+      ORDER BY team_email, created_at
+    `);
+    res.json(r.rows);
+  });
+
+  app.post("/api/admin/teams/disconnect", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    const { pool } = await import("./db");
+    await pool.query(`UPDATE toolbox_sessions SET team_email = NULL WHERE email = $1`, [email.toLowerCase()]);
+    res.json({ ok: true });
+  });
+
   // ── PDF print geometry extraction ─────────────────────────────────────────
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -3815,16 +3838,75 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json({ ok: true, token });
   });
 
+  // ── Team: connect ─────────────────────────────────────────────────────────
+  app.post("/api/team/connect", async (req, res) => {
+    const { email, token, team_email } = req.body;
+    if (!email || !token || !team_email) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    // Verify caller session
+    const auth = await pool.query(
+      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    // Verify team email exists as a registered session
+    const teamRow = await pool.query(
+      `SELECT email FROM toolbox_sessions WHERE email = $1`,
+      [team_email.toLowerCase().trim()]
+    );
+    if (!teamRow.rows.length) return res.status(404).json({ error: "Team email not found. That email must be registered in the app first." });
+    // Prevent connecting to your own email
+    if (team_email.toLowerCase().trim() === email.toLowerCase()) {
+      return res.status(400).json({ error: "You cannot connect to your own email as a team." });
+    }
+    await pool.query(
+      `UPDATE toolbox_sessions SET team_email = $1 WHERE email = $2`,
+      [team_email.toLowerCase().trim(), email.toLowerCase()]
+    );
+    res.json({ ok: true, team_email: team_email.toLowerCase().trim() });
+  });
+
+  // ── Team: leave ───────────────────────────────────────────────────────────
+  app.post("/api/team/leave", async (req, res) => {
+    const { email, token } = req.body;
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(
+      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(
+      `UPDATE toolbox_sessions SET team_email = NULL WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+    res.json({ ok: true });
+  });
+
+  // ── Team: get current team info ───────────────────────────────────────────
+  app.get("/api/team/info", async (req, res) => {
+    const { email, token } = req.query as { email: string; token: string };
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(
+      `SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      [email.toLowerCase(), token]
+    );
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    res.json({ team_email: auth.rows[0].team_email ?? null });
+  });
+
   // ── Toolbox: save item ────────────────────────────────────────────────────
   app.post("/api/toolbox/save", async (req, res) => {
     const { email, token, type, title, data, notes } = req.body;
     if (!email || !token || !title) return res.status(400).json({ error: "Missing fields" });
     const { pool } = await import("./db");
-    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    const auth = await pool.query(`SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
     const result = await pool.query(
       `INSERT INTO toolbox_items (email, type, title, data, notes) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [email.toLowerCase(), type || "result", title, data ? JSON.stringify(data) : null, notes || ""]
+      [dataEmail, type || "result", title, data ? JSON.stringify(data) : null, notes || ""]
     );
     res.json(result.rows[0]);
   });
@@ -3834,11 +3916,13 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const { email, token } = req.query as { email: string; token: string };
     if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
     const { pool } = await import("./db");
-    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    const auth = await pool.query(`SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    // Use team email if connected, otherwise own email
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
     const result = await pool.query(
       `SELECT * FROM toolbox_items WHERE email = $1 ORDER BY created_at DESC`,
-      [email.toLowerCase()]
+      [dataEmail]
     );
     res.json(result.rows);
   });
@@ -3949,17 +4033,18 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     if (!email || !token || !nickname) return res.status(400).json({ error: "Missing required fields" });
     const { pool } = await import("./db");
     const auth = await pool.query(
-      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      `SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`,
       [email.toLowerCase(), token]
     );
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
     const result = await pool.query(
       `INSERT INTO user_machines (email, nickname, shop_machine_no, serial_number, machine_id,
          brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact,
          coolant_types, tsc_psi, machine_type, control, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING id`,
-      [email.toLowerCase(), nickname, shop_machine_no || null, serial_number || null,
+      [dataEmail, nickname, shop_machine_no || null, serial_number || null,
        machine_id || null, brand || null, model || null, max_rpm || null,
        spindle_hp || null, taper || null, drive_type || null,
        dual_contact ?? false, coolant_types || null, tsc_psi || null,
@@ -3974,13 +4059,15 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
     const { pool } = await import("./db");
     const auth = await pool.query(
-      `SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`,
+      `SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`,
       [email.toLowerCase(), token]
     );
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    // Use team email if connected, otherwise own email
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
     const result = await pool.query(
       `SELECT * FROM user_machines WHERE email = $1 ORDER BY created_at DESC`,
-      [email.toLowerCase()]
+      [dataEmail]
     );
     res.json(result.rows);
   });
