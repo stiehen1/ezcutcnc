@@ -973,7 +973,7 @@ export default function Mentor() {
     main_rpm: number; main_hp: number;
     sub_rpm: number | null;
     live_rpm: number | null; live_hp: number | null;
-    mill_rpm: number | null; mill_hp: number | null;  // B-axis / dedicated milling spindle
+    mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;  // B-axis / dedicated milling spindle
     drive: string;
   } | null>(null);
   const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub" | "mill">("main");
@@ -1069,6 +1069,19 @@ export default function Mentor() {
     const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
     const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : null) ?? m.machine_type;
     const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
+    // Normalize mill spindle taper the same way as main taper
+    const _millTaperRaw = typeof m.mill_spindle_taper === "string" ? m.mill_spindle_taper.trim() : null;
+    const _millTaperNorm = _millTaperRaw
+      ? _millTaperRaw
+          .replace(/^HSK-[A-Z](\d+)$/i, (_, n) => `HSK${n}`)
+          .replace(/^HSK-E32$/i, "HSK32")
+          .replace(/^HSK-T63$/i, "HSK63")
+          .replace(/^HSK-A50$/i, "HSK50")
+          .replace(/^capto\s+/i, "CAPTO ")
+      : null;
+    const millTaper = (_millTaperNorm && validTapers.includes(_millTaperNorm)) ? _millTaperNorm
+                    : (_millTaperRaw && validTapers.includes(_millTaperRaw)) ? _millTaperRaw
+                    : null;
     // Store raw machine specs for spindle toggle
     const _machData = {
       main_rpm: m.max_rpm ?? 0,
@@ -1078,6 +1091,7 @@ export default function Mentor() {
       live_hp: m.live_tool_hp ? Number(m.live_tool_hp) : null,
       mill_rpm: m.mill_spindle_max_rpm ?? null,
       mill_hp: m.mill_spindle_hp ? Number(m.mill_spindle_hp) : null,
+      mill_taper: millTaper,
       drive,
     };
     setActiveMachineData(_machData);
@@ -1095,15 +1109,18 @@ export default function Mentor() {
     const effectiveHp    = isLatheType && _machData.live_hp   ? _machData.live_hp
                          : isMillTurnType && _machData.mill_hp ? _machData.mill_hp
                          : _machData.main_hp;
+    // For mill_turn with B-axis spindle, use mill taper; otherwise use main taper
+    const effectiveTaper = (isMillTurnType && _machData.mill_rpm && millTaper) ? millTaper : rawTaper;
     const rawLtDrive     = typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type.trim().toLowerCase() : null;
     const effectiveDrive = (isLatheType && rawLtDrive && ["direct","belt","gear"].includes(rawLtDrive) ? rawLtDrive : drive) as typeof drive;
+    const millDualContact = effectiveTaper?.startsWith("HSK") || effectiveTaper?.startsWith("CAPTO");
     setForm(p => ({
       ...p,
       max_rpm: effectiveRpm || p.max_rpm,
       machine_hp: effectiveHp || p.machine_hp,
-      spindle_taper: rawTaper ?? p.spindle_taper,
+      spindle_taper: (effectiveTaper ?? p.spindle_taper) as typeof p.spindle_taper,
       spindle_drive: effectiveDrive as any,
-      dual_contact: dualContact,
+      dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
     }));
     setActiveMachineId(m.id ?? null);
@@ -5571,18 +5588,18 @@ ${stabSection}
           {/* Mill-Turn spindle selector — catalog machine OR manually entered sub RPM */}
           {form.machine_type === "mill_turn" && (activeMachineData?.sub_rpm || activeMachineData?.mill_rpm || manualSubRpm > 0) && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
-              <FieldLabel hint="Select which spindle this operation runs on. B-axis / milling spindle is the dedicated high-speed milling head — use this for all milling ops. Main spindle is the turning spindle (lower RPM, higher torque). Sub spindle for backwork.">Active Spindle</FieldLabel>
+              <FieldLabel hint="Select which spindle this operation runs on. B-axis / milling spindle is the dedicated high-speed milling head — use this for all milling ops. A-axis / main spindle is the turning spindle (lower RPM, higher torque). C-axis / sub spindle for backwork.">Active Spindle</FieldLabel>
               <div className="flex gap-2 flex-wrap">
                 {([
-                  { key: "main" as const, label: "Main Spindle", note: "Turning / heavy roughing",
+                  { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
                     rpm: activeMachineData?.main_rpm ?? form.max_rpm,
                     hp:  activeMachineData?.main_hp  ?? form.machine_hp,
                     show: true },
-                  { key: "mill" as const, label: "Mill Spindle", note: "B-axis · high-speed milling",
+                  { key: "mill" as const, label: "B-Axis Spindle", note: "High-speed milling head",
                     rpm: activeMachineData?.mill_rpm ?? 0,
                     hp:  activeMachineData?.mill_hp  ?? form.machine_hp,
                     show: !!(activeMachineData?.mill_rpm) },
-                  { key: "sub"  as const, label: "Sub Spindle",  note: "Backwork / finishing",
+                  { key: "sub"  as const, label: "C-Axis Spindle", note: "Sub spindle / backwork",
                     rpm: activeMachineData?.sub_rpm  ?? manualSubRpm,
                     hp:  activeMachineData?.main_hp  ?? form.machine_hp,
                     show: !!(activeMachineData?.sub_rpm || manualSubRpm > 0) },
@@ -5592,7 +5609,14 @@ ${stabSection}
                     type="button"
                     onClick={() => {
                       setSelectedSpindle(key);
-                      setForm(p => ({ ...p, max_rpm: rpm, machine_hp: hp }));
+                      setForm(p => {
+                        // When switching to B-axis mill spindle, use its taper; switching back uses main taper
+                        const newTaper = key === "mill" && activeMachineData?.mill_taper
+                          ? activeMachineData.mill_taper as typeof p.spindle_taper
+                          : p.spindle_taper;
+                        const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
+                        return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual };
+                      });
                     }}
                     className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
                     style={{
@@ -5612,7 +5636,7 @@ ${stabSection}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool (driven turret) RPM limit. Main spindle turning RPM is not used for milling calcs — only the live tool station RPM matters here." : "Spindle speed ceiling from your machine spec. The engine will not exceed this value."}>{form.machine_type === "mill_turn" ? "Main Spindle RPM" : form.machine_type === "lathe" ? "Live Tool RPM" : "Max RPM"}</FieldLabel>
+              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool (driven turret) RPM limit. Main spindle turning RPM is not used for milling calcs — only the live tool station RPM matters here." : "Spindle speed ceiling from your machine spec. The engine will not exceed this value."}>{form.machine_type === "mill_turn" ? "A-Axis RPM" : form.machine_type === "lathe" ? "Live Tool RPM" : "Max RPM"}</FieldLabel>
               <Input
                 type="number"
                 step="10"
@@ -5628,7 +5652,7 @@ ${stabSection}
             </div>
             {form.machine_type === "lathe" && activeMachineData && (
               <div className="space-y-2">
-                <FieldLabel hint="Main turning spindle RPM — shown for reference only. Not used for milling calculations.">Main Spindle RPM</FieldLabel>
+                <FieldLabel hint="A-axis / main turning spindle RPM — shown for reference only. Not used for milling calculations.">A-Axis RPM</FieldLabel>
                 <div className="rounded px-3 py-2 text-sm text-zinc-400 bg-zinc-800/60 border border-zinc-700/40">
                   {activeMachineData.main_rpm.toLocaleString()} RPM <span className="text-xs">(turning only)</span>
                 </div>
@@ -5636,7 +5660,7 @@ ${stabSection}
             )}
             {form.machine_type === "mill_turn" && (
               <div className="space-y-2">
-                <FieldLabel hint="Sub spindles typically run faster than the main spindle — ideal for backworking and finishing ops. Enter 0 or leave blank if your machine has no sub spindle.">Sub Spindle RPM</FieldLabel>
+                <FieldLabel hint="C-axis / sub spindle RPM — typically runs faster than the A-axis main spindle, ideal for backworking and finishing ops. Enter 0 or leave blank if your machine has no sub spindle.">C-Axis RPM</FieldLabel>
                 <Input
                   type="number"
                   step="10"
