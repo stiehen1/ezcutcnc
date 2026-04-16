@@ -3560,7 +3560,7 @@ CRITICAL RULES — READ CAREFULLY:
    - ".1875±.001" → 0.1875
    The nominal value is always the FIRST number before any +, -, or ± symbol.
 
-2. tool_dia is ALWAYS the largest Ø dimension on the cutter body — it appears labeled on both the left and right ends of the tool profile. It is NEVER 0 and NEVER left blank. On keyseat cutters it is the disc/wheel diameter (the big cutting part).
+2. tool_dia is the CUTTING diameter — the Ø dimension at the tip/cutting end of the tool. On standard endmills the cutting dia equals the shank dia. On REDUCED-SHANK / MICRO tools (e.g. QTR3-style, stub cutters) the shank is LARGER than the cutting end — in this case tool_dia is the SMALL Ø at the tip (e.g. Ø0.0590), NOT the shank. The shank Ø (e.g. Ø0.250) goes in shank_dia. Rule: tool_dia = the Ø callout nearest the cutting tip/flutes. shank_dia = the Ø callout on the large body/shank end. If both ends are labeled with different diameters, the SMALLER one at the cutting tip is tool_dia. tool_dia is NEVER 0. On keyseat cutters it is the disc/wheel diameter (the big cutting part).
 
 3. For KEYSEAT cutters specifically:
    - loc = the disc WIDTH (thickness of the cutting wheel, e.g. ".1875±.001" → 0.1875)
@@ -3633,7 +3633,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "coolant_fed": <boolean, true if the print includes any note indicating coolant-through capability — look for text like "COOLANT FED", "COOLANT THROUGH", "COOLANT THRU", "THRU COOLANT", "TSC", "THROUGH SPINDLE COOLANT", or any note referencing internal coolant passages. false if no such note is found.>,
   "shank_type": <string or null — look in the title block, notes section, or shank detail for shank type callouts. Return "weldon" if "WELDON FLAT", "WELDON", or "W/FLAT" is noted. Return "safe_lock" if "SAFE LOCK", "SAFELOCK", "SAFE-LOCK", "HAIMER", or "HAIMER SAFE-LOCK" is noted. Return null if no special shank type is noted.>,
   "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>,
-  "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>
+  "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>,
+  "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". false otherwise.>,
+  "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". false otherwise.>
 }`;
 
   app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {

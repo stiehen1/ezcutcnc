@@ -1472,6 +1472,9 @@ export default function Mentor() {
         else if (tt === "chamfer_mill") {
           next.tool_type = "chamfer_mill";
         }
+        // Variable pitch/helix from print notes
+        if (e.variable_pitch === true) next.variable_pitch = true;
+        if (e.variable_helix === true) next.variable_helix = true;
         // Coolant-fed detection
         if (e.coolant_fed === true) {
           if (tt === "drill" || tt === "step_drill") next.drill_coolant_fed = true;
@@ -1525,6 +1528,9 @@ export default function Mentor() {
       if (e.tool_number) toastParts.push(`Tool ${e.tool_number}`);
       if (e._converted_from_mm) toastParts.push("Metric print — converted to inches");
       if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
+      if (e.variable_pitch && e.variable_helix) toastParts.push("Var Pitch + Var Helix detected");
+      else if (e.variable_pitch) toastParts.push("Variable Pitch detected");
+      else if (e.variable_helix) toastParts.push("Variable Helix detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Haimer Safe-Lock shank — shrink fit holder set");
       // Build list of which fields were populated
