@@ -77,8 +77,8 @@ _MICRO_ISO_BUCKET = {
     "Aluminum": "N", "Non-Ferrous": "N", "Plastics": "N",
     # P — steels
     "Steel": "P",
-    # K — cast iron
-    "Cast Iron": "K",
+    # K — cast iron / abrasive non-ferrous (same chip-load discipline)
+    "Cast Iron": "K", "Abrasive Non-Ferrous": "K",
     # M — stainless
     "Stainless": "M",
     # S — titanium / HRSA

@@ -4,6 +4,9 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "aluminum_wrought_hs": "High-strength 7075/2024 series — stronger and harder than 6061 (~150 HB vs ~95 HB), cutting forces are higher and tool wear is noticeably faster. Run ~20% lower SFM and slightly lighter chip load than 6061. Rigidity matters more: thin walls and long stickouts will chatter and deform. Sharp tools and good chip evacuation still mandatory; polished carbide or DLC, no TiAlN coatings.",
   "aluminum_cast":       "Silicon particles are the enemy — more Si means more abrasion and shorter tool life. A356/A357 (7% Si) are more forgiving; A380 (8.5% Si) and especially A390 (17% Si high-silicon) eat edges fast. Reduce SFM and chip load vs. wrought, monitor edge condition closely, and shorten change intervals in high-Si grades. PCD tooling cost-justified in high-volume production.",
   "non_ferrous":         "Copper and brass are soft but gummy — copper especially smears and welds to the edge at low chip load. High feed, sharp polished flutes, no dwells. Leaded brass (C360) is much friendlier than copper; bronze varies widely by alloy and lead content.",
+  "manganese_bronze":    "ISO N by composition but behaves like an abrasive alloy steel in the cut. High zinc (30–40%) plus manganese and iron additions create hard intermetallic phases that act like built-in grinding media — abrasive flank wear and edge micro-chipping are the dominant failure modes. Use coated steel-grade tooling (P-Max/T-Max), not aluminum tools. Reduce chip load 15–25% vs free brass; expect tool life closer to cast iron than copper alloy. Never run DLC or uncoated carbide.",
+  "silicon_bronze":      "C65500/C64200 — silicon particles add moderate abrasion vs free brass. Cleaner chip than manganese bronze but still wears edges faster than leaded brass or copper. Coated carbide (P-Max) preferred; uncoated or DLC not recommended.",
+  "copper_beryllium":    "C17200/C17300 beryllium copper — very high strength (~100 ksi) and extremely abrasive. Treat it like a hard abrasive alloy steel for tooling selection. IMPORTANT: beryllium dust is highly toxic and carcinogenic — use flood coolant (no mist/dry), proper respiratory protection, and local exhaust. Coated carbide (P-Max) required.",
   // P — Steel
   "steel_mild":          "Plain low-carbon and structural steels (A36, 1018, 1020, 10xx series). Very consistent — predictable chip load, good tool life. Flood or mist coolant; standard TiAlN coated carbide. A36 hot-rolled can vary heat to heat — check hardness on critical jobs.",
   "steel_free":          "Sulfur-additive free-machining grades (12L14, 1215, 1117). Easiest steel to machine — sulfur breaks chips cleanly at high SFM. Run fast, push the feed, expect excellent tool life. Note: 12L14 is not weldable.",
@@ -72,7 +75,11 @@ export const ISO_SUBCATEGORIES = [
   { iso: "N" as IsoCategory, key: "aluminum_wrought",      label: "Wrought Aluminum — General (6061, 6082, 5052, 6xxx/5xxx)", hardness: { value: 0,  scale: "hrb" as const } },
   { iso: "N" as IsoCategory, key: "aluminum_wrought_hs",   label: "Wrought Aluminum — High Strength (7075, 2024, 7xxx/2xxx)", hardness: { value: 0,  scale: "hrb" as const } },
   { iso: "N" as IsoCategory, key: "aluminum_cast",         label: "Cast Aluminum (A356, A380, A390, high-Si)", hardness: { value: 0,  scale: "hrb" as const } },
-  { iso: "N" as IsoCategory, key: "non_ferrous",           label: "Copper / Brass / Bronze",                  hardness: { value: 0,  scale: "hrb" as const } },
+  { iso: "N" as IsoCategory, key: "non_ferrous",           label: "Copper / Free-Cutting Brass / Leaded Bronze", hardness: { value: 0,  scale: "hrb" as const } },
+  // N — Abrasive Non-Ferrous (listed under P for tooling routing — ISO N by composition but needs steel-grade tools)
+  { iso: "P" as IsoCategory, key: "manganese_bronze",     label: "Manganese Bronze (C86300, C86500) — Abrasive", hardness: { value: 75, scale: "hrb" as const } },
+  { iso: "P" as IsoCategory, key: "silicon_bronze",       label: "Silicon Bronze (C65500, C64200) — Abrasive",   hardness: { value: 70, scale: "hrb" as const } },
+  { iso: "P" as IsoCategory, key: "copper_beryllium",     label: "Beryllium Copper (C17200, C17300) — Abrasive / Hazmat", hardness: { value: 36, scale: "hrc" as const } },
   // P — Steel
   { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
@@ -221,10 +228,18 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "lm4": "aluminum_cast",   "lm25": "aluminum_cast",  // UK BS designation
   "en ac-46000": "aluminum_cast", "en ac-42100": "aluminum_cast",  // EN casting grades
   "a380.0": "aluminum_cast", "a356.0": "aluminum_cast",
-  // ── Copper / Brass ────────────────────────────────────────────────────────
-  "copper": "non_ferrous", "brass": "non_ferrous", "bronze": "non_ferrous",
+  // ── Copper / Free-Cutting Brass / Leaded Bronze ──────────────────────────
+  "copper": "non_ferrous", "brass": "non_ferrous",
   "c360": "non_ferrous", "c260": "non_ferrous", "c932": "non_ferrous",
   "naval brass": "non_ferrous", "red brass": "non_ferrous",
+  // ── Abrasive Bronze / Cu Alloys (route to P-coat tooling) ─────────────────
+  "manganese bronze": "manganese_bronze", "c86300": "manganese_bronze",
+  "c86500": "manganese_bronze", "mang bronze": "manganese_bronze",
+  "silicon bronze": "silicon_bronze", "c65500": "silicon_bronze", "c64200": "silicon_bronze",
+  "beryllium copper": "copper_beryllium", "c17200": "copper_beryllium",
+  "c17300": "copper_beryllium", "be-cu": "copper_beryllium", "becu": "copper_beryllium",
+  // legacy catch-all "bronze" — stays non_ferrous (leaded tin bronze is free-cutting)
+  "bronze": "non_ferrous",
   // ── Mild / Low-Carbon Steel ───────────────────────────────────────────────
   "1005": "steel_mild", "1006": "steel_mild", "1008": "steel_mild",
   "1010": "steel_mild", "1012": "steel_mild", "1015": "steel_mild",
