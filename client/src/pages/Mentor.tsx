@@ -1494,13 +1494,15 @@ export default function Mentor() {
       setPdfFluteWash(_fwEst);
       setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
       // Set default stickout
-      // Reduced-shank: stickout = lbs + 0.33×shank_dia (collet grips on shank body, not cutting end)
+      // Reduced-shank (QTR3-style tapered neck): collet must grip on the .250 shank body,
+      // past the taper end. LBS = "clear length TSC" = taper-to-shank transition point.
+      // Add 0.75×shank_dia beyond LBS to ensure collet is fully on the parallel shank body.
       // Standard: stickout = LOC + flute_wash + 0.33×cutting_dia
       const _pdfLbs = e.lbs > 0 ? e.lbs : 0;
       const _pdfShankDia = e.shank_dia > 0 ? e.shank_dia : 0;
       if (_pdfLoc > 0 && _pdfDia > 0) {
         const _defaultSo = _isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0
-          ? Math.ceil((_pdfLbs + 0.33 * _pdfShankDia) * 200) / 200
+          ? Math.ceil((_pdfLbs + 0.75 * _pdfShankDia) * 200) / 200
           : Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
