@@ -385,6 +385,32 @@ SPINDLE_DRIVE_EFF = {
     "gear":   0.88,  # older machines, knee mills — gear mesh losses
 }
 
+# Live tool / turret connection profile
+# Applied when machine_type == "lathe" or "swiss" and live_tool_connection is set.
+# rigidity   — multiplies allowable deflection limit (>1.0 = stiffer = allow more tool flex)
+# torque_xfr — scales effective cutting force capacity (how well torque reaches the tool)
+# damping    — multiplies _dlim before workholding compliance divide (>1.0 = more stable)
+# rpm_cap    — hard cap on live tool RPM (0 = no cap beyond machine max)
+# hp_class   — informational label for advisory messages
+LIVE_TOOL_CONNECTION_PROFILE = {
+    # key:           (rigidity, torque_xfr, damping, rpm_cap,  hp_class)
+    "VDI30":         (0.70,     0.65,       0.75,    6000,    "light"),
+    "VDI40":         (0.75,     0.70,       0.80,    6000,    "standard"),
+    "VDI50":         (0.85,     0.80,       0.85,    6000,    "standard"),
+    "BMT45":         (0.80,     0.80,       0.85,    6000,    "standard"),
+    "BMT55":         (0.85,     0.85,       0.88,    6000,    "standard"),
+    "BMT65":         (0.90,     0.90,       0.90,    6000,    "standard"),
+    "BMT75":         (1.00,     1.00,       0.95,    6000,    "heavy"),
+    "HSK32":         (1.00,     0.90,       1.00,    20000,   "mill_spindle"),
+    "HSK50":         (1.10,     1.00,       1.05,    15000,   "mill_spindle"),
+    "HSK63":         (1.20,     1.10,       1.10,    20000,   "mill_spindle"),
+    "HSK100":        (1.40,     1.30,       1.20,    12000,   "mill_spindle"),
+    "CAPTO C6":      (1.25,     1.20,       1.10,    20000,   "mill_spindle"),
+    "CAPTO C8":      (1.35,     1.30,       1.20,    15000,   "mill_spindle"),
+    "GANG":          (0.60,     0.50,       0.70,    10000,   "micro"),
+    "proprietary":   (0.72,     0.65,       0.75,    6000,    "light"),  # Star / unknown swiss
+}
+
 TOOLHOLDER_RIGIDITY = {
     # new ISO key names
     "er_collet":       1.00,
@@ -3308,6 +3334,33 @@ def run(payload=None):
     _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
     _drive_eff = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     data.setdefault("machine_hp", float(payload.get("machine_hp", 10.0)) * _drive_eff)
+
+    # ── Live tool connection profile (lathe / swiss only) ─────────────────────
+    # When the machine is a lathe or swiss and a live_tool_connection is set,
+    # apply connection-specific rigidity, torque transfer, damping, and RPM cap.
+    # For VMC/HMC the profile is unused — those spindle connections are already
+    # captured by the toolholder rigidity hierarchy.
+    _machine_type_lt = str(data.get("machine_type", "vmc") or "vmc").lower()
+    _lt_conn = str(payload.get("live_tool_connection", "") or "").strip()
+    _lt_profile = LIVE_TOOL_CONNECTION_PROFILE.get(_lt_conn) if _lt_conn else None
+    if _lt_profile and _machine_type_lt in ("lathe", "swiss"):
+        _lt_rig, _lt_torque, _lt_damp, _lt_rpm_cap, _lt_class = _lt_profile
+        # Cap machine RPM to live tool RPM cap if set
+        if _lt_rpm_cap > 0:
+            data["max_rpm"] = min(data.get("max_rpm", 99999), _lt_rpm_cap)
+        # Cap machine HP to live_tool_hp from payload if provided
+        _lt_hp = float(payload.get("live_tool_hp", 0) or 0)
+        if _lt_hp > 0:
+            data["machine_hp"] = min(data["machine_hp"], _lt_hp)
+        # Store for use in stability calc
+        data["_lt_rigidity"] = _lt_rig
+        data["_lt_damping"]  = _lt_damp
+        data["_lt_class"]    = _lt_class
+    else:
+        data.setdefault("_lt_rigidity", 1.0)
+        data.setdefault("_lt_damping",  1.0)
+        data.setdefault("_lt_class",    None)
+
     data.setdefault("stickout", float(payload.get("stickout", 2.0)))
     data["part_stickout"] = float(payload.get("part_stickout", 0) or 0)
     data.setdefault("coolant", payload.get("coolant", "flood"))
@@ -5033,6 +5086,10 @@ def run(payload=None):
         _dlim_default = 0.001
     _dlim     = float(data.get("deflection_limit_override") or _dlim_default)
 
+    # Live tool connection damping — VDI/GANG systems are less rigid than direct spindles;
+    # BMT face-contact is stiffer. Scales _dlim before workholding divide.
+    _dlim *= float(data.get("_lt_damping", 1.0))
+
     # Variable Pitch / Variable Helix chatter resistance bonus.
     # These features disrupt the regenerative chatter feedback loop (Tobias-Tlusty mechanism),
     # raising the stable depth of cut. We model this as an increase in the effective
@@ -5077,6 +5134,10 @@ def run(payload=None):
         _wh_factor *= _part_so_mult
 
     _dlim /= _wh_factor
+
+    # Live tool connection rigidity — face-contact (BMT) systems are stiffer than
+    # bore-clamped (VDI) and gang tooling; multiplies the effective deflection limit.
+    _dlim *= float(data.get("_lt_rigidity", 1.0))
 
     _defl_pct = round(_defl / _dlim * 100, 1) if _dlim > 0 else 0.0
 

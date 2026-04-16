@@ -1067,6 +1067,11 @@ export default function Mentor() {
           .replace(/^HSK-E32$/i, "HSK32")
           .replace(/^HSK-T63$/i, "HSK63")
           .replace(/^HSK-A50$/i, "HSK50")
+          // A2-x is a lathe spindle nose standard, not a toolholder taper.
+          // Fall back to the live_tool_connection if available, otherwise BMT65 (A2-6/8/11) or BMT55 (A2-5).
+          .replace(/^A2-5$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT55")
+          .replace(/^A2-(\d+)$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT65")
+          .replace(/^A2-\d+\/A2-\d+$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT65")
       : null;
     const validTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","VDI30","VDI40","VDI50","BMT45","BMT55","BMT65","CAPTO C6","CAPTO C8"];
     const rawTaper = (_taperNorm && validTapers.includes(_taperNorm)) ? _taperNorm : _taperRaw;
@@ -1134,6 +1139,8 @@ export default function Mentor() {
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
       sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
+      live_tool_connection: (typeof m.live_tool_connection === "string" ? m.live_tool_connection : "") || "",
+      live_tool_hp: _machData.live_hp ?? 0,
     }));
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
@@ -1595,6 +1602,8 @@ export default function Mentor() {
     doc_xd: 0,
 
     machine_hp: 0,
+    live_tool_connection: "",
+    live_tool_hp: 0,
     spindle_drive: "belt" as "direct" | "belt" | "gear",
     stickout: 0,
     part_stickout: 0,

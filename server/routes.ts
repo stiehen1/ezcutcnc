@@ -3850,19 +3850,33 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       if (!q || q.length < 1) return res.json([]);
       const { pool } = await import("./db");
 
-      // Split query into tokens — all tokens must match somewhere in brand/model/control.
+      // Split query into tokens — all tokens must match somewhere in brand/model/control/machine_type.
       // Strip dashes and spaces for matching so "VF2" matches "VF-2", "haasVF2" matches "Haas VF-2".
+      // Also map user-friendly type labels to machine_type keys so "lathe", "VMC", "mill-turn" etc. work.
+      const MACHINE_TYPE_ALIASES: Record<string, string> = {
+        "lathe": "lathe", "lathes": "lathe",
+        "vmc": "vmc", "vertical": "vmc", "vertical mill": "vmc", "vertical machining": "vmc",
+        "hmc": "hmc", "horizontal": "hmc", "horizontal mill": "hmc", "horizontal machining": "hmc",
+        "mill-turn": "mill_turn", "millturn": "mill_turn", "mill turn": "mill_turn", "multitask": "mill_turn",
+        "swiss": "swiss", "swiss lathe": "swiss", "swiss turn": "swiss",
+        "5axis": "5axis", "5-axis": "5axis", "five axis": "5axis",
+        "edm": "edm", "wire edm": "edm",
+        "grinder": "grinder", "grinding": "grinder",
+      };
       const tokens = q.trim().split(/\s+/).filter(Boolean);
       const params: string[] = tokens.map(t => `%${t}%`);
-      const tokenConds = tokens.map((_, i) =>
-        `(brand ILIKE $${i+1}
+      // For each token, also check if it (or lowercased phrase) maps to a machine_type key
+      const tokenConds = tokens.map((t, i) => {
+        const typeKey = MACHINE_TYPE_ALIASES[t.toLowerCase()];
+        const typeClause = typeKey ? ` OR machine_type = '${typeKey}'` : "";
+        return `(brand ILIKE $${i+1}
           OR model ILIKE $${i+1}
           OR control ILIKE $${i+1}
           OR (brand || ' ' || model) ILIKE $${i+1}
           OR REPLACE(model, '-', '') ILIKE REPLACE($${i+1}, '-', '')
           OR REPLACE(brand || ' ' || model, '-', '') ILIKE REPLACE($${i+1}, '-', '')
-          OR REPLACE(REPLACE(brand || model, '-', ''), ' ', '') ILIKE REPLACE(REPLACE($${i+1}, '-', ''), ' ', ''))`
-      ).join(" AND ");
+          OR REPLACE(REPLACE(brand || model, '-', ''), ' ', '') ILIKE REPLACE(REPLACE($${i+1}, '-', ''), ' ', '')${typeClause})`;
+      }).join(" AND ");
 
       // Relevance: model exact match > model starts-with > brand+model starts-with > rest
       const lastTok = `%${tokens[tokens.length - 1]}%`;
@@ -3890,11 +3904,13 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             [email.toLowerCase(), token]
           );
           if (auth.rows.length) {
-            const userTokenConds = tokens.map((_, i) =>
-              `(brand ILIKE $${i+3} OR model ILIKE $${i+3} OR nickname ILIKE $${i+3} OR shop_machine_no ILIKE $${i+3} OR control ILIKE $${i+3}
-                OR REPLACE(model, '-', '') ILIKE REPLACE($${i+3}, '-', '')
-                OR REPLACE(REPLACE(brand || model, '-', ''), ' ', '') ILIKE REPLACE(REPLACE($${i+3}, '-', ''), ' ', ''))`
-            ).join(" AND ");
+            const userTokenConds = tokens.map((t, i) => {
+              const typeKey = MACHINE_TYPE_ALIASES[t.toLowerCase()];
+              const typeClause = typeKey ? ` OR um.machine_type = '${typeKey}'` : "";
+              return `(um.brand ILIKE $${i+3} OR um.model ILIKE $${i+3} OR um.nickname ILIKE $${i+3} OR um.shop_machine_no ILIKE $${i+3} OR um.control ILIKE $${i+3}
+                OR REPLACE(um.model, '-', '') ILIKE REPLACE($${i+3}, '-', '')
+                OR REPLACE(REPLACE(um.brand || um.model, '-', ''), ' ', '') ILIKE REPLACE(REPLACE($${i+3}, '-', ''), ' ', '')${typeClause})`;
+            }).join(" AND ");
             const userParams = [email.toLowerCase(), token, ...tokens.map(t => `%${t}%`)];
             const ur = await pool.query(
               `SELECT um.id, um.brand, um.model, um.max_rpm, um.spindle_hp, um.taper, um.drive_type, um.dual_contact, um.coolant_types, um.tsc_psi, um.machine_type, um.control, um.nickname, um.shop_machine_no,
