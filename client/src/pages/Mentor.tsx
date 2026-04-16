@@ -1569,9 +1569,10 @@ export default function Mentor() {
 
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
     machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
-    mill_spindle_rpm: 0,   // B-axis mill spindle RPM (mill_turn only)
-    mill_spindle_hp: 0,    // B-axis mill spindle HP (mill_turn only)
-    sub_spindle_rpm: 0,    // C-axis sub spindle RPM (mill_turn only)
+    mill_spindle_rpm: 0,        // B-axis mill spindle RPM (mill_turn only)
+    mill_spindle_hp: 0,         // B-axis mill spindle HP (mill_turn only)
+    sub_spindle_rpm: 0,         // C-axis sub spindle RPM (mill_turn only)
+    lathe_has_sub_spindle: false, // lathe sub-spindle toggle
     toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
     dual_contact: false,
     holder_gage_length: 0,
@@ -3375,6 +3376,10 @@ ${stabSection}
       tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
       rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
       "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
+      hydraulic_chuck: "Hydraulic Chuck", power_chuck: "Power Chuck",
+      form_jaws: "Form Jaws", step_jaws: "Step Jaws", pie_jaws: "Pie Jaws",
+      steady_rest: "Steady Rest", secondary_op_vise: "Secondary Op Vise",
+      modular_quickchange: "Modular Quick-Change",
       ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
       zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
     };
@@ -5606,6 +5611,58 @@ ${stabSection}
             </div>
           </div>
 
+          {/* Lathe sub-spindle toggle + selector */}
+          {form.machine_type === "lathe" && (
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <FieldLabel hint="Enable if your lathe has a sub-spindle (e.g. Mazak QTN, Nakamura-Tome, Doosan Lynx). Adds a Main / Sub selector so the engine knows which spindle is doing the work.">Sub-Spindle</FieldLabel>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(p => {
+                      const enabling = !p.lathe_has_sub_spindle;
+                      return { ...p, lathe_has_sub_spindle: enabling };
+                    });
+                    if (selectedSpindle === "sub") setSelectedSpindle("main");
+                  }}
+                  className={`text-xs px-2.5 py-1 rounded border font-semibold transition-all ${form.lathe_has_sub_spindle ? "bg-amber-500 border-amber-500 text-black" : "bg-transparent border-zinc-600 text-zinc-400 hover:border-amber-400 hover:text-amber-400"}`}
+                >
+                  {form.lathe_has_sub_spindle ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+              {form.lathe_has_sub_spindle && (
+                <div className="flex gap-2 flex-wrap">
+                  {([
+                    { key: "main" as const, label: "Main Spindle", note: "Primary chuck — turning, bar work, live tool milling" },
+                    { key: "sub"  as const, label: "Sub-Spindle",  note: "Pickoff / backside ops" },
+                  ]).map(({ key, label, note }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSpindle(key);
+                        setForm(p => {
+                          const subIncompat = ["tailstock_supported", "between_centers", "steady_rest"] as string[];
+                          const newWH = key === "sub" && subIncompat.includes(p.workholding) ? "soft_jaws" as typeof p.workholding : p.workholding;
+                          return { ...p, workholding: newWH };
+                        });
+                      }}
+                      className="flex flex-col items-start px-3 py-2 rounded border text-xs font-semibold transition-all"
+                      style={{
+                        backgroundColor: selectedSpindle === key ? "#f59e0b" : "transparent",
+                        borderColor: "#f59e0b",
+                        color: selectedSpindle === key ? "#000" : "#f59e0b",
+                      }}
+                    >
+                      <span>{label}</span>
+                      <span className="font-normal opacity-70">{note}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
           {form.machine_type === "mill_turn" && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
@@ -5637,12 +5694,14 @@ ${stabSection}
                           ? _millTaper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
-                        // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
-                        const bAxisIncompat = ["sub_spindle", "tailstock_supported"] as string[];
-                        const aAxisIncompat = ["sub_spindle"] as string[];
-                        const newWH = key === "sub"  ? "sub_spindle" as typeof p.workholding
+                        // Workholding: C-axis → collet_chuck (sub has its own chuck options now)
+                        // B-axis → clear anything that doesn't apply to part-in-chuck milling
+                        // A-axis → keep current unless it was a C-axis-only choice
+                        const bAxisIncompat = ["sub_spindle", "tailstock_supported", "between_centers", "steady_rest", "tombstone", "5th_axis_vise", "vise", "toe_clamps"] as string[];
+                        const cAxisIncompat = ["tailstock_supported", "between_centers", "steady_rest", "expanding_mandrel", "dovetail", "rigid_fixture", "modular_quickchange", "secondary_op_vise", "tombstone", "5th_axis_vise", "vise", "toe_clamps", "sub_spindle"] as string[];
+                        const newWH = key === "sub"  && cAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
                                     : key === "mill" && bAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
-                                    : key === "main" && aAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
+                                    : key === "main" && (["sub_spindle"] as string[]).includes(p.workholding) ? "collet_chuck" as typeof p.workholding
                                     : p.workholding;
                         return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual, workholding: newWH };
                       });
@@ -6133,14 +6192,16 @@ ${stabSection}
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
               <FieldLabel hint={
-                form.machine_type === "lathe"
-                  ? "Workholding affects live tool rigidity and access. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
+                (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
+                  ? (form.machine_type === "lathe"
+                    ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (great runout, watch torque capacity). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel (avoid heavy radial WOC). Add Tailstock or Steady Rest for long parts."
+                    : "C-axis / sub-spindle — part transferred for backside ops. Same tiered logic as main spindle: Soft/Form Jaws and 6-Jaw first; collet for small-diameter finish work. No tailstock or steady rest on sub-spindle.")
                   : form.machine_type === "mill_turn"
-                  ? (selectedSpindle === "sub"
-                    ? "C-axis / sub-spindle selected — part is transferred for back-side ops. Workholding is fixed to Sub-Spindle. Switch to A-axis or B-axis spindle to change workholding."
+                  ? (selectedSpindle === "sub" /* handled above — dead branch */
+                    ? ""
                     : selectedSpindle === "mill"
-                    ? "B-axis milling spindle active — full milling workholding applies. Tailstock and sub-spindle hidden (conflict with B-axis swing). Most rigid to least rigid: Rigid Fixture → Dovetail → 5th-Axis Vise → Collet Chuck → Vise / Soft Jaws → Chuck options → Expanding Mandrel."
-                    : "A-axis turning spindle active. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → 6-Jaw Chuck → Expanding Mandrel → Tailstock Support. Collet chuck is best for bar work and precision; 6-jaw reduces distortion on thin-wall parts.")
+                    ? "B-axis milling spindle active — part stays in the A-axis chuck while the B-axis tool mills at compound angles. B-axis introduces angled + multi-directional loads, so conforming workholding matters most. Best choices: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet is great for finishing but low torque capacity under heavy B-axis loads. Dovetail and rigid fixture for special-access or prismatic secondary ops only."
+                    : "A-axis main turning spindle. Best choices for off-axis / multi-face loads: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet and 3-jaw are good for concentric bar work but watch slip under angled cuts. Tailstock, between centers, and steady rest reduce deflection on long parts — critical for shaft work.")
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
                   : form.machine_type === "5axis"
@@ -6149,43 +6210,70 @@ ${stabSection}
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  form.machine_type === "lathe"
+                  (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? ([
-                      { key: "collet_chuck",      label: "Collet Chuck"     },
-                      { key: "soft_jaws",         label: "Soft Jaws"        },
-                      { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"  },
-                      { key: "expanding_mandrel", label: "Expanding Mandrel"},
-                      { key: "sub_spindle",       label: "Sub-Spindle"     },
+                      /* Tier 1 — best contact/conformity under C-axis milling side loads */
+                      { key: "soft_jaws",           label: "Soft Jaws"         },
+                      { key: "form_jaws",           label: "Form Jaws"         },
+                      { key: "6_jaw_chuck",         label: "6-Jaw Chuck"       },
+                      { key: "pie_jaws",            label: "Pie Jaws"          },
+                      /* Tier 2 — good, conditional */
+                      { key: "hydraulic_chuck",     label: "Hydraulic Chuck"   },
+                      { key: "power_chuck",         label: "Power Chuck"       },
+                      { key: "collet_chuck",        label: "Collet Chuck"      },
+                      /* Tier 3 — limited (engine penalizes slip/runout) */
+                      { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"   },
+                      { key: "step_jaws",           label: "Step Jaws"         },
+                      { key: "expanding_mandrel",   label: "Expanding Mandrel" },
+                      /* Support — lathe only (sub-spindle has no tailstock/steady rest) */
+                      ...(form.machine_type === "lathe" ? [
+                        { key: "tailstock_supported" as const, label: "Tailstock"       },
+                        { key: "between_centers"     as const, label: "Between Centers" },
+                        { key: "steady_rest"         as const, label: "Steady Rest"     },
+                      ] : []),
                     ] as const)
                   : form.machine_type === "mill_turn"
-                  ? (selectedSpindle === "sub"
+                  ? (selectedSpindle === "mill"
                     ? ([
-                        { key: "sub_spindle", label: "C-Axis / Sub-Spindle" },
-                      ] as const)
-                    : selectedSpindle === "mill"
-                    ? ([
-                        { key: "collet_chuck",      label: "Collet Chuck"      },
-                        { key: "soft_jaws",         label: "Soft Jaws"         },
-                        { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"   },
-                        { key: "6_jaw_chuck",       label: "6-Jaw Chuck"       },
-                        { key: "expanding_mandrel", label: "Expanding Mandrel" },
-                        { key: "rigid_fixture",     label: "Rigid Fixture"     },
-                        { key: "dovetail",          label: "Dovetail"          },
-                        { key: "5th_axis_vise",     label: "5th-Axis Vise"     },
-                        { key: "vise",              label: "Vise"              },
-                        { key: "tombstone",         label: "Tombstone"         },
+                        /* Tier 1 — B-axis primary (best resistance to angled multi-directional loads) */
+                        { key: "soft_jaws",           label: "Soft Jaws"            },
+                        { key: "form_jaws",           label: "Form Jaws"            },
+                        { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "pie_jaws",            label: "Pie Jaws"             },
+                        { key: "hydraulic_chuck",     label: "Hydraulic Chuck"      },
+                        { key: "power_chuck",         label: "Power Chuck"          },
+                        /* Tier 2 — conditional (good for finishing / light cuts; watch torque on collet) */
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "step_jaws",           label: "Step Jaws"            },
+                        { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        /* Tier 3 — special use (access / secondary-op fixture work) */
+                        { key: "dovetail",            label: "Dovetail"             },
+                        { key: "rigid_fixture",       label: "Rigid Fixture"        },
+                        { key: "modular_quickchange", label: "Modular Quick-Change" },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
                         ] : []),
                       ] as const)
                     : /* main / A-axis */ ([
-                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        /* Primary — best for off-axis / multi-face turning loads */
                         { key: "soft_jaws",           label: "Soft Jaws"            },
-                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "form_jaws",           label: "Form Jaws"            },
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
+                        { key: "pie_jaws",            label: "Pie Jaws"             },
+                        { key: "hydraulic_chuck",     label: "Hydraulic Chuck"      },
+                        { key: "power_chuck",         label: "Power Chuck"          },
+                        /* Conditional — good for concentric / light ops */
+                        { key: "collet_chuck",        label: "Collet Chuck"         },
+                        { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"      },
+                        { key: "step_jaws",           label: "Step Jaws"            },
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
+                        /* Full-access / support */
+                        { key: "dovetail",            label: "Dovetail"             },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
+                        { key: "between_centers",     label: "Between Centers"      },
+                        { key: "steady_rest",         label: "Steady Rest"          },
                         ...((activeMachineDataRef.current?.brand ?? activeMachineData?.brand)?.toLowerCase().includes("dmg") ? [
                           { key: "ijaw" as const,      label: "iJAW"       },
                           { key: "autochuck" as const, label: "autoCHUCK"  },
@@ -6252,7 +6340,7 @@ ${stabSection}
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setForm((p) => ({ ...p, workholding: key }))}
+                    onClick={() => setForm((p) => ({ ...p, workholding: key as typeof p.workholding }))}
                     className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
                     style={{
                       backgroundColor: form.workholding === key ? "#a855f7" : "transparent",
