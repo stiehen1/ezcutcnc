@@ -3938,7 +3938,7 @@ ${stabSection}
                   <button type="button" onClick={leaveTeam} className="ml-1.5 text-[10px] text-zinc-600 hover:text-red-400 underline underline-offset-2">leave</button>
                 </span>
               : <button type="button" onClick={() => { setShowTeamModal(true); setTeamInput(""); setTeamError(""); }}
-                  className="text-[10px] text-zinc-600 hover:text-zinc-400 underline underline-offset-2">connect to a team →</button>
+                  className="text-[10px] text-cyan-500 hover:text-cyan-300 underline underline-offset-2">connect to a team →</button>
           )}
           <span className="text-xs text-zinc-500 font-medium tracking-wide">Powered by <span className="text-zinc-300 font-semibold">Core Cutter LLC</span></span>
         </div>
