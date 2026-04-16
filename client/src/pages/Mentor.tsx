@@ -975,6 +975,7 @@ export default function Mentor() {
     live_rpm: number | null; live_hp: number | null;
     mill_rpm: number | null; mill_hp: number | null; mill_taper: string | null;  // B-axis / dedicated milling spindle
     drive: string;
+    brand: string | null;
   } | null>(null);
   const [selectedSpindle, setSelectedSpindle] = React.useState<"main" | "sub" | "mill">("main");
   const [manualSubRpm, setManualSubRpm] = React.useState<number>(0); // for manual mill-turn entry
@@ -1093,6 +1094,7 @@ export default function Mentor() {
       mill_hp: m.mill_spindle_hp ? Number(m.mill_spindle_hp) : null,
       mill_taper: millTaper,
       drive,
+      brand: typeof m.brand === "string" ? m.brand.trim() : null,
     };
     setActiveMachineData(_machData);
     // For mill_turn: default to B-axis milling spindle if present, else main
@@ -1562,7 +1564,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -3356,6 +3358,11 @@ ${stabSection}
       collet_chuck: "Collet Chuck", face_plate: "Face Plate",
       trunnion_4th: "4th Axis Trunnion", fixture_plate: "Fixture Plate",
       magnetic: "Magnetic Chuck", tombstone: "Tombstone",
+      expanding_mandrel: "Expanding Mandrel", sub_spindle: "C-Axis / Sub-Spindle",
+      tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
+      rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
+      "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
+      ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
     };
     if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
     if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
@@ -6152,6 +6159,10 @@ ${stabSection}
                         { key: "5th_axis_vise",     label: "5th-Axis Vise"     },
                         { key: "vise",              label: "Vise"              },
                         { key: "tombstone",         label: "Tombstone"         },
+                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                          { key: "ijaw" as const,      label: "iJAW"       },
+                          { key: "autochuck" as const, label: "autoCHUCK"  },
+                        ] : []),
                       ] as const)
                     : /* main / A-axis */ ([
                         { key: "collet_chuck",        label: "Collet Chuck"         },
@@ -6160,6 +6171,10 @@ ${stabSection}
                         { key: "6_jaw_chuck",         label: "6-Jaw Chuck"          },
                         { key: "expanding_mandrel",   label: "Expanding Mandrel"    },
                         { key: "tailstock_supported", label: "Tailstock Support"    },
+                        ...(activeMachineData?.brand?.toLowerCase().includes("dmg") ? [
+                          { key: "ijaw" as const,      label: "iJAW"       },
+                          { key: "autochuck" as const, label: "autoCHUCK"  },
+                        ] : []),
                       ] as const)
                   )
                   : form.machine_type === "hmc"
@@ -6210,6 +6225,8 @@ ${stabSection}
                     between_centers:   "Part supported at both ends between a drive center and a live tailstock center. Eliminates overhang — highest rigidity for turning long shafts.",
                     face_plate:        "Part bolted directly to a face plate mounted on the spindle. Used for large or irregular parts that won't fit in a chuck.",
                     "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts.",
+                    ijaw:        "DMG MORI iJAW — sensor-driven intelligent clamping with real-time clamping force monitoring. Detects workpiece slip and misloads before the cut starts. Best for high-value parts or unattended operation.",
+                    autochuck:   "DMG MORI autoCHUCK 2.0 — automated rapid jaw-change system that eliminates manual jaw swaps between jobs. Reduces setup time significantly in high-mix production. Standard chuck rigidity.",
                   };
                   const tooltip = WH_TOOLTIPS[key];
                   const btn = (
