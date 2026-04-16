@@ -1472,6 +1472,9 @@ export default function Mentor() {
         else if (tt === "chamfer_mill") {
           next.tool_type = "chamfer_mill";
         }
+        // Variable pitch/helix from print notes
+        if (e.variable_pitch === true) next.variable_pitch = true;
+        if (e.variable_helix === true) next.variable_helix = true;
         // Coolant-fed detection
         if (e.coolant_fed === true) {
           if (tt === "drill" || tt === "step_drill") next.drill_coolant_fed = true;
@@ -1525,6 +1528,9 @@ export default function Mentor() {
       if (e.tool_number) toastParts.push(`Tool ${e.tool_number}`);
       if (e._converted_from_mm) toastParts.push("Metric print — converted to inches");
       if (e.coolant_fed === true) toastParts.push("Coolant-fed detected");
+      if (e.variable_pitch && e.variable_helix) toastParts.push("Var Pitch + Var Helix detected");
+      else if (e.variable_pitch) toastParts.push("Variable Pitch detected");
+      else if (e.variable_helix) toastParts.push("Variable Helix detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Haimer Safe-Lock shank — shrink fit holder set");
       // Build list of which fields were populated
@@ -2408,6 +2414,16 @@ export default function Mentor() {
     setEdpNotFound(false);
   }
 
+  function clearPdf() {
+    setPdfExtracted(false);
+    setPdfToolNumber(null);
+    setPdfConvertedFromMm(false);
+    setPdfOal(0);
+    setPdfFluteWash(0);
+    setPdfFluteWashText("");
+    setDpSpecialTool(false);
+  }
+
   function resetAll() {
     setForm(INITIAL_FORM);
     setIsoCategory("P");
@@ -2438,6 +2454,7 @@ export default function Mentor() {
     setTmNeckText("");
     setTmGcodeExpanded(false);
     clearSku();
+    clearPdf();
     setMatSearchInput("");
     setMatMatchResult(null);
     setMatMatchError(null);
@@ -4774,7 +4791,7 @@ ${stabSection}
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
-                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
               <label className="flex flex-col items-center gap-1 cursor-pointer">
@@ -4917,7 +4934,7 @@ ${stabSection}
               {pdfExtracted ? (
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
-                  <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                  <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                 </div>
               ) : (
                 <label className="flex flex-col items-center gap-1 cursor-pointer">
@@ -6470,7 +6487,7 @@ ${stabSection}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
-                    <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                    <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
                     <FieldLabel hint="Flute wash is the distance from the end of the LOC to where the flutes fully disappear into the shank — this section must not slide into the toolholder. Not called out on CC prints; estimated at 20% of LOC. Measure from the physical tool and correct here if needed.">Flute Wash (in)</FieldLabel>
@@ -7137,7 +7154,7 @@ ${stabSection}
           {pdfExtracted && (
             <div className="rounded-lg border border-amber-500 bg-amber-950/20 p-2 mb-3 flex items-center justify-between">
               <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""} — please verify all dimensions match your print before running</span>
-              <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+              <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
             </div>
           )}
 
@@ -7186,7 +7203,7 @@ ${stabSection}
             {pdfExtracted ? (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
-                <button type="button" onClick={() => setPdfExtracted(false)} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
+                <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
               </div>
             ) : (
               <label className="flex flex-col items-center gap-1 cursor-pointer">
@@ -7925,7 +7942,7 @@ ${stabSection}
                     {pdfExtracted ? (
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
-                        <button type="button" onClick={() => { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "", woc_pct: 0, doc_xd: 0 })); }} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
+                        <button type="button" onClick={clearPdf} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
                       </div>
                     ) : (
                       <label className="flex flex-col items-center gap-1 cursor-pointer">
