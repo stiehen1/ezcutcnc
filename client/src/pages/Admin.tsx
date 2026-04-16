@@ -58,18 +58,37 @@ type TeamMember = {
   created_at: string;
 };
 
+type Announcement = {
+  id: number;
+  version: string;
+  headline: string;
+  subheadline: string;
+  bullets: string[];
+  active: boolean;
+  published_at: string | null;
+  created_at: string;
+};
+
 export default function Admin() {
   const [authed, setAuthed] = React.useState(() => sessionStorage.getItem("admin_token") === "corecutter1");
   const [password, setPassword] = React.useState("");
   const [authError, setAuthError] = React.useState("");
   const [authLoading, setAuthLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
-  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access" | "teams">("registrations");
+  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access" | "teams" | "announcements">("registrations");
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [access, setAccess] = React.useState<AccessData | null>(null);
   const [teams, setTeams] = React.useState<TeamMember[] | null>(null);
   const [teamMsg, setTeamMsg] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [announcements, setAnnouncements] = React.useState<Announcement[]>([]);
+  const [annHeadline, setAnnHeadline] = React.useState("");
+  const [annSubheadline, setAnnSubheadline] = React.useState("");
+  const [annVersion, setAnnVersion] = React.useState("");
+  const [annBullets, setAnnBullets] = React.useState<string[]>(["", "", ""]);
+  const [annSaving, setAnnSaving] = React.useState(false);
+  const [annMsg, setAnnMsg] = React.useState("");
+  const [previewMode, setPreviewMode] = React.useState(false);
 
   // Access form state
   const [newEmail, setNewEmail] = React.useState("");
@@ -80,7 +99,7 @@ export default function Admin() {
   const [accessMsg, setAccessMsg] = React.useState("");
 
   React.useEffect(() => {
-    if (authed) { loadStats(); loadAccess(); loadTeams(); }
+    if (authed) { loadStats(); loadAccess(); loadTeams(); loadAnnouncements(); }
   }, [authed]);
 
   const token = () => sessionStorage.getItem("admin_token") || "";
@@ -126,6 +145,31 @@ export default function Admin() {
   async function loadTeams() {
     const r = await fetch(`/api/admin/teams?token=${encodeURIComponent(token())}`);
     if (r.ok) setTeams(await r.json());
+  }
+
+  async function loadAnnouncements() {
+    const r = await fetch(`/api/admin/announcements?token=${encodeURIComponent(token())}`);
+    if (r.ok) setAnnouncements(await r.json());
+  }
+
+  async function publishAnnouncement() {
+    if (!annVersion.trim() || !annHeadline.trim()) { setAnnMsg("Version and headline are required."); return; }
+    const bullets = annBullets.filter(b => b.trim());
+    setAnnSaving(true);
+    const r = await fetch(`/api/admin/announcements?token=${encodeURIComponent(token())}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: annVersion.trim(), headline: annHeadline.trim(), subheadline: annSubheadline.trim(), bullets }),
+    });
+    setAnnSaving(false);
+    if (r.ok) {
+      setAnnMsg("Published! Users will see this on their next visit.");
+      setTimeout(() => setAnnMsg(""), 4000);
+      loadAnnouncements();
+    } else {
+      const d = await r.json();
+      setAnnMsg(d.error || "Failed to publish.");
+    }
   }
 
   async function disconnectTeamMember(email: string) {
@@ -300,7 +344,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 border border-border">
-          {(["registrations", "users", "activity", "usage", "access", "teams"] as const).map(t => (
+          {(["registrations", "users", "activity", "usage", "access", "teams", "announcements"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -310,12 +354,13 @@ export default function Admin() {
                   ? t === "access" ? "#7c3aed"
                   : t === "registrations" ? "#059669"
                   : t === "teams" ? "#0369a1"
+                  : t === "announcements" ? "#be185d"
                   : "#6366f1"
                   : "transparent",
                 color: tab === t ? "#fff" : "#a1a1aa",
               }}
             >
-              {t === "registrations" ? "Registrations" : t === "users" ? "Toolbox Users" : t === "activity" ? "Activity" : t === "usage" ? "Usage" : t === "teams" ? "Teams" : "Access"}
+              {t === "registrations" ? "Registrations" : t === "users" ? "Toolbox Users" : t === "activity" ? "Activity" : t === "usage" ? "Usage" : t === "teams" ? "Teams" : t === "announcements" ? "Announcements" : "Access"}
             </button>
           ))}
         </div>
@@ -690,8 +735,191 @@ export default function Admin() {
           </div>
         )}
 
+        {/* Announcements tab */}
+        {tab === "announcements" && (
+          <div className="space-y-8">
+            {/* Draft & Publish form */}
+            <div className="bg-zinc-900 border border-rose-700/30 rounded-xl px-5 py-5 space-y-4">
+              <div>
+                <h2 className="text-sm font-bold text-white mb-1">Publish a What's New Announcement</h2>
+                <p className="text-xs text-zinc-400">When published, every user sees this modal once on their next visit. Update the version string to re-show to all users.</p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Version (unique ID — change this each time)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 2026-04-16-team-connect"
+                    value={annVersion}
+                    onChange={e => setAnnVersion(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Headline</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Team Connect is here!"
+                    value={annHeadline}
+                    onChange={e => setAnnHeadline(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Subheadline</label>
+                  <input
+                    type="text"
+                    placeholder="Optional subtitle shown below headline"
+                    value={annSubheadline}
+                    onChange={e => setAnnSubheadline(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-2">Bullet points</label>
+                  <div className="space-y-2">
+                    {annBullets.map((b, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Feature bullet point…"
+                          value={b}
+                          onChange={e => {
+                            const next = [...annBullets];
+                            next[idx] = e.target.value;
+                            setAnnBullets(next);
+                          }}
+                          className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
+                        />
+                        {annBullets.length > 1 && (
+                          <button
+                            onClick={() => setAnnBullets(annBullets.filter((_, i) => i !== idx))}
+                            className="text-zinc-500 hover:text-red-400 text-sm font-bold transition-colors"
+                            title="Remove bullet"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setAnnBullets([...annBullets, ""])}
+                    className="mt-2 text-xs text-rose-400 hover:text-rose-300 font-semibold"
+                  >
+                    + Add bullet
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setPreviewMode(p => !p)}
+                  className="text-xs text-zinc-300 hover:text-white border border-zinc-600 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  {previewMode ? "Hide preview" : "Preview modal →"}
+                </button>
+                <button
+                  onClick={publishAnnouncement}
+                  disabled={annSaving}
+                  className="bg-rose-700 hover:bg-rose-600 text-white rounded-lg px-4 py-1.5 text-xs font-semibold disabled:opacity-40 transition-colors"
+                >
+                  {annSaving ? "Publishing…" : "Publish Announcement"}
+                </button>
+              </div>
+
+              {annMsg && (
+                <div className={`text-xs rounded-lg px-3 py-2 ${annMsg.startsWith("Published") ? "bg-green-900/40 border border-green-600/40 text-green-300" : "bg-red-900/40 border border-red-600/40 text-red-300"}`}>
+                  {annMsg}
+                </div>
+              )}
+
+              {/* Inline modal preview */}
+              {previewMode && (
+                <div className="border border-orange-500/30 rounded-xl bg-zinc-950 px-6 py-5 space-y-3">
+                  <div className="text-[10px] font-bold tracking-widest text-orange-500 uppercase">What's New</div>
+                  <div className="text-base font-bold text-white">{annHeadline || <span className="text-zinc-600 italic">Headline will appear here</span>}</div>
+                  {annSubheadline && <div className="text-xs text-zinc-400">{annSubheadline}</div>}
+                  {annBullets.some(b => b.trim()) && (
+                    <ul className="space-y-1.5 mt-2">
+                      {annBullets.filter(b => b.trim()).map((b, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-300">
+                          <span className="text-orange-500 mt-0.5">•</span>
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!annBullets.some(b => b.trim()) && <p className="text-xs text-zinc-600 italic">Bullet points will appear here</p>}
+                </div>
+              )}
+            </div>
+
+            {/* Announcement history */}
+            <div>
+              <h2 className="text-sm font-bold text-white mb-3">Announcement History</h2>
+              <div className="border border-border rounded-xl overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-zinc-900 border-b border-border">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Version</th>
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Headline</th>
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Published</th>
+                      <th className="px-4 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {announcements.length === 0 && (
+                      <tr><td colSpan={5} className="text-center text-muted-foreground px-4 py-8">No announcements yet.</td></tr>
+                    )}
+                    {announcements.map((a, i) => (
+                      <tr key={a.id} className={i % 2 === 0 ? "bg-zinc-950/30" : ""}>
+                        <td className="px-4 py-2.5 font-mono text-zinc-300">{a.version}</td>
+                        <td className="px-4 py-2.5 text-white">{a.headline}</td>
+                        <td className="px-4 py-2.5">
+                          {a.active
+                            ? <span className="bg-emerald-900/40 text-emerald-400 rounded px-1.5 py-0.5 text-[10px] font-semibold">Active</span>
+                            : <span className="bg-zinc-800 text-zinc-500 rounded px-1.5 py-0.5 text-[10px] font-semibold">Inactive</span>
+                          }
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-400">{fmt(a.published_at)}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex justify-end gap-2">
+                            {a.active && (
+                              <button
+                                onClick={async () => {
+                                  await fetch(`/api/admin/announcements/${a.id}/deactivate?token=${encodeURIComponent(token())}`, { method: "POST" });
+                                  loadAnnouncements();
+                                }}
+                                className="text-[10px] bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded px-2 py-1 font-semibold transition-colors"
+                              >
+                                Deactivate
+                              </button>
+                            )}
+                            <button
+                              onClick={async () => {
+                                await fetch(`/api/admin/announcements/${a.id}?token=${encodeURIComponent(token())}`, { method: "DELETE" });
+                                loadAnnouncements();
+                              }}
+                              className="text-[10px] bg-red-900/30 text-red-400 hover:bg-red-800/50 rounded px-2 py-1 font-semibold transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="text-center pt-2">
-          <button onClick={() => { loadStats(); loadAccess(); loadTeams(); }} className="text-xs text-indigo-400 hover:text-indigo-300">Refresh data</button>
+          <button onClick={() => { loadStats(); loadAccess(); loadTeams(); loadAnnouncements(); }} className="text-xs text-indigo-400 hover:text-indigo-300">Refresh data</button>
         </div>
       </div>
     </div>

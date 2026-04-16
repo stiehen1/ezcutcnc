@@ -435,6 +435,8 @@ export default function Mentor() {
   const [tbInputEmail, setTbInputEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [tbError, setTbError] = React.useState("");
   const [tbTitle, setTbTitle] = React.useState("");
+  const [tbJobNo, setTbJobNo] = React.useState("");
+  const [tbPartName, setTbPartName] = React.useState("");
   const [tbItemCount, setTbItemCount] = React.useState<number | null>(null);
 
   // ── Email results (lead capture) ──────────────────────────────────────────
@@ -1276,6 +1278,8 @@ export default function Mentor() {
           email: e, token: t,
           type: "result",
           title,
+          job_no: tbJobNo.trim(),
+          part_name: tbPartName.trim(),
           data: { inputs: form, customer: result?.customer, engineering: result?.engineering, tool_number: pdfToolNumber ?? undefined, operation, isoCategory, edpText, skuDescription, activeMachineId, activeMachineName },
         }),
       });
@@ -12611,11 +12615,27 @@ ${stabSection}
             </div>
             <input
               type="text"
-              placeholder={`Title (optional) — e.g. "Job 1042 Op-10 finish pass"`}
+              placeholder={`Title (optional) — e.g. "Op-10 finish pass"`}
               value={tbTitle}
               onChange={e => setTbTitle(e.target.value)}
               className="w-full rounded-lg border border-indigo-700/50 bg-zinc-800/60 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
             />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Job # (optional)"
+                value={tbJobNo}
+                onChange={e => setTbJobNo(e.target.value)}
+                className="flex-1 rounded-lg border border-indigo-700/50 bg-zinc-800/60 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+              />
+              <input
+                type="text"
+                placeholder="Part name (optional)"
+                value={tbPartName}
+                onChange={e => setTbPartName(e.target.value)}
+                className="flex-1 rounded-lg border border-indigo-700/50 bg-zinc-800/60 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
         </div>
       )}

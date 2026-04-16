@@ -215,6 +215,33 @@ export async function registerRoutes(
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE toolbox_items ADD COLUMN IF NOT EXISTS job_no TEXT DEFAULT ''`).catch(() => {});
+    await pool.query(`ALTER TABLE toolbox_items ADD COLUMN IF NOT EXISTS part_name TEXT DEFAULT ''`).catch(() => {});
+  } catch (err: any) {
+    console.warn("[Toolbox migration]", err?.message ?? err);
+  }
+
+  // announcements table
+  try {
+    const { pool } = await import("./db");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        version TEXT NOT NULL UNIQUE,
+        headline TEXT NOT NULL,
+        subheadline TEXT NOT NULL DEFAULT '',
+        bullets JSONB NOT NULL DEFAULT '[]',
+        active BOOLEAN NOT NULL DEFAULT FALSE,
+        published_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  } catch (err: any) {
+    console.warn("[Announcements migration]", err?.message ?? err);
+  }
+
+  try {
+    const { pool } = await import("./db");
     // user_specials: repository of special/custom CC tools per user
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_specials (
@@ -3458,6 +3485,45 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ── Admin: announcements ──────────────────────────────────────────────────
+  app.get("/api/admin/announcements", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    const r = await pool.query(`SELECT * FROM announcements ORDER BY created_at DESC`);
+    res.json(r.rows);
+  });
+
+  app.post("/api/admin/announcements", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { version, headline, subheadline, bullets } = req.body;
+    if (!version?.trim() || !headline?.trim()) return res.status(400).json({ error: "version and headline required" });
+    const { pool } = await import("./db");
+    // Deactivate all others first
+    await pool.query(`UPDATE announcements SET active = FALSE`);
+    const r = await pool.query(
+      `INSERT INTO announcements (version, headline, subheadline, bullets, active, published_at)
+       VALUES ($1, $2, $3, $4, TRUE, NOW())
+       ON CONFLICT (version) DO UPDATE SET headline=$2, subheadline=$3, bullets=$4, active=TRUE, published_at=NOW()
+       RETURNING *`,
+      [version.trim(), headline.trim(), subheadline?.trim() || "", JSON.stringify(bullets || [])]
+    );
+    res.json(r.rows[0]);
+  });
+
+  app.post("/api/admin/announcements/:id/deactivate", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    await pool.query(`UPDATE announcements SET active = FALSE WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/admin/announcements/:id", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { pool } = await import("./db");
+    await pool.query(`DELETE FROM announcements WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  });
+
   // ── PDF print geometry extraction ─────────────────────────────────────────
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -3838,6 +3904,17 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json({ ok: true, token });
   });
 
+  // ── Announcements: public ─────────────────────────────────────────────────
+  app.get("/api/announcement", async (req, res) => {
+    const { pool } = await import("./db");
+    const r = await pool.query(
+      `SELECT id, version, headline, subheadline, bullets, published_at
+       FROM announcements WHERE active = TRUE ORDER BY published_at DESC LIMIT 1`
+    );
+    if (!r.rows.length) return res.json(null);
+    res.json(r.rows[0]);
+  });
+
   // ── Team: connect ─────────────────────────────────────────────────────────
   app.post("/api/team/connect", async (req, res) => {
     const { email, token, team_email } = req.body;
@@ -3898,15 +3975,15 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
   // ── Toolbox: save item ────────────────────────────────────────────────────
   app.post("/api/toolbox/save", async (req, res) => {
-    const { email, token, type, title, data, notes } = req.body;
+    const { email, token, type, title, data, notes, job_no, part_name } = req.body;
     if (!email || !token || !title) return res.status(400).json({ error: "Missing fields" });
     const { pool } = await import("./db");
     const auth = await pool.query(`SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
     const result = await pool.query(
-      `INSERT INTO toolbox_items (email, type, title, data, notes) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [dataEmail, type || "result", title, data ? JSON.stringify(data) : null, notes || ""]
+      `INSERT INTO toolbox_items (email, type, title, data, notes, job_no, part_name) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [dataEmail, type || "result", title, data ? JSON.stringify(data) : null, notes || "", job_no || "", part_name || ""]
     );
     res.json(result.rows[0]);
   });
@@ -4127,13 +4204,21 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   });
 
   app.patch("/api/toolbox/items/:id", async (req, res) => {
-    const { email, token, title } = req.body;
+    const { email, token, title, job_no, part_name } = req.body;
     const id = parseInt(req.params.id);
-    if (!email || !token || !title?.trim()) return res.status(400).json({ error: "Missing fields" });
+    if (!email || !token) return res.status(400).json({ error: "Missing fields" });
     const { pool } = await import("./db");
-    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    const auth = await pool.query(`SELECT team_email FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
-    const r = await pool.query(`UPDATE toolbox_items SET title = $1 WHERE id = $2 AND email = $3 RETURNING *`, [title.trim(), id, email.toLowerCase()]);
+    const dataEmail = auth.rows[0].team_email ?? email.toLowerCase();
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (title?.trim()) { fields.push(`title = $${fields.length + 1}`); vals.push(title.trim()); }
+    if (job_no !== undefined) { fields.push(`job_no = $${fields.length + 1}`); vals.push(job_no || ""); }
+    if (part_name !== undefined) { fields.push(`part_name = $${fields.length + 1}`); vals.push(part_name || ""); }
+    if (!fields.length) return res.status(400).json({ error: "Nothing to update" });
+    vals.push(id, dataEmail);
+    const r = await pool.query(`UPDATE toolbox_items SET ${fields.join(", ")} WHERE id = $${vals.length - 1} AND email = $${vals.length} RETURNING *`, vals);
     if (!r.rows.length) return res.status(404).json({ error: "Not found" });
     res.json(r.rows[0]);
   });
