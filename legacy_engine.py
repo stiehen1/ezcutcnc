@@ -1,5 +1,6 @@
 import math
 from engine.physics import (
+    micro_tool_feed_limit,
     chip_thinning_factor,
     chip_thickness,
     effective_chip_thickness,
@@ -3558,6 +3559,7 @@ def run(payload=None):
     # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
     # Finish mode: chip thinning NOT applied — thinner chip is intentional for surface quality;
     # boosting feed to compensate defeats the purpose and degrades finish.
+    _base_ipt_before_ct = ipt  # preserve for micro-tool limiter
     if mode == "finish":
         chip_factor = 1.0
     elif mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
@@ -3570,6 +3572,42 @@ def run(payload=None):
     if data["mode"] in ("hem", "trochoidal"):
         _hem_ipt_mult = HEM_IPT_MULT.get(_mat_key, HEM_IPT_MULT.get(material_group, 2.0))
         ipt *= _hem_ipt_mult
+
+    # ── Micro-tool feed limiter (replaces crude IPM caps) ─────────────────────
+    # For D < 1/8" (and 1/8" finish/profile/slot), cap chip-thinning-adjusted
+    # feed using a multi-factor model: material × operation × rpm_ratio ×
+    # setup_quality × L:D × tool_series. Preserves chip load physics direction
+    # but prevents unrealistically high IPM that breaks tiny tools in practice.
+    _micro_dia = float(data.get("diameter", 0.0) or 0.0)
+    if _micro_dia < 0.1876:  # apply to ≤ 3/16" (band D + finish passes at 1/8")
+        _micro_feed_physics = rpm * flutes * ipt
+        _micro_stickout = float(data.get("stickout", 0.0) or 0.0)
+        _micro_ld = (_micro_stickout / _micro_dia) if _micro_dia > 0 else 0.0
+        _micro_series = str(data.get("tool_series", "") or "")
+        _micro_vp = bool(data.get("variable_pitch", False))
+        _micro_vh = bool(data.get("variable_helix", False))
+        _micro_holder = str(data.get("toolholder", "er_collet") or "er_collet")
+        _micro_feed_limited, _micro_reason = micro_tool_feed_limit(
+            feed_physics=_micro_feed_physics,
+            base_ipt=_base_ipt_before_ct,
+            chip_thinning_factor_raw=chip_factor * (_hem_ipt_mult if data["mode"] in ("hem", "trochoidal") else 1.0),
+            rpm_actual=rpm,
+            flutes=flutes,
+            diameter=_micro_dia,
+            material_group=material_group,
+            mode=mode,
+            rpm_target=target_rpm,
+            ld_ratio=_micro_ld,
+            toolholder=_micro_holder,
+            tool_series=_micro_series,
+            variable_pitch=_micro_vp,
+            variable_helix=_micro_vh,
+        )
+        if _micro_reason:
+            print(f"⚠ {_micro_reason}")
+            # Back-solve the ipt that produces _micro_feed_limited at this rpm/flutes
+            _micro_ipt_adj = _micro_feed_limited / max(1e-9, rpm * flutes)
+            ipt = _micro_ipt_adj
 
     doc = data["doc_xd"] * data["diameter"]
     woc = (data["woc_pct"] / 100) * data["diameter"]
@@ -4421,53 +4459,7 @@ def run(payload=None):
     diameter = float(data.get("diameter", 0.0) or 0.0)
     feed_ipm = state.get("feed_ipm", state.get("feed", state.get("feedrate", 0.0)))
 
-    # ── Micro-tool absolute feed cap ─────────────────────────────────────────
-    # Physics-based chip load is correct but produces unrealistically high IPM
-    # on tiny tools — the limiting factor shifts to machine vibration, part
-    # deflection, and chip packing, not chip load math.
-    # Cap table (validated against shop experience):
-    #   ≤ 1/16"  (0.0625): 15 IPM
-    #   ≤ 3/32"  (0.0938): 22 IPM
-    #   ≤ 1/8"   (0.125):  35 IPM
-    #   ≤ 3/16"  (0.1875): 55 IPM
-    #   > 3/16":  no cap
-    _micro_ipm_cap = None
-    if diameter <= 0.0625:
-        _micro_ipm_cap = 15.0
-    elif diameter <= 0.09375:
-        _micro_ipm_cap = 22.0
-    elif diameter <= 0.125:
-        _micro_ipm_cap = 35.0
-    elif diameter <= 0.1875:
-        _micro_ipm_cap = 55.0
-
-    if _micro_ipm_cap is not None and feed_ipm > _micro_ipm_cap:
-        print(f"⚠ Micro-tool feed capped at {_micro_ipm_cap:.0f} IPM (physics calc: {feed_ipm:.1f} IPM) — "
-              f"chip load is correct but machine vibration and chip packing limit practical feed on ø{diameter:.4f}\" tools.")
-        # Scale state feed and derived values proportionally
-        _ipm_scale = _micro_ipm_cap / max(1e-6, feed_ipm)
-        feed_ipm = _micro_ipm_cap
-        state["feed"] = feed_ipm
-        state["mrr"]  = float(state.get("mrr",  0.0)) * _ipm_scale
-        state["hp"]   = float(state.get("hp",   0.0)) * _ipm_scale
-        state["load"] = float(state.get("load", 0.0)) * _ipm_scale
-
-    # ── Finish-pass wall taper warning (micro tools + chip thinning) ─────────
-    # High adj_fpt from chip thinning on a light finishing pass with a small
-    # tool produces significant cutting force variation → wall taper.
-    # Warn when: finish/profile mode, dia ≤ 1/8", woc ≤ 5%, adj_fpt > 2× fpt.
-    _adj_fpt = float(state.get("adj_fpt", state.get("ipt", 0.0)) or 0.0)
-    _base_fpt = float(state.get("fpt", state.get("base_ipt", 0.0)) or 0.0)
-    _finish_mode = (data.get("mode", "") or "").lower() in ("finish", "profile")
-    _woc_pct_now = float(data.get("woc_pct", 50.0) or 50.0)
-    if (_finish_mode and diameter <= 0.125 and _woc_pct_now <= 6.0
-            and _base_fpt > 0 and _adj_fpt > 1.8 * _base_fpt):
-        print(
-            f"⚠ Wall taper risk: chip thinning is boosting programmed feed significantly "
-            f"(base FPT {_base_fpt:.5f}\" → adj {_adj_fpt:.5f}\") on a light finishing pass "
-            f"with ø{diameter:.4f}\" tool. Consider reducing feed to {feed_ipm * 0.4:.1f}–"
-            f"{feed_ipm * 0.6:.1f} IPM for tighter wall straightness."
-        )
+    # (micro-tool feed cap is now applied upstream at IPT level — see micro_tool_feed_limit in engine/physics.py)
 
     hp = state.get("hp", 0.0)
     spindle_load = state.get("load", 0.0) * 100.0

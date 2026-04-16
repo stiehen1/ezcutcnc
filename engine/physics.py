@@ -52,6 +52,189 @@ def get_mode_defaults(mode: str, material: str):
 
 HELIX_FORCE_FACTOR = {35: 1.00, 38: 0.95, 45: 0.90}
 
+# ============================================================
+# MICRO-TOOL FEED LIMITER
+# Replaces crude absolute-IPM caps with a physics-grounded,
+# multi-factor limiter that respects material, operation,
+# spindle speed, L:D, setup quality, and tool geometry.
+# Based on miniature-tool guidance (Harvey, Sandvik) and the
+# principle that runout/deflection/vibration — not chip-load
+# math — are the governing limits for D < 1/8".
+# ============================================================
+
+# Diameter bands (inches)
+def _micro_band(dia: float) -> str:
+    """A=≤1/32, B=≤1/16, C=≤3/32, D=≤1/8. Returns None if > 1/8."""
+    if dia <= 0.03125:  return "A"
+    if dia <= 0.0625:   return "B"
+    if dia <= 0.09375:  return "C"
+    if dia <= 0.125:    return "D"
+    return None  # > 1/8" — caller decides whether to apply
+
+# Map ISO material group name → simplified bucket
+_MICRO_ISO_BUCKET = {
+    # N — nonferrous
+    "Aluminum": "N", "Non-Ferrous": "N", "Plastics": "N",
+    # P — steels
+    "Steel": "P",
+    # K — cast iron
+    "Cast Iron": "K",
+    # M — stainless
+    "Stainless": "M",
+    # S — titanium / HRSA
+    "Titanium": "S", "Inconel": "S",
+}
+
+# Material practicality factor by ISO bucket
+_MICRO_MAT_FACTOR = {"N": 1.00, "P": 0.82, "M": 0.72, "S": 0.62, "K": 0.75}
+
+# Operation bucket → factor
+# hem_rough: most freedom; finish_wall: most restrictive (taper > survival)
+_MICRO_OP_FACTOR = {
+    "hem_rough":    1.00,
+    "traditional":  0.90,
+    "profile":      0.82,
+    "floor_finish": 0.72,
+    "slot":         0.62,
+    "finish_wall":  0.58,
+}
+
+# Max chip-thinning multiplier by (band, op_bucket)
+# Caps the 1/sin(arccos(...)) boost to prevent absurd feed jumps on tiny tools.
+_MICRO_MAX_CTF = {
+    # band: {op_bucket: max_ctf}
+    "A": {"hem_rough": 1.15, "traditional": 1.08, "profile": 1.08, "floor_finish": 1.05, "slot": 0.95, "finish_wall": 1.00},
+    "B": {"hem_rough": 1.28, "traditional": 1.18, "profile": 1.18, "floor_finish": 1.10, "slot": 1.00, "finish_wall": 1.08},
+    "C": {"hem_rough": 1.42, "traditional": 1.30, "profile": 1.28, "floor_finish": 1.18, "slot": 1.08, "finish_wall": 1.15},
+    "D": {"hem_rough": 1.60, "traditional": 1.45, "profile": 1.40, "floor_finish": 1.28, "slot": 1.15, "finish_wall": 1.22},
+}
+
+# RPM ratio factor — penalises when machine can't reach target SFM RPM
+def _micro_rpm_factor(rpm_ratio: float, iso_bucket: str) -> float:
+    if rpm_ratio >= 0.90:
+        f = 1.00
+    elif rpm_ratio >= 0.70:
+        f = 0.90
+    elif rpm_ratio >= 0.50:
+        f = 0.78
+    else:
+        f = 0.65
+    # Tighter materials are less forgiving at low RPM
+    if iso_bucket in ("M", "S") and rpm_ratio < 0.70:
+        f *= 0.92
+    return f
+
+# Setup/runout quality factor
+_MICRO_SETUP_FACTOR = {
+    "excellent": 1.00,  # shrink-fit / hydraulic / very low runout
+    "good":      0.90,
+    "unknown":   0.78,
+    "poor":      0.62,
+}
+
+# L:D factor
+def _micro_ld_factor(ld: float) -> float:
+    if ld <= 2.5:  return 1.00
+    if ld <= 4.0:  return 0.88
+    if ld <= 6.0:  return 0.72
+    if ld <= 8.0:  return 0.58
+    return 0.45
+
+# Series/geometry bonus
+def _micro_series_factor(tool_series: str, variable_pitch: bool, variable_helix: bool) -> float:
+    s = (tool_series or "").upper()
+    if s.startswith("QTR3"):
+        return 1.06  # 3-fl variable pitch+helix, larger shank — more stable than generic micro
+    if variable_pitch and variable_helix:
+        return 1.04
+    if variable_pitch:
+        return 1.00
+    return 0.95  # generic non-stability micro
+
+def micro_tool_feed_limit(
+    feed_physics: float,
+    base_ipt: float,
+    chip_thinning_factor_raw: float,
+    rpm_actual: float,
+    flutes: int,
+    diameter: float,
+    material_group: str,
+    mode: str,
+    rpm_target: float,
+    ld_ratio: float,
+    toolholder: str,
+    tool_series: str,
+    variable_pitch: bool,
+    variable_helix: bool,
+) -> tuple:
+    """
+    Multi-factor micro-tool feed limiter.
+    Returns (feed_limited, reason_str_or_None).
+    reason_str is None when no cap was applied.
+
+    For D >= 1/8" and not in finish_wall / profile / slot, returns feed_physics unchanged.
+    """
+    band = _micro_band(diameter)
+    # Map operation to bucket
+    if mode in ("hem", "trochoidal"):
+        op_bucket = "hem_rough"
+    elif mode == "traditional":
+        op_bucket = "traditional"
+    elif mode == "finish":
+        op_bucket = "finish_wall"
+    elif mode == "profile":
+        op_bucket = "profile"
+    elif mode == "slot":
+        op_bucket = "slot"
+    else:
+        op_bucket = "profile"
+
+    # Only apply to D < 1/8" (or 1/8" finish/profile/slot)
+    if band is None:
+        if op_bucket not in ("finish_wall", "profile", "slot"):
+            return feed_physics, None
+        band = "D"  # treat 1/8" < D ≤ 3/16" finish passes as band D
+
+    iso = _MICRO_ISO_BUCKET.get(material_group, "P")
+
+    # 1. Cap chip-thinning multiplier
+    max_ctf = _MICRO_MAX_CTF.get(band, _MICRO_MAX_CTF["D"]).get(op_bucket, 1.40)
+    ctf_used = min(chip_thinning_factor_raw, max_ctf)
+    feed_ctf_cap = rpm_actual * flutes * base_ipt * ctf_used
+
+    # 2. Build practicality multiplier
+    rpm_ratio = (rpm_actual / rpm_target) if rpm_target > 1e-6 else 1.0
+    setup_quality = {
+        "shrink_fit": "excellent", "press_fit": "excellent", "capto": "excellent",
+        "hydraulic": "good", "milling_chuck": "good", "hp_collet": "good",
+        "er_collet": "unknown", "weldon": "unknown",
+    }.get(toolholder, "unknown")
+
+    practicality = (
+        _MICRO_MAT_FACTOR.get(iso, 0.82)
+        * _MICRO_OP_FACTOR.get(op_bucket, 0.82)
+        * _micro_rpm_factor(rpm_ratio, iso)
+        * _MICRO_SETUP_FACTOR.get(setup_quality, 0.78)
+        * _micro_ld_factor(ld_ratio)
+        * _micro_series_factor(tool_series, variable_pitch, variable_helix)
+    )
+
+    feed_practical = feed_ctf_cap * practicality
+
+    # 3. Never go below a minimum that ensures cutting (not rubbing)
+    min_feed = rpm_actual * flutes * base_ipt * 0.50  # floor at 50% of base no-CT feed
+    feed_final = max(min_feed, min(feed_physics, feed_practical))
+
+    if feed_final >= feed_physics * 0.995:
+        return feed_physics, None  # no meaningful cap — don't bother noting it
+
+    reason = (
+        f"Micro-tool practical feed cap applied (ø{diameter:.4f}\" band-{band}, "
+        f"{material_group} {op_bucket}): physics {feed_physics:.1f} IPM → "
+        f"{feed_final:.1f} IPM  [CTF cap ×{ctf_used:.2f}, practicality ×{practicality:.2f}]"
+    )
+    return feed_final, reason
+
 # Radial rake force factor — positive rake reduces Kc (easier cutting).
 # Normalized to 7° (standard steel/stainless tools = 1.00 baseline).
 # VXR series at 0° (neutral rake) generates ~5% more force than standard.
