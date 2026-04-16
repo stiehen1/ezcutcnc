@@ -5641,12 +5641,14 @@ ${stabSection}
                           ? _millTaper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
-                        // Workholding: C-axis → sub_spindle; B-axis → clear sub_spindle/tailstock if set; A-axis → clear sub_spindle if set
-                        const bAxisIncompat = ["sub_spindle", "tailstock_supported", "tombstone", "5th_axis_vise", "vise", "toe_clamps"] as string[];
-                        const aAxisIncompat = ["sub_spindle"] as string[];
-                        const newWH = key === "sub"  ? "sub_spindle" as typeof p.workholding
+                        // Workholding: C-axis → collet_chuck (sub has its own chuck options now)
+                        // B-axis → clear anything that doesn't apply to part-in-chuck milling
+                        // A-axis → keep current unless it was a C-axis-only choice
+                        const bAxisIncompat = ["sub_spindle", "tailstock_supported", "between_centers", "steady_rest", "tombstone", "5th_axis_vise", "vise", "toe_clamps"] as string[];
+                        const cAxisIncompat = ["tailstock_supported", "between_centers", "steady_rest", "expanding_mandrel", "dovetail", "rigid_fixture", "modular_quickchange", "secondary_op_vise", "tombstone", "5th_axis_vise", "vise", "toe_clamps", "sub_spindle"] as string[];
+                        const newWH = key === "sub"  && cAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
                                     : key === "mill" && bAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
-                                    : key === "main" && aAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
+                                    : key === "main" && (["sub_spindle"] as string[]).includes(p.workholding) ? "collet_chuck" as typeof p.workholding
                                     : p.workholding;
                         return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual, workholding: newWH };
                       });
@@ -6137,11 +6139,13 @@ ${stabSection}
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
               <FieldLabel hint={
-                form.machine_type === "lathe"
-                  ? "Workholding affects live tool rigidity and access. Most rigid to least rigid: Collet Chuck → Soft Jaws → 3-Jaw Hard Jaws → Expanding Mandrel → Sub-Spindle. Collet chucks give the best access and concentricity; soft jaws are the best all-around production choice."
+                (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
+                  ? (form.machine_type === "lathe"
+                    ? "C-axis / live tool lathe — part is held in the spindle and indexed for milling. Soft jaws are the best all-around choice; collet chuck for best concentricity and high RPM; 6-jaw for thin-wall; tailstock or steady rest reduces deflection on long parts. Most rigid to least rigid: Soft Jaws → Collet → 3-Jaw → 6-Jaw → Hydraulic/Power → Form Jaws → Expanding Mandrel → Between Centers → Tailstock → Steady Rest."
+                    : "C-axis / sub-spindle active — part transferred from A-axis for backside ops. Same workholding logic as main spindle but typically smaller chuck capacity. Collet for best concentricity; soft jaws for custom OD grip; tailstock/steady rest not available on sub-spindle.")
                   : form.machine_type === "mill_turn"
-                  ? (selectedSpindle === "sub"
-                    ? "C-axis / sub-spindle selected — part is transferred for back-side ops. Workholding is fixed to Sub-Spindle. Switch to A-axis or B-axis spindle to change workholding."
+                  ? (selectedSpindle === "sub" /* handled above — dead branch */
+                    ? ""
                     : selectedSpindle === "mill"
                     ? "B-axis milling spindle active — the part stays held in the A-axis chuck while the B-axis tool mills it. Select how the part is currently chucked. Most rigid to least rigid: Dovetail → Rigid Fixture → Collet Chuck → Soft Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel."
                     : "A-axis turning spindle active. Most rigid to least rigid: Hydraulic/Power Chuck → Collet Chuck → Soft/Form/Step Jaws → 3-Jaw → 6-Jaw → Expanding Mandrel → Tailstock Support → Steady Rest. Collet chuck for bar work and precision; 6-jaw for thin-wall; hydraulic/power chuck for repeatability and high-volume; form/step/pie jaws for complex profiles.")
@@ -6153,20 +6157,30 @@ ${stabSection}
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  form.machine_type === "lathe"
+                  (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? ([
-                      { key: "collet_chuck",      label: "Collet Chuck"     },
-                      { key: "soft_jaws",         label: "Soft Jaws"        },
-                      { key: "3_jaw_chuck",       label: "3-Jaw Hard Jaws"  },
-                      { key: "expanding_mandrel", label: "Expanding Mandrel"},
-                      { key: "sub_spindle",       label: "Sub-Spindle"     },
+                      /* Primary chuck */
+                      { key: "soft_jaws",           label: "Soft Jaws"         },
+                      { key: "collet_chuck",         label: "Collet Chuck"      },
+                      { key: "3_jaw_chuck",          label: "3-Jaw Hard Jaws"   },
+                      { key: "6_jaw_chuck",          label: "6-Jaw Chuck"       },
+                      { key: "hydraulic_chuck",      label: "Hydraulic Chuck"   },
+                      { key: "power_chuck",          label: "Power Chuck"       },
+                      /* Custom jawing */
+                      { key: "form_jaws",            label: "Form Jaws"         },
+                      { key: "step_jaws",            label: "Step Jaws"         },
+                      { key: "pie_jaws",             label: "Pie Jaws"          },
+                      /* Mandrel / support */
+                      { key: "expanding_mandrel",    label: "Expanding Mandrel" },
+                      /* Support — lathe only (sub-spindle has no tailstock/steady rest) */
+                      ...(form.machine_type === "lathe" ? [
+                        { key: "tailstock_supported" as const, label: "Tailstock"        },
+                        { key: "between_centers"     as const, label: "Between Centers"  },
+                        { key: "steady_rest"         as const, label: "Steady Rest"      },
+                      ] : []),
                     ] as const)
                   : form.machine_type === "mill_turn"
-                  ? (selectedSpindle === "sub"
-                    ? ([
-                        { key: "sub_spindle", label: "C-Axis / Sub-Spindle" },
-                      ] as const)
-                    : selectedSpindle === "mill"
+                  ? (selectedSpindle === "mill"
                     ? ([
                         /* Part is held in A-axis chuck — these describe that holding condition */
                         { key: "collet_chuck",        label: "Collet Chuck"         },
@@ -6266,7 +6280,7 @@ ${stabSection}
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setForm((p) => ({ ...p, workholding: key }))}
+                    onClick={() => setForm((p) => ({ ...p, workholding: key as typeof p.workholding }))}
                     className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
                     style={{
                       backgroundColor: form.workholding === key ? "#a855f7" : "transparent",
