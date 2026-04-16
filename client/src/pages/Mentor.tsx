@@ -1569,9 +1569,10 @@ export default function Mentor() {
 
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
     machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
-    mill_spindle_rpm: 0,   // B-axis mill spindle RPM (mill_turn only)
-    mill_spindle_hp: 0,    // B-axis mill spindle HP (mill_turn only)
-    sub_spindle_rpm: 0,    // C-axis sub spindle RPM (mill_turn only)
+    mill_spindle_rpm: 0,        // B-axis mill spindle RPM (mill_turn only)
+    mill_spindle_hp: 0,         // B-axis mill spindle HP (mill_turn only)
+    sub_spindle_rpm: 0,         // C-axis sub spindle RPM (mill_turn only)
+    lathe_has_sub_spindle: false, // lathe sub-spindle toggle
     toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
     dual_contact: false,
     holder_gage_length: 0,
@@ -5609,6 +5610,58 @@ ${stabSection}
               )}
             </div>
           </div>
+
+          {/* Lathe sub-spindle toggle + selector */}
+          {form.machine_type === "lathe" && (
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <FieldLabel hint="Enable if your lathe has a sub-spindle (e.g. Mazak QTN, Nakamura-Tome, Doosan Lynx). Adds a Main / Sub selector so the engine knows which spindle is doing the work.">Sub-Spindle</FieldLabel>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(p => {
+                      const enabling = !p.lathe_has_sub_spindle;
+                      return { ...p, lathe_has_sub_spindle: enabling };
+                    });
+                    if (selectedSpindle === "sub") setSelectedSpindle("main");
+                  }}
+                  className={`text-xs px-2.5 py-1 rounded border font-semibold transition-all ${form.lathe_has_sub_spindle ? "bg-amber-500 border-amber-500 text-black" : "bg-transparent border-zinc-600 text-zinc-400 hover:border-amber-400 hover:text-amber-400"}`}
+                >
+                  {form.lathe_has_sub_spindle ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+              {form.lathe_has_sub_spindle && (
+                <div className="flex gap-2 flex-wrap">
+                  {([
+                    { key: "main" as const, label: "Main Spindle", note: "Primary chuck — turning, bar work, live tool milling" },
+                    { key: "sub"  as const, label: "Sub-Spindle",  note: "Pickoff / backside ops" },
+                  ]).map(({ key, label, note }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSpindle(key);
+                        setForm(p => {
+                          const subIncompat = ["tailstock_supported", "between_centers", "steady_rest"] as string[];
+                          const newWH = key === "sub" && subIncompat.includes(p.workholding) ? "soft_jaws" as typeof p.workholding : p.workholding;
+                          return { ...p, workholding: newWH };
+                        });
+                      }}
+                      className="flex flex-col items-start px-3 py-2 rounded border text-xs font-semibold transition-all"
+                      style={{
+                        backgroundColor: selectedSpindle === key ? "#f59e0b" : "transparent",
+                        borderColor: "#f59e0b",
+                        color: selectedSpindle === key ? "#000" : "#f59e0b",
+                      }}
+                    >
+                      <span>{label}</span>
+                      <span className="font-normal opacity-70">{note}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
           {form.machine_type === "mill_turn" && (
