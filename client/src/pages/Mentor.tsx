@@ -1486,20 +1486,48 @@ export default function Mentor() {
         else if (e.shank_type === "safe_lock") next.toolholder = "shrink_fit";
         return next;
       });
-      // Flute wash: not on print — estimate 20% of LOC as conservative default
+      // Flute wash: estimate 20% of LOC, but 0 for reduced-shank tools (tapered neck — no parallel relief)
       const _pdfLoc = e.loc > 0 ? e.loc : 0;
       const _pdfDia = e.tool_dia > 0 ? e.tool_dia : 0;
-      const _fwEst = _pdfLoc > 0 ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
+      const _isReducedShank = e.shank_dia > 0 && e.shank_dia > e.tool_dia * 1.05;
+      const _fwEst = (_pdfLoc > 0 && !_isReducedShank) ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
       setPdfFluteWash(_fwEst);
       setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
-      // Set default stickout: LOC + flute_wash_est + 0.33×D
+      // Set default stickout
+      // For reduced-shank tools: try DB lookup on closest standard QTR3 SKU first.
+      // Falls back to taper geometry formula (30° included = 15° half-angle) if no DB match.
+      // Standard tools: LOC + flute_wash + 0.33×cutting_dia
+      const _pdfLbs = e.lbs > 0 ? e.lbs : 0;
+      const _pdfShankDia = e.shank_dia > 0 ? e.shank_dia : 0;
       if (_pdfLoc > 0 && _pdfDia > 0) {
-        const _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
+        let _defaultSo: number;
+        if (_isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0) {
+          // Try DB lookup — QTR3-RN first (necked tools have lbs), then QTR3
+          let dbStickout: number | null = null;
+          try {
+            const seriesToTry = _pdfLbs > 0 ? ["QTR3-RN", "QTR3"] : ["QTR3"];
+            for (const s of seriesToTry) {
+              const _sr = await fetch(`/api/skus/stickout-lookup?series=${encodeURIComponent(s)}&dia=${_pdfDia}&loc=${_pdfLoc}`);
+              if (_sr.ok) { const _sd = await _sr.json(); if (_sd.stickout) { dbStickout = _sd.stickout; break; } }
+            }
+          } catch { /* ignore */ }
+          if (dbStickout != null && dbStickout > 0) {
+            _defaultSo = dbStickout;
+          } else {
+            // Fallback: compute from 30° included taper geometry
+            const radialDelta = (_pdfShankDia - _pdfDia) / 2;
+            const taperLen = radialDelta / Math.tan(15 * Math.PI / 180);
+            _defaultSo = Math.ceil((_pdfLbs + taperLen + 0.52 * _pdfShankDia) * 200) / 200;
+          }
+        } else {
+          _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
+        }
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
       }
       // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style
-      {
+      // Skip if mode is slot or face — those lock WOC to fixed values
+      if (form.mode !== "slot" && form.mode !== "face") {
         const spMode = (form.dp_cutting_style ?? "hem") === "hem" ? "hem" : "traditional";
         const newFlutes = e.flutes > 0 ? e.flutes : form.flutes;
         const newDia    = _pdfDia > 0 ? _pdfDia : form.tool_dia;
@@ -1927,7 +1955,8 @@ export default function Mentor() {
         const vxrCap = (n: number) => loc > 0 && dia > 0 ? Math.min(loc / dia, n) : n;
         hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
       } else {
-        const hemCap = iso === "H" ? 1.5 : 3.0;
+        // HEM DOC cap by flute count: 3-fl → 1.5×D, 4-fl → 2.0×D, 5+fl → 3.0×D (hardened always 1.5×D)
+        const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5 : flutes === 4 ? 2.0 : 3.0;
         const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
         const docHigh = Math.round(rawHigh * 4) / 4;
         const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
@@ -2422,6 +2451,19 @@ export default function Mentor() {
     setPdfFluteWash(0);
     setPdfFluteWashText("");
     setDpSpecialTool(false);
+    // Reset all form fields that PDF upload populates
+    setForm(p => ({
+      ...p,
+      tool_dia: 0, flutes: 4, loc: 0, lbs: 0, shank_dia: 0,
+      corner_condition: "square", corner_radius: 0, coating: "",
+      variable_pitch: false, variable_helix: false,
+      helix_angle: 0,
+    }));
+    setToolDiaText("");
+    setLocText("");
+    setLbsText("");
+    setShankDiaText("");
+    setCrText("");
   }
 
   function resetAll() {
@@ -6489,7 +6531,7 @@ ${stabSection}
                     <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric print, converted to inches" : ""}{pdfOal > 0 ? ` · OAL ${pdfOal.toFixed(3)}"` : ""} — please verify all dimensions match your print before running</span>
                     <button type="button" onClick={clearPdf} className="text-[10px] text-gray-400 hover:text-white underline">Clear</button>
                   </div>
-                  <div className="flex items-center gap-2 pt-1">
+                  {!(form.shank_dia > 0 && form.shank_dia > form.tool_dia * 1.05) && <div className="flex items-center gap-2 pt-1">
                     <FieldLabel hint="Flute wash is the distance from the end of the LOC to where the flutes fully disappear into the shank — this section must not slide into the toolholder. Not called out on CC prints; estimated at 20% of LOC. Measure from the physical tool and correct here if needed.">Flute Wash (in)</FieldLabel>
                     <Input type="text" inputMode="decimal" className="no-spinners w-24 h-7 text-xs"
                       placeholder="est."
@@ -6510,7 +6552,7 @@ ${stabSection}
                       }}
                     />
                     <span className="text-[10px] text-amber-400/70">estimated — verify with tool</span>
-                  </div>
+                  </div>}
                 </div>
               ) : (
                 <label className="flex flex-col items-center gap-1 cursor-pointer">

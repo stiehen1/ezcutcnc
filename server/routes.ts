@@ -478,6 +478,34 @@ export async function registerRoutes(
     }
   });
 
+  // ── Stickout lookup: closest standard SKU by series + dia + loc ─────────────
+  app.get("/api/skus/stickout-lookup", async (req, res) => {
+    try {
+      const series = String(req.query.series ?? "").trim().toUpperCase();
+      const dia    = parseFloat(String(req.query.dia ?? "0"));
+      const loc    = parseFloat(String(req.query.loc ?? "0"));
+      if (!series || !dia) return res.json({ stickout: null });
+      const { pool } = await import("./db");
+      // Find closest match: same series, closest cutting dia, then closest LOC
+      const result = await pool.query(
+        `SELECT default_stickout_in::float AS stickout
+         FROM skus s
+         JOIN sku_uploads u ON s.upload_id = u.id
+         WHERE u.is_current = TRUE
+           AND UPPER(s.series) = $1
+           AND s.default_stickout_in IS NOT NULL
+         ORDER BY ABS(s.cutting_diameter_in::float - $2),
+                  ABS(COALESCE(s.loc_in::float, 0) - $3)
+         LIMIT 1`,
+        [series, dia, loc]
+      );
+      const stickout = result.rows[0]?.stickout ?? null;
+      return res.json({ stickout });
+    } catch {
+      return res.json({ stickout: null });
+    }
+  });
+
   // ── SKU upload history ────────────────────────────────────────────────────
   app.get("/api/skus/uploads", async (req, res) => {
     try {
