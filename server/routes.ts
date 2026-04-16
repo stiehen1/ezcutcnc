@@ -320,6 +320,8 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company TEXT`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS zip TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS first_name TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_name TEXT`);
   } catch (err: any) {
     console.warn("[Leads migration]", err?.message ?? err);
   }
@@ -2001,6 +2003,8 @@ export async function registerRoutes(
   app.post("/api/register", async (req, res) => {
     try {
       const { name, email, company, zip } = (req.body ?? {}) as { name?: string; email?: string; company?: string; zip?: string };
+      const firstName = name ? name.trim().split(/\s+/)[0] : null;
+      const lastName = name ? name.trim().split(/\s+/).slice(1).join(" ") || null : null;
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: "Valid email required" });
       }
@@ -2008,13 +2012,15 @@ export async function registerRoutes(
       const geo = await geoFromIp(clientIp);
       const { pool } = await import("./db");
       const isNew = await pool.query(
-        `INSERT INTO leads (email, operation, name, company, zip, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO leads (email, operation, name, first_name, last_name, company, zip, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (email) DO UPDATE SET
-           name    = COALESCE(EXCLUDED.name, leads.name),
-           company = COALESCE(EXCLUDED.company, leads.company),
-           zip     = COALESCE(EXCLUDED.zip, leads.zip)
+           name       = COALESCE(EXCLUDED.name, leads.name),
+           first_name = COALESCE(EXCLUDED.first_name, leads.first_name),
+           last_name  = COALESCE(EXCLUDED.last_name, leads.last_name),
+           company    = COALESCE(EXCLUDED.company, leads.company),
+           zip        = COALESCE(EXCLUDED.zip, leads.zip)
          RETURNING id, (xmax = 0) AS is_new`,
-        [email.toLowerCase().trim(), "tool_request", name ?? null, company ?? null, zip ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
+        [email.toLowerCase().trim(), "tool_request", name ?? null, firstName, lastName, company ?? null, zip ?? null, clientIp, geo.city, geo.region, geo.country, geo.postal]
       );
       // Send registration notification to Scott for new users only (not duplicates)
       const isNewRow = isNew.rows[0]?.is_new === true;
