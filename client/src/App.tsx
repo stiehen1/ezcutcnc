@@ -1138,7 +1138,7 @@ function TeamsTab() {
                 <div className="space-y-3">
                   {[
                     { n: "1", title: "Manager registers", body: "Your programming manager opens CoreCutCNC and registers with a shared department email — e.g. programming@acmemachine.com." },
-                    { n: "2", title: "Each programmer connects", body: "Every programmer clicks the Teams tab (or "connect to a team →" in the app header) and enters that shared email." },
+                    { n: "2", title: "Each programmer connects", body: 'Every programmer clicks the Teams tab (or "connect to a team →" in the app header) and enters that shared email.' },
                     { n: "3", title: "Done — everything syncs", body: "From that point, saved machines and Toolbox setups are shared. Add a machine from any PC and the whole team sees it." },
                   ].map(s => (
                     <div key={s.n} className="flex gap-3">
@@ -1203,6 +1203,76 @@ function TeamsTab() {
   );
 }
 
+type Announcement = {
+  id: number;
+  version: string;
+  headline: string;
+  subheadline: string;
+  bullets: string[];
+  published_at: string;
+};
+
+function WhatsNewModal() {
+  const [announcement, setAnnouncement] = React.useState<Announcement | null>(null);
+  const [visible, setVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    fetch("/api/announcement")
+      .then(r => r.ok ? r.json() : null)
+      .then((data: Announcement | null) => {
+        if (!data || !data.version) return;
+        const seen = localStorage.getItem("seen_announcement");
+        if (seen === data.version) return;
+        setAnnouncement(data);
+        setVisible(true);
+      })
+      .catch(() => {});
+  }, []);
+
+  if (!visible || !announcement) return null;
+
+  const dismiss = () => {
+    localStorage.setItem("seen_announcement", announcement.version);
+    setVisible(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 px-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl">
+        {/* Badge */}
+        <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-2">
+          What's New
+        </span>
+        {/* Headline */}
+        <p className="text-lg font-bold text-white leading-snug">{announcement.headline}</p>
+        {/* Subheadline */}
+        {announcement.subheadline && (
+          <p className="text-sm text-zinc-400 mt-1">{announcement.subheadline}</p>
+        )}
+        {/* Bullets */}
+        {announcement.bullets && announcement.bullets.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {announcement.bullets.map((bullet, i) => (
+              <li key={i} className="flex gap-2 items-start">
+                <span className="text-orange-400 shrink-0 leading-5">·</span>
+                <span className="text-sm text-zinc-300">{bullet}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* Dismiss button */}
+        <button
+          onClick={dismiss}
+          className="w-full bg-orange-600 hover:bg-orange-500 text-white font-semibold py-2.5 rounded-lg mt-5 text-sm transition-colors"
+        >
+          Got it →
+        </button>
+        <p className="text-[10px] text-zinc-600 text-center mt-2">You won't see this again on this device.</p>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -1228,6 +1298,7 @@ function App() {
         <TeamsTab />
         <HelpButton />
         <BrevoNudge />
+        <WhatsNewModal />
         <AddToHomeScreenBanner />
       </TooltipProvider>
     </QueryClientProvider>
