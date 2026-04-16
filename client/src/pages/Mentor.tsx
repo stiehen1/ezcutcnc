@@ -3869,6 +3869,8 @@ ${stabSection}
               <button type="button" onClick={() => {
                 localStorage.removeItem("cc_user_name"); localStorage.removeItem("cc_first_name");
                 localStorage.removeItem("cc_last_name"); localStorage.removeItem("er_email");
+                localStorage.removeItem("tb_email"); localStorage.removeItem("tb_token");
+                setTbEmail(""); setTbToken(""); setErEmail("");
                 setShowWelcomeModal(true); setWelcomeFirstName(""); setWelcomeLastName(""); setWelcomeEmail(""); setWelcomeError("");
               }} className="ml-1.5 text-[10px] text-zinc-600 hover:text-zinc-400 underline underline-offset-2">not you?</button>
             </span>
