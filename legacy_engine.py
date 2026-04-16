@@ -412,6 +412,8 @@ SPINDLE_TORQUE_CAPACITY = {
     "BT30":   190,
     "BT40":   520,
     "BT50":  1200,
+    "HSK32":  120,   # High-speed small-spindle (Robodrill, precision VMC)
+    "HSK50":  280,   # Mid-size HSK (Makino L2, Slim3n/5n, J-series small)
     "HSK63":  460,
     "HSK100": 950,
     # Lathe live-tool turret interfaces — lower torque than machining center tapers
