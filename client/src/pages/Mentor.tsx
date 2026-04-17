@@ -3784,12 +3784,33 @@ ${stabSection}
           const selected = entryTypes.filter(k => labelMap[k]);
           return selected.length > 0 ? selected.map(k => labelMap[k]).join(" / ") : "Helical / Ramp";
         })()));
-        lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
-        lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
-        lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
-        lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
-        lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
-        lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
+        if (entryTypes.includes("sweep")) {
+          const dia = form.tool_dia ?? 0;
+          const radMin = (em.sweep_arc_radius_min_in != null && em.sweep_arc_radius_min_in > 0) ? em.sweep_arc_radius_min_in : dia * 0.50;
+          const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : dia * 0.75;
+          lines.push(L("Sweep Arc (min)", `≥${radMin.toFixed(4)}"`));
+          lines.push(L("Sweep Arc (rec)", `${radRec.toFixed(4)}"`));
+          lines.push(L("Sweep Entry Feed", `${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM`));
+          lines.push(L("Sweep Full Feed",  `${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM`));
+        }
+        if (entryTypes.includes("helical")) {
+          lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
+          lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
+          lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
+        }
+        if (entryTypes.includes("ramp")) {
+          lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
+          lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
+          lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
+        }
+        if (entryTypes.includes("straight")) {
+          lines.push(L("Straight Entry", `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM`));
+        }
+        if (entryTypes.includes("slot_straight")) {
+          const slotFull = result?.milling?.feed_ipm ?? 0;
+          lines.push(L("Slot Entry Feed", `${(slotFull * 0.50).toFixed(1)} IPM  (50% — shock load at first engagement)`));
+          lines.push(L("Slot Full Feed",  `${slotFull.toFixed(1)} IPM`));
+        };
         lines.push("");
       }
 
