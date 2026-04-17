@@ -8,6 +8,39 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (April 2026)
 
+### Email / Saved Output
+- **Teeth in Cut** and **Engagement Angle** added to Speeds & Feeds section of email/text output. Engine computes exact arc degrees (`acos(1 − 2×WOC%)`) for all conventional/HEM endmill operations; 180° for full-slot, 90° for face mill.
+- **Entry Moves section** now only prints the sections matching the user's selected entry type checkboxes (Sweep/Roll-in, Helical, Ramp, Straight Plunge, Slot Straight). Previously all entry types were printed regardless of selection.
+- **Entry Type label** in saved output now reflects the actual user selection, not a hardcoded "Helical / Ramp" fallback.
+
+### Tailstock / Live Center Support
+- **Tailstock checkbox** added to workholding section, visible when setup uses trunnion, chuck (3/4/6-jaw, collet, hydraulic, power), face plate, or between-centers.
+- When active: applies **3.5× deflection limit boost** (simply-supported beam model vs. cantilever). Stickout reduction suggestions are suppressed and replaced with an informational note. A soft advisory fires if stickout exceeds 4×D even with tailstock.
+- `tailstock: boolean` added to Zod schema (`shared/routes.ts`) and engine payload.
+
+### PDF Tool Upload Fixes (Reduced-Shank / QTR3-Style Tools)
+- **Cutting diameter extraction** fixed — EXTRACTION_PROMPT now correctly identifies the cutting tip diameter vs. the larger shank OD for reduced-shank tools. Previously extracted 0.250" shank as cutting dia for a 0.059" tip.
+- **Variable pitch/helix auto-detection** — PDF extraction now outputs `variable_pitch`, `variable_helix`, and `tool_series` fields; series inferred from geometry (3-fl + reduced shank + var pitch + var helix → QTR3).
+- **Flute wash estimate suppressed** for reduced-shank tools (shank > 1.05× cut dia). The 20% LOC estimate is irrelevant for tapered-neck tools.
+- **Flute wash field hidden** in the form when a reduced-shank tool is loaded.
+- **Default stickout** for reduced-shank QTR3 tools: DB lookup against closest standard QTR3-RN SKU first, then QTR3, then fallback to taper geometry formula (`LBS + taper_length + 0.52 × shank_dia`). Taper length computed from 30° included / 15° half-angle geometry. Prevents collet from landing inside the taper zone.
+
+### DOC Defaults — Conservative Starting Points
+- **Slot mode** always defaults to `low` DOC preset. User adjusts up from there.
+- **Tools ≤ 0.125" diameter** always default to `low` DOC across all modes. Small tools break, not bend.
+- **HEM DOC cap by flute count**: 3-flute = 1.5×D, 4-flute = 2.0×D, 5+ flute = 3.0×D. Previous flat 3×D cap was wrong for small-diameter 3-flute tools.
+- **Slot DOC preset buttons** now use `getDynamicPresets()` output instead of hardcoded flat values — buttons and displayed value now match.
+
+### Multi-Axis Machine Save Fix
+- Multi-axis spindle fields (`sub_spindle_rpm`, `live_tool_rpm`, `live_tool_hp`, `live_tool_taper`, `mill_spindle_rpm`, `mill_spindle_hp`, `mill_spindle_taper`, `live_connection`, `live_drive`) were lost on quick-save due to missing DB columns and incomplete payload. Fixed: migrations add all 9 columns; `saveMachine()` sends all 25 fields.
+
+### Toolbox — Team Sharing Note
+- Added team sharing info note below the Toolbox header with a "connect your team →" link that opens the Teams tab.
+- "Connect to a team" link color updated to cyan so it's visible against the dark header.
+
+### PDF Clear Button
+- **All Clear buttons** (inline banner clear + Reset All at bottom) now fully reset special tool state AND all form fields that were auto-populated from the PDF (tool dia, LOC, LBS, shank dia, flutes, corner condition, corner radius, coating, variable pitch, variable helix, helix angle). Previously the inline Clear only dismissed the banner without clearing fields.
+
 ### Torque Zone Card
 - **Spindle HP/torque database audit** — corrected ~80+ machines where peak/S6 ratings were stored as continuous (S1). Affected machines: all 51 Haas mills (21 HP → 30 HP corrected), Fanuc Robodrill MiB5 series, Brother Speedio, Yasda, Grob G750, Heller MCH 350/400, B+W MCX, DMG Mori NTX mill-turn series, and all 218.8 ft-lb placeholder values on machining centers.
 - **Two-segment torque model** — flat constant-torque zone below `peak_torque_rpm`, hyperbolic falloff above. `base_torque_ftlb` sanity-checked against expected value at rated RPM.
@@ -36,6 +69,36 @@ Fires when the recommended RPM is < 20% of the machine's max RPM, tool ≤ 1.5",
 - Regrind messaging updated: "~50% of new tool price — a properly reground edge can **exceed** new tool performance" (not just match).
 - **Download Brochure** link added inline — serves `Reconditioning Brochure (260214).pdf` from `client/public/`.
 - **Shipping address** shown below the reconditioning section: Core Cutter LLC · 120 Technology Dr · Gardiner, ME 04345.
+
+### Mill-Turn / Multi-Axis Machine Support
+- **A/B/C-axis spindle selector** — active spindle axis drives workholding list, spindle specs (HP, RPM, taper), and engine payload.
+- **B-axis milling spindle** — `mill_spindle_rpm`, `mill_spindle_hp`, `mill_spindle_taper` columns added; B-axis workholding list scoped to turning-center chuck options.
+- **Sub-spindle toggle** — `sub_spindle_rpm` column; sub-spindle workholding list (collet chuck, hydraulic chuck, power chuck, 3-jaw).
+- **Live tool spindle** — `live_tool_rpm`, `live_tool_hp`, `live_tool_taper`, `live_connection`, `live_drive` columns.
+- **19 mill-turn machines** added to catalog with A/B/C-axis spindle data.
+- **Workholding lists** tiered by suitability per axis: A-axis (full turning center list), B-axis (chuck options only), C-axis (milling suitability tier).
+- **iJAW / autoCHUCK** workholding options added for DMG Mori mill-turn machines.
+- **Zero-Point / RockLock and Pyramid Fixture** added for 5-axis trunnion setups.
+
+### Speeder (Speed Increaser) Support
+- Speeder input: ratio (e.g. 4×), max input RPM, max output RPM, and max torque.
+- Engine uses lower of HP-derate or torque limit. Taper fallback validation — invalid CAT40 fallback for A2-x spindle nose fixed.
+
+### Materials System
+- **N1 / N2 ISO split** — N2 = abrasive non-ferrous (manganese bronze, silicon bronze, copper beryllium, dark green #558B2F). Engine routes N2 through P-Max/steel tool chain.
+- Added `manganese_bronze`, `silicon_bronze`, `copper_beryllium` as N2 abrasive non-ferrous materials.
+
+### Micro-Tool Feed Limiter
+- Replaced crude IPM caps on small tools (≤ 0.125") with a multi-factor feed limiter. Machine-limited RPM setups no longer over-penalized.
+
+### Machine Management
+- Machine management (add/edit/delete) moved to Toolbox. Mentor page is read-only picker.
+
+### What's New Announcement System
+- Floating "What's New" announcement panel with per-release notes and seen-state tracking.
+
+### Job # and Part Name Tagging
+- Saved applications in Toolbox support Job # and Part Name tags for easy retrieval.
 
 ---
 
@@ -295,11 +358,12 @@ Defined in `shared/routes.ts` using Zod. The full `MentorInput` and `MentorRespo
 | `max_rpm` | number | Spindle maximum RPM |
 | `hardness_value` | number | Workpiece hardness (used for SFM derating) |
 | `hardness_scale` | enum | `hrb`, `hrc` |
+| `tailstock` | boolean | Tailstock/live center in use — applies 3.5× deflection limit boost (simply-supported beam) |
 
 ### Response Structure (`MentorResponse`)
 
 - **`customer`** — RPM, SFM, feed IPM, MRR, HP utilization, FPT, status notes
-- **`engineering`** — cutting force (lbf), deflection, chip thickness, chatter index, tool life estimate
+- **`engineering`** — cutting force (lbf), deflection, chip thickness, chatter index, teeth_in_cut, engagement_angle_deg, tool life estimate
 - **`stability`** — stickout, L/D ratio, deflection vs. limit (%), ordered suggestion list
 - **`drilling`** — thrust, torque, peck schedule, stability sub-object
 - **`reaming`** — stock check, surface finish risk, tool life range
@@ -443,6 +507,10 @@ Series CMS (2/4 flute, 0° shear) and CMH (3/5 flute, 30° shear angle).
 | ≥ 175% | "High Chatter Risk" (red) |
 
 Messages are advisory only — no "do not run" language.
+
+### Tailstock Rigidity Boost
+
+When **Tailstock / Live Center** is checked, the deflection limit is multiplied by **3.5×** (simply-supported beam model). Stickout reduction suggestions are suppressed. Visible for trunnion, chuck, face plate, and between-centers workholding setups.
 
 ### Suggestion Order
 
