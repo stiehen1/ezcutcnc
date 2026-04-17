@@ -515,6 +515,8 @@ export default function Mentor() {
   async function submitWelcome() {
     if (!welcomeFirstName.trim() || !welcomeLastName.trim()) { setWelcomeError("Please enter your first and last name."); return; }
     if (!welcomeEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(welcomeEmail.trim())) { setWelcomeError("Please enter a valid email address."); return; }
+    if (!welcomeCompany.trim()) { setWelcomeError("Please enter your company or shop name."); return; }
+    if (!welcomeZip.trim()) { setWelcomeError("Please enter your zip / postal code."); return; }
     setWelcomeValidating(true);
     setWelcomeError("");
     try {
@@ -534,8 +536,8 @@ export default function Mentor() {
     localStorage.setItem("cc_first_name", welcomeFirstName.trim());
     localStorage.setItem("cc_last_name", welcomeLastName.trim());
     localStorage.setItem("er_email", welcomeEmail.trim().toLowerCase());
-    if (welcomeCompany.trim()) localStorage.setItem("cc_company", welcomeCompany.trim());
-    if (welcomeZip.trim()) localStorage.setItem("cc_zip", welcomeZip.trim());
+    localStorage.setItem("cc_company", welcomeCompany.trim());
+    localStorage.setItem("cc_zip", welcomeZip.trim());
     setErEmail(welcomeEmail.trim().toLowerCase());
     setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
@@ -12702,7 +12704,7 @@ ${stabSection}
               />
             </div>
             <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Company</label>
+              <label className="text-xs text-zinc-400 mb-1 block">Company <span className="text-red-400">*</span></label>
               <input
                 type="text"
                 placeholder="Your shop or company name"
@@ -12712,7 +12714,7 @@ ${stabSection}
               />
             </div>
             <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Zip / Postal Code</label>
+              <label className="text-xs text-zinc-400 mb-1 block">Zip / Postal Code <span className="text-red-400">*</span></label>
               <input
                 type="text"
                 inputMode="numeric"
