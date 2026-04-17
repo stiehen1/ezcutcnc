@@ -3771,6 +3771,10 @@ ${stabSection}
         const ctStatus = ct >= minCt ? "✓ Cutting" : "⚠ Near rubbing threshold";
         lines.push(L("Chip Thickness",  `${ct.toFixed(5)}"  (min ~${minCt.toFixed(5)}")  ${ctStatus}`));
       }
+      if (eng?.teeth_in_cut != null)
+        lines.push(L("Teeth in Cut",    `${eng.teeth_in_cut.toFixed(2)}`));
+      if (eng?.engagement_angle_deg != null)
+        lines.push(L("Engagement Angle",`${eng.engagement_angle_deg.toFixed(1)}°`));
       if (cust.peripheral_feed_ipm != null)
         lines.push(L("Peripheral Feed",`${cust.peripheral_feed_ipm.toFixed(2)} IPM`));
       lines.push("");
