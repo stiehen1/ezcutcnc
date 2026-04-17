@@ -2786,6 +2786,7 @@ def run_keyseat(payload: dict) -> dict:
             "chip_thickness_in":     round(ipt, 6),
             "chatter_index":         round(stability_pct / 100.0, 3),
             "teeth_in_cut":          round(flutes * 1.0, 2),  # full-slot: all teeth in cut
+            "engagement_angle_deg":  180.0,
             "helix_wrap_deg":        None,
             "engagement_continuous": True,
             "tool_life_min":         round(tool_life_min, 1),
@@ -2981,6 +2982,7 @@ def run_dovetail(payload: dict) -> dict:
             "chip_thickness_in":     round(ipt / max(0.1, lead_ctf), 6),  # actual chip thickness before lead CTF
             "chatter_index":         round(stability_pct / 100.0, 3),
             "teeth_in_cut":          round(flutes * 0.5, 2),  # approximate: ~half-engagement
+            "engagement_angle_deg":  90.0,
             "helix_wrap_deg":        None,
             "engagement_continuous": True,
             "tool_life_min":         round(tool_life_min, 1),
@@ -3202,6 +3204,7 @@ def run_feedmill(payload: dict) -> dict:
             "chip_thickness_in":     round(ipt_base, 6),
             "chatter_index":         round(stability_pct / 100.0, 3),
             "teeth_in_cut":          round(max(0.1, (math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0)))) / (2.0 * math.pi)) * flutes), 2),
+            "engagement_angle_deg":  round(math.degrees(math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0))))), 1),
             "tool_life_min":         round(tool_life_min, 1),
             "force_lbf":             round(total_force, 2),
             "radial_force_lbf":      round(radial_force, 2),
@@ -5681,6 +5684,7 @@ def run(payload=None):
 
         _tic_ae  = max(-1.0, min(1.0, 1.0 - 2.0 * _tic_woc / _tic_d)) if _tic_d > 0 else 1.0
         _tic_ang = math.acos(_tic_ae)                   # radial engagement arc entry→exit (rad)
+        _engagement_angle_deg = round(math.degrees(_tic_ang), 1)
 
         # Helix wrap angle over DOC
         _helix_wrap_rad = (2.0 * _tic_doc * math.tan(math.radians(_tic_helix)) / _tic_d) if _tic_d > 0 else 0.0
@@ -5696,6 +5700,7 @@ def run(payload=None):
             _teeth_in_cut_result = round(max(0.1, (_tic_ang / (2.0 * math.pi)) * _tic_fl), 2)
     except Exception:
         _teeth_in_cut_result = None
+        _engagement_angle_deg = None
     # ── end teeth in cut ─────────────────────────────────────────────────────
 
     # ── Chip-clearance check (WOC vs flute count) ───────────────────────────
@@ -5825,6 +5830,7 @@ def run(payload=None):
             "chip_thickness_in": float(chip_t),
             "chatter_index": locals().get("chatter_index", 0.0),
             "teeth_in_cut": _teeth_in_cut_result,
+            "engagement_angle_deg": _engagement_angle_deg,
             "helix_wrap_deg": _helix_wrap_deg,
             "engagement_continuous": _engagement_continuous,
             "tool_life_min": float(tool_life_min),
