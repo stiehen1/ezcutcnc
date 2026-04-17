@@ -5135,6 +5135,13 @@ def run(payload=None):
 
     _dlim /= _wh_factor
 
+    # Tailstock / live center support: part is simply-supported (both ends constrained)
+    # vs. cantilever (chuck only). Simply-supported beam deflects ~3.5× less at midspan.
+    # Suppress stickout suggestions when active — part rigidity is already high.
+    _tailstock = bool(payload.get("tailstock", False))
+    if _tailstock:
+        _dlim *= 3.5
+
     # Live tool connection rigidity — face-contact (BMT) systems are stiffer than
     # bore-clamped (VDI) and gang tooling; multiplies the effective deflection limit.
     _dlim *= float(data.get("_lt_rigidity", 1.0))
@@ -5237,7 +5244,23 @@ def run(payload=None):
     _stickout_is_fixed = _tool_series_upper in _fixed_stickout_series
     _seen_stickout = set()
     _at_lbs_floor = _lbs > 0 and _so <= _min_so + 0.05  # already at or within 0.05" of LBS floor
-    if _so > 0 and not _stickout_is_fixed and not _at_lbs_floor:
+
+    # Tailstock active: part is simply-supported — suppress stickout reduction suggestions
+    # unless stickout is extreme (>4×D), in which case keep a soft advisory note.
+    if _tailstock and _defl_pct < 175:
+        _hw_suggestions.append({
+            "type": "info",
+            "label": "Tailstock support active",
+            "detail": "Simply-supported beam — deflection limit boosted 3.5×. Setup looks good.",
+        })
+    elif _tailstock and _so > 0 and _d > 0 and _so > 4 * _d:
+        _hw_suggestions.append({
+            "type": "info",
+            "label": f'Tailstock active — stickout {_so:.2f}" is aggressive ({_so/_d:.1f}×D)',
+            "detail": "Tailstock helps significantly, but verify overhung load on rotary axis bearings.",
+        })
+
+    if _so > 0 and not _stickout_is_fixed and not _at_lbs_floor and not _tailstock:
         for frac in (0.70, 0.80):
             _ln = round(max(_so * frac, _min_so), 3)
             if _ln >= _so - 1e-4:
