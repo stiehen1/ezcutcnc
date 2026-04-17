@@ -1716,6 +1716,7 @@ export default function Mentor() {
     spindle_drive: "belt" as "direct" | "belt" | "gear",
     stickout: 0,
     part_stickout: 0,
+    tailstock: false,
 
     existing_hole_dia: 0,
     target_hole_dia: 0,
@@ -3533,6 +3534,7 @@ ${stabSection}
     };
     if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
     if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
+    if (form.tailstock) lines.push(L("Tailstock", "In use — simply-supported (3.5× rigidity boost applied)"));
     const thLabels: Record<string, string> = {
       er_collet: "ER Collet", hp_collet: "HP Collet", weldon: "Weldon / Set Screw",
       milling_chuck: "Milling Chuck", hydraulic: "Hydraulic Chuck",
@@ -6442,7 +6444,7 @@ ${stabSection}
           </div>
 
           {/* Part Stickout — shown when workholding is a chuck or trunnion */}
-          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"] as string[]).includes(form.workholding) && (
+          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers"] as string[]).includes(form.workholding) && (
             <div className="mt-3">
               <FieldLabel hint="Distance from the chuck jaw face (or trunnion fixture face) to the cut location. Longer part overhang adds compliance — a long part sticking out of a chuck deflects far more than a stubby one. Leave blank if the cut is close to the jaws.">Part Overhang Past Jaws (in)</FieldLabel>
               <Input
@@ -6460,6 +6462,23 @@ ${stabSection}
                 }}
               />
               <p className="text-[10px] text-zinc-500 mt-1">Used to adjust workholding compliance in the stability model — longer overhang increases chatter risk.</p>
+            </div>
+          )}
+
+          {/* Tailstock checkbox — shown for trunnion, chuck, and lathe workholding */}
+          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck"] as string[]).includes(form.workholding) && (
+            <div className="mt-3 flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                id="tailstock_cb"
+                checked={!!form.tailstock}
+                onChange={e => setForm(p => ({ ...p, tailstock: e.target.checked }))}
+                className="mt-0.5 accent-indigo-500 w-4 h-4 shrink-0"
+              />
+              <label htmlFor="tailstock_cb" className="text-sm text-zinc-300 cursor-pointer leading-snug">
+                Tailstock / live center in use
+                <span className="block text-[10px] text-zinc-500 mt-0.5">Simply-supported beam — significantly reduces part deflection. Apply when a dead center, live center, or sub-spindle is supporting the far end of the part.</span>
+              </label>
             </div>
           )}
 
