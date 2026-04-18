@@ -1130,7 +1130,7 @@ export default function Mentor() {
           .replace(/^A2-(\d+)$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT65")
           .replace(/^A2-\d+\/A2-\d+$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT65")
       : null;
-    const validTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","VDI30","VDI40","VDI50","BMT45","BMT55","BMT65","CAPTO C6","CAPTO C8"];
+    const validTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","VDI30","VDI40","VDI50","BMT45","BMT55","BMT65","CAPTO C6","CAPTO C8"];
     const rawTaper = (_taperNorm && validTapers.includes(_taperNorm)) ? _taperNorm : _taperRaw;
     const rawDrive = typeof m.drive_type === "string" ? m.drive_type.trim().toLowerCase() : null;
     const rawMachType = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
