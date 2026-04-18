@@ -1685,7 +1685,7 @@ export default function Mentor() {
     chamfer_tip_dia: 0,
     chamfer_depth: 0,
 
-    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
+    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "HSK125" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8",
     machine_type: "vmc" as "vmc" | "hmc" | "5axis" | "mill_turn" | "lathe",
     mill_spindle_rpm: 0,        // B-axis mill spindle RPM (mill_turn only)
     mill_spindle_hp: 0,         // B-axis mill spindle HP (mill_turn only)

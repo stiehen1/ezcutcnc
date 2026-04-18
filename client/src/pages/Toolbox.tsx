@@ -1004,7 +1004,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                               <label className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1 block">Spindle Taper</label>
                               <select value={mTaper} onChange={e => setMTaper(e.target.value)}
                                 className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
-                                {["CAT40","CAT50","BT30","BT40","BT50","HSK63","HSK100","CAPTO C6","CAPTO C8"].map(t => <option key={t} value={t}>{t}</option>)}
+                                {["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","CAPTO C6","CAPTO C8"].map(t => <option key={t} value={t}>{t}</option>)}
                               </select>
                             </div>
                             <div>
