@@ -442,6 +442,7 @@ SPINDLE_TORQUE_CAPACITY = {
     "HSK50":  280,   # Mid-size HSK (Makino L2, Slim3n/5n, J-series small)
     "HSK63":  460,
     "HSK100": 950,
+    "HSK125": 2100,  # HSK-A125 — heavy-duty (Makino T4, large aerospace HMC)
     # Lathe live-tool turret interfaces — lower torque than machining center tapers
     "VDI30":   90,
     "VDI40":  180,
