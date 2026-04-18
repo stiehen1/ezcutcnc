@@ -5882,7 +5882,7 @@ ${stabSection}
                           ) as typeof p.spindle_taper;
                           // if current taper isn't valid for new machine type, reset to default
                           const latheTapers  = ["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const;
-                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","CAPTO C6","CAPTO C8"] as const;
+                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const;
                           const taperReset =
                             isLathe && !(latheTapers as readonly string[]).includes(p.spindle_taper)  ? defaultTaper :
                             !isLathe && !(millingTapers as readonly string[]).includes(p.spindle_taper) ? defaultTaper :
@@ -5924,10 +5924,10 @@ ${stabSection}
                   form.machine_type === "lathe"
                   ? (["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const)
                   : form.machine_type === "hmc"
-                  ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100"] as const)
+                  ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100","HSK125"] as const)
                   : (form.machine_type === "5axis" || form.machine_type === "mill_turn")
-                  ? (["CAT40","BT40","HSK32","HSK50","HSK63","HSK100","CAPTO C6","CAPTO C8"] as const)
-                  : /* vmc */ (["CAT30","CAT40","CAT50","BT30","BT40","HSK32","HSK50","HSK63","HSK100"] as const)
+                  ? (["CAT40","BT40","HSK32","HSK50","HSK63","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const)
+                  : /* vmc */ (["CAT30","CAT40","CAT50","BT30","BT40","HSK32","HSK50","HSK63","HSK100","HSK125"] as const)
                 ).map((t) => {
                   const taperLabel: Record<string, string> = { CAT30: "CV30", CAT40: "CV40", CAT50: "CV50" };
                   return (
