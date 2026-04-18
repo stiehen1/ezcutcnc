@@ -595,6 +595,8 @@ function FeedbackButton() {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState("Bug");
   const [message, setMessage] = React.useState("");
+  const [machineBrand, setMachineBrand] = React.useState("");
+  const [machineModel, setMachineModel] = React.useState("");
   const [email, setEmail] = React.useState(() => localStorage.getItem("er_email") || "");
   const [screenshot, setScreenshot] = React.useState<string | null>(null);
   const [screenshotName, setScreenshotName] = React.useState("");
@@ -643,15 +645,19 @@ function FeedbackButton() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
+    if (type === "Add a Missing CNC Machine" && (!machineBrand.trim() || !machineModel.trim())) return;
     setSending(true);
+    const fullMessage = type === "Add a Missing CNC Machine"
+      ? `Brand: ${machineBrand.trim()}\nModel: ${machineModel.trim()}\n\n${message.trim()}`
+      : message.trim();
     try {
       await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, message, email, screenshot, screenshotName }),
+        body: JSON.stringify({ type, message: fullMessage, email, screenshot, screenshotName }),
       });
       setSent(true);
-      setTimeout(() => { setOpen(false); setSent(false); setMessage(""); setEmail(""); setType("Bug"); setScreenshot(null); setScreenshotName(""); }, 2500);
+      setTimeout(() => { setOpen(false); setSent(false); setMessage(""); setEmail(""); setType("Bug"); setScreenshot(null); setScreenshotName(""); setMachineBrand(""); setMachineModel(""); }, 2500);
     } catch { setOpen(false); }
     setSending(false);
   };
@@ -694,11 +700,36 @@ function FeedbackButton() {
                     <option>Wrong Speeds/Feeds</option>
                     <option>Missing Material</option>
                     <option>Missing Tool Type</option>
+                    <option>Add a Missing CNC Machine</option>
                     <option>Suggestion</option>
                     <option>Compliment</option>
                     <option>Other</option>
                   </select>
                 </div>
+                {type === "Add a Missing CNC Machine" && (
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-[11px] text-zinc-400 mb-1 block">Brand <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Haas"
+                        value={machineBrand}
+                        onChange={e => setMachineBrand(e.target.value)}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-orange-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[11px] text-zinc-400 mb-1 block">Model <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        placeholder="e.g. VF-2"
+                        value={machineModel}
+                        onChange={e => setMachineModel(e.target.value)}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[11px] text-zinc-400">Message <span className="text-red-400">*</span></label>
@@ -711,7 +742,7 @@ function FeedbackButton() {
                     value={message}
                     onChange={e => setMessage(e.target.value)}
                     rows={4}
-                    placeholder="Tell us what's on your mind..."
+                    placeholder={type === "Add a Missing CNC Machine" ? "Any spindle specs you know (HP, RPM, taper, etc.) — we'll look up the rest." : "Tell us what's on your mind..."}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-orange-500 resize-none"
                     required
                   />
