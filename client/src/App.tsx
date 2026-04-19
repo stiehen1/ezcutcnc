@@ -213,6 +213,23 @@ const WALKTHROUGH_STEPS = [
 
 const walkThruOpenRef = { open: false, setOpen: (_: boolean) => {} };
 
+// Shared close-others bus — each side tab registers a closer; opening one fires all others closed
+const _sideTabClosers = new Set<() => void>();
+function useSideTab() {
+  const [open, setOpen] = React.useState(false);
+  const closeRef = React.useRef(() => setOpen(false));
+  React.useEffect(() => {
+    closeRef.current = () => setOpen(false);
+    _sideTabClosers.add(closeRef.current);
+    return () => { _sideTabClosers.delete(closeRef.current); };
+  }, []);
+  const openTab = React.useCallback(() => {
+    _sideTabClosers.forEach(fn => fn());
+    setOpen(true);
+  }, []);
+  return { open, openTab, closeTab: () => setOpen(false) };
+}
+
 function WelcomeModal({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: () => void } = {}) {
   const [open, setOpen] = React.useState(() => forceOpen ?? !localStorage.getItem("welcome_seen"));
   const [step, setStep] = React.useState(0);
@@ -473,7 +490,7 @@ const PAGE_HELP: Record<string, { title: string; sections: { heading: string; bo
 };
 
 function HelpButton() {
-  const [open, setOpen] = React.useState(false);
+  const { open, openTab, closeTab } = useSideTab();
   const [overviewOpen, setOverviewOpen] = React.useState(false);
   const [location] = useLocation();
 
@@ -507,7 +524,7 @@ function HelpButton() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={openTab}
         className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 148px)", height: 74, background: "linear-gradient(180deg,#6366f1,#4f46e5)" }}
         aria-label="Pro Tips"
@@ -515,14 +532,14 @@ function HelpButton() {
         Pro Tips
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={closeTab}>
           <div
             className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <p className="text-sm font-semibold text-white">Welcome to CoreCutCNC</p>
-              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+              <button onClick={closeTab} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-4 flex flex-col gap-5">
               {/* Page-specific help */}
@@ -575,24 +592,24 @@ function HelpButton() {
 }
 
 function WalkThruButton() {
-  const [open, setOpen] = React.useState(false);
+  const { open, openTab, closeTab } = useSideTab();
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={openTab}
         className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 74px)", height: 74, background: "linear-gradient(180deg,#fbbf24,#d97706)" }}
         aria-label="Walk-Thru"
       >
         Walk-Thru
       </button>
-      {open && <WelcomeModal forceOpen onClose={() => setOpen(false)} />}
+      {open && <WelcomeModal forceOpen onClose={closeTab} />}
     </>
   );
 }
 
 function FeedbackButton() {
-  const [open, setOpen] = React.useState(false);
+  const { open, openTab, closeTab } = useSideTab();
   const [type, setType] = React.useState("Bug");
   const [message, setMessage] = React.useState("");
   const [machineBrand, setMachineBrand] = React.useState("");
@@ -657,8 +674,8 @@ function FeedbackButton() {
         body: JSON.stringify({ type, message: fullMessage, email, screenshot, screenshotName }),
       });
       setSent(true);
-      setTimeout(() => { setOpen(false); setSent(false); setMessage(""); setEmail(""); setType("Bug"); setScreenshot(null); setScreenshotName(""); setMachineBrand(""); setMachineModel(""); }, 2500);
-    } catch { setOpen(false); }
+      setTimeout(() => { closeTab(); setSent(false); setMessage(""); setEmail(""); setType("Bug"); setScreenshot(null); setScreenshotName(""); setMachineBrand(""); setMachineModel(""); }, 2500);
+    } catch { closeTab(); }
     setSending(false);
   };
 
@@ -666,7 +683,7 @@ function FeedbackButton() {
     <>
       {/* Floating tab */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={openTab}
         className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 0px)", height: 74, background: "linear-gradient(180deg,#10b981,#059669)" }}
         aria-label="Send feedback"
@@ -676,14 +693,14 @@ function FeedbackButton() {
 
       {/* Slide-in panel */}
       {open && (
-        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={closeTab}>
           <div
             className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col p-5"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-semibold text-white">Send Feedback</p>
-              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+              <button onClick={closeTab} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
             </div>
             {sent ? (
               <p className="text-sm text-green-400 mt-4">Thanks! We got your feedback.</p>
@@ -791,7 +808,7 @@ function FeedbackButton() {
 }
 
 function RegrindingTab() {
-  const [open, setOpen] = React.useState(false);
+  const { open, openTab, closeTab } = useSideTab();
   const [contactOpen, setContactOpen] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const [city, setCity] = React.useState("");
@@ -816,7 +833,7 @@ function RegrindingTab() {
     <>
       {/* Floating tab */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={openTab}
         className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 74px)", height: 74, background: "linear-gradient(180deg,#f97316,#ea580c)" }}
         aria-label="Tool Regrinding Program"
@@ -826,7 +843,7 @@ function RegrindingTab() {
 
       {/* Slide-in panel */}
       {open && (
-        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={closeTab}>
           <div
             className="w-full max-w-sm bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col overflow-y-auto"
             onClick={e => e.stopPropagation()}
@@ -837,7 +854,7 @@ function RegrindingTab() {
                 <p className="text-sm font-bold text-orange-400 uppercase tracking-widest">Tool Reconditioning</p>
                 <p className="text-[10px] text-zinc-400 mt-0.5">Core Cutter LLC · Gardiner, ME</p>
               </div>
-              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
+              <button onClick={closeTab} className="text-zinc-500 hover:text-white text-lg leading-none">✕</button>
             </div>
 
             <div className="p-5 space-y-5">
@@ -1047,7 +1064,7 @@ function RegrindingTab() {
 }
 
 function TeamsTab() {
-  const [open, setOpen] = React.useState(false);
+  const { open, openTab, closeTab } = useSideTab();
   const [showConnect, setShowConnect] = React.useState(false);
   const [teamInput, setTeamInput] = React.useState("");
   const [teamError, setTeamError] = React.useState("");
@@ -1099,7 +1116,7 @@ function TeamsTab() {
     <>
       {/* Floating tab */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={openTab}
         className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 148px)", height: 74, background: "linear-gradient(180deg,#0891b2,#0e7490)" }}
         aria-label="Programming Teams"
@@ -1109,7 +1126,7 @@ function TeamsTab() {
 
       {/* Slide-in panel */}
       {open && (
-        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={closeTab}>
           <div
             className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col overflow-y-auto"
             onClick={e => e.stopPropagation()}
@@ -1120,7 +1137,7 @@ function TeamsTab() {
                 <p className="text-xs font-bold uppercase tracking-widest text-cyan-100">Programming Teams</p>
                 <p className="text-[11px] text-cyan-200 mt-0.5">Share machines & setups across your whole shop</p>
               </div>
-              <button onClick={() => setOpen(false)} className="text-cyan-200 hover:text-white text-lg leading-none ml-3">✕</button>
+              <button onClick={closeTab} className="text-cyan-200 hover:text-white text-lg leading-none ml-3">✕</button>
             </div>
 
             <div className="p-4 space-y-5 flex-1">
