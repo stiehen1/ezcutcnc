@@ -591,19 +591,151 @@ function HelpButton() {
   );
 }
 
-function WalkThruButton() {
+// ── Training video config — add YouTube URL when video is ready ──────────────
+// youtubeId: the part after ?v= or youtu.be/  (leave empty string = Coming Soon)
+const TRAINING_VIDEOS = [
+  { id: "overview",      title: "Getting Started / Overview",         desc: "App layout, registration, and your first calculation.",                       youtubeId: "" },
+  { id: "tool_finder",   title: "Tool Finder",                        desc: "Search the catalog, filter by material and operation, load into calculator.",  youtubeId: "" },
+  { id: "milling",       title: "Milling — Standard Endmill",         desc: "HEM, conventional, finish, slot — speeds, feeds, stability mentor.",          youtubeId: "" },
+  { id: "chamfer",       title: "Chamfer Mill",                       desc: "CMS/CMH series, effective diameter, multi-pass strategy.",                    youtubeId: "" },
+  { id: "specials",      title: "Special Tools — PDF Upload",         desc: "Upload a Core Cutter special print and auto-fill tool geometry.",             youtubeId: "" },
+  { id: "drilling",      title: "Drilling & Reaming",                 desc: "Carbide drill, peck cycles, reamer stock, surface finish risk.",              youtubeId: "" },
+  { id: "threadmill",    title: "Thread Milling",                     desc: "UN/Metric/NPT, radial passes, G-code output.",                               youtubeId: "" },
+  { id: "feedmill",      title: "Feed Milling (High-Feed Mill)",      desc: "Lead angle chip thinning, WOC/DOC limits, ramp angle.",                      youtubeId: "" },
+  { id: "stability",     title: "Stability Mentor",                   desc: "Reading the chatter risk score, acting on suggestions.",                     youtubeId: "" },
+  { id: "toolbox",       title: "Toolbox & Saved Setups",             desc: "Save machines, re-run setups, team sharing.",                                youtubeId: "" },
+  { id: "roi",           title: "ROI Calculator",                     desc: "Build a cost-per-part comparison for a customer presentation.",              youtubeId: "" },
+];
+
+function TrainingVideosTab() {
   const { open, openTab, closeTab } = useSideTab();
+  const [expandedVideo, setExpandedVideo] = React.useState<string | null>(null);
+  const [quickStartOpen, setQuickStartOpen] = React.useState(false);
+  const [quickStartStep, setQuickStartStep] = React.useState(0);
+
   return (
     <>
       <button
         onClick={openTab}
         className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 74px)", height: 74, background: "linear-gradient(180deg,#fbbf24,#d97706)" }}
-        aria-label="Walk-Thru"
+        aria-label="Training Videos"
       >
-        Walk-Thru
+        Training
       </button>
-      {open && <WelcomeModal forceOpen onClose={closeTab} />}
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={closeTab}>
+          <div
+            className="w-full max-w-xs bg-zinc-900 border-l border-zinc-700 h-full shadow-2xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-4 py-3 flex items-center justify-between z-10">
+              <div>
+                <p className="text-sm font-bold text-amber-400 uppercase tracking-widest">Training Videos</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">CoreCutCNC — section-by-section guides</p>
+              </div>
+              <button onClick={closeTab} className="text-zinc-500 hover:text-white text-lg leading-none ml-3">✕</button>
+            </div>
+
+            {/* Video list */}
+            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+              {TRAINING_VIDEOS.map(v => {
+                const hasVideo = !!v.youtubeId;
+                const isExpanded = expandedVideo === v.id;
+                return (
+                  <div key={v.id} className="rounded-lg border border-zinc-700/60 bg-zinc-800/50 overflow-hidden">
+                    {/* Card header — always visible */}
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2.5 flex items-start gap-2.5"
+                      onClick={() => setExpandedVideo(isExpanded ? null : v.id)}
+                    >
+                      <span className="mt-0.5 shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                        style={{ background: hasVideo ? "#d97706" : "#3f3f46", color: hasVideo ? "#fff" : "#71717a" }}>
+                        {hasVideo ? "▶ Play" : "Soon"}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white leading-snug">{v.title}</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">{v.desc}</p>
+                      </div>
+                    </button>
+
+                    {/* Expanded — YouTube embed or coming soon */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3">
+                        {hasVideo ? (
+                          <div className="relative w-full rounded overflow-hidden bg-black" style={{ paddingBottom: "56.25%" }}>
+                            <iframe
+                              className="absolute inset-0 w-full h-full"
+                              src={`https://www.youtube.com/embed/${v.youtubeId}?rel=0&modestbranding=1`}
+                              title={v.title}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        ) : (
+                          <div className="rounded bg-zinc-700/40 border border-zinc-600/40 px-3 py-4 text-center">
+                            <p className="text-2xl mb-1">🎬</p>
+                            <p className="text-xs font-semibold text-zinc-300">Coming Soon</p>
+                            <p className="text-[10px] text-zinc-500 mt-1">This training video is in production.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Quick Start accordion */}
+              <div className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-800/50 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2.5 flex items-center justify-between"
+                  onClick={() => setQuickStartOpen(o => !o)}
+                >
+                  <span className="text-xs font-semibold text-zinc-300">📋 Quick Start Guide</span>
+                  <span className="text-zinc-500 text-xs">{quickStartOpen ? "▲" : "▼"}</span>
+                </button>
+                {quickStartOpen && (
+                  <div className="px-3 pb-3 space-y-3">
+                    {WALKTHROUGH_STEPS.map((s, i) => (
+                      <div
+                        key={i}
+                        className={`rounded-lg p-3 border cursor-pointer transition-colors ${quickStartStep === i ? "border-amber-500/60 bg-amber-900/20" : "border-zinc-700/40 bg-zinc-800/30 hover:border-zinc-600"}`}
+                        onClick={() => setQuickStartStep(i)}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-base">{s.icon}</span>
+                          <p className="text-xs font-semibold text-white leading-snug">{s.title}</p>
+                        </div>
+                        {quickStartStep === i && (
+                          <div className="mt-1.5 text-[11px] text-zinc-400 leading-relaxed space-y-1.5">
+                            {"subtitle" in s && s.subtitle && <p className="text-zinc-300 font-medium">{s.subtitle}</p>}
+                            {"body" in s && s.body && <p>{s.body}</p>}
+                            {"steps" in s && s.steps && (
+                              <ul className="space-y-1">
+                                {s.steps.map((st: any) => (
+                                  <li key={st.n} className="flex gap-2">
+                                    <span className="shrink-0 w-4 h-4 rounded-full bg-amber-600 text-white text-[9px] font-bold flex items-center justify-center">{st.n}</span>
+                                    <span>{st.text}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {"note" in s && s.note && <p className="text-amber-400/80 italic">{s.note}</p>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1340,7 +1472,7 @@ function App() {
         <Router />
         <Toaster />
         <WelcomeModal />
-        <WalkThruButton />
+        <TrainingVideosTab />
         <FeedbackButton />
         <RegrindingTab />
         <TeamsTab />
