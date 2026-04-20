@@ -5992,7 +5992,7 @@ ${stabSection}
                       { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
                       { key: "hydraulic",  label: "Hydraulic",  hint: "Oil-membrane clamping — excellent vibration damping and 1–2 µm runout. Available on premium live tool heads." },
                       { key: "weldon",     label: "Weldon",     hint: "Side-lock set screw on a flat — positive mechanical lock, prevents pullout under heavy radial load on live tool turrets." },
-                      { key: "hp_collet",  label: "HP Collet",  hint: "SK/FX-style precision bearing nut collet — better clamping and runout than standard ER. Good upgrade for live tool stations." },
+                      { key: "hp_collet",  label: "HP Collet",  hint: "SK/SX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer SX)" },
                       { key: "er_collet",  label: "ER Collet",  hint: "Standard ER collet — most common live tooling holder. 3–5 µm runout. Versatile across drills, end mills, and taps." },
                     ] as const)
                   : ([
@@ -6002,7 +6002,7 @@ ${stabSection}
                       { key: "hydraulic",       label: "Hydraulic",       hint: "Oil-membrane clamping — full circumferential contact, excellent vibration damping, 1–2 µm runout. Great for finishing and long-reach applications." },
 { key: "milling_chuck",   label: "Milling Chuck",   hint: "Full-bore mechanical chuck — high clamping torque, good radial stiffness. Well suited for heavy interrupted cuts and roughing." },
                       { key: "weldon",          label: "Weldon",          hint: "Side-lock set screw on a flat ground into the shank — positive mechanical lock, prevents pullout under heavy load. Larger tools (≥1\") often use double Weldon flats." },
-                      { key: "hp_collet",       label: "HP Collet",       hint: "SK/FX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer FX)" },
+                      { key: "hp_collet",       label: "HP Collet",       hint: "SK/SX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer SX)" },
                       { key: "er_collet",       label: "ER Collet",       hint: "Standard ER collet — versatile and widely available. 3–5 µm runout. Good for general use; upgrade for precision or HEM work." },
                     ] as const)
                 ).map(({ key, label, hint }) => (
