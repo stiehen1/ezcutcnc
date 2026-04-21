@@ -1705,17 +1705,17 @@ export default function Mentor() {
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
 
-    max_rpm: 0,
+    max_rpm: 10000,
     rpm_util_pct: 0.95,
     drill_feed_util_pct: 0.90,
 
     woc_pct: 0,
     doc_xd: 0,
 
-    machine_hp: 0,
+    machine_hp: 15,
     live_tool_connection: "",
     live_tool_hp: 0,
-    spindle_drive: "belt" as "direct" | "belt" | "gear",
+    spindle_drive: "direct" as "direct" | "belt" | "gear",
     stickout: 0,
     part_stickout: 0,
     tailstock: false,
@@ -5485,6 +5485,14 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Machine Power</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+
+          {/* Generic machine disclaimer */}
+          {!activeMachineName && (
+            <div className="mb-3 flex items-start gap-1.5 text-[10px] text-zinc-500 leading-snug">
+              <span className="mt-0.5 shrink-0">⚠</span>
+              <span>Using generic defaults (15 HP / 10k RPM / CV40 / Direct). Select your machine above for accurate HP utilization and spindle load.</span>
+            </div>
+          )}
 
           {/* Machine selector */}
           <div className="mb-4 space-y-2">
