@@ -4293,7 +4293,7 @@ ${stabSection}
 
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <select
-                className={`w-full rounded-md border px-3 py-2 text-sm ${!form.mode ? "border-zinc-500 bg-zinc-800 text-zinc-300" : "bg-background"}`}
+                className={`w-full rounded-md border px-3 py-2.5 text-sm font-medium ${!form.mode ? "border-orange-500 bg-zinc-800 text-orange-300" : "border-orange-500/60 bg-zinc-800 text-zinc-100"}`}
                 aria-label="Milling process"
                 value={form.mode}
                 onChange={(e) => {
