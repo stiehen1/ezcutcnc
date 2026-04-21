@@ -9053,7 +9053,7 @@ ${stabSection}
         <CardContent className="space-y-4">
           {!customer ? (
             <div className="text-sm text-muted-foreground">
-              Run the Advisor to see recommendations.
+              Run the engine to view recommendations.
             </div>
           ) : threadResult ? (
             /* ── THREAD MILLING OUTPUT ───────────────────────────── */
