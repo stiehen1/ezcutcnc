@@ -6269,7 +6269,7 @@ ${stabSection}
                   <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Fluid Type</p>
                   <div className="flex flex-wrap gap-1.5">
                     {([
-                      { key: "water_soluble",  label: "Water-Soluble",  hint: "Soluble oil (oil-in-water emulsion). Good lubricity and cooling. Measure with a refractometer — target 8–12%. Best all-around for steel and stainless." },
+                      { key: "water_soluble",  label: "Water-Soluble Oil",  hint: "Mineral oil with emulsifiers that mix easily with water — tiny oil droplets suspend throughout, creating a stable emulsion. Gives you cooling from the water and lubrication from the oil. Measure with a refractometer — target 8–12%. Best all-around for steel and stainless." },
                       { key: "semi_synthetic", label: "Semi-Synthetic",  hint: "Partial synthetic + partial mineral oil. Balanced lubricity and cooling. Very common in job shops — good for steel, stainless, and cast iron." },
                       { key: "synthetic",      label: "Synthetic",       hint: "Water-based, no mineral oil. Excellent cooling, lower lubricity. Preferred for aluminum. Less ideal for stainless/Inconel where lubricity reduces built-up edge." },
                       { key: "straight_oil",   label: "Straight Oil",    hint: "Pure cutting oil — no water. Best lubricity, minimal cooling. Preferred for difficult stainless, Inconel, and threading. Not ideal for high-speed aluminum." },
