@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Neon__run_sql",
+      "Bash(python -c ':*)",
+      "mcp__Neon__list_projects",
+      "WebFetch(domain:machinetool.global.brother)",
+      "WebSearch",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
