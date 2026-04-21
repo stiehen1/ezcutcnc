@@ -6132,86 +6132,92 @@ ${stabSection}
               </div>
 
               {/* Yes/No question rows */}
-              <div className="space-y-2 pt-1 border-t border-border/50">
+              <div className="pt-2 border-t border-border/50 space-y-0">
                 {/* Extension Holder */}
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-3 py-2 border-b border-border/30">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-xs font-medium text-zinc-300 cursor-default w-52 shrink-0">Is an Extension Holder being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                      <span className="text-xs font-medium text-zinc-300 cursor-default flex-1">Is an Extension Holder being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-64 text-xs">
-                      An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability mentor will flag this.
+                      An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability advisor will flag this.
                     </TooltipContent>
                   </Tooltip>
-                  {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
-                    <button key={String(val)} type="button"
-                      onClick={() => setForm(p => ({ ...p, extension_holder: val }))}
-                      className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                      style={{
-                        backgroundColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                        borderColor: val ? "#f59e0b" : "#52525b",
-                        color: form.extension_holder === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
-                      }}
-                    >{label}</button>
-                  ))}
-                  {form.extension_holder && (
-                    <span className="text-[11px] text-amber-400">⚠ Multi-joint setup — added compliance and runout at each interface</span>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                      <button key={String(val)} type="button"
+                        onClick={() => setForm(p => ({ ...p, extension_holder: val }))}
+                        className="rounded px-3 py-1 text-xs font-semibold border transition-all w-12"
+                        style={{
+                          backgroundColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                          borderColor: val ? "#f59e0b" : "#52525b",
+                          color: form.extension_holder === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                        }}
+                      >{label}</button>
+                    ))}
+                  </div>
                 </div>
+                {form.extension_holder && (
+                  <div className="text-[11px] text-amber-400 py-1.5 border-b border-border/30">⚠ Multi-joint setup — added compliance and runout at each interface</div>
+                )}
 
                 {/* Speed Increaser — VMC / HMC / 5-axis only */}
                 {(form.machine_type === "vmc" || form.machine_type === "hmc" || form.machine_type === "5axis") && (
                   <div>
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-3 py-2 border-b border-border/30">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="text-xs font-medium text-zinc-300 cursor-default w-52 shrink-0">Is a Speed Increaser being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                          <span className="text-xs font-medium text-zinc-300 cursor-default flex-1">Is a Speed Increaser being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-64 text-xs">
                           A speeder multiplies spindle RPM by a gear ratio (e.g. 4:1 = 4× RPM) while dividing available torque and HP by the same ratio. The engine will cap RPM at the speeder's output limit and derate machine HP accordingly.
                         </TooltipContent>
                       </Tooltip>
-                      {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
-                        <button key={String(val)} type="button"
-                          onClick={() => setForm(p => ({ ...p, speeder_enabled: val }))}
-                          className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                          style={{
-                            backgroundColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                            borderColor: val ? "#f59e0b" : "#52525b",
-                            color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
-                          }}
-                        >{label}</button>
-                      ))}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                          <button key={String(val)} type="button"
+                            onClick={() => setForm(p => ({ ...p, speeder_enabled: val }))}
+                            className="rounded px-3 py-1 text-xs font-semibold border transition-all w-12"
+                            style={{
+                              backgroundColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                              borderColor: val ? "#f59e0b" : "#52525b",
+                              color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                            }}
+                          >{label}</button>
+                        ))}
+                      </div>
                     </div>
-                    {form.speeder_enabled && <SpeeederDetails form={form} setForm={setForm} />}
+                    {form.speeder_enabled && <div className="py-2 border-b border-border/30"><SpeeederDetails form={form} setForm={setForm} /></div>}
                   </div>
                 )}
 
                 {/* Right-Angle Head */}
                 <div>
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 py-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="text-xs font-medium text-zinc-300 cursor-default w-52 shrink-0">Is a Right-Angle Head being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                        <span className="text-xs font-medium text-zinc-300 cursor-default flex-1">Is a Right-Angle Head being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-64 text-xs">
                         A right-angle head mounts in the spindle and redirects the tool 90°. The gear interface and cantilevered output spindle significantly reduce rigidity — the stability model applies a 28% deflection penalty. Use for cross-holes, side features, and undercuts without re-fixturing.
                       </TooltipContent>
                     </Tooltip>
-                    {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
-                      <button key={String(val)} type="button"
-                        onClick={() => setForm(p => ({ ...p, toolholder: val ? "right_angle_head" : "er_collet" }))}
-                        className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                        style={{
-                          backgroundColor: (form.toolholder === "right_angle_head") === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                          borderColor: val ? "#f59e0b" : "#52525b",
-                          color: (form.toolholder === "right_angle_head") === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
-                        }}
-                      >{label}</button>
-                    ))}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                        <button key={String(val)} type="button"
+                          onClick={() => setForm(p => ({ ...p, toolholder: val ? "right_angle_head" : "er_collet" }))}
+                          className="rounded px-3 py-1 text-xs font-semibold border transition-all w-12"
+                          style={{
+                            backgroundColor: (form.toolholder === "right_angle_head") === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                            borderColor: val ? "#f59e0b" : "#52525b",
+                            color: (form.toolholder === "right_angle_head") === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                          }}
+                        >{label}</button>
+                      ))}
+                    </div>
                   </div>
                   {form.toolholder === "right_angle_head" && (
-                    <div className="flex items-start gap-1.5 text-[11px] text-amber-400 mt-1.5">
+                    <div className="flex items-start gap-1.5 text-[11px] text-amber-400 pb-1">
                       <span className="shrink-0">⚠</span>
                       <span>Reduce DOC/WOC 30–40% vs a direct toolholder. The stability advisor will reflect the lower rigidity limit.</span>
                     </div>
@@ -6263,7 +6269,7 @@ ${stabSection}
                   <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Fluid Type</p>
                   <div className="flex flex-wrap gap-1.5">
                     {([
-                      { key: "water_soluble",  label: "Water-Soluble",  hint: "Soluble oil (oil-in-water emulsion). Good lubricity and cooling. Measure with a refractometer — target 8–12%. Best all-around for steel and stainless." },
+                      { key: "water_soluble",  label: "Water-Soluble Oil",  hint: "Mineral oil with emulsifiers that mix easily with water — tiny oil droplets suspend throughout, creating a stable emulsion. Gives you cooling from the water and lubrication from the oil. Measure with a refractometer — target 8–12%. Best all-around for steel and stainless." },
                       { key: "semi_synthetic", label: "Semi-Synthetic",  hint: "Partial synthetic + partial mineral oil. Balanced lubricity and cooling. Very common in job shops — good for steel, stainless, and cast iron." },
                       { key: "synthetic",      label: "Synthetic",       hint: "Water-based, no mineral oil. Excellent cooling, lower lubricity. Preferred for aluminum. Less ideal for stainless/Inconel where lubricity reduces built-up edge." },
                       { key: "straight_oil",   label: "Straight Oil",    hint: "Pure cutting oil — no water. Best lubricity, minimal cooling. Preferred for difficult stainless, Inconel, and threading. Not ideal for high-speed aluminum." },
