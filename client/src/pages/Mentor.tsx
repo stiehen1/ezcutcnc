@@ -9053,7 +9053,7 @@ ${stabSection}
         <CardContent className="space-y-4">
           {!customer ? (
             <div className="text-sm text-muted-foreground">
-              Run Mentor to see recommendations.
+              Run the Advisor to see recommendations.
             </div>
           ) : threadResult ? (
             /* ── THREAD MILLING OUTPUT ───────────────────────────── */
@@ -9831,7 +9831,7 @@ ${stabSection}
               {/* Drill Design Mentor */}
               {drillResult.geometry_tip && (
                 <div className="rounded-lg border border-sky-500/50 bg-sky-500/10 px-3 py-2.5 text-xs">
-                  <p className="font-semibold text-sky-300 mb-0.5">Drill Design Mentor</p>
+                  <p className="font-semibold text-sky-300 mb-0.5">Drill Design Advisor</p>
                   <p className="text-sky-100/80">{drillResult.geometry_tip}</p>
                 </div>
               )}
