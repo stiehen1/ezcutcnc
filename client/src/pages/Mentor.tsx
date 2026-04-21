@@ -4292,8 +4292,9 @@ ${stabSection}
             )}
 
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
+              <div className="py-4">
               <select
-                className={`w-full rounded-md border px-3 py-2 text-sm ${!form.mode ? "border-zinc-500 bg-zinc-800 text-zinc-300" : "bg-background"}`}
+                className={`w-full rounded-md border-2 px-3 py-2.5 text-sm font-semibold ${!form.mode ? "border-yellow-400 bg-zinc-800 text-yellow-300" : "border-yellow-400 bg-zinc-800 text-zinc-100"}`}
                 aria-label="Milling process"
                 value={form.mode}
                 onChange={(e) => {
@@ -4354,8 +4355,8 @@ ${stabSection}
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
                 <option value="deep_pocket">Deep Pocket / Thin Wall (Progressive Reach)</option>
               </select>
+              </div>
             )}
-
 
             {/* circ_interp hole dimensions moved to CUT ENGAGEMENT section */}
           </div>
