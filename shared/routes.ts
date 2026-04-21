@@ -51,7 +51,7 @@ export const mentorSchemas = {
     spindle_taper: z.enum(["CAT30", "CAT40", "CAT50", "BT30", "BT40", "BT50", "HSK32", "HSK50", "HSK63", "HSK100", "HSK125", "VDI30", "VDI40", "VDI50", "BMT45", "BMT55", "BMT65", "CAPTO C6", "CAPTO C8"]).default("CAT40"),
     spindle_drive: z.enum(["direct", "belt", "gear"]).default("belt"),
     machine_type: z.enum(["vmc", "hmc", "5axis", "mill_turn", "lathe"]).default("vmc"),
-    toolholder: z.enum(["shrink_fit", "hydraulic", "hp_collet", "er_collet", "milling_chuck", "weldon", "press_fit", "capto"]).default("er_collet"),
+    toolholder: z.enum(["shrink_fit", "hydraulic", "hp_collet", "er_collet", "milling_chuck", "weldon", "press_fit", "capto", "right_angle_head"]).default("er_collet"),
     holder_gage_length: z.number().min(0).default(0),
     holder_nose_dia: z.number().min(0).default(0),
     dual_contact: z.boolean().default(false),

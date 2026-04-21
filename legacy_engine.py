@@ -413,6 +413,7 @@ LIVE_TOOL_CONNECTION_PROFILE = {
 
 TOOLHOLDER_RIGIDITY = {
     # new ISO key names
+    "right_angle_head": 0.72,  # angle head attachment — gear interface + cantilevered spindle, significantly less rigid
     "er_collet":       1.00,
     "hp_collet":       1.05,  # SK/FX-style precision bearing nut collet — better than ER but still slotted
     "weldon":          1.08,  # Side-lock set screw on flat — positive mechanical lock, moderate runout

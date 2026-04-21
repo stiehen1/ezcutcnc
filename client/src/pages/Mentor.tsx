@@ -56,6 +56,60 @@ function defaultThreadFlutes(dia: number): number {
   return 5;
 }
 
+function SpeeederDetails({ form, setForm }: {
+  form: { max_rpm: number; speeder_ratio: number; speeder_max_rpm: number; machine_hp: number; speeder_max_torque_nm: number };
+  setForm: React.Dispatch<React.SetStateAction<any>>;
+}) {
+  const effectiveRpm = Math.min(Math.round(form.max_rpm * form.speeder_ratio), form.speeder_max_rpm);
+  const hpFromRatio = form.machine_hp / form.speeder_ratio;
+  const hpFromTorque = form.speeder_max_torque_nm > 0
+    ? (form.speeder_max_torque_nm * effectiveRpm / 9549) * 1.341
+    : Infinity;
+  const effectiveHp = Math.min(hpFromRatio, hpFromTorque);
+  const torqueLimited = form.speeder_max_torque_nm > 0 && hpFromTorque < hpFromRatio;
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex gap-3">
+        <div className="flex-1 space-y-1">
+          <FieldLabel hint="Gear ratio of the speeder (e.g. 4 = 4× RPM multiplication). Common ratios: 4:1, 5:1, 6:1. Check your speeder's spec sheet.">Ratio (×)</FieldLabel>
+          <Input type="number" step="0.5" min="1" max="20" className="no-spinners" placeholder="e.g. 4"
+            value={form.speeder_ratio || ""}
+            onChange={e => setForm((p: any) => ({ ...p, speeder_ratio: Math.max(1, Number(e.target.value) || 1) }))} />
+        </div>
+        <div className="flex-1 space-y-1">
+          <FieldLabel hint="Maximum output RPM the speeder is rated for. The engine caps RPM at this value regardless of ratio. Check your speeder's spec sheet.">Max Output RPM</FieldLabel>
+          <Input type="number" step="1000" min="0" className="no-spinners" placeholder="e.g. 40000"
+            value={form.speeder_max_rpm || ""}
+            onChange={e => setForm((p: any) => ({ ...p, speeder_max_rpm: Math.max(0, Number(e.target.value) || 0) }))} />
+        </div>
+        <div className="flex-1 space-y-1">
+          <FieldLabel hint="Effective RPM ceiling: min(machine RPM × ratio, speeder max RPM).">Effective RPM</FieldLabel>
+          <div className="rounded px-3 py-2 text-sm font-semibold text-emerald-400 bg-zinc-800/60 border border-zinc-700/40">
+            {effectiveRpm.toLocaleString()}
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1 space-y-1">
+          <FieldLabel hint="Maximum output torque the speeder head is rated for (N·m). Found on your speeder's spec sheet. Leave 0 if unknown — engine will use HP derate only.">Max Torque (N·m)</FieldLabel>
+          <Input type="number" step="0.1" min="0" className="no-spinners" placeholder="0 = use HP only"
+            value={form.speeder_max_torque_nm || ""}
+            onChange={e => setForm((p: any) => ({ ...p, speeder_max_torque_nm: Math.max(0, Number(e.target.value) || 0) }))} />
+        </div>
+        <div className="flex-1 space-y-1">
+          <FieldLabel hint={torqueLimited ? "Torque limit is the binding constraint at this RPM — engine caps power here." : "HP derate (machine HP ÷ ratio) is the binding constraint."}>
+            Effective HP {torqueLimited ? <span className="text-amber-400 text-[10px] ml-1">torque-limited</span> : ""}
+          </FieldLabel>
+          <div className={`rounded px-3 py-2 text-sm font-semibold bg-zinc-800/60 border border-zinc-700/40 ${torqueLimited ? "text-amber-400" : "text-emerald-400"}`}>
+            {isFinite(effectiveHp) ? effectiveHp.toFixed(1) : hpFromRatio.toFixed(1)} HP
+          </div>
+        </div>
+        <div className="flex-1" />
+      </div>
+    </div>
+  );
+}
+
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React.ReactNode }) {
   return (
     <TooltipProvider delayDuration={200}>
@@ -1695,7 +1749,7 @@ export default function Mentor() {
     speeder_ratio: 4,
     speeder_max_rpm: 40000,
     speeder_max_torque_nm: 0,
-    toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto",
+    toolholder: "er_collet" as "er_collet" | "hp_collet" | "weldon" | "milling_chuck" | "hydraulic" | "press_fit" | "shrink_fit" | "capto" | "right_angle_head",
     dual_contact: false,
     holder_gage_length: 0,
     holder_nose_dia: 0,
@@ -4296,7 +4350,7 @@ ${stabSection}
                 <option value="finish">Finishing</option>
                 <option value="face">Facing (Planar Milling)</option>
                 <option value="slot">Slotting</option>
-                <option value="circ_interp">Circular Interpolation</option>
+                <option value="circ_interp">Circular Interpolation (e.g. Bore Enlargement)</option>
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
                 <option value="deep_pocket">Deep Pocket / Thin Wall (Progressive Reach)</option>
               </select>
@@ -5879,7 +5933,7 @@ ${stabSection}
                           // workholding default
                           const defaultWH = isLatheLike ? "collet_chuck" as const : key === "hmc" ? "rigid_fixture" as const : "vise" as const;
                           // toolholder — reset if switching away from a lathe-incompatible holder
-                          const latheSafe = ["er_collet","hp_collet","weldon","hydraulic","shrink_fit","capto"] as const;
+                          const latheSafe = ["er_collet","hp_collet","weldon","hydraulic","shrink_fit","capto","right_angle_head"] as const;
                           const thReset = isLatheLike && !(latheSafe as readonly string[]).includes(p.toolholder) ? "er_collet" as const : p.toolholder;
                           // spindle taper default per machine type
                           const defaultTaper = (
@@ -5984,94 +6038,65 @@ ${stabSection}
             </div>
 
             {/* Toolholder */}
-            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-emerald-500 p-3 space-y-1.5">
-              <FieldLabel hint={
-                form.machine_type === "mill_turn"
-                  ? "Toolholder rigidity affects deflection, runout, and live/B-axis milling stability. Capto and shrink fit are top choices for heavy B-axis milling — maximum rigidity and runout control. Hydraulic is ideal for finishing. ER collet is the most common and versatile turret option. Ordered most to least rigid."
-                  : (form.machine_type === "lathe")
-                  ? "Toolholder rigidity affects deflection, runout, and chatter on live tool ops. Ordered most to least rigid. ER collet is the most common turret holder; hydraulic or shrink fit for precision or heavy milling."
-                  : "Toolholder rigidity affects deflection, runout, and chatter. Buttons are ordered most rigid to least rigid (left to right). Hover each holder for details."
-              }>Tool Holder</FieldLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {(
-                  (form.machine_type === "lathe" || form.machine_type === "mill_turn")
-                  ? ([
-                      { key: "capto",      label: "Capto",      hint: "Sandvik Capto polygon taper — designed for turning/milling centres. Exceptional rigidity and fast changeover on live tool turrets." },
-                      { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
-                      { key: "hydraulic",  label: "Hydraulic",  hint: "Oil-membrane clamping — excellent vibration damping and 1–2 µm runout. Available on premium live tool heads." },
-                      { key: "weldon",     label: "Weldon",     hint: "Side-lock set screw on a flat — positive mechanical lock, prevents pullout under heavy radial load on live tool turrets." },
-                      { key: "hp_collet",  label: "HP Collet",  hint: "SK/SX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer SX)" },
-                      { key: "er_collet",  label: "ER Collet",  hint: "Standard ER collet — most common live tooling holder. 3–5 µm runout. Versatile across drills, end mills, and taps." },
-                    ] as const)
-                  : ([
-                      { key: "capto",           label: "Capto",           hint: "Polygon taper with face contact — exceptional rigidity and repeatability. Common on turning/milling centres." },
-                      { key: "shrink_fit",      label: "Shrink Fit",      hint: "Thermally shrunk onto shank — <1 µm runout, maximum grip and rigidity. Best for high-speed and heavy roughing." },
-                      { key: "press_fit",       label: "Press-Fit",       hint: "Lobed press-fit interface — full bore contact with self-centering geometry under load. High rigidity and excellent runout. Requires dedicated press tooling to assemble." },
-                      { key: "hydraulic",       label: "Hydraulic",       hint: "Oil-membrane clamping — full circumferential contact, excellent vibration damping, 1–2 µm runout. Great for finishing and long-reach applications." },
-{ key: "milling_chuck",   label: "Milling Chuck",   hint: "Full-bore mechanical chuck — high clamping torque, good radial stiffness. Well suited for heavy interrupted cuts and roughing." },
-                      { key: "weldon",          label: "Weldon",          hint: "Side-lock set screw on a flat ground into the shank — positive mechanical lock, prevents pullout under heavy load. Larger tools (≥1\") often use double Weldon flats." },
-                      { key: "hp_collet",       label: "HP Collet",       hint: "SK/SX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer SX)" },
-                      { key: "er_collet",       label: "ER Collet",       hint: "Standard ER collet — versatile and widely available. 3–5 µm runout. Good for general use; upgrade for precision or HEM work." },
-                    ] as const)
-                ).map(({ key, label, hint }) => (
-                  <Tooltip key={key}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setForm((p) => ({ ...p, toolholder: key }))}
-                        className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
-                        style={{
-                          backgroundColor: form.toolholder === key ? "#10b981" : "transparent",
-                          borderColor: "#10b981",
-                          color: form.toolholder === key ? "#fff" : "#10b981",
-                        }}
-                      >
-                        {label}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-56 text-xs">{hint}</TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
-              {/* Extension holder Yes/No */}
-              <div className="flex items-center gap-3 pt-2 mt-1 border-t border-border flex-wrap">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-xs font-medium text-zinc-300 cursor-default">Is an Extension Holder being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-64 text-xs">
-                    An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability mentor will flag this.
-                  </TooltipContent>
-                </Tooltip>
-                {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
-                  <button
-                    key={String(val)}
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, extension_holder: val }))}
-                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                    style={{
-                      backgroundColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                      borderColor: val ? "#f59e0b" : "#52525b",
-                      color: form.extension_holder === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                {form.extension_holder && (
-                  <span className="text-[11px] text-amber-400">⚠ Multi-joint setup — added compliance and runout at each interface</span>
-                )}
+            <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-emerald-500 p-3 space-y-3">
+              {/* Holder type buttons */}
+              <div className="space-y-1.5">
+                <FieldLabel hint={
+                  form.machine_type === "mill_turn"
+                    ? "Toolholder rigidity affects deflection, runout, and live/B-axis milling stability. Capto and shrink fit are top choices for heavy B-axis milling — maximum rigidity and runout control. Hydraulic is ideal for finishing. ER collet is the most common and versatile turret option. Ordered most to least rigid."
+                    : (form.machine_type === "lathe")
+                    ? "Toolholder rigidity affects deflection, runout, and chatter on live tool ops. Ordered most to least rigid. ER collet is the most common turret holder; hydraulic or shrink fit for precision or heavy milling."
+                    : "Toolholder rigidity affects deflection, runout, and chatter. Buttons are ordered most rigid to least rigid (left to right). Hover each holder for details."
+                }>Tool Holder</FieldLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    (form.machine_type === "lathe" || form.machine_type === "mill_turn")
+                    ? ([
+                        { key: "capto",      label: "Capto",      hint: "Sandvik Capto polygon taper — designed for turning/milling centres. Exceptional rigidity and fast changeover on live tool turrets." },
+                        { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
+                        { key: "hydraulic",  label: "Hydraulic",  hint: "Oil-membrane clamping — excellent vibration damping and 1–2 µm runout. Available on premium live tool heads." },
+                        { key: "weldon",     label: "Weldon",     hint: "Side-lock set screw on a flat — positive mechanical lock, prevents pullout under heavy radial load on live tool turrets." },
+                        { key: "hp_collet",  label: "HP Collet",  hint: "SK/SX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer SX)" },
+                        { key: "er_collet",  label: "ER Collet",  hint: "Standard ER collet — most common live tooling holder. 3–5 µm runout. Versatile across drills, end mills, and taps." },
+                      ] as const)
+                    : ([
+                        { key: "capto",         label: "Capto",         hint: "Polygon taper with face contact — exceptional rigidity and repeatability. Common on turning/milling centres." },
+                        { key: "shrink_fit",    label: "Shrink Fit",    hint: "Thermally shrunk onto shank — <1 µm runout, maximum grip and rigidity. Best for high-speed and heavy roughing." },
+                        { key: "press_fit",     label: "Press-Fit",     hint: "Lobed press-fit interface — full bore contact with self-centering geometry under load. High rigidity and excellent runout. Requires dedicated press tooling to assemble." },
+                        { key: "hydraulic",     label: "Hydraulic",     hint: "Oil-membrane clamping — full circumferential contact, excellent vibration damping, 1–2 µm runout. Great for finishing and long-reach applications." },
+                        { key: "milling_chuck", label: "Milling Chuck", hint: "Full-bore mechanical chuck — high clamping torque, good radial stiffness. Well suited for heavy interrupted cuts and roughing." },
+                        { key: "weldon",        label: "Weldon",        hint: "Side-lock set screw on a flat ground into the shank — positive mechanical lock, prevents pullout under heavy load. Larger tools (≥1\") often use double Weldon flats." },
+                        { key: "hp_collet",     label: "HP Collet",     hint: "SK/SX-style precision bearing nut collet — better clamping than standard ER but still a slotted collet. Good all-around upgrade from ER. (e.g. Lyndex SK, Pioneer SX)" },
+                        { key: "er_collet",     label: "ER Collet",     hint: "Standard ER collet — versatile and widely available. 3–5 µm runout. Good for general use; upgrade for precision or HEM work." },
+                      ] as const)
+                  ).map(({ key, label, hint }) => (
+                    <Tooltip key={key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setForm((p) => ({ ...p, toolholder: key }))}
+                          className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                          style={{
+                            backgroundColor: form.toolholder === key ? "#10b981" : "transparent",
+                            borderColor: "#10b981",
+                            color: form.toolholder === key ? "#fff" : "#10b981",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-56 text-xs">{hint}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
               </div>
 
-              {/* Holder extension inputs */}
-              <div className="flex gap-3 pt-2 mt-1 border-t border-border">
+              {/* Holder Gage Length + Nose Dia */}
+              <div className="flex gap-3 pt-2 border-t border-border/50">
                 <div className="flex-1 space-y-1">
                   <FieldLabel hint="Total projection from spindle face to end of holder (where tool starts). Accounts for long-nose, extended shrink fit, or any holder that adds reach before the tool. Leave blank for standard holders.">Holder Gage Length (in)</FieldLabel>
                   <Input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="e.g. 4.0"
-                    className="no-spinners"
+                    type="text" inputMode="decimal" placeholder="e.g. 4.0" className="no-spinners"
                     value={holderGageText}
                     onChange={(e) => setHolderGageText(e.target.value)}
                     onBlur={() => {
@@ -6089,10 +6114,7 @@ ${stabSection}
                 <div className="flex-1 space-y-1">
                   <FieldLabel hint="Diameter of the holder nose / extension section. Critical for long-nose and slender extension holders — a thin nose deflects much more than a standard body. Leave blank to use a default estimate (2× tool diameter).">Nose Dia (in)</FieldLabel>
                   <Input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="e.g. 1.25"
-                    className="no-spinners"
+                    type="text" inputMode="decimal" placeholder="e.g. 1.25" className="no-spinners"
                     value={holderNoseDiaText}
                     onChange={(e) => setHolderNoseDiaText(e.target.value)}
                     onBlur={() => {
@@ -6108,97 +6130,94 @@ ${stabSection}
                   />
                 </div>
               </div>
-              {/* Speeder / Speed Increaser */}
-              <div className="flex items-center gap-3 pt-2 mt-1 border-t border-border flex-wrap">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-xs font-medium text-zinc-300 cursor-default">Speed Increaser (Speeder)? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-64 text-xs">
-                    A speeder multiplies spindle RPM by a gear ratio (e.g. 4:1 = 4× RPM) while dividing available torque and HP by the same ratio. The engine will cap RPM at the speeder's output limit and derate machine HP accordingly.
-                  </TooltipContent>
-                </Tooltip>
-                {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
-                  <button
-                    key={String(val)}
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, speeder_enabled: val }))}
-                    className="rounded px-3 py-1 text-xs font-semibold border transition-all"
-                    style={{
-                      backgroundColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                      borderColor: val ? "#f59e0b" : "#52525b",
-                      color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {form.speeder_enabled && (() => {
-                const effectiveRpm = Math.min(
-                  Math.round(form.max_rpm * form.speeder_ratio),
-                  form.speeder_max_rpm
-                );
-                const hpFromRatio   = form.machine_hp / form.speeder_ratio;
-                // HP limit from torque: P(HP) = T(N·m) × RPM / 9549 × 1.341
-                const hpFromTorque  = form.speeder_max_torque_nm > 0
-                  ? (form.speeder_max_torque_nm * effectiveRpm / 9549) * 1.341
-                  : Infinity;
-                const effectiveHp   = Math.min(hpFromRatio, hpFromTorque);
-                const torqueLimited = form.speeder_max_torque_nm > 0 && hpFromTorque < hpFromRatio;
-                return (
-                  <div className="space-y-2 pt-2">
-                    {/* Row 1: Ratio / Max RPM / Effective RPM */}
-                    <div className="flex gap-3">
-                      <div className="flex-1 space-y-1">
-                        <FieldLabel hint="Gear ratio of the speeder (e.g. 4 = 4× RPM multiplication). Common ratios: 4:1, 5:1, 6:1. Check your speeder's spec sheet.">Ratio (×)</FieldLabel>
-                        <Input
-                          type="number" step="0.5" min="1" max="20" className="no-spinners"
-                          placeholder="e.g. 4"
-                          value={form.speeder_ratio || ""}
-                          onChange={e => setForm(p => ({ ...p, speeder_ratio: Math.max(1, Number(e.target.value) || 1) }))}
-                        />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <FieldLabel hint="Maximum output RPM the speeder is rated for. The engine caps RPM at this value regardless of ratio. Check your speeder's spec sheet.">Max Output RPM</FieldLabel>
-                        <Input
-                          type="number" step="1000" min="0" className="no-spinners"
-                          placeholder="e.g. 40000"
-                          value={form.speeder_max_rpm || ""}
-                          onChange={e => setForm(p => ({ ...p, speeder_max_rpm: Math.max(0, Number(e.target.value) || 0) }))}
-                        />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <FieldLabel hint="Effective RPM ceiling: min(machine RPM × ratio, speeder max RPM).">Effective RPM</FieldLabel>
-                        <div className="rounded px-3 py-2 text-sm font-semibold text-emerald-400 bg-zinc-800/60 border border-zinc-700/40">
-                          {effectiveRpm.toLocaleString()}
-                        </div>
-                      </div>
+
+              {/* Yes/No question rows */}
+              <div className="space-y-2 pt-1 border-t border-border/50">
+                {/* Extension Holder */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs font-medium text-zinc-300 cursor-default w-52 shrink-0">Is an Extension Holder being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-64 text-xs">
+                      An extension holder is clamped inside your main toolholder to gain extra reach. Each added interface (spindle → holder → extension → tool) multiplies compliance and runout — the stability mentor will flag this.
+                    </TooltipContent>
+                  </Tooltip>
+                  {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                    <button key={String(val)} type="button"
+                      onClick={() => setForm(p => ({ ...p, extension_holder: val }))}
+                      className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                        borderColor: val ? "#f59e0b" : "#52525b",
+                        color: form.extension_holder === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                      }}
+                    >{label}</button>
+                  ))}
+                  {form.extension_holder && (
+                    <span className="text-[11px] text-amber-400">⚠ Multi-joint setup — added compliance and runout at each interface</span>
+                  )}
+                </div>
+
+                {/* Speed Increaser — VMC / HMC / 5-axis only */}
+                {(form.machine_type === "vmc" || form.machine_type === "hmc" || form.machine_type === "5axis") && (
+                  <div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-xs font-medium text-zinc-300 cursor-default w-52 shrink-0">Is a Speed Increaser being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-64 text-xs">
+                          A speeder multiplies spindle RPM by a gear ratio (e.g. 4:1 = 4× RPM) while dividing available torque and HP by the same ratio. The engine will cap RPM at the speeder's output limit and derate machine HP accordingly.
+                        </TooltipContent>
+                      </Tooltip>
+                      {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                        <button key={String(val)} type="button"
+                          onClick={() => setForm(p => ({ ...p, speeder_enabled: val }))}
+                          className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                          style={{
+                            backgroundColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                            borderColor: val ? "#f59e0b" : "#52525b",
+                            color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                          }}
+                        >{label}</button>
+                      ))}
                     </div>
-                    {/* Row 2: Max Torque / Effective HP */}
-                    <div className="flex gap-3">
-                      <div className="flex-1 space-y-1">
-                        <FieldLabel hint="Maximum output torque the speeder head is rated for (N·m). Found on your speeder's spec sheet. Leave 0 if unknown — engine will use HP derate only.">Max Torque (N·m)</FieldLabel>
-                        <Input
-                          type="number" step="0.1" min="0" className="no-spinners"
-                          placeholder="0 = use HP only"
-                          value={form.speeder_max_torque_nm || ""}
-                          onChange={e => setForm(p => ({ ...p, speeder_max_torque_nm: Math.max(0, Number(e.target.value) || 0) }))}
-                        />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <FieldLabel hint={torqueLimited ? "Torque limit is the binding constraint at this RPM — engine caps power here." : "HP derate (machine HP ÷ ratio) is the binding constraint."}>
-                          Effective HP {torqueLimited ? <span className="text-amber-400 text-[10px] ml-1">torque-limited</span> : ""}
-                        </FieldLabel>
-                        <div className={`rounded px-3 py-2 text-sm font-semibold bg-zinc-800/60 border border-zinc-700/40 ${torqueLimited ? "text-amber-400" : "text-emerald-400"}`}>
-                          {isFinite(effectiveHp) ? effectiveHp.toFixed(1) : hpFromRatio.toFixed(1)} HP
-                        </div>
-                      </div>
-                      <div className="flex-1" /> {/* spacer */}
-                    </div>
+                    {form.speeder_enabled && <SpeeederDetails form={form} setForm={setForm} />}
                   </div>
-                );
-              })()}
+                )}
+
+                {/* Right-Angle Head */}
+                <div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-xs font-medium text-zinc-300 cursor-default w-52 shrink-0">Is a Right-Angle Head being used? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-64 text-xs">
+                        A right-angle head mounts in the spindle and redirects the tool 90°. The gear interface and cantilevered output spindle significantly reduce rigidity — the stability model applies a 28% deflection penalty. Use for cross-holes, side features, and undercuts without re-fixturing.
+                      </TooltipContent>
+                    </Tooltip>
+                    {([{ val: false, label: "No" }, { val: true, label: "Yes" }] as const).map(({ val, label }) => (
+                      <button key={String(val)} type="button"
+                        onClick={() => setForm(p => ({ ...p, toolholder: val ? "right_angle_head" : "er_collet" }))}
+                        className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                        style={{
+                          backgroundColor: (form.toolholder === "right_angle_head") === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
+                          borderColor: val ? "#f59e0b" : "#52525b",
+                          color: (form.toolholder === "right_angle_head") === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                        }}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  {form.toolholder === "right_angle_head" && (
+                    <div className="flex items-start gap-1.5 text-[11px] text-amber-400 mt-1.5">
+                      <span className="shrink-0">⚠</span>
+                      <span>Reduce DOC/WOC 30–40% vs a direct toolholder. The stability advisor will reflect the lower rigidity limit.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Coolant */}
