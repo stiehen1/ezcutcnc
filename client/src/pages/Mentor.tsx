@@ -4948,7 +4948,7 @@ ${stabSection}
                           borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
                           color: active ? "#fff" : isRec ? "#f59e0b" : "#6366f1",
                         }}
-                      >{label}{isRec ? " ★" : ""}</button>
+                      >{label}{isRec ? <span style={{ color: "#f59e0b" }}> ★</span> : ""}</button>
                     );
                   })}
                 </div>
