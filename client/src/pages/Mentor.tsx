@@ -1684,9 +1684,19 @@ export default function Mentor() {
     const s = raw.trim();
     const slash = s.indexOf("/");
     if (slash > 0) {
-      const num = parseFloat(s.slice(0, slash));
+      const beforeSlash = s.slice(0, slash);
       const den = parseFloat(s.slice(slash + 1));
-      if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) return num / den;
+      if (Number.isFinite(den) && den !== 0) {
+        // Handle "1-1/4" or "1 1/4" (whole + fraction)
+        const dashMatch = beforeSlash.match(/^(\d+)[\s-](\d+)$/);
+        if (dashMatch) {
+          const whole = parseFloat(dashMatch[1]);
+          const num   = parseFloat(dashMatch[2]);
+          if (Number.isFinite(whole) && Number.isFinite(num)) return whole + num / den;
+        }
+        const num = parseFloat(beforeSlash);
+        if (Number.isFinite(num)) return num / den;
+      }
     }
     return parseFloat(s);
   };
