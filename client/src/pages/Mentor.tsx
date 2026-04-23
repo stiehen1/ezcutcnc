@@ -11642,8 +11642,8 @@ ${stabSection}
         );
       })()}
 
-      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only, not deep pocket */}
-      {operation === "milling" && (form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && (stabilityIndex || stability) && (
+      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only, not deep pocket, not chamfer mill */}
+      {operation === "milling" && form.tool_type !== "chamfer_mill" && (form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && (stabilityIndex || stability) && (
       <div className="rounded-2xl border border-card-border overflow-hidden mt-5">
 
         {/* Section header */}
