@@ -213,20 +213,32 @@ const WALKTHROUGH_STEPS = [
 
 const walkThruOpenRef = { open: false, setOpen: (_: boolean) => {} };
 
-// Shared close-others bus — each side tab registers a closer; opening one fires all others closed
-const _sideTabClosers = new Set<() => void>();
+// Shared close-others bus
+// Use a getter/setter pair per tab so the registry holds live references.
+// The registry is keyed by a stable symbol created at hook call site so
+// hot-reload re-registrations replace rather than accumulate.
+const _sideTabRegistry = new Map<symbol, () => void>();
+
 function useSideTab() {
   const [open, setOpen] = React.useState(false);
-  const closeRef = React.useRef(() => setOpen(false));
+  const keyRef = React.useRef<symbol | null>(null);
+  if (!keyRef.current) keyRef.current = Symbol();
+
+  // Keep the registry entry pointing at the latest setOpen
+  const setOpenRef = React.useRef(setOpen);
+  setOpenRef.current = setOpen;
+
   React.useEffect(() => {
-    closeRef.current = () => setOpen(false);
-    _sideTabClosers.add(closeRef.current);
-    return () => { _sideTabClosers.delete(closeRef.current); };
+    const key = keyRef.current!;
+    _sideTabRegistry.set(key, () => setOpenRef.current(false));
+    return () => { _sideTabRegistry.delete(key); };
   }, []);
+
   const openTab = React.useCallback(() => {
-    _sideTabClosers.forEach(fn => fn());
+    _sideTabRegistry.forEach(close => close());
     setOpen(true);
   }, []);
+
   return { open, openTab, closeTab: () => setOpen(false) };
 }
 
@@ -525,7 +537,7 @@ function HelpButton() {
     <>
       <button
         onClick={openTab}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        className="fixed right-0 z-[60] text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 148px)", height: 74, background: "linear-gradient(180deg,#6366f1,#4f46e5)" }}
         aria-label="Pro Tips"
       >
@@ -617,7 +629,7 @@ function TrainingVideosTab() {
     <>
       <button
         onClick={openTab}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        className="fixed right-0 z-[60] text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 74px)", height: 74, background: "linear-gradient(180deg,#fbbf24,#d97706)" }}
         aria-label="Training Videos"
       >
@@ -816,7 +828,7 @@ function FeedbackButton() {
       {/* Floating tab */}
       <button
         onClick={openTab}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        className="fixed right-0 z-[60] text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 0px)", height: 74, background: "linear-gradient(180deg,#10b981,#059669)" }}
         aria-label="Send feedback"
       >
@@ -966,7 +978,7 @@ function RegrindingTab() {
       {/* Floating tab */}
       <button
         onClick={openTab}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        className="fixed right-0 z-[60] text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 74px)", height: 74, background: "linear-gradient(180deg,#f97316,#ea580c)" }}
         aria-label="Tool Regrinding Program"
       >
@@ -1249,7 +1261,7 @@ function TeamsTab() {
       {/* Floating tab */}
       <button
         onClick={openTab}
-        className="fixed right-0 z-50 text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
+        className="fixed right-0 z-[60] text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% + 148px)", height: 74, background: "linear-gradient(180deg,#0891b2,#0e7490)" }}
         aria-label="Programming Teams"
       >

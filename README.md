@@ -8,6 +8,34 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (April 2026)
 
+### PDF Upload — Step Drill & LOC Extraction (late April 2026)
+- **Bold lines = cutting surfaces** added as Rule 0 in extraction prompt — universal convention on all CC prints; thin/dashed lines = shank/body/relief
+- **Step drill diameter assignment** (Rule 2b): `tool_dia` = smallest cutting dia (tip/entry, feed basis); `drill_step_diameters` = larger cutting dias only (SFM basis); shank OD goes to `shank_dia` — never in any cutting dia field. CC-14371 worked example embedded in prompt: `tool_dia=0.103, shank_dia=0.1875, drill_step_diameters=[0.141]`
+- **LOC = cut depth** established as the single authoritative field for drills and reamers. CLEAR and "flute length" labels on CC prints are ambiguous relief dimensions and must not be used for calculations. Engine now reads `loc` directly (`drill_flute_length` kept as fallback only)
+- `drill_flute_length` and `ream_flute_length` deprecated — set to 0 in extraction; engine uses `loc`
+- Tool number extraction reinforced: character-for-character from the TOOL # field (fixes CC-14371 not appearing in banner)
+- mm conversion blocks added for `ream_step_diameters` and `ream_step_lengths`
+
+### Drilling UI (late April 2026)
+- **Point angle default** changed from 135 to `0` (unset) — no pre-selection before PDF upload or manual click; engine defaults to 135 when 0 is sent
+- Point angle buttons show a hint when unset ("Select point angle")
+- **WOC/DOC/stickout fields** guarded with `operation === "milling"` — previously bled into drilling/reaming UI when switching operations
+- **Editable dimension fields** added: LOC (cut depth), OAL, Entry Ø (feed basis), Largest Ø (SFM basis), Step Length from Tip — all pre-filled from PDF upload, all user-editable
+- Step diameter panel auto-opens when PDF detects multiple cutting diameters (`isStepDrill = drill_step_diameters?.length > 0`)
+- **Flute depth warning** fixed: `usable = fl − sfm_dia × 0.3` — point clearance based on largest cutting diameter (was incorrectly using tiny entry tip dia, making warning far too aggressive)
+- Quotes card: "Flute Length" label changed to "LOC"; value now reads from `form.loc`
+
+### Reaming UI (late April 2026)
+- Same editable dimension fields as drilling (LOC, OAL, step dia, step length), pre-filled from PDF
+- Same WOC/DOC/stickout guard applied
+
+### Thread Milling Star Fix (late April 2026)
+- Recommended cut direction ★ now always visible in amber (`#f59e0b`) on the recommended button regardless of whether the button is also the active selection (was invisible when button was both recommended and active)
+- G-code dialects added: Okuma OSP, Heidenhain
+
+### Training Videos (late April 2026)
+- Badge changed from "Soon" to "Coming Soon"
+
 ### Email / Saved Output
 - **Teeth in Cut** and **Engagement Angle** added to Speeds & Feeds section of email/text output. Engine computes exact arc degrees (`acos(1 − 2×WOC%)`) for all conventional/HEM endmill operations; 180° for full-slot, 90° for face mill.
 - **Entry Moves section** now only prints the sections matching the user's selected entry type checkboxes (Sweep/Roll-in, Helical, Ramp, Straight Plunge, Slot Straight). Previously all entry types were printed regardless of selection.
