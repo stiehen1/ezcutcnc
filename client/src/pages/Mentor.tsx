@@ -7653,8 +7653,8 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Standard WOC/DOC (hidden for surfacing, chamfer_mill, deep_pocket) ── */}
-          {form.mode !== "surfacing" && form.mode !== "deep_pocket" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
+          {/* ── Standard WOC/DOC (milling only — hidden for surfacing, chamfer_mill, deep_pocket) ── */}
+          {operation === "milling" && form.mode !== "surfacing" && form.mode !== "deep_pocket" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
