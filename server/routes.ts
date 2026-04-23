@@ -3588,6 +3588,8 @@ Look for a units indicator on the print — typically in the title block, notes 
 
 CRITICAL RULES — READ CAREFULLY:
 
+0. BOLD LINES = CUTTING SURFACES. This is the universal convention on ALL Core Cutter prints. In the profile/drawing view, lines drawn BOLD (thick/heavy weight) represent surfaces that are intended to cut material. Lines drawn THIN or DASHED represent non-cutting surfaces (shank, body, clearance relief, back taper). Use this to identify which diameters, lengths, and features are cutting geometry vs. non-cutting geometry. When multiple Ø callouts appear on a print, only extract as cutting diameters those associated with bold-line profiles. Thin-line or dashed-line Ø callouts are shank/body dimensions and go in shank_dia.
+
 1. ALL dimensions on Core Cutter prints have tolerances. You MUST extract the NOMINAL (base) value only and discard all tolerance information:
    - "Ø0.750-.0001/.0004" → 0.750
    - "1.875+.06/.00" → 1.875
