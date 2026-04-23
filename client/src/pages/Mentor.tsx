@@ -1519,6 +1519,15 @@ export default function Mentor() {
           next.drill_point_angle = Number(e.drill_point_angle) as 118 | 130 | 135 | 140 | 145;
         }
         if (e.drill_flute_length > 0) next.drill_flute_length = e.drill_flute_length;
+        if (e.ream_step_diameters?.length > 0) {
+          next.ream_step_diameters = e.ream_step_diameters;
+          next.ream_steps = e.ream_step_diameters.length;
+          if (e.ream_step_diameters.length > 0) {
+            setReamStepDiaText(e.ream_step_diameters[0].toFixed(4));
+          }
+        }
+        if (e.ream_step_lengths?.length > 0) next.ream_step_lengths = e.ream_step_lengths;
+        if (e.ream_flute_length > 0) next.ream_flute_length = e.ream_flute_length;
         if (e.cutting_material) {
           const matKey = e.cutting_material as string;
           next.material = matKey as any;
@@ -1812,6 +1821,7 @@ export default function Mentor() {
     ream_shank_dia: 0,
     ream_blind: false,
     ream_coolant_fed: false,
+    ream_flute_length: 0,
     ream_steps: 0,
     ream_step_diameters: [] as number[],
     ream_step_lengths: [] as number[],
@@ -7521,7 +7531,7 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Step reamer — largest diameter */}
+          {/* Step reamer — largest diameter input (manual entry; PDF auto-fills) */}
           {form.ream_steps > 0 && (
             <div className="mt-3 space-y-1">
               <FieldLabel hint="Largest diameter on the step reamer. SFM and RPM are calculated on this diameter; feed is set by the entry (smallest) diameter.">Largest Dia (in)</FieldLabel>
@@ -7540,6 +7550,48 @@ ${stabSection}
               />
             </div>
           )}
+
+          {/* Dimension summary — flute length, OAL, step diameters */}
+          {(() => {
+            const hasStepDias = form.ream_step_diameters?.length > 0;
+            const largestDia  = hasStepDias ? Math.max(form.tool_dia, ...form.ream_step_diameters) : form.tool_dia;
+            const entryDia    = form.tool_dia;
+            const isStep      = hasStepDias && largestDia > entryDia + 0.0005;
+            const showFl      = form.ream_flute_length > 0;
+            const showOal     = pdfOal > 0;
+            if (!showFl && !showOal && !isStep) return null;
+            return (
+              <div className="mt-3 space-y-2">
+                {(showFl || showOal) && (
+                  <div className="flex gap-4 text-[11px]">
+                    {showFl && (
+                      <div><span className="text-zinc-500">Flute Length </span><span className="font-medium text-foreground">{form.ream_flute_length.toFixed(3)}"</span></div>
+                    )}
+                    {showOal && (
+                      <div><span className="text-zinc-500">OAL </span><span className="font-medium text-foreground">{pdfOal.toFixed(3)}"</span></div>
+                    )}
+                  </div>
+                )}
+                {isStep && (
+                  <div className="rounded border border-zinc-700 bg-zinc-900/50 px-3 py-2 space-y-1 text-[11px]">
+                    <div className="text-zinc-400 font-medium mb-1">Step Reamer Diameters</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Entry ø (feed basis)</span>
+                      <span className="font-medium text-foreground">{entryDia.toFixed(4)}"</span>
+                    </div>
+                    {form.ream_step_diameters.map((d: number, i: number) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-zinc-500">Step {i + 1} ø{i === form.ream_step_diameters.length - 1 ? " (SFM basis)" : ""}</span>
+                        <span className="font-medium text-foreground">{d.toFixed(4)}"
+                          {form.ream_step_lengths[i] != null && <span className="text-zinc-500 ml-2">× {form.ream_step_lengths[i].toFixed(3)}" from tip</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Flutes + Shank — shared across both modes */}
           <div className="grid grid-cols-2 gap-3 mt-3">

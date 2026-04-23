@@ -3667,7 +3667,10 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "drill_step_diameters": <array of step diameters in ascending order (smallest first) for step drills — read from the print's step Ø callouts (e.g. Ø0.141, Ø0.103 → [0.103, 0.141]). [] if not applicable>,
   "drill_step_lengths": <array of step lengths in inches measured from the drill tip — one entry per step diameter, same order. These are the "STEP END" dimension(s) on the print. [] if not applicable>,
   "drill_point_angle": <number, the included point angle in degrees — look for the angle callout at the drill tip (e.g. 140°, 135°, 118°). Return the closest standard value: 118, 130, 135, 140, or 145. 135 if not shown.>,
-  "drill_flute_length": <number in inches, the fluted / cutting length labeled "LOC" or "CLEAR" on the print — this is the usable flute length, not the step length. 0 if not shown.>,
+  "drill_flute_length": <number in inches, the fluted / cutting length labeled "LOC" or "CLEAR" on the print for drills — usable flute length, not step length. 0 if not shown.>,
+  "ream_step_diameters": <array of step diameters in ascending order (smallest first) for step reamers — read from the print's step Ø callouts. [] if single-diameter reamer or not applicable>,
+  "ream_step_lengths": <array of step lengths in inches measured from the reamer tip — one entry per step diameter, same order. [] if not applicable>,
+  "ream_flute_length": <number in inches, the fluted / cutting length labeled "LOC", "FL", or "FLUTE LENGTH" on the print for reamers. 0 if not shown.>,
   "cutting_material": <string, the workpiece material this tool is designed for — look for "CUTTING=" or "FOR:" in the notes section. Map to one of: "aluminum_wrought", "steel_alloy", "steel_free", "stainless_304", "stainless_316", "stainless_ph", "cast_iron", "inconel_718", "inconel_625", "titanium", "hardened_lt55", "hardened_gt55" — use null if not specified>,
   "coolant_fed": <boolean, true if the print includes any note indicating coolant-through capability — look for text like "COOLANT FED", "COOLANT THROUGH", "COOLANT THRU", "THRU COOLANT", "TSC", "THROUGH SPINDLE COOLANT", or any note referencing internal coolant passages. false if no such note is found.>,
   "shank_type": <string or null — look in the title block, notes section, or shank detail for shank type callouts. Return "weldon" if "WELDON FLAT", "WELDON", or "W/FLAT" is noted. Return "safe_lock" if "SAFE LOCK", "SAFELOCK", "SAFE-LOCK", "HAIMER", or "HAIMER SAFE-LOCK" is noted. Return null if no special shank type is noted.>,
@@ -3765,6 +3768,16 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         }
         if (Array.isArray(extracted.drill_step_lengths)) {
           extracted.drill_step_lengths = (extracted.drill_step_lengths as number[]).map(
+            (d: number) => Math.round((d / 25.4) * 100000) / 100000
+          );
+        }
+        if (Array.isArray(extracted.ream_step_diameters)) {
+          extracted.ream_step_diameters = (extracted.ream_step_diameters as number[]).map(
+            (d: number) => Math.round((d / 25.4) * 100000) / 100000
+          );
+        }
+        if (Array.isArray(extracted.ream_step_lengths)) {
+          extracted.ream_step_lengths = (extracted.ream_step_lengths as number[]).map(
             (d: number) => Math.round((d / 25.4) * 100000) / 100000
           );
         }
