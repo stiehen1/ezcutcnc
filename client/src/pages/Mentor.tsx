@@ -1512,8 +1512,13 @@ export default function Mentor() {
         if (e.chamfer_tip_dia > 0) next.chamfer_tip_dia = e.chamfer_tip_dia;
         if (e.drill_step_diameters?.length > 0) {
           next.drill_step_diameters = e.drill_step_diameters;
-          next.drill_steps = 1;
+          next.drill_steps = e.drill_step_diameters.length;
         }
+        if (e.drill_step_lengths?.length > 0) next.drill_step_lengths = e.drill_step_lengths;
+        if (e.drill_point_angle && [118, 130, 135, 140, 145].includes(Number(e.drill_point_angle))) {
+          next.drill_point_angle = Number(e.drill_point_angle) as 118 | 130 | 135 | 140 | 145;
+        }
+        if (e.drill_flute_length > 0) next.drill_flute_length = e.drill_flute_length;
         if (e.cutting_material) {
           const matKey = e.cutting_material as string;
           next.material = matKey as any;
@@ -7334,22 +7339,61 @@ ${stabSection}
             if (!hasCoolant && isDeep && recGeo === "standard") recGeo = "med_helix";
             if (!hasCoolant && isVeryDeep && recGeo === "med_helix") recGeo = "high_helix";
             if (form.drill_geometry !== recGeo) setTimeout(() => setForm((p) => ({ ...p, drill_geometry: recGeo })), 0);
+            const hasStepDias = form.drill_step_diameters?.length > 0;
+            const largestDia = hasStepDias ? Math.max(form.tool_dia, ...form.drill_step_diameters) : form.tool_dia;
+            const entryDia   = form.tool_dia;
+            const isStepDrill = hasStepDias && largestDia > entryDia + 0.0005;
             return (
-              <div className="space-y-1.5 mt-3">
-                <FieldLabel hint="Point angle as specified on the CC drill print.">Point Angle</FieldLabel>
-                <div className="flex gap-2">
-                  {([118, 130, 135, 140, 145] as const).map((pa) => {
-                    const isSelected = form.drill_point_angle === pa;
-                    return (
-                      <div key={pa} className="flex-1 rounded py-2 text-xs font-semibold border text-center"
-                        style={{
-                          backgroundColor: isSelected ? "#6366f1" : "transparent",
-                          borderColor: isSelected ? "#6366f1" : "#3f3f46",
-                          color: isSelected ? "#fff" : "#52525b",
-                        }}>{pa}°</div>
-                    );
-                  })}
+              <div className="space-y-3 mt-3">
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Point angle as specified on the CC drill print. Click to override.">Point Angle</FieldLabel>
+                  <div className="flex gap-2">
+                    {([118, 130, 135, 140, 145] as const).map((pa) => {
+                      const isSelected = form.drill_point_angle === pa;
+                      return (
+                        <button key={pa} type="button"
+                          onClick={() => setForm((p) => ({ ...p, drill_point_angle: pa }))}
+                          className="flex-1 rounded py-2 text-xs font-semibold border text-center transition-all"
+                          style={{
+                            backgroundColor: isSelected ? "#6366f1" : "transparent",
+                            borderColor: isSelected ? "#6366f1" : "#3f3f46",
+                            color: isSelected ? "#fff" : "#71717a",
+                          }}>{pa}°</button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Dimension summary row — flute length, OAL */}
+                {(form.drill_flute_length > 0 || pdfOal > 0) && (
+                  <div className="flex gap-4 text-[11px]">
+                    {form.drill_flute_length > 0 && (
+                      <div><span className="text-zinc-500">Flute Length </span><span className="font-medium text-foreground">{form.drill_flute_length.toFixed(3)}"</span></div>
+                    )}
+                    {pdfOal > 0 && (
+                      <div><span className="text-zinc-500">OAL </span><span className="font-medium text-foreground">{pdfOal.toFixed(3)}"</span></div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step drill: show entry dia and largest dia with their roles */}
+                {isStepDrill && (
+                  <div className="rounded border border-zinc-700 bg-zinc-900/50 px-3 py-2 space-y-1 text-[11px]">
+                    <div className="text-zinc-400 font-medium mb-1">Step Drill Diameters</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Entry ø (feed basis)</span>
+                      <span className="font-medium text-foreground">{entryDia.toFixed(4)}"</span>
+                    </div>
+                    {form.drill_step_diameters.map((d: number, i: number) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-zinc-500">Step {i + 1} ø{i === form.drill_step_diameters.length - 1 ? " (SFM basis)" : ""}</span>
+                        <span className="font-medium text-foreground">{d.toFixed(4)}"
+                          {form.drill_step_lengths[i] != null && <span className="text-zinc-500 ml-2">× {form.drill_step_lengths[i].toFixed(3)}" from tip</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
