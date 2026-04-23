@@ -1450,6 +1450,7 @@ export default function Mentor() {
   const [pdfFluteWash, setPdfFluteWash] = React.useState<number>(0);
   const [pdfFluteWashText, setPdfFluteWashText] = React.useState<string>("");
   const [pdfOal, setPdfOal] = React.useState<number>(0);
+  const [pdfOalText, setPdfOalText] = React.useState<string>("");
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
@@ -1522,12 +1523,11 @@ export default function Mentor() {
         if (e.ream_step_diameters?.length > 0) {
           next.ream_step_diameters = e.ream_step_diameters;
           next.ream_steps = e.ream_step_diameters.length;
-          if (e.ream_step_diameters.length > 0) {
-            setReamStepDiaText(e.ream_step_diameters[0].toFixed(4));
-          }
+          setReamStepDiaText(e.ream_step_diameters[0].toFixed(4));
+          if (e.ream_step_lengths?.[0] > 0) setReamStepLenText(e.ream_step_lengths[0].toFixed(3));
         }
         if (e.ream_step_lengths?.length > 0) next.ream_step_lengths = e.ream_step_lengths;
-        if (e.ream_flute_length > 0) next.ream_flute_length = e.ream_flute_length;
+        if (e.ream_flute_length > 0) { next.ream_flute_length = e.ream_flute_length; setReamFluteLenText(e.ream_flute_length.toFixed(3)); }
         if (e.cutting_material) {
           const matKey = e.cutting_material as string;
           next.material = matKey as any;
@@ -1639,7 +1639,14 @@ export default function Mentor() {
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
       setPdfConvertedFromMm(!!e._converted_from_mm);
-      setPdfOal(e.oal > 0 ? e.oal : 0);
+      const _oal = e.oal > 0 ? e.oal : 0;
+      setPdfOal(_oal);
+      setPdfOalText(_oal > 0 ? _oal.toFixed(3) : "");
+      if (e.drill_flute_length > 0) setDrillFluteLenText(e.drill_flute_length.toFixed(3));
+      if (e.drill_step_diameters?.length > 0) {
+        setStepDiaTexts(e.drill_step_diameters.map((d: number) => d.toFixed(4)));
+        setStepLenTexts((e.drill_step_lengths ?? []).map((l: number) => l > 0 ? l.toFixed(3) : ""));
+      }
       mentor.reset();
       const toastParts: string[] = [];
       if (e.tool_number) toastParts.push(`Tool ${e.tool_number}`);
@@ -2196,6 +2203,8 @@ export default function Mentor() {
   const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
   const [stepLenTexts, setStepLenTexts] = React.useState<string[]>([]);
   const [reamStepDiaText, setReamStepDiaText] = React.useState("");
+  const [reamStepLenText, setReamStepLenText] = React.useState("");
+  const [reamFluteLenText, setReamFluteLenText] = React.useState("");
   const [raText, setRaText] = React.useState("");
   const [chamferTipDiaText, setChamferTipDiaText] = React.useState("");
   const [chamferDepthText, setChamferDepthText] = React.useState("");
@@ -2550,6 +2559,7 @@ export default function Mentor() {
     setPdfToolNumber(null);
     setPdfConvertedFromMm(false);
     setPdfOal(0);
+    setPdfOalText("");
     setPdfFluteWash(0);
     setPdfFluteWashText("");
     setDpSpecialTool(false);
@@ -2589,6 +2599,8 @@ export default function Mentor() {
     setDrillHoleDepthText("");
     setStepDiaTexts([]);
     setStepLenTexts([]);
+    setReamFluteLenText("");
+    setReamStepLenText("");
     setChamferTipDiaText("");
     setChamferDepthText("");
     setTmMajorDiaText("");
@@ -7377,36 +7389,105 @@ ${stabSection}
                   )}
                 </div>
 
-                {/* Dimension summary row — flute length, OAL */}
-                {(form.drill_flute_length > 0 || pdfOal > 0) && (
-                  <div className="flex gap-4 text-[11px]">
-                    {form.drill_flute_length > 0 && (
-                      <div><span className="text-zinc-500">Flute Length </span><span className="font-medium text-foreground">{form.drill_flute_length.toFixed(3)}"</span></div>
-                    )}
-                    {pdfOal > 0 && (
-                      <div><span className="text-zinc-500">OAL </span><span className="font-medium text-foreground">{pdfOal.toFixed(3)}"</span></div>
-                    )}
+                {/* Editable dimension fields — flute length, OAL, diameters */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <FieldLabel hint="Usable flute / cutting length — labeled CLEAR or LOC on the print.">Flute Length (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 0.750"
+                      value={drillFluteLenText}
+                      onChange={e => setDrillFluteLenText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(drillFluteLenText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, drill_flute_length: n })); setDrillFluteLenText(n.toFixed(3)); }
+                        else { setDrillFluteLenText(form.drill_flute_length > 0 ? form.drill_flute_length.toFixed(3) : ""); }
+                      }}
+                    />
                   </div>
-                )}
+                  <div className="space-y-1">
+                    <FieldLabel hint="Overall length of the drill from tip to end of shank.">OAL (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 2.500"
+                      value={pdfOalText}
+                      onChange={e => setPdfOalText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(pdfOalText);
+                        if (Number.isFinite(n) && n > 0) { setPdfOal(n); setPdfOalText(n.toFixed(3)); }
+                        else { setPdfOalText(pdfOal > 0 ? pdfOal.toFixed(3) : ""); }
+                      }}
+                    />
+                  </div>
+                </div>
 
-                {/* Step drill: show entry dia and largest dia with their roles */}
-                {isStepDrill && (
-                  <div className="rounded border border-zinc-700 bg-zinc-900/50 px-3 py-2 space-y-1 text-[11px]">
-                    <div className="text-zinc-400 font-medium mb-1">Step Drill Diameters</div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Entry ø (feed basis)</span>
-                      <span className="font-medium text-foreground">{entryDia.toFixed(4)}"</span>
+                {/* Diameter fields — single dia or step drill */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <FieldLabel hint="Entry (smallest) diameter — sets chip load and feed rate.">{isStepDrill ? "Entry Ø (feed basis)" : "Drill Diameter (in)"}</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                        placeholder="e.g. 0.1875"
+                        value={toolDiaText}
+                        onChange={e => setToolDiaText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseDim(toolDiaText);
+                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, tool_dia: n })); setToolDiaText(n.toFixed(4)); }
+                          else { setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : ""); }
+                        }}
+                      />
                     </div>
-                    {form.drill_step_diameters.map((d: number, i: number) => (
-                      <div key={i} className="flex justify-between">
-                        <span className="text-zinc-500">Step {i + 1} ø{i === form.drill_step_diameters.length - 1 ? " (SFM basis)" : ""}</span>
-                        <span className="font-medium text-foreground">{d.toFixed(4)}"
-                          {form.drill_step_lengths[i] != null && <span className="text-zinc-500 ml-2">× {form.drill_step_lengths[i].toFixed(3)}" from tip</span>}
-                        </span>
+                    {isStepDrill && (
+                      <div className="space-y-1">
+                        <FieldLabel hint="Largest step diameter — sets SFM and RPM.">Largest Ø (SFM basis)</FieldLabel>
+                        <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                          placeholder="e.g. 0.141"
+                          value={stepDiaTexts[0] ?? ""}
+                          onChange={e => setStepDiaTexts([e.target.value])}
+                          onBlur={() => {
+                            const n = parseDim(stepDiaTexts[0] ?? "");
+                            if (Number.isFinite(n) && n > 0) {
+                              setForm(p => ({ ...p, drill_step_diameters: [n], drill_steps: 1 }));
+                              setStepDiaTexts([n.toFixed(4)]);
+                            } else {
+                              setStepDiaTexts([form.drill_step_diameters[0] > 0 ? form.drill_step_diameters[0].toFixed(4) : ""]);
+                            }
+                          }}
+                        />
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                  {/* Step length */}
+                  {isStepDrill && (
+                    <div className="space-y-1">
+                      <FieldLabel hint="Step end length measured from the drill tip — the axial depth at which the step shoulder cuts.">Step Length from Tip (in)</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                        placeholder="e.g. 0.268"
+                        value={stepLenTexts[0] ?? ""}
+                        onChange={e => setStepLenTexts([e.target.value])}
+                        onBlur={() => {
+                          const n = parseDim(stepLenTexts[0] ?? "");
+                          if (Number.isFinite(n) && n > 0) {
+                            setForm(p => ({ ...p, drill_step_lengths: [n] }));
+                            setStepLenTexts([n.toFixed(3)]);
+                          } else {
+                            setStepLenTexts([form.drill_step_lengths[0] > 0 ? form.drill_step_lengths[0].toFixed(3) : ""]);
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                  {/* Add step / remove step toggle */}
+                  {!isStepDrill ? (
+                    <button type="button"
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 underline"
+                      onClick={() => { setForm(p => ({ ...p, drill_steps: 1, drill_step_diameters: [], drill_step_lengths: [] })); setStepDiaTexts([""]); setStepLenTexts([""]); }}
+                    >+ Add step diameter</button>
+                  ) : (
+                    <button type="button"
+                      className="text-[10px] text-zinc-500 hover:text-red-400 underline"
+                      onClick={() => { setForm(p => ({ ...p, drill_steps: 0, drill_step_diameters: [], drill_step_lengths: [] })); setStepDiaTexts([]); setStepLenTexts([]); }}
+                    >✕ Remove step — single diameter drill</button>
+                  )}
+                </div>
               </div>
             );
           })()}
@@ -7534,62 +7615,84 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Step reamer — largest diameter input (manual entry; PDF auto-fills) */}
-          {form.ream_steps > 0 && (
-            <div className="mt-3 space-y-1">
-              <FieldLabel hint="Largest diameter on the step reamer. SFM and RPM are calculated on this diameter; feed is set by the entry (smallest) diameter.">Largest Dia (in)</FieldLabel>
-              <Input
-                type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 0.625"
-                value={reamStepDiaText}
-                onChange={(e) => setReamStepDiaText(e.target.value)}
+          {/* Editable dimension fields — flute length, OAL */}
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="space-y-1">
+              <FieldLabel hint="Usable flute / cutting length — labeled LOC or FL on the print.">Flute Length (in)</FieldLabel>
+              <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                placeholder="e.g. 0.750"
+                value={reamFluteLenText}
+                onChange={e => setReamFluteLenText(e.target.value)}
                 onBlur={() => {
-                  const n = parseDim(reamStepDiaText);
-                  if (Number.isFinite(n) && n > 0) {
-                    setForm((p) => ({ ...p, ream_step_diameters: [n] }));
-                    setReamStepDiaText(n.toFixed(4));
-                  }
+                  const n = parseDim(reamFluteLenText);
+                  if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, ream_flute_length: n })); setReamFluteLenText(n.toFixed(3)); }
+                  else { setReamFluteLenText(form.ream_flute_length > 0 ? form.ream_flute_length.toFixed(3) : ""); }
                 }}
               />
             </div>
-          )}
+            <div className="space-y-1">
+              <FieldLabel hint="Overall length of the reamer from tip to end of shank.">OAL (in)</FieldLabel>
+              <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                placeholder="e.g. 2.500"
+                value={pdfOalText}
+                onChange={e => setPdfOalText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(pdfOalText);
+                  if (Number.isFinite(n) && n > 0) { setPdfOal(n); setPdfOalText(n.toFixed(3)); }
+                  else { setPdfOalText(pdfOal > 0 ? pdfOal.toFixed(3) : ""); }
+                }}
+              />
+            </div>
+          </div>
 
-          {/* Dimension summary — flute length, OAL, step diameters */}
+          {/* Diameter fields — entry dia + optional step */}
           {(() => {
-            const hasStepDias = form.ream_step_diameters?.length > 0;
-            const largestDia  = hasStepDias ? Math.max(form.tool_dia, ...form.ream_step_diameters) : form.tool_dia;
-            const entryDia    = form.tool_dia;
-            const isStep      = hasStepDias && largestDia > entryDia + 0.0005;
-            const showFl      = form.ream_flute_length > 0;
-            const showOal     = pdfOal > 0;
-            if (!showFl && !showOal && !isStep) return null;
+            const isStep = form.ream_steps > 0;
             return (
               <div className="mt-3 space-y-2">
-                {(showFl || showOal) && (
-                  <div className="flex gap-4 text-[11px]">
-                    {showFl && (
-                      <div><span className="text-zinc-500">Flute Length </span><span className="font-medium text-foreground">{form.ream_flute_length.toFixed(3)}"</span></div>
-                    )}
-                    {showOal && (
-                      <div><span className="text-zinc-500">OAL </span><span className="font-medium text-foreground">{pdfOal.toFixed(3)}"</span></div>
-                    )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <FieldLabel hint="Entry (smallest) reamer diameter — sets chip load and feed rate.">{isStep ? "Entry Ø (feed basis)" : "Reamer Diameter (in)"}</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 0.500"
+                      value={toolDiaText}
+                      onChange={e => setToolDiaText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(toolDiaText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, tool_dia: n })); setToolDiaText(n.toFixed(4)); }
+                        else { setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : ""); }
+                      }}
+                    />
                   </div>
-                )}
-                {isStep && (
-                  <div className="rounded border border-zinc-700 bg-zinc-900/50 px-3 py-2 space-y-1 text-[11px]">
-                    <div className="text-zinc-400 font-medium mb-1">Step Reamer Diameters</div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Entry ø (feed basis)</span>
-                      <span className="font-medium text-foreground">{entryDia.toFixed(4)}"</span>
+                  {isStep && (
+                    <div className="space-y-1">
+                      <FieldLabel hint="Largest step diameter — sets SFM and RPM.">Largest Ø (SFM basis)</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                        placeholder="e.g. 0.625"
+                        value={reamStepDiaText}
+                        onChange={e => setReamStepDiaText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseDim(reamStepDiaText);
+                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, ream_step_diameters: [n] })); setReamStepDiaText(n.toFixed(4)); }
+                          else { setReamStepDiaText(form.ream_step_diameters[0] > 0 ? form.ream_step_diameters[0].toFixed(4) : ""); }
+                        }}
+                      />
                     </div>
-                    {form.ream_step_diameters.map((d: number, i: number) => (
-                      <div key={i} className="flex justify-between">
-                        <span className="text-zinc-500">Step {i + 1} ø{i === form.ream_step_diameters.length - 1 ? " (SFM basis)" : ""}</span>
-                        <span className="font-medium text-foreground">{d.toFixed(4)}"
-                          {form.ream_step_lengths[i] != null && <span className="text-zinc-500 ml-2">× {form.ream_step_lengths[i].toFixed(3)}" from tip</span>}
-                        </span>
-                      </div>
-                    ))}
+                  )}
+                </div>
+                {isStep && (
+                  <div className="space-y-1">
+                    <FieldLabel hint="Step end length measured from the reamer tip.">Step Length from Tip (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 0.268"
+                      value={reamStepLenText}
+                      onChange={e => setReamStepLenText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(reamStepLenText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, ream_step_lengths: [n] })); setReamStepLenText(n.toFixed(3)); }
+                        else { setReamStepLenText(form.ream_step_lengths[0] > 0 ? form.ream_step_lengths[0].toFixed(3) : ""); }
+                      }}
+                    />
                   </div>
                 )}
               </div>
