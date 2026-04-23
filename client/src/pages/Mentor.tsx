@@ -1470,6 +1470,7 @@ export default function Mentor() {
       }
       const data = await res.json();
       const e = data.extracted ?? {};
+      console.log("[PDF] tool_number=", e.tool_number, "no_tool_number=", e.no_tool_number, "error=", e.error);
 
       // Reject non-Core Cutter prints
       if (e.error === "not_core_cutter") {
