@@ -3578,7 +3578,7 @@ If you do NOT find "Core Cutter" on the print, return ONLY:
 If you find "Core Cutter" but NO "CC-XXXXX" tool number, still extract all dimensions but include:
 {"tool_number": null, "no_tool_number": true, ...rest of fields}
 
-If both are present, extract the tool number as "tool_number" (e.g. "CC-12650") along with all tool geometry dimensions, and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object.
+If both are present, extract the tool number exactly as shown in the TOOL # field (e.g. "CC-14371") as "tool_number" along with all tool geometry dimensions, and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object. IMPORTANT: The tool number is in the title block labeled "TOOL #" — it will be in the format CC-NNNNN (e.g. CC-14371). Extract it character-for-character.
 
 UNITS — CHECK FIRST:
 Look for a units indicator on the print — typically in the title block, notes section, or dimension callouts. Common indicators: "DIMENSIONS IN MM", "ALL DIMS IN MILLIMETERS", "mm", or dimension values that are clearly metric (e.g. 12.70, 6.350, 25.4).
@@ -3597,6 +3597,14 @@ CRITICAL RULES — READ CAREFULLY:
    The nominal value is always the FIRST number before any +, -, or ± symbol.
 
 2. tool_dia is the CUTTING diameter — the Ø dimension at the tip/cutting end of the tool. On standard endmills the cutting dia equals the shank dia. On REDUCED-SHANK / MICRO tools (e.g. QTR3-style, stub cutters) the shank is LARGER than the cutting end — in this case tool_dia is the SMALL Ø at the tip (e.g. Ø0.0590), NOT the shank. The shank Ø (e.g. Ø0.250) goes in shank_dia. Rule: tool_dia = the Ø callout nearest the cutting tip/flutes. shank_dia = the Ø callout on the large body/shank end. If both ends are labeled with different diameters, the SMALLER one at the cutting tip is tool_dia. tool_dia is NEVER 0. On keyseat cutters it is the disc/wheel diameter (the big cutting part).
+
+2b. For STEP DRILLS specifically — this is the most important rule for step drills:
+   - A step drill has multiple cutting diameters shown with BOLD lines on the profile drawing. The shank/body is shown with thin or dashed lines and is NOT a cutting diameter.
+   - tool_dia = the SMALLEST cutting diameter (at the very tip of the drill — the first material it contacts). Example: if the print shows Ø0.1875 (shank, dashed/thin line), Ø0.141 (step, bold), Ø0.103 (tip, bold) → tool_dia = 0.103.
+   - drill_step_diameters = ALL larger cutting diameters in ascending order, NOT including tool_dia. Example: [0.141]. The shank diameter (Ø0.1875) is NEVER in drill_step_diameters — it goes in shank_dia.
+   - drill_step_lengths = the "STEP END" dimension(s) measured from the drill tip — one per step diameter. Example: 0.268 → [0.268].
+   - drill_flute_length = the "LOC" dimension (fluted cutting length). The "CLEAR" dimension is the clearance relief length (slightly longer) — use LOC, not CLEAR.
+   - Summary for the CC-14371 example: tool_dia=0.103, shank_dia=0.1875, drill_step_diameters=[0.141], drill_step_lengths=[0.268], drill_flute_length=0.625, oal=2.50.
 
 3. For KEYSEAT cutters specifically:
    - loc = the disc WIDTH (thickness of the cutting wheel, e.g. ".1875±.001" → 0.1875)
@@ -3664,10 +3672,10 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "chamfer_angle": <number, included chamfer angle in degrees, 0 if not applicable>,
   "chamfer_tip_dia": <number in inches, 0 if not applicable>,
   "thread_tpi": <number, threads per inch for threadmills, 0 if not applicable>,
-  "drill_step_diameters": <array of step diameters in ascending order (smallest first) for step drills — read from the print's step Ø callouts (e.g. Ø0.141, Ø0.103 → [0.103, 0.141]). [] if not applicable>,
-  "drill_step_lengths": <array of step lengths in inches measured from the drill tip — one entry per step diameter, same order. These are the "STEP END" dimension(s) on the print. [] if not applicable>,
-  "drill_point_angle": <number, the included point angle in degrees — look for the angle callout at the drill tip (e.g. 140°, 135°, 118°). Return the closest standard value: 118, 130, 135, 140, or 145. 135 if not shown.>,
-  "drill_flute_length": <number in inches, the fluted / cutting length labeled "LOC" or "CLEAR" on the print for drills — usable flute length, not step length. 0 if not shown.>,
+  "drill_step_diameters": <array — for step drills: the larger cutting diameters ONLY (NOT the shank, NOT tool_dia). Ascending order. Example: tool_dia=0.103, step=0.141, shank=0.1875 → [0.141]. [] if single-diameter drill>,
+  "drill_step_lengths": <array of "STEP END" lengths in inches measured from the drill tip, one per step diameter. Example: 0.268 → [0.268]. [] if not applicable>,
+  "drill_point_angle": <number, the included point angle in degrees at the drill tip (e.g. 140°). Return closest standard: 118, 130, 135, 140, or 145. 135 if not shown.>,
+  "drill_flute_length": <number in inches — the "LOC" dimension on the print (fluted cutting length). Do NOT use the "CLEAR" dimension. 0 if not shown.>,
   "ream_step_diameters": <array of step diameters in ascending order (smallest first) for step reamers — read from the print's step Ø callouts. [] if single-diameter reamer or not applicable>,
   "ream_step_lengths": <array of step lengths in inches measured from the reamer tip — one entry per step diameter, same order. [] if not applicable>,
   "ream_flute_length": <number in inches, the fluted / cutting length labeled "LOC", "FL", or "FLUTE LENGTH" on the print for reamers. 0 if not shown.>,
