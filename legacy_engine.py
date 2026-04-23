@@ -1531,7 +1531,12 @@ def run_chamfer_mill(payload: dict) -> dict:
 
     # SFM — same base as endmills; chamfering is still a peripheral cut
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(mat_group, 300))
-    sfm_target = base_sfm * hardness_sfm_mult(_hrc)
+    _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
+                       "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+                       "stainless_ph", "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420")
+    if mat_group not in _no_hrc_penalty and _mat_key not in _no_hrc_penalty:
+        base_sfm *= hardness_sfm_mult(_hrc)
+    sfm_target = base_sfm
 
     # D_eff at the outer edge of the chamfer
     half_angle_rad = math.radians(chamfer_angle / 2.0)
