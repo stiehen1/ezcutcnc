@@ -1805,7 +1805,7 @@ export default function Mentor() {
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
 
     // Drilling-specific
-    drill_point_angle: 135 as 118 | 130 | 135 | 140 | 145,
+    drill_point_angle: 0 as 0 | 118 | 130 | 135 | 140 | 145,
     drill_flute_length: 0,
     drill_hole_depth: 0,
     drill_blind: false,
@@ -3635,7 +3635,7 @@ ${stabSection}
         const depthD = form.tool_dia > 0 ? (form.drill_hole_depth / form.tool_dia) : 0;
         lines.push(L("Hole Depth",  `${form.drill_hole_depth.toFixed(4)}"  (${depthD.toFixed(1)}×D)`));
       }
-      lines.push(L("Point Angle",   `${form.drill_point_angle}°`));
+      lines.push(L("Point Angle",   form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)"));
       lines.push(L("Flute Geometry",{ standard: "Standard", med_helix: "Medium Helix", high_helix: "High Helix" }[form.drill_geometry as string] ?? form.drill_geometry));
       if (form.coolant) lines.push(L("Coolant",       form.coolant));
       if (drillResult.entry_dia != null && drillResult.largest_dia != null && drillResult.entry_dia !== drillResult.largest_dia) {
@@ -7356,7 +7356,7 @@ ${stabSection}
             return (
               <div className="space-y-3 mt-3">
                 <div className="space-y-1.5">
-                  <FieldLabel hint="Point angle as specified on the CC drill print. Click to override.">Point Angle</FieldLabel>
+                  <FieldLabel hint="Point angle as specified on the CC drill print. Auto-filled from PDF upload, or click to set manually.">Point Angle</FieldLabel>
                   <div className="flex gap-2">
                     {([118, 130, 135, 140, 145] as const).map((pa) => {
                       const isSelected = form.drill_point_angle === pa;
@@ -7372,6 +7372,9 @@ ${stabSection}
                       );
                     })}
                   </div>
+                  {form.drill_point_angle === 0 && (
+                    <p className="text-[10px] text-zinc-500 mt-1">Upload a CC print or select a point angle above — defaults to 135° if not set.</p>
+                  )}
                 </div>
 
                 {/* Dimension summary row — flute length, OAL */}
@@ -10017,7 +10020,7 @@ ${stabSection}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
                       <div><span className="text-zinc-500">Drill Diameter</span><span className="ml-2 font-medium text-foreground">{form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes || "—"}</span></div>
-                      <div><span className="text-zinc-500">Point Angle</span><span className="ml-2 font-medium text-foreground">{form.drill_point_angle}°</span></div>
+                      <div><span className="text-zinc-500">Point Angle</span><span className="ml-2 font-medium text-foreground">{form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)"}</span></div>
                       <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Hole Depth</span><span className="ml-2 font-medium text-foreground">{form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.drill_blind ? "Blind" : "Through"}</span></div>
@@ -10051,7 +10054,7 @@ ${stabSection}
                 const spec = {
                   diameter: form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "?",
                   flutes: form.flutes ? String(form.flutes) : "?",
-                  point_angle: `${form.drill_point_angle}°`,
+                  point_angle: form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)",
                   flute_length: form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "?",
                   hole_depth: form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "?",
                   hole_type: form.drill_blind ? "Blind" : "Through",

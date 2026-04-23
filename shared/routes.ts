@@ -87,7 +87,7 @@ export const mentorSchemas = {
     hardness_scale: z.enum(["hrb", "hrc"]).default("hrc"),
 
     // Drilling-specific
-    drill_point_angle: z.number().int().default(135),
+    drill_point_angle: z.number().int().default(0),
     drill_flute_length: z.number().min(0).default(0),
     drill_hole_depth: z.number().min(0).default(0),
     drill_blind: z.boolean().default(false),
