@@ -1826,7 +1826,7 @@ export default function Mentor() {
     thread_rows: 1,
     thread_neck_length: 0,
     npt_size: "",
-    thread_gcode_dialect: "fanuc" as "fanuc" | "siemens",
+    thread_gcode_dialect: "fanuc" as "fanuc" | "siemens" | "okuma" | "heidenhain",
     thread_cut_direction: "top_down" as "top_down" | "bottom_up",
 
     quiet: true,
@@ -4294,7 +4294,7 @@ ${stabSection}
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <div className="py-4">
               <select
-                className={`w-full rounded-md border-2 px-3 py-2.5 text-sm font-semibold ${!form.mode ? "border-yellow-400 bg-zinc-800 text-yellow-300" : "border-yellow-400 bg-zinc-800 text-zinc-100"}`}
+                className={`w-full rounded-md border-2 px-3 py-2.5 text-sm font-semibold ${!form.mode ? "border-yellow-400 bg-zinc-800 text-yellow-300 animate-pulse" : "border-yellow-400 bg-zinc-800 text-zinc-100"}`}
                 aria-label="Milling process"
                 value={form.mode}
                 onChange={(e) => {
@@ -4877,9 +4877,9 @@ ${stabSection}
 
           {/* G-Code Dialect */}
           <div className="mt-3 space-y-1.5">
-            <FieldLabel hint="CNC control dialect for G-code output. Fanuc/Haas: ( ) comments, T01 M06, G43 TLO. Siemens 840D: ; comments, T1 D1, TURN=1 helical arc.">G-Code Dialect</FieldLabel>
+            <FieldLabel hint="CNC control dialect for G-code output. Fanuc/Haas: ( ) comments, T01 M06, G43 TLO. Siemens 840D: ; comments, T1 D1, helical arc. Okuma OSP: ( ) comments, T1 M6, G43 H1 — Fanuc-compatible. Heidenhain iTNC/TNC 640: BEGIN PGM, TOOL CALL, CC/C arc syntax.">G-Code Dialect</FieldLabel>
             <div className="flex gap-2">
-              {([{ val: "fanuc", label: "Fanuc / Haas" }, { val: "siemens", label: "Siemens 840D" }] as const).map(({ val, label }) => (
+              {([{ val: "fanuc", label: "Fanuc / Haas" }, { val: "siemens", label: "Siemens 840D" }, { val: "okuma", label: "Okuma OSP" }, { val: "heidenhain", label: "Heidenhain" }] as const).map(({ val, label }) => (
                 <button key={val} type="button"
                   onClick={() => setForm((p) => ({ ...p, thread_gcode_dialect: val }))}
                   className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
@@ -7571,7 +7571,7 @@ ${stabSection}
                   >Optimal</button>
                 )}
               </div>
-              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+              <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!wocText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -7726,7 +7726,7 @@ ${stabSection}
               {form.mode === "circ_interp" ? (
                 <div className="space-y-1">
                   <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
-                  <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                  <div className={`flex h-9 items-center overflow-hidden rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!docText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -7797,7 +7797,7 @@ ${stabSection}
                   >Optimal</button>
                 )}
               </div>
-              <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+              <div className={`flex h-9 items-center overflow-hidden rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!docText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -9242,7 +9242,7 @@ ${stabSection}
               <div className="rounded-xl border-2 border-indigo-500 bg-indigo-500/10 p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wide">
-                    G-Code — {form.thread_gcode_dialect === "siemens" ? "Siemens 840D" : "Fanuc / Haas"} · {form.thread_cut_direction === "bottom_up" ? "Bottom-Up" : "Top-Down"}
+                    G-Code — {{ fanuc: "Fanuc / Haas", siemens: "Siemens 840D", okuma: "Okuma OSP", heidenhain: "Heidenhain" }[form.thread_gcode_dialect] ?? "Fanuc / Haas"} · {form.thread_cut_direction === "bottom_up" ? "Bottom-Up" : "Top-Down"}
                   </span>
                   <div className="flex gap-2">
                     <button
