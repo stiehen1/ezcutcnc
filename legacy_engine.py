@@ -1810,7 +1810,7 @@ def run_drilling(payload: dict) -> dict:
     """Full drilling calc — solid carbide drills, geometry + material driven."""
     D      = float(payload.get("tool_dia", 0.5) or 0.5)
     depth  = float(payload.get("drill_hole_depth", 0) or 0)
-    fl     = float(payload.get("drill_flute_length", 0) or 0)
+    fl     = float(payload.get("loc", 0) or payload.get("drill_flute_length", 0) or 0)  # LOC = cut depth
     blind  = bool(payload.get("drill_blind", False))
     pa     = int(payload.get("drill_point_angle", 135) or 135)
     coolant = str(payload.get("coolant", "flood") or "flood")
@@ -1877,9 +1877,11 @@ def run_drilling(payload: dict) -> dict:
     hp_required   = torque_inlbf * rpm / 63025.0
 
     # Flute length warning — usable depth = flute_length minus point clearance (~0.3×D)
+    # Use sfm_dia (largest cutting dia) for clearance — on step drills the point geometry
+    # is set by the largest diameter, not the tiny entry tip.
     flute_warning = None
     if fl > 0 and depth > 0:
-        usable = fl - feed_dia * 0.3
+        usable = fl - sfm_dia * 0.3
         if depth > usable:
             flute_warning = (
                 f"Hole depth {depth:.3f}\" exceeds usable flute depth {max(usable,0):.3f}\" "

@@ -654,7 +654,7 @@ function TrainingVideosTab() {
                     >
                       <span className="mt-0.5 shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
                         style={{ background: hasVideo ? "#d97706" : "#3f3f46", color: hasVideo ? "#fff" : "#71717a" }}>
-                        {hasVideo ? "▶ Play" : "Soon"}
+                        {hasVideo ? "▶ Play" : "Coming Soon"}
                       </span>
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-white leading-snug">{v.title}</p>

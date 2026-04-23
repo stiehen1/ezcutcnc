@@ -1450,6 +1450,7 @@ export default function Mentor() {
   const [pdfFluteWash, setPdfFluteWash] = React.useState<number>(0);
   const [pdfFluteWashText, setPdfFluteWashText] = React.useState<string>("");
   const [pdfOal, setPdfOal] = React.useState<number>(0);
+  const [pdfOalText, setPdfOalText] = React.useState<string>("");
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
@@ -1512,8 +1513,21 @@ export default function Mentor() {
         if (e.chamfer_tip_dia > 0) next.chamfer_tip_dia = e.chamfer_tip_dia;
         if (e.drill_step_diameters?.length > 0) {
           next.drill_step_diameters = e.drill_step_diameters;
-          next.drill_steps = 1;
+          next.drill_steps = e.drill_step_diameters.length;
         }
+        if (e.drill_step_lengths?.length > 0) next.drill_step_lengths = e.drill_step_lengths;
+        if (e.drill_point_angle && [118, 130, 135, 140, 145].includes(Number(e.drill_point_angle))) {
+          next.drill_point_angle = Number(e.drill_point_angle) as 118 | 130 | 135 | 140 | 145;
+        }
+        // drill_flute_length deprecated — LOC (form.loc) is the cut depth for drills
+        if (e.ream_step_diameters?.length > 0) {
+          next.ream_step_diameters = e.ream_step_diameters;
+          next.ream_steps = e.ream_step_diameters.length;
+          setReamStepDiaText(e.ream_step_diameters[0].toFixed(4));
+          if (e.ream_step_lengths?.[0] > 0) setReamStepLenText(e.ream_step_lengths[0].toFixed(3));
+        }
+        if (e.ream_step_lengths?.length > 0) next.ream_step_lengths = e.ream_step_lengths;
+        // ream_flute_length deprecated — LOC (form.loc) is the cut depth for reamers
         if (e.cutting_material) {
           const matKey = e.cutting_material as string;
           next.material = matKey as any;
@@ -1625,7 +1639,14 @@ export default function Mentor() {
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
       setPdfConvertedFromMm(!!e._converted_from_mm);
-      setPdfOal(e.oal > 0 ? e.oal : 0);
+      const _oal = e.oal > 0 ? e.oal : 0;
+      setPdfOal(_oal);
+      setPdfOalText(_oal > 0 ? _oal.toFixed(3) : "");
+      // locText already set above from e.loc for drills/reamers
+      if (e.drill_step_diameters?.length > 0) {
+        setStepDiaTexts(e.drill_step_diameters.map((d: number) => d.toFixed(4)));
+        setStepLenTexts((e.drill_step_lengths ?? []).map((l: number) => l > 0 ? l.toFixed(3) : ""));
+      }
       mentor.reset();
       const toastParts: string[] = [];
       if (e.tool_number) toastParts.push(`Tool ${e.tool_number}`);
@@ -1684,9 +1705,19 @@ export default function Mentor() {
     const s = raw.trim();
     const slash = s.indexOf("/");
     if (slash > 0) {
-      const num = parseFloat(s.slice(0, slash));
+      const beforeSlash = s.slice(0, slash);
       const den = parseFloat(s.slice(slash + 1));
-      if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) return num / den;
+      if (Number.isFinite(den) && den !== 0) {
+        // Handle "1-1/4" or "1 1/4" (whole + fraction)
+        const dashMatch = beforeSlash.match(/^(\d+)[\s-](\d+)$/);
+        if (dashMatch) {
+          const whole = parseFloat(dashMatch[1]);
+          const num   = parseFloat(dashMatch[2]);
+          if (Number.isFinite(whole) && Number.isFinite(num)) return whole + num / den;
+        }
+        const num = parseFloat(beforeSlash);
+        if (Number.isFinite(num)) return num / den;
+      }
     }
     return parseFloat(s);
   };
@@ -1781,7 +1812,7 @@ export default function Mentor() {
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
 
     // Drilling-specific
-    drill_point_angle: 135 as 118 | 130 | 135 | 140 | 145,
+    drill_point_angle: 0 as 0 | 118 | 130 | 135 | 140 | 145,
     drill_flute_length: 0,
     drill_hole_depth: 0,
     drill_blind: false,
@@ -1797,6 +1828,7 @@ export default function Mentor() {
     ream_shank_dia: 0,
     ream_blind: false,
     ream_coolant_fed: false,
+    ream_flute_length: 0,
     ream_steps: 0,
     ream_step_diameters: [] as number[],
     ream_step_lengths: [] as number[],
@@ -2171,6 +2203,8 @@ export default function Mentor() {
   const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
   const [stepLenTexts, setStepLenTexts] = React.useState<string[]>([]);
   const [reamStepDiaText, setReamStepDiaText] = React.useState("");
+  const [reamStepLenText, setReamStepLenText] = React.useState("");
+  const [reamFluteLenText, setReamFluteLenText] = React.useState("");
   const [raText, setRaText] = React.useState("");
   const [chamferTipDiaText, setChamferTipDiaText] = React.useState("");
   const [chamferDepthText, setChamferDepthText] = React.useState("");
@@ -2525,6 +2559,7 @@ export default function Mentor() {
     setPdfToolNumber(null);
     setPdfConvertedFromMm(false);
     setPdfOal(0);
+    setPdfOalText("");
     setPdfFluteWash(0);
     setPdfFluteWashText("");
     setDpSpecialTool(false);
@@ -2564,6 +2599,8 @@ export default function Mentor() {
     setDrillHoleDepthText("");
     setStepDiaTexts([]);
     setStepLenTexts([]);
+    setReamFluteLenText("");
+    setReamStepLenText("");
     setChamferTipDiaText("");
     setChamferDepthText("");
     setTmMajorDiaText("");
@@ -3610,7 +3647,7 @@ ${stabSection}
         const depthD = form.tool_dia > 0 ? (form.drill_hole_depth / form.tool_dia) : 0;
         lines.push(L("Hole Depth",  `${form.drill_hole_depth.toFixed(4)}"  (${depthD.toFixed(1)}×D)`));
       }
-      lines.push(L("Point Angle",   `${form.drill_point_angle}°`));
+      lines.push(L("Point Angle",   form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)"));
       lines.push(L("Flute Geometry",{ standard: "Standard", med_helix: "Medium Helix", high_helix: "High Helix" }[form.drill_geometry as string] ?? form.drill_geometry));
       if (form.coolant) lines.push(L("Coolant",       form.coolant));
       if (drillResult.entry_dia != null && drillResult.largest_dia != null && drillResult.entry_dia !== drillResult.largest_dia) {
@@ -4923,7 +4960,7 @@ ${stabSection}
                           borderColor: active ? "#6366f1" : isRec ? "#f59e0b" : "#6366f1",
                           color: active ? "#fff" : isRec ? "#f59e0b" : "#6366f1",
                         }}
-                      >{label}{isRec && !active ? " ★" : ""}</button>
+                      >{label}{isRec ? <span style={{ color: "#f59e0b" }}> ★</span> : ""}</button>
                     );
                   })}
                 </div>
@@ -7324,21 +7361,132 @@ ${stabSection}
             if (!hasCoolant && isDeep && recGeo === "standard") recGeo = "med_helix";
             if (!hasCoolant && isVeryDeep && recGeo === "med_helix") recGeo = "high_helix";
             if (form.drill_geometry !== recGeo) setTimeout(() => setForm((p) => ({ ...p, drill_geometry: recGeo })), 0);
+            const hasStepDias = form.drill_step_diameters?.length > 0;
+            const largestDia = hasStepDias ? Math.max(form.tool_dia, ...form.drill_step_diameters) : form.tool_dia;
+            const entryDia   = form.tool_dia;
+            const isStepDrill = hasStepDias && largestDia > entryDia + 0.0005;
             return (
-              <div className="space-y-1.5 mt-3">
-                <FieldLabel hint="Point angle as specified on the CC drill print.">Point Angle</FieldLabel>
-                <div className="flex gap-2">
-                  {([118, 130, 135, 140, 145] as const).map((pa) => {
-                    const isSelected = form.drill_point_angle === pa;
-                    return (
-                      <div key={pa} className="flex-1 rounded py-2 text-xs font-semibold border text-center"
-                        style={{
-                          backgroundColor: isSelected ? "#6366f1" : "transparent",
-                          borderColor: isSelected ? "#6366f1" : "#3f3f46",
-                          color: isSelected ? "#fff" : "#52525b",
-                        }}>{pa}°</div>
-                    );
-                  })}
+              <div className="space-y-3 mt-3">
+                <div className="space-y-1.5">
+                  <FieldLabel hint="Point angle as specified on the CC drill print. Auto-filled from PDF upload, or click to set manually.">Point Angle</FieldLabel>
+                  <div className="flex gap-2">
+                    {([118, 130, 135, 140, 145] as const).map((pa) => {
+                      const isSelected = form.drill_point_angle === pa;
+                      return (
+                        <button key={pa} type="button"
+                          onClick={() => setForm((p) => ({ ...p, drill_point_angle: pa }))}
+                          className="flex-1 rounded py-2 text-xs font-semibold border text-center transition-all"
+                          style={{
+                            backgroundColor: isSelected ? "#6366f1" : "transparent",
+                            borderColor: isSelected ? "#6366f1" : "#3f3f46",
+                            color: isSelected ? "#fff" : "#71717a",
+                          }}>{pa}°</button>
+                      );
+                    })}
+                  </div>
+                  {form.drill_point_angle === 0 && (
+                    <p className="text-[10px] text-zinc-500 mt-1">Upload a CC print or select a point angle above — defaults to 135° if not set.</p>
+                  )}
+                </div>
+
+                {/* Editable dimension fields — LOC, OAL, diameters */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <FieldLabel hint="LOC — Length of Cut. The bold-line cutting zone depth on the print. This is the maximum hole depth the tool can drill.">LOC / Cut Depth (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 0.625"
+                      value={locText}
+                      onChange={e => setLocText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(locText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, loc: n })); setLocText(n.toFixed(3)); }
+                        else { setLocText(form.loc > 0 ? form.loc.toFixed(3) : ""); }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel hint="Overall length of the drill from tip to end of shank.">OAL (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 2.500"
+                      value={pdfOalText}
+                      onChange={e => setPdfOalText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(pdfOalText);
+                        if (Number.isFinite(n) && n > 0) { setPdfOal(n); setPdfOalText(n.toFixed(3)); }
+                        else { setPdfOalText(pdfOal > 0 ? pdfOal.toFixed(3) : ""); }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Diameter fields — single dia or step drill */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <FieldLabel hint="Entry (smallest) diameter — sets chip load and feed rate.">{isStepDrill ? "Entry Ø (feed basis)" : "Drill Diameter (in)"}</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                        placeholder="e.g. 0.1875"
+                        value={toolDiaText}
+                        onChange={e => setToolDiaText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseDim(toolDiaText);
+                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, tool_dia: n })); setToolDiaText(n.toFixed(4)); }
+                          else { setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : ""); }
+                        }}
+                      />
+                    </div>
+                    {isStepDrill && (
+                      <div className="space-y-1">
+                        <FieldLabel hint="Largest step diameter — sets SFM and RPM.">Largest Ø (SFM basis)</FieldLabel>
+                        <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                          placeholder="e.g. 0.141"
+                          value={stepDiaTexts[0] ?? ""}
+                          onChange={e => setStepDiaTexts([e.target.value])}
+                          onBlur={() => {
+                            const n = parseDim(stepDiaTexts[0] ?? "");
+                            if (Number.isFinite(n) && n > 0) {
+                              setForm(p => ({ ...p, drill_step_diameters: [n], drill_steps: 1 }));
+                              setStepDiaTexts([n.toFixed(4)]);
+                            } else {
+                              setStepDiaTexts([form.drill_step_diameters[0] > 0 ? form.drill_step_diameters[0].toFixed(4) : ""]);
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {/* Step length */}
+                  {isStepDrill && (
+                    <div className="space-y-1">
+                      <FieldLabel hint="Step end length measured from the drill tip — the axial depth at which the step shoulder cuts.">Step Length from Tip (in)</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                        placeholder="e.g. 0.268"
+                        value={stepLenTexts[0] ?? ""}
+                        onChange={e => setStepLenTexts([e.target.value])}
+                        onBlur={() => {
+                          const n = parseDim(stepLenTexts[0] ?? "");
+                          if (Number.isFinite(n) && n > 0) {
+                            setForm(p => ({ ...p, drill_step_lengths: [n] }));
+                            setStepLenTexts([n.toFixed(3)]);
+                          } else {
+                            setStepLenTexts([form.drill_step_lengths[0] > 0 ? form.drill_step_lengths[0].toFixed(3) : ""]);
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                  {/* Add step / remove step toggle */}
+                  {!isStepDrill ? (
+                    <button type="button"
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 underline"
+                      onClick={() => { setForm(p => ({ ...p, drill_steps: 1, drill_step_diameters: [], drill_step_lengths: [] })); setStepDiaTexts([""]); setStepLenTexts([""]); }}
+                    >+ Add step diameter</button>
+                  ) : (
+                    <button type="button"
+                      className="text-[10px] text-zinc-500 hover:text-red-400 underline"
+                      onClick={() => { setForm(p => ({ ...p, drill_steps: 0, drill_step_diameters: [], drill_step_lengths: [] })); setStepDiaTexts([]); setStepLenTexts([]); }}
+                    >✕ Remove step — single diameter drill</button>
+                  )}
                 </div>
               </div>
             );
@@ -7467,25 +7615,89 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Step reamer — largest diameter */}
-          {form.ream_steps > 0 && (
-            <div className="mt-3 space-y-1">
-              <FieldLabel hint="Largest diameter on the step reamer. SFM and RPM are calculated on this diameter; feed is set by the entry (smallest) diameter.">Largest Dia (in)</FieldLabel>
-              <Input
-                type="text" inputMode="decimal" className="no-spinners"
+          {/* Editable dimension fields — LOC, OAL */}
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="space-y-1">
+              <FieldLabel hint="LOC — Length of Cut. The bold-line cutting zone depth on the print.">LOC / Cut Depth (in)</FieldLabel>
+              <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
                 placeholder="e.g. 0.625"
-                value={reamStepDiaText}
-                onChange={(e) => setReamStepDiaText(e.target.value)}
+                value={locText}
+                onChange={e => setLocText(e.target.value)}
                 onBlur={() => {
-                  const n = parseDim(reamStepDiaText);
-                  if (Number.isFinite(n) && n > 0) {
-                    setForm((p) => ({ ...p, ream_step_diameters: [n] }));
-                    setReamStepDiaText(n.toFixed(4));
-                  }
+                  const n = parseDim(locText);
+                  if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, loc: n })); setLocText(n.toFixed(3)); }
+                  else { setLocText(form.loc > 0 ? form.loc.toFixed(3) : ""); }
                 }}
               />
             </div>
-          )}
+            <div className="space-y-1">
+              <FieldLabel hint="Overall length of the reamer from tip to end of shank.">OAL (in)</FieldLabel>
+              <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                placeholder="e.g. 2.500"
+                value={pdfOalText}
+                onChange={e => setPdfOalText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(pdfOalText);
+                  if (Number.isFinite(n) && n > 0) { setPdfOal(n); setPdfOalText(n.toFixed(3)); }
+                  else { setPdfOalText(pdfOal > 0 ? pdfOal.toFixed(3) : ""); }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Diameter fields — entry dia + optional step */}
+          {(() => {
+            const isStep = form.ream_steps > 0;
+            return (
+              <div className="mt-3 space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <FieldLabel hint="Entry (smallest) reamer diameter — sets chip load and feed rate.">{isStep ? "Entry Ø (feed basis)" : "Reamer Diameter (in)"}</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 0.500"
+                      value={toolDiaText}
+                      onChange={e => setToolDiaText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(toolDiaText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, tool_dia: n })); setToolDiaText(n.toFixed(4)); }
+                        else { setToolDiaText(form.tool_dia > 0 ? form.tool_dia.toFixed(4) : ""); }
+                      }}
+                    />
+                  </div>
+                  {isStep && (
+                    <div className="space-y-1">
+                      <FieldLabel hint="Largest step diameter — sets SFM and RPM.">Largest Ø (SFM basis)</FieldLabel>
+                      <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                        placeholder="e.g. 0.625"
+                        value={reamStepDiaText}
+                        onChange={e => setReamStepDiaText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseDim(reamStepDiaText);
+                          if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, ream_step_diameters: [n] })); setReamStepDiaText(n.toFixed(4)); }
+                          else { setReamStepDiaText(form.ream_step_diameters[0] > 0 ? form.ream_step_diameters[0].toFixed(4) : ""); }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                {isStep && (
+                  <div className="space-y-1">
+                    <FieldLabel hint="Step end length measured from the reamer tip.">Step Length from Tip (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
+                      placeholder="e.g. 0.268"
+                      value={reamStepLenText}
+                      onChange={e => setReamStepLenText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(reamStepLenText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, ream_step_lengths: [n] })); setReamStepLenText(n.toFixed(3)); }
+                        else { setReamStepLenText(form.ream_step_lengths[0] > 0 ? form.ream_step_lengths[0].toFixed(3) : ""); }
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Flutes + Shank — shared across both modes */}
           <div className="grid grid-cols-2 gap-3 mt-3">
@@ -7547,8 +7759,8 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Standard WOC/DOC (hidden for surfacing, chamfer_mill, deep_pocket) ── */}
-          {form.mode !== "surfacing" && form.mode !== "deep_pocket" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
+          {/* ── Standard WOC/DOC (milling only — hidden for surfacing, chamfer_mill, deep_pocket) ── */}
+          {operation === "milling" && form.mode !== "surfacing" && form.mode !== "deep_pocket" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
@@ -9601,7 +9813,7 @@ ${stabSection}
                     </div>
                   )}
                   <div><span className="text-zinc-500">Shank Dia</span><span className="ml-2 font-medium text-foreground">{form.ream_shank_dia ? `${form.ream_shank_dia.toFixed(4)}"` : form.tool_dia ? `${form.tool_dia.toFixed(4)}" (= cut dia)` : "—"}</span></div>
-                  <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.ream_hole_depth ? `${form.ream_hole_depth.toFixed(3)}"` : "—"}</span></div>
+                  <div><span className="text-zinc-500">LOC</span><span className="ml-2 font-medium text-foreground">{form.loc ? `${form.loc.toFixed(3)}"` : "—"}</span></div>
                   <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.ream_blind ? "Blind" : "Through"}</span></div>
                   <div><span className="text-zinc-500">Coolant Thru</span><span className="ml-2 font-medium text-foreground">{form.ream_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"}</span></div>
                   {reamResult.tool_life_lo != null && reamResult.tool_life_hi != null && (
@@ -9911,8 +10123,8 @@ ${stabSection}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
                       <div><span className="text-zinc-500">Drill Diameter</span><span className="ml-2 font-medium text-foreground">{form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes || "—"}</span></div>
-                      <div><span className="text-zinc-500">Point Angle</span><span className="ml-2 font-medium text-foreground">{form.drill_point_angle}°</span></div>
-                      <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "—"}</span></div>
+                      <div><span className="text-zinc-500">Point Angle</span><span className="ml-2 font-medium text-foreground">{form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)"}</span></div>
+                      <div><span className="text-zinc-500">LOC</span><span className="ml-2 font-medium text-foreground">{form.loc ? `${form.loc.toFixed(3)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Hole Depth</span><span className="ml-2 font-medium text-foreground">{form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.drill_blind ? "Blind" : "Through"}</span></div>
                       <div><span className="text-zinc-500">Flute Geometry</span><span className="ml-2 font-medium text-foreground">{{ standard: "Standard", high_helix: "High Helix", parabolic: "Parabolic" }[form.drill_geometry as string] ?? form.drill_geometry}</span></div>
@@ -9945,8 +10157,8 @@ ${stabSection}
                 const spec = {
                   diameter: form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "?",
                   flutes: form.flutes ? String(form.flutes) : "?",
-                  point_angle: `${form.drill_point_angle}°`,
-                  flute_length: form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "?",
+                  point_angle: form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)",
+                  flute_length: form.loc ? `${form.loc.toFixed(3)}"` : "?",
                   hole_depth: form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "?",
                   hole_type: form.drill_blind ? "Blind" : "Through",
                   coolant_thru: form.drill_coolant_fed ? "Yes" : "No",
@@ -10002,7 +10214,7 @@ ${stabSection}
                               <span className="text-zinc-500">Diameter</span><span>{spec.diameter}</span>
                               <span className="text-zinc-500">Flutes</span><span>{spec.flutes}</span>
                               <span className="text-zinc-500">Point Angle</span><span>{spec.point_angle}</span>
-                              <span className="text-zinc-500">Flute Length</span><span>{spec.flute_length}</span>
+                              <span className="text-zinc-500">LOC</span><span>{spec.flute_length}</span>
                               <span className="text-zinc-500">Hole Depth</span><span>{spec.hole_depth}</span>
                               <span className="text-zinc-500">Hole Type</span><span>{spec.hole_type}</span>
                               <span className="text-zinc-500">Coolant Thru</span><span>{spec.coolant_thru}</span>
@@ -11642,8 +11854,8 @@ ${stabSection}
         );
       })()}
 
-      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only, not deep pocket */}
-      {operation === "milling" && (form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && (stabilityIndex || stability) && (
+      {/* MACHINING STABILITY INDEX + RIGIDITY AUDIT — milling only, not deep pocket, not chamfer mill */}
+      {operation === "milling" && form.tool_type !== "chamfer_mill" && (form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && (stabilityIndex || stability) && (
       <div className="rounded-2xl border border-card-border overflow-hidden mt-5">
 
         {/* Section header */}

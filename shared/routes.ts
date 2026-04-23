@@ -87,7 +87,7 @@ export const mentorSchemas = {
     hardness_scale: z.enum(["hrb", "hrc"]).default("hrc"),
 
     // Drilling-specific
-    drill_point_angle: z.number().int().default(135),
+    drill_point_angle: z.number().int().default(0),
     drill_flute_length: z.number().min(0).default(0),
     drill_hole_depth: z.number().min(0).default(0),
     drill_blind: z.boolean().default(false),
@@ -102,6 +102,7 @@ export const mentorSchemas = {
     ream_hole_depth: z.number().min(0).default(0),
     ream_blind: z.boolean().default(false),
     ream_coolant_fed: z.boolean().default(false),
+    ream_flute_length: z.number().min(0).default(0),
     ream_steps: z.number().int().min(0).max(3).default(0),
     ream_step_diameters: z.array(z.number().positive()).max(3).default([]),
     ream_step_lengths: z.array(z.number().positive()).max(3).default([]),
