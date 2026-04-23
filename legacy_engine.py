@@ -1879,8 +1879,9 @@ def run_drilling(payload: dict) -> dict:
     # Flute length warning — usable depth = flute_length minus point clearance (~0.3×D)
     # Use sfm_dia (largest cutting dia) for clearance — on step drills the point geometry
     # is set by the largest diameter, not the tiny entry tip.
+    # Through holes: point exits the part before the shoulder reaches depth — no warning needed.
     flute_warning = None
-    if fl > 0 and depth > 0:
+    if fl > 0 and depth > 0 and blind:
         usable = fl - sfm_dia * 0.3
         if depth > usable:
             flute_warning = (
@@ -1894,9 +1895,8 @@ def run_drilling(payload: dict) -> dict:
     min_ipr = drill_min_ipr(feed_dia, mat_group)
     if ipr < min_ipr:
         chip_warning = (
-            f"Calculated feed ({ipr:.5f} ipr) was below the critical chip thickness floor for this "
-            f"material (min ≈ {min_ipr:.4f} ipr) — feed has been raised to the minimum to prevent "
-            f"rubbing, work hardening, and accelerated wear."
+            f"Feed auto-adjusted to minimum chip thickness floor for this material "
+            f"(min ≈ {min_ipr:.4f} ipr) to prevent rubbing and work hardening."
         )
         ipr = min_ipr
 

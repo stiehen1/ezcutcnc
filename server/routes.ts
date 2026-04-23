@@ -3570,7 +3570,13 @@ export async function registerRoutes(
 
 FIRST — verify this is a genuine Core Cutter LLC print:
 1. Look for "CORE CUTTER" or "Core Cutter" or "CORE CUTTER, LLC" in the title block, header, or logo area.
-2. Look for a tool number in the format "CC-XXXXX" (e.g. CC-12650) in the title block (labeled "TOOL #").
+2. Find the TOOL # field in the title block. It contains a number like "CC-14371". The title block is typically a table in the lower-right corner of the print with rows labeled TOOL #, CUSTOMER, DRAWN BY, DATE, etc.
+
+TOOL NUMBER EXTRACTION — CRITICAL:
+- The TOOL # field contains the tool number. Example: if it says "CC-14371" extract exactly "CC-14371".
+- Do NOT confuse TOOL # with CUSTOMER TOOL # (a different field). Use only the "TOOL #" field.
+- The format is always CC- followed by 4 or 5 digits (e.g. CC-14371, CC-12650, CC-9823).
+- This field is ALWAYS present on genuine Core Cutter prints. Look carefully.
 
 If you do NOT find "Core Cutter" on the print, return ONLY:
 {"error": "not_core_cutter"}
@@ -3578,7 +3584,7 @@ If you do NOT find "Core Cutter" on the print, return ONLY:
 If you find "Core Cutter" but NO "CC-XXXXX" tool number, still extract all dimensions but include:
 {"tool_number": null, "no_tool_number": true, ...rest of fields}
 
-If both are present, extract the tool number exactly as shown in the TOOL # field (e.g. "CC-14371") as "tool_number" along with all tool geometry dimensions, and return ONLY valid JSON — no explanation, no markdown, just the raw JSON object. IMPORTANT: The tool number is in the title block labeled "TOOL #" — it will be in the format CC-NNNNN (e.g. CC-14371). Extract it character-for-character.
+If both are present, return ONLY valid JSON — no explanation, no markdown, just the raw JSON object. Include "tool_number" as the first field.
 
 UNITS — CHECK FIRST:
 Look for a units indicator on the print — typically in the title block, notes section, or dimension callouts. Common indicators: "DIMENSIONS IN MM", "ALL DIMS IN MILLIMETERS", "mm", or dimension values that are clearly metric (e.g. 12.70, 6.350, 25.4).

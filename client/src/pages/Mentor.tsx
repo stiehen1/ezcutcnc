@@ -9774,21 +9774,35 @@ ${stabSection}
                 );
               })()}
 
-              {/* Recommended Reamer + Quote CTA — combined card */}
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs space-y-3">
+              {/* Print-on-file confirmation — shown instead of quote card when PDF was uploaded */}
+              {(pdfExtracted || pdfToolNumber) && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-2.5 text-xs flex items-center gap-2 text-amber-400">
+                  <span>✓</span>
+                  <span className="font-semibold">Print uploaded{pdfToolNumber ? ` — ${pdfToolNumber}` : ""}</span>
+                </div>
+              )}
+
+              {/* Recommended Reamer + Quote CTA — hidden when a special print is already uploaded */}
+              {!pdfExtracted && !pdfToolNumber && <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs space-y-3">
                 {/* Header */}
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">Core Cutter Recommends</p>
                     <p className="font-semibold text-foreground text-sm">Custom Reamer — Built to Order</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => { setQuoteSent(false); setShowQuote(true); }}
-                    className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
-                  >
-                    Request Quote
-                  </button>
+                  {(pdfToolNumber || pdfExtracted) ? (
+                    <span className="shrink-0 rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-400">
+                      {pdfToolNumber ?? "On File"}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setQuoteSent(false); setShowQuote(true); }}
+                      className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
+                    >
+                      Request Quote
+                    </button>
+                  )}
                 </div>
 
                 {/* Flute configuration — full width, no wrap */}
@@ -9845,7 +9859,7 @@ ${stabSection}
                     ))}
                   </ul>
                 )}
-              </div>
+              </div>}
 
               {/* Quote modal */}
               {showQuote && (() => {
@@ -10086,22 +10100,31 @@ ${stabSection}
                 </div>
               )}
 
-              {/* Critical chip thickness warning */}
+              {/* Chip thickness advisory — informational, feed already auto-corrected */}
               {drillResult.chip_warning && (
-                <div className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                  ⚠ <span className="font-semibold">Critical Chip Thickness:</span> {drillResult.chip_warning}
+                <div className="rounded-lg border border-zinc-600 bg-zinc-800/60 px-3 py-2 text-xs text-zinc-300">
+                  ℹ {drillResult.chip_warning}
                 </div>
               )}
 
-              {/* Flute length warning */}
-              {drillResult.flute_warning && (
+              {/* Flute length warning — blind holes only (through holes: point exits before shoulder reaches depth) */}
+              {drillResult.flute_warning && !form.drill_blind && null}
+              {drillResult.flute_warning && form.drill_blind && (
                 <div className="rounded-lg border border-orange-500 bg-orange-500/10 px-3 py-2 text-xs text-orange-300">
                   ⚠ {drillResult.flute_warning}
                 </div>
               )}
 
-              {/* Core Cutter Recommends — drill quote card */}
-              {(() => {
+              {/* Print-on-file confirmation — shown instead of quote card when PDF was uploaded */}
+              {(pdfExtracted || pdfToolNumber) && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-2.5 text-xs flex items-center gap-2 text-amber-400">
+                  <span>✓</span>
+                  <span className="font-semibold">Print uploaded{pdfToolNumber ? ` — ${pdfToolNumber}` : ""}</span>
+                </div>
+              )}
+
+              {/* Core Cutter Recommends — drill quote card (hidden when a special print is already uploaded) */}
+              {!pdfExtracted && !pdfToolNumber && (() => {
                 const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? "?";
                 const hasSteps = form.drill_steps > 0;
                 return (
@@ -10111,13 +10134,19 @@ ${stabSection}
                         <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">Core Cutter Recommends</p>
                         <p className="font-semibold text-foreground text-sm">Custom {hasSteps ? "Step Drill" : "Drill"} — Built to Order</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => { setDrillQuoteSent(false); setShowDrillQuote(true); }}
-                        className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
-                      >
-                        Request Quote
-                      </button>
+                      {(pdfToolNumber || pdfExtracted) ? (
+                        <span className="shrink-0 rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-400">
+                          {pdfToolNumber ?? "On File"}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setDrillQuoteSent(false); setShowDrillQuote(true); }}
+                          className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors"
+                        >
+                          Request Quote
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
