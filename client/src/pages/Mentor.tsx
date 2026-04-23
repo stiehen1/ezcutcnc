@@ -1519,7 +1519,7 @@ export default function Mentor() {
         if (e.drill_point_angle && [118, 130, 135, 140, 145].includes(Number(e.drill_point_angle))) {
           next.drill_point_angle = Number(e.drill_point_angle) as 118 | 130 | 135 | 140 | 145;
         }
-        if (e.drill_flute_length > 0) next.drill_flute_length = e.drill_flute_length;
+        // drill_flute_length deprecated — LOC (form.loc) is the cut depth for drills
         if (e.ream_step_diameters?.length > 0) {
           next.ream_step_diameters = e.ream_step_diameters;
           next.ream_steps = e.ream_step_diameters.length;
@@ -1527,7 +1527,7 @@ export default function Mentor() {
           if (e.ream_step_lengths?.[0] > 0) setReamStepLenText(e.ream_step_lengths[0].toFixed(3));
         }
         if (e.ream_step_lengths?.length > 0) next.ream_step_lengths = e.ream_step_lengths;
-        if (e.ream_flute_length > 0) { next.ream_flute_length = e.ream_flute_length; setReamFluteLenText(e.ream_flute_length.toFixed(3)); }
+        // ream_flute_length deprecated — LOC (form.loc) is the cut depth for reamers
         if (e.cutting_material) {
           const matKey = e.cutting_material as string;
           next.material = matKey as any;
@@ -1642,7 +1642,7 @@ export default function Mentor() {
       const _oal = e.oal > 0 ? e.oal : 0;
       setPdfOal(_oal);
       setPdfOalText(_oal > 0 ? _oal.toFixed(3) : "");
-      if (e.drill_flute_length > 0) setDrillFluteLenText(e.drill_flute_length.toFixed(3));
+      // locText already set above from e.loc for drills/reamers
       if (e.drill_step_diameters?.length > 0) {
         setStepDiaTexts(e.drill_step_diameters.map((d: number) => d.toFixed(4)));
         setStepLenTexts((e.drill_step_lengths ?? []).map((l: number) => l > 0 ? l.toFixed(3) : ""));
@@ -7389,18 +7389,18 @@ ${stabSection}
                   )}
                 </div>
 
-                {/* Editable dimension fields — flute length, OAL, diameters */}
+                {/* Editable dimension fields — LOC, OAL, diameters */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <FieldLabel hint="Usable flute / cutting length — labeled CLEAR or LOC on the print.">Flute Length (in)</FieldLabel>
+                    <FieldLabel hint="LOC — Length of Cut. The bold-line cutting zone depth on the print. This is the maximum hole depth the tool can drill.">LOC / Cut Depth (in)</FieldLabel>
                     <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
-                      placeholder="e.g. 0.750"
-                      value={drillFluteLenText}
-                      onChange={e => setDrillFluteLenText(e.target.value)}
+                      placeholder="e.g. 0.625"
+                      value={locText}
+                      onChange={e => setLocText(e.target.value)}
                       onBlur={() => {
-                        const n = parseDim(drillFluteLenText);
-                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, drill_flute_length: n })); setDrillFluteLenText(n.toFixed(3)); }
-                        else { setDrillFluteLenText(form.drill_flute_length > 0 ? form.drill_flute_length.toFixed(3) : ""); }
+                        const n = parseDim(locText);
+                        if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, loc: n })); setLocText(n.toFixed(3)); }
+                        else { setLocText(form.loc > 0 ? form.loc.toFixed(3) : ""); }
                       }}
                     />
                   </div>
@@ -7615,18 +7615,18 @@ ${stabSection}
             </div>
           </div>
 
-          {/* Editable dimension fields — flute length, OAL */}
+          {/* Editable dimension fields — LOC, OAL */}
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div className="space-y-1">
-              <FieldLabel hint="Usable flute / cutting length — labeled LOC or FL on the print.">Flute Length (in)</FieldLabel>
+              <FieldLabel hint="LOC — Length of Cut. The bold-line cutting zone depth on the print.">LOC / Cut Depth (in)</FieldLabel>
               <Input type="text" inputMode="decimal" className="no-spinners h-8 text-xs"
-                placeholder="e.g. 0.750"
-                value={reamFluteLenText}
-                onChange={e => setReamFluteLenText(e.target.value)}
+                placeholder="e.g. 0.625"
+                value={locText}
+                onChange={e => setLocText(e.target.value)}
                 onBlur={() => {
-                  const n = parseDim(reamFluteLenText);
-                  if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, ream_flute_length: n })); setReamFluteLenText(n.toFixed(3)); }
-                  else { setReamFluteLenText(form.ream_flute_length > 0 ? form.ream_flute_length.toFixed(3) : ""); }
+                  const n = parseDim(locText);
+                  if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, loc: n })); setLocText(n.toFixed(3)); }
+                  else { setLocText(form.loc > 0 ? form.loc.toFixed(3) : ""); }
                 }}
               />
             </div>
@@ -9813,7 +9813,7 @@ ${stabSection}
                     </div>
                   )}
                   <div><span className="text-zinc-500">Shank Dia</span><span className="ml-2 font-medium text-foreground">{form.ream_shank_dia ? `${form.ream_shank_dia.toFixed(4)}"` : form.tool_dia ? `${form.tool_dia.toFixed(4)}" (= cut dia)` : "—"}</span></div>
-                  <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.ream_hole_depth ? `${form.ream_hole_depth.toFixed(3)}"` : "—"}</span></div>
+                  <div><span className="text-zinc-500">LOC</span><span className="ml-2 font-medium text-foreground">{form.loc ? `${form.loc.toFixed(3)}"` : "—"}</span></div>
                   <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.ream_blind ? "Blind" : "Through"}</span></div>
                   <div><span className="text-zinc-500">Coolant Thru</span><span className="ml-2 font-medium text-foreground">{form.ream_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"}</span></div>
                   {reamResult.tool_life_lo != null && reamResult.tool_life_hi != null && (
@@ -10124,7 +10124,7 @@ ${stabSection}
                       <div><span className="text-zinc-500">Drill Diameter</span><span className="ml-2 font-medium text-foreground">{form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Flutes</span><span className="ml-2 font-medium text-foreground">{form.flutes || "—"}</span></div>
                       <div><span className="text-zinc-500">Point Angle</span><span className="ml-2 font-medium text-foreground">{form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)"}</span></div>
-                      <div><span className="text-zinc-500">Flute Length</span><span className="ml-2 font-medium text-foreground">{form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "—"}</span></div>
+                      <div><span className="text-zinc-500">LOC</span><span className="ml-2 font-medium text-foreground">{form.loc ? `${form.loc.toFixed(3)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Hole Depth</span><span className="ml-2 font-medium text-foreground">{form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "—"}</span></div>
                       <div><span className="text-zinc-500">Hole Type</span><span className="ml-2 font-medium text-foreground">{form.drill_blind ? "Blind" : "Through"}</span></div>
                       <div><span className="text-zinc-500">Flute Geometry</span><span className="ml-2 font-medium text-foreground">{{ standard: "Standard", high_helix: "High Helix", parabolic: "Parabolic" }[form.drill_geometry as string] ?? form.drill_geometry}</span></div>
@@ -10158,7 +10158,7 @@ ${stabSection}
                   diameter: form.tool_dia ? `${form.tool_dia.toFixed(4)}"` : "?",
                   flutes: form.flutes ? String(form.flutes) : "?",
                   point_angle: form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)",
-                  flute_length: form.drill_flute_length ? `${form.drill_flute_length.toFixed(3)}"` : "?",
+                  flute_length: form.loc ? `${form.loc.toFixed(3)}"` : "?",
                   hole_depth: form.drill_hole_depth ? `${form.drill_hole_depth.toFixed(3)}"` : "?",
                   hole_type: form.drill_blind ? "Blind" : "Through",
                   coolant_thru: form.drill_coolant_fed ? "Yes" : "No",
@@ -10214,7 +10214,7 @@ ${stabSection}
                               <span className="text-zinc-500">Diameter</span><span>{spec.diameter}</span>
                               <span className="text-zinc-500">Flutes</span><span>{spec.flutes}</span>
                               <span className="text-zinc-500">Point Angle</span><span>{spec.point_angle}</span>
-                              <span className="text-zinc-500">Flute Length</span><span>{spec.flute_length}</span>
+                              <span className="text-zinc-500">LOC</span><span>{spec.flute_length}</span>
                               <span className="text-zinc-500">Hole Depth</span><span>{spec.hole_depth}</span>
                               <span className="text-zinc-500">Hole Type</span><span>{spec.hole_type}</span>
                               <span className="text-zinc-500">Coolant Thru</span><span>{spec.coolant_thru}</span>

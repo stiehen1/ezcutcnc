@@ -1810,7 +1810,7 @@ def run_drilling(payload: dict) -> dict:
     """Full drilling calc — solid carbide drills, geometry + material driven."""
     D      = float(payload.get("tool_dia", 0.5) or 0.5)
     depth  = float(payload.get("drill_hole_depth", 0) or 0)
-    fl     = float(payload.get("drill_flute_length", 0) or 0)
+    fl     = float(payload.get("loc", 0) or payload.get("drill_flute_length", 0) or 0)  # LOC = cut depth
     blind  = bool(payload.get("drill_blind", False))
     pa     = int(payload.get("drill_point_angle", 135) or 135)
     coolant = str(payload.get("coolant", "flood") or "flood")
