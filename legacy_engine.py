@@ -1738,7 +1738,7 @@ def run_chamfer_mill(payload: dict) -> dict:
             "feed_ipm":        round(feed_ipm, 2),
             "doc_in":          round(chamfer_depth, 4),
             "woc_in":          round(d_eff, 4),  # repurposed: D_eff stored here for display
-            "mrr_in3_min":     0.0,
+            "mrr_in3_min":     round(mrr_equiv, 4),
             "spindle_load_pct": round((hp_required / machine_hp) * 100.0, 1) if machine_hp > 0 else 0.0,
             "hp_required":     round(hp_required, 3),
             "fpt":             round(ipt, 6),
