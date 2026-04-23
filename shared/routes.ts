@@ -119,7 +119,7 @@ export const mentorSchemas = {
     thread_rows: z.number().int().min(1).max(4).default(1),
     thread_neck_length: z.number().default(0),
     npt_size: z.string().default(""),
-    thread_gcode_dialect: z.enum(["fanuc", "siemens"]).default("fanuc"),
+    thread_gcode_dialect: z.enum(["fanuc", "siemens", "okuma", "heidenhain"]).default("fanuc"),
     thread_cut_direction: z.enum(["top_down", "bottom_up"]).default("top_down"),
 
     // Keyseat-specific

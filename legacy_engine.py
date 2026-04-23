@@ -6189,7 +6189,106 @@ def _generate_threadmill_gcode(
     plunge_feed = round(feed_ipm * 0.3, 1)
     side_feed   = round(feed_ipm * 0.5, 1)
 
-    if dialect == "siemens":
+    if dialect == "heidenhain":
+        # ── Heidenhain iTNC / TNC 640 ──────────────────────────────────────
+        # Arc direction: DR+ = CCW (G3), DR- = CW (G2)
+        arc_dr  = "DR+" if arc_cmd  == "G3" else "DR-"
+        lead_dr = "DR+" if lead_arc == "G3" else "DR-"
+        lines = [
+            f"; {thread_label} {int_ext} {hand_str}",
+            f"; TOOL: D={tool_dia:.4f}\"  {rows_str}",
+            f"; PITCH: {pitch_in:.5f}\"  THREAD DEPTH: {h_thread:.5f}\"",
+            f"; RPM: {rpm}  FEED: {feed_ipm:.1f} IPM",
+            f"; RADIAL PASSES: {num_passes}{' + SPRING' if spring_pass else ''}",
+            f"; MATERIAL: {mat.upper().replace('_', ' ')}",
+            f"; CUT DIRECTION: {dir_label}",
+            ";",
+            "; *** SET DATUM AND TOOL LENGTH BEFORE RUNNING ***",
+            "; *** VERIFY DRY RUN BEFORE CUTTING ***",
+            ";",
+            "BEGIN PGM THREADMILL MM",
+            "BLK FORM 0.1 Z X-50 Y-50 Z-50",
+            "BLK FORM 0.2 X+50 Y+50 Z+0",
+            f"TOOL CALL 1 Z S{rpm}",
+            "L Z+100 FMAX",
+            "M8",
+            ";",
+            "; POSITION TO THREAD CENTER",
+            "L X+0 Y+0 FMAX",
+        ]
+        # For Heidenhain, generate passes using CC/C arc syntax
+        total_passes = num_passes + (1 if spring_pass else 0)
+        z_start = -engagement if not bottom_up else -(h_thread * tool_rows + engagement)
+        for p in range(total_passes):
+            if p < num_passes:
+                r = round(r_full - h_thread + doc_per_pass * (p + 1), 5)
+                pass_label = f"PASS {p+1} {'ROUGH' if p < num_passes - 1 else 'FINISH'}"
+            else:
+                r = round(r_full, 5)
+                pass_label = "SPRING PASS"
+            z_top    = round(z_start, 4)
+            z_bottom = round(z_top - pitch_in * tool_rows, 4) if not bottom_up else round(z_top + pitch_in * tool_rows, 4)
+            lines += [
+                ";",
+                f"; {pass_label}  R={r:.5f}\"",
+                f"L X+0 Y+0 Z{z_top:+.4f} F{plunge_feed:.1f}",
+                f"CC X+0 Y+0",
+                f"L X{r:+.5f} Y+0 F{side_feed:.1f}",
+                f"C X+0 Y{r:+.5f} {arc_dr} INC F{feed_ipm:.1f}",
+                f"C X{-r:+.5f} Y+0 {arc_dr} INC",
+                f"C X+0 Y{-r:+.5f} {arc_dr} INC",
+                f"C X{r:+.5f} Y+0 {arc_dr} Z{z_bottom:+.4f} INC",
+                f"L X+0 Y+0 F{side_feed:.1f}",
+            ]
+        lines += [";", "L Z+100 FMAX", "M9", "M5", "END PGM THREADMILL MM"]
+
+    elif dialect == "okuma":
+        # ── Okuma OSP-P300 / OSP-P500 ─────────────────────────────────────
+        # Nearly Fanuc-compatible; uses ( ) comments, VCALL for subprograms,
+        # modal G codes persist. Toolchange: T1 M6 (no leading zero required).
+        lines = [
+            f"({thread_label} {int_ext} {hand_str})",
+            f"(TOOL: D={tool_dia:.4f}\"  {rows_str})",
+            f"(PITCH: {pitch_in:.5f}\"  THREAD DEPTH: {h_thread:.5f}\")",
+            f"(RPM: {rpm}  FEED: {feed_ipm:.1f} IPM)",
+            f"(RADIAL PASSES: {num_passes}{' + SPRING' if spring_pass else ''})",
+            f"(ENGAGEMENT: {engagement:.3f}\"  STICKOUT: {stickout:.3f}\")",
+            f"(MATERIAL: {mat.upper().replace('_', ' ')})",
+            f"(CUT DIRECTION: {dir_label})",
+            "()",
+            "(*** SET TOOL LENGTH AND WORK COORDINATES BEFORE RUNNING ***)",
+            "(*** VERIFY DRY RUN BEFORE CUTTING ***)",
+            "()",
+            "G17 G90 G94",
+            "T1 M6",
+            "G43 Z1.0 H1",
+            f"S{rpm} M3",
+            "M8",
+            "()",
+            "(POSITION TO THREAD CENTER)",
+            "G0 X0. Y0.",
+        ]
+        if is_tapered:
+            lines += _gcode_taper_thread(
+                arc_cmd=arc_cmd, lead_arc=lead_arc, engagement=engagement,
+                pitch_in=pitch_in, tpi=tpi, r_full=r_full, h_thread=h_thread,
+                num_passes=num_passes, spring_pass=spring_pass,
+                doc_per_pass=doc_per_pass, feed_ipm=feed_ipm,
+                plunge_feed=plunge_feed, side_feed=side_feed,
+                hand=hand, internal=internal, bottom_up=bottom_up,
+            )
+        else:
+            lines += _gcode_straight_thread(
+                arc_cmd=arc_cmd, lead_arc=lead_arc, engagement=engagement,
+                pitch_in=pitch_in, r_full=r_full, h_thread=h_thread,
+                num_passes=num_passes, spring_pass=spring_pass,
+                doc_per_pass=doc_per_pass, feed_ipm=feed_ipm,
+                plunge_feed=plunge_feed, side_feed=side_feed,
+                tool_rows=tool_rows, bottom_up=bottom_up,
+            )
+        lines += ["()", "G0 Z1.0", "M9", "M5", "M30", "%"]
+
+    elif dialect == "siemens":
         # ── Siemens Sinumerik 840D / 828D ─────────────────────────────────
         c = ";"   # comment char
         lines = [

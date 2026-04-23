@@ -1826,7 +1826,7 @@ export default function Mentor() {
     thread_rows: 1,
     thread_neck_length: 0,
     npt_size: "",
-    thread_gcode_dialect: "fanuc" as "fanuc" | "siemens",
+    thread_gcode_dialect: "fanuc" as "fanuc" | "siemens" | "okuma" | "heidenhain",
     thread_cut_direction: "top_down" as "top_down" | "bottom_up",
 
     quiet: true,
@@ -4877,9 +4877,9 @@ ${stabSection}
 
           {/* G-Code Dialect */}
           <div className="mt-3 space-y-1.5">
-            <FieldLabel hint="CNC control dialect for G-code output. Fanuc/Haas: ( ) comments, T01 M06, G43 TLO. Siemens 840D: ; comments, T1 D1, TURN=1 helical arc.">G-Code Dialect</FieldLabel>
+            <FieldLabel hint="CNC control dialect for G-code output. Fanuc/Haas: ( ) comments, T01 M06, G43 TLO. Siemens 840D: ; comments, T1 D1, helical arc. Okuma OSP: ( ) comments, T1 M6, G43 H1 — Fanuc-compatible. Heidenhain iTNC/TNC 640: BEGIN PGM, TOOL CALL, CC/C arc syntax.">G-Code Dialect</FieldLabel>
             <div className="flex gap-2">
-              {([{ val: "fanuc", label: "Fanuc / Haas" }, { val: "siemens", label: "Siemens 840D" }] as const).map(({ val, label }) => (
+              {([{ val: "fanuc", label: "Fanuc / Haas" }, { val: "siemens", label: "Siemens 840D" }, { val: "okuma", label: "Okuma OSP" }, { val: "heidenhain", label: "Heidenhain" }] as const).map(({ val, label }) => (
                 <button key={val} type="button"
                   onClick={() => setForm((p) => ({ ...p, thread_gcode_dialect: val }))}
                   className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
@@ -9242,7 +9242,7 @@ ${stabSection}
               <div className="rounded-xl border-2 border-indigo-500 bg-indigo-500/10 p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wide">
-                    G-Code — {form.thread_gcode_dialect === "siemens" ? "Siemens 840D" : "Fanuc / Haas"} · {form.thread_cut_direction === "bottom_up" ? "Bottom-Up" : "Top-Down"}
+                    G-Code — {{ fanuc: "Fanuc / Haas", siemens: "Siemens 840D", okuma: "Okuma OSP", heidenhain: "Heidenhain" }[form.thread_gcode_dialect] ?? "Fanuc / Haas"} · {form.thread_cut_direction === "bottom_up" ? "Bottom-Up" : "Top-Down"}
                   </span>
                   <div className="flex gap-2">
                     <button
