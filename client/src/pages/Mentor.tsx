@@ -4294,7 +4294,7 @@ ${stabSection}
             {operation === "milling" && form.tool_type !== "chamfer_mill" && (
               <div className="py-4">
               <select
-                className={`w-full rounded-md border-2 px-3 py-2.5 text-sm font-semibold ${!form.mode ? "border-yellow-400 bg-zinc-800 text-yellow-300" : "border-yellow-400 bg-zinc-800 text-zinc-100"}`}
+                className={`w-full rounded-md border-2 px-3 py-2.5 text-sm font-semibold ${!form.mode ? "border-yellow-400 bg-zinc-800 text-yellow-300 animate-pulse" : "border-yellow-400 bg-zinc-800 text-zinc-100"}`}
                 aria-label="Milling process"
                 value={form.mode}
                 onChange={(e) => {
@@ -7571,7 +7571,7 @@ ${stabSection}
                   >Optimal</button>
                 )}
               </div>
-              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+              <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!wocText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -7726,7 +7726,7 @@ ${stabSection}
               {form.mode === "circ_interp" ? (
                 <div className="space-y-1">
                   <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
-                  <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                  <div className={`flex h-9 items-center overflow-hidden rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!docText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -7797,7 +7797,7 @@ ${stabSection}
                   >Optimal</button>
                 )}
               </div>
-              <div className="flex h-9 items-center overflow-hidden rounded-md border border-input bg-background px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+              <div className={`flex h-9 items-center overflow-hidden rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!docText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                 <input
                   type="text"
                   inputMode="decimal"
