@@ -4194,13 +4194,7 @@ ${stabSection}
         </CardHeader>
 
         <CardContent className="space-y-4 pt-0">
-          {/* Operation / Process */}
-          <div className="flex items-center gap-3 my-3">
-            <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Operation / Process</div>
-            <div className="flex-1 border-t-2 border-orange-500" />
-          </div>
-          <div className="space-y-2">
+          <div className="space-y-2 mt-4">
             {/* Top row: Tool Finder + Calculators — equal width */}
             <div className="flex gap-2">
               {([
@@ -4231,6 +4225,12 @@ ${stabSection}
                   </button>
                 );
               })}
+            </div>
+            {/* Operation / Process divider — below nav tiles, above operation buttons */}
+            <div className="flex items-center gap-3 pt-3 pb-2">
+              <div className="flex-1 border-t-2 border-orange-500" />
+              <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Operation / Tool / Process</div>
+              <div className="flex-1 border-t-2 border-orange-500" />
             </div>
             {/* Second row: operation calculators */}
             <div className="flex flex-wrap gap-2">
