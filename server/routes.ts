@@ -3663,6 +3663,7 @@ VALIDATION: lbs must ALWAYS be greater than loc. If your extracted lbs is less t
 
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
+  "tool_number": <string — the value from the TOOL # field in the title block, e.g. "CC-14371". ALWAYS present on Core Cutter prints. Do NOT use the CUSTOMER TOOL # field.>,
   "units": "in|mm",
   "tool_type": "endmill|feedmill|keyseat|dovetail|drill|step_drill|reamer|threadmill|chamfer_mill",
   "tool_dia": <number, cutting diameter — nominal value only, in the print's native units>,
