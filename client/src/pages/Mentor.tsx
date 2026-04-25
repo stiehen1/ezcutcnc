@@ -4215,9 +4215,9 @@ ${stabSection}
                     }}
                     className="flex-1 rounded-lg flex flex-col items-center justify-center gap-1 px-2 py-3 text-[10px] font-semibold border transition-all"
                     style={{
-                      backgroundColor: active ? "#6366f1" : "transparent",
-                      borderColor: "#6366f1",
-                      color: active ? "#fff" : "#6366f1",
+                      backgroundColor: active ? "#0e7490" : "#0c1a20",
+                      borderColor: "#0e7490",
+                      color: active ? "#fff" : "#22d3ee",
                     }}
                   >
                     <span>{label}</span>
