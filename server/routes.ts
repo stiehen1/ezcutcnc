@@ -438,6 +438,24 @@ export async function registerRoutes(
         AND way_type IS NULL
     `);
 
+    // ── Brother: all Speedio linear-guide machines ──────────────────────────
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand ILIKE 'Brother%' AND way_type IS NULL
+    `);
+
+    // ── Fanuc Robodrill: all α-D series, HSK32/BBT30, direct, 24k rpm, linear ─
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', max_rpm = 24000
+      WHERE brand ILIKE 'Fanuc%' AND model ILIKE '%Robodrill%' AND way_type IS NULL
+    `);
+
+    // ── Hurco: all VM/VMX verticals, CAT40 direct, linear roller guides ────────
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct'
+      WHERE brand ILIKE 'Hurco%' AND way_type IS NULL
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
