@@ -382,6 +382,32 @@ export async function registerRoutes(
       WHERE brand = 'Okuma' AND model ILIKE 'MA-%H%' AND way_type IS NULL
     `);
 
+    // ── DMG Mori (mill) way_type and spindle corrections ───────────────────
+    // NMV series: HSK-A63, direct, 20000 rpm, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'HSK-A63', max_rpm = 20000
+      WHERE brand ILIKE 'DMG%' AND model ILIKE 'NMV%' AND way_type IS NULL
+    `);
+    // DMU/DMC 5-axis: HSK-A63, direct, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'HSK-A63'
+      WHERE brand ILIKE 'DMG%' AND (model ILIKE 'DMU%' OR model ILIKE 'DMC%') AND way_type IS NULL
+    `);
+    // NHX/NHC 40-taper horizontals: linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand ILIKE 'DMG%' AND (model ILIKE 'NHX%' OR model ILIKE 'NHC%')
+        AND (taper = 'CAT40' OR taper = 'HSK-A63' OR taper ILIKE 'BT40%')
+        AND way_type IS NULL
+    `);
+    // NHX/NHC 50-taper heavy horizontals: box
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand ILIKE 'DMG%' AND (model ILIKE 'NHX%' OR model ILIKE 'NHC%')
+        AND (taper = 'CAT50' OR taper = 'HSK-A100' OR taper ILIKE 'BT50%')
+        AND way_type IS NULL
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
