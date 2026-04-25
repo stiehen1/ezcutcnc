@@ -408,6 +408,36 @@ export async function registerRoutes(
         AND way_type IS NULL
     `);
 
+    // ── Doosan / DN Solutions way_type corrections ──────────────────────────
+    // DNM series: CAT40, linear roller guides
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND model ILIKE 'DNM%' AND way_type IS NULL
+    `);
+    // Mynx and 50-taper heavy verticals: box
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND (model ILIKE 'Mynx%' OR taper = 'CAT50')
+        AND way_type IS NULL
+    `);
+    // NHP 40-taper horizontals: linear; 50-taper: box
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND model ILIKE 'NHP%'
+        AND (taper = 'CAT40' OR taper ILIKE 'BT40%' OR taper ILIKE 'HSK-A63%')
+        AND way_type IS NULL
+    `);
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND model ILIKE 'NHP%'
+        AND (taper = 'CAT50' OR taper ILIKE 'BT50%' OR taper ILIKE 'HSK-A100%')
+        AND way_type IS NULL
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
