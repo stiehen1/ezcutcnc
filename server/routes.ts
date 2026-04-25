@@ -322,6 +322,37 @@ export async function registerRoutes(
         AND way_type IS NULL
     `);
 
+    // ── Mazak way_type and spindle corrections ──────────────────────────────
+    // VCN series: CAT40 direct 12000 rpm, MX roller guideways = linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', max_rpm = 12000, taper = 'CAT40'
+      WHERE brand = 'Mazak' AND model ILIKE 'VCN-%' AND way_type IS NULL
+    `);
+    // VARIAXIS i-series: HSK-A63, direct, 15000+ rpm, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'HSK-A63'
+      WHERE brand = 'Mazak' AND model ILIKE 'VARIAXIS%' AND way_type IS NULL
+    `);
+    // INTEGREX i-series: linear guideways
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Mazak' AND model ILIKE 'INTEGREX%' AND way_type IS NULL
+    `);
+    // HCN-4000: linear; HCN-5000/6800: box (heavy HMC, gear drive)
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Mazak' AND model ILIKE 'HCN-4000%' AND way_type IS NULL
+    `);
+    await pool.query(`
+      UPDATE machines SET way_type = 'box', drive_type = 'gear'
+      WHERE brand = 'Mazak' AND (model ILIKE 'HCN-5000%' OR model ILIKE 'HCN-6800%') AND way_type IS NULL
+    `);
+    // HCN-6800 is CAT50
+    await pool.query(`
+      UPDATE machines SET taper = 'CAT50'
+      WHERE brand = 'Mazak' AND model ILIKE 'HCN-6800%'
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
