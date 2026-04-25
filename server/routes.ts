@@ -353,6 +353,35 @@ export async function registerRoutes(
       WHERE brand = 'Mazak' AND model ILIKE 'HCN-6800%'
     `);
 
+    // ── Okuma way_type and spindle corrections ──────────────────────────────
+    // GENOS M-series: CAT40 BIG-PLUS direct, linear roller guides
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'CAT40'
+      WHERE brand = 'Okuma' AND model ILIKE 'GENOS M%' AND way_type IS NULL
+    `);
+    // MB-V series vertical machining centers: CAT40/BT40 direct, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct'
+      WHERE brand = 'Okuma' AND model ILIKE 'MB-%V%' AND way_type IS NULL
+    `);
+    // MB-H 40-taper horizontals (MB-4000H): linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Okuma' AND model ILIKE 'MB-4%H%' AND way_type IS NULL
+    `);
+    // MB-H 50-taper heavy horizontals (MB-5000H, MB-8000H, MB-10000H): box
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand = 'Okuma'
+        AND (model ILIKE 'MB-5%H%' OR model ILIKE 'MB-8%H%' OR model ILIKE 'MB-10%H%')
+        AND way_type IS NULL
+    `);
+    // MA-H series: heavy-duty HMC, box ways
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand = 'Okuma' AND model ILIKE 'MA-%H%' AND way_type IS NULL
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
