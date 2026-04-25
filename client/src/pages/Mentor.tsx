@@ -4099,21 +4099,29 @@ ${stabSection}
     keyseat: "Keyseat", dovetail: "Dovetail", feedmill: "Feed Mill",
   };
   function SharedTabBar() {
+    const NAV_OPS = ["toolfinder", "feedmilling", "toolbox"];
     return (
       <div className="flex flex-wrap gap-2 mb-6 items-center">
-        {ALL_OPS.map((op) => (
-          <button key={op} type="button"
-            onClick={() => { setOperation(op); mentor.reset(); }}
-            className="rounded px-3 py-1.5 text-xs font-semibold border transition-all"
-            style={{
-              backgroundColor: operation === op ? "#6366f1" : "transparent",
-              borderColor: "#6366f1",
-              color: operation === op ? "#fff" : "#6366f1",
-            }}
-          >
-            {OP_LABELS[op]}
-          </button>
-        ))}
+        {ALL_OPS.map((op) => {
+          const isNav = NAV_OPS.includes(op);
+          const active = operation === op;
+          const activeColor = isNav ? "#0e7490" : "#6366f1";
+          const textColor = isNav ? "#22d3ee" : "#6366f1";
+          const activeBg = isNav ? "#0c1a20" : "transparent";
+          return (
+            <button key={op} type="button"
+              onClick={() => { setOperation(op); mentor.reset(); }}
+              className="rounded px-3 py-1.5 text-xs font-semibold border transition-all"
+              style={{
+                backgroundColor: active ? activeColor : activeBg,
+                borderColor: activeColor,
+                color: active ? "#fff" : textColor,
+              }}
+            >
+              {OP_LABELS[op]}
+            </button>
+          );
+        })}
       </div>
     );
   }
