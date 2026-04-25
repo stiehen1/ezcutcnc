@@ -285,6 +285,42 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_coolant TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_connection TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_drive_type TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
+
+    // ── Makino MAG spindle corrections (ids 346-353) ────────────────────────
+    // MAG A-series and MAG1/3/4 all use 33,000 rpm HSK-F80 direct-drive spindle,
+    // 130 kW peak (~170 hp). Previous data had wrong CAT50/gear entries.
+    await pool.query(`
+      UPDATE machines SET
+        taper = 'HSK-F80',
+        drive_type = 'direct',
+        max_rpm = 33000,
+        spindle_hp = 170,
+        base_torque_ftlb = 208,
+        peak_torque_rpm = 26000,
+        rated_rpm = 26000,
+        curve_confidence = 'medium',
+        way_type = 'linear'
+      WHERE id IN (346, 347, 348, 349, 350, 351, 352, 353)
+        AND brand = 'Makino'
+    `);
+
+    // ── Haas way_type corrections ───────────────────────────────────────────
+    // All modern Haas VF/UMC/EC-40-taper/DM/DT series: linear guides
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Haas'
+        AND (taper = 'CAT40' OR taper = 'BT30')
+        AND way_type IS NULL
+    `);
+    // Large Haas EC 50-taper horizontals: box ways
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand = 'Haas'
+        AND taper = 'CAT50'
+        AND way_type IS NULL
+    `);
 
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
