@@ -285,6 +285,158 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_coolant TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_connection TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_drive_type TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
+
+    // ── Makino MAG spindle corrections (ids 346-353) ────────────────────────
+    // MAG A-series and MAG1/3/4 all use 33,000 rpm HSK-F80 direct-drive spindle,
+    // 130 kW peak (~170 hp). Previous data had wrong CAT50/gear entries.
+    await pool.query(`
+      UPDATE machines SET
+        taper = 'HSK-F80',
+        drive_type = 'direct',
+        max_rpm = 33000,
+        spindle_hp = 170,
+        base_torque_ftlb = 208,
+        peak_torque_rpm = 26000,
+        rated_rpm = 26000,
+        curve_confidence = 'medium',
+        way_type = 'linear'
+      WHERE id IN (346, 347, 348, 349, 350, 351, 352, 353)
+        AND brand = 'Makino'
+    `);
+
+    // ── Haas way_type corrections ───────────────────────────────────────────
+    // All modern Haas VF/UMC/EC-40-taper/DM/DT series: linear guides
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Haas'
+        AND (taper = 'CAT40' OR taper = 'BT30')
+        AND way_type IS NULL
+    `);
+    // Large Haas EC 50-taper horizontals: box ways
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand = 'Haas'
+        AND taper = 'CAT50'
+        AND way_type IS NULL
+    `);
+
+    // ── Mazak way_type and spindle corrections ──────────────────────────────
+    // VCN series: CAT40 direct 12000 rpm, MX roller guideways = linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', max_rpm = 12000, taper = 'CAT40'
+      WHERE brand = 'Mazak' AND model ILIKE 'VCN-%' AND way_type IS NULL
+    `);
+    // VARIAXIS i-series: HSK-A63, direct, 15000+ rpm, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'HSK-A63'
+      WHERE brand = 'Mazak' AND model ILIKE 'VARIAXIS%' AND way_type IS NULL
+    `);
+    // INTEGREX i-series: linear guideways
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Mazak' AND model ILIKE 'INTEGREX%' AND way_type IS NULL
+    `);
+    // HCN-4000: linear; HCN-5000/6800: box (heavy HMC, gear drive)
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Mazak' AND model ILIKE 'HCN-4000%' AND way_type IS NULL
+    `);
+    await pool.query(`
+      UPDATE machines SET way_type = 'box', drive_type = 'gear'
+      WHERE brand = 'Mazak' AND (model ILIKE 'HCN-5000%' OR model ILIKE 'HCN-6800%') AND way_type IS NULL
+    `);
+    // HCN-6800 is CAT50
+    await pool.query(`
+      UPDATE machines SET taper = 'CAT50'
+      WHERE brand = 'Mazak' AND model ILIKE 'HCN-6800%'
+    `);
+
+    // ── Okuma way_type and spindle corrections ──────────────────────────────
+    // GENOS M-series: CAT40 BIG-PLUS direct, linear roller guides
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'CAT40'
+      WHERE brand = 'Okuma' AND model ILIKE 'GENOS M%' AND way_type IS NULL
+    `);
+    // MB-V series vertical machining centers: CAT40/BT40 direct, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct'
+      WHERE brand = 'Okuma' AND model ILIKE 'MB-%V%' AND way_type IS NULL
+    `);
+    // MB-H 40-taper horizontals (MB-4000H): linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand = 'Okuma' AND model ILIKE 'MB-4%H%' AND way_type IS NULL
+    `);
+    // MB-H 50-taper heavy horizontals (MB-5000H, MB-8000H, MB-10000H): box
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand = 'Okuma'
+        AND (model ILIKE 'MB-5%H%' OR model ILIKE 'MB-8%H%' OR model ILIKE 'MB-10%H%')
+        AND way_type IS NULL
+    `);
+    // MA-H series: heavy-duty HMC, box ways
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand = 'Okuma' AND model ILIKE 'MA-%H%' AND way_type IS NULL
+    `);
+
+    // ── DMG Mori (mill) way_type and spindle corrections ───────────────────
+    // NMV series: HSK-A63, direct, 20000 rpm, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'HSK-A63', max_rpm = 20000
+      WHERE brand ILIKE 'DMG%' AND model ILIKE 'NMV%' AND way_type IS NULL
+    `);
+    // DMU/DMC 5-axis: HSK-A63, direct, linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', taper = 'HSK-A63'
+      WHERE brand ILIKE 'DMG%' AND (model ILIKE 'DMU%' OR model ILIKE 'DMC%') AND way_type IS NULL
+    `);
+    // NHX/NHC 40-taper horizontals: linear
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand ILIKE 'DMG%' AND (model ILIKE 'NHX%' OR model ILIKE 'NHC%')
+        AND (taper = 'CAT40' OR taper = 'HSK-A63' OR taper ILIKE 'BT40%')
+        AND way_type IS NULL
+    `);
+    // NHX/NHC 50-taper heavy horizontals: box
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE brand ILIKE 'DMG%' AND (model ILIKE 'NHX%' OR model ILIKE 'NHC%')
+        AND (taper = 'CAT50' OR taper = 'HSK-A100' OR taper ILIKE 'BT50%')
+        AND way_type IS NULL
+    `);
+
+    // ── Doosan / DN Solutions way_type corrections ──────────────────────────
+    // DNM series: CAT40, linear roller guides
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND model ILIKE 'DNM%' AND way_type IS NULL
+    `);
+    // Mynx and 50-taper heavy verticals: box
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND (model ILIKE 'Mynx%' OR taper = 'CAT50')
+        AND way_type IS NULL
+    `);
+    // NHP 40-taper horizontals: linear; 50-taper: box
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND model ILIKE 'NHP%'
+        AND (taper = 'CAT40' OR taper ILIKE 'BT40%' OR taper ILIKE 'HSK-A63%')
+        AND way_type IS NULL
+    `);
+    await pool.query(`
+      UPDATE machines SET way_type = 'box'
+      WHERE (brand ILIKE 'Doosan%' OR brand ILIKE 'DN Solutions%')
+        AND model ILIKE 'NHP%'
+        AND (taper = 'CAT50' OR taper ILIKE 'BT50%' OR taper ILIKE 'HSK-A100%')
+        AND way_type IS NULL
+    `);
 
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
