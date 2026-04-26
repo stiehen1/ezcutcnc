@@ -287,6 +287,10 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_drive_type TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS base_torque_ftlb NUMERIC(8,2)`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_rpm INTEGER`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_rpm INTEGER`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS curve_confidence TEXT`);
 
     // ── Makino MAG spindle corrections (ids 346-353) ────────────────────────
     // MAG A-series and MAG1/3/4 all use 33,000 rpm HSK-F80 direct-drive spindle,
@@ -436,6 +440,24 @@ export async function registerRoutes(
         AND model ILIKE 'NHP%'
         AND (taper = 'CAT50' OR taper ILIKE 'BT50%' OR taper ILIKE 'HSK-A100%')
         AND way_type IS NULL
+    `);
+
+    // ── Brother: all Speedio linear-guide machines ──────────────────────────
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear'
+      WHERE brand ILIKE 'Brother%' AND way_type IS NULL
+    `);
+
+    // ── Fanuc Robodrill: all α-D series, HSK32/BBT30, direct, 24k rpm, linear ─
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct', max_rpm = 24000
+      WHERE brand ILIKE 'Fanuc%' AND model ILIKE '%Robodrill%' AND way_type IS NULL
+    `);
+
+    // ── Hurco: all VM/VMX verticals, CAT40 direct, linear roller guides ────────
+    await pool.query(`
+      UPDATE machines SET way_type = 'linear', drive_type = 'direct'
+      WHERE brand ILIKE 'Hurco%' AND way_type IS NULL
     `);
 
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
