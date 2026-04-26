@@ -287,6 +287,10 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS live_tool_drive_type TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS base_torque_ftlb NUMERIC(8,2)`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_rpm INTEGER`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_rpm INTEGER`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS curve_confidence TEXT`);
 
     // ── Makino MAG spindle corrections (ids 346-353) ────────────────────────
     // MAG A-series and MAG1/3/4 all use 33,000 rpm HSK-F80 direct-drive spindle,
