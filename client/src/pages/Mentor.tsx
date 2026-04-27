@@ -7646,7 +7646,7 @@ ${stabSection}
                   <span className="text-zinc-400">Tolerance Band ({reamTolClass})</span>
                   <span className="font-mono text-indigo-300">{reamTolBand(form.tool_dia, reamTolClass)}</span>
                 </div>
-                {(() => {
+                {!reamMultiDia && (() => {
                   const stock = reamStockRange(form.tool_dia);
                   if (!stock) return null;
                   const ideal = +(form.tool_dia - stock.ideal).toFixed(4);
