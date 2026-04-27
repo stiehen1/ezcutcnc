@@ -2747,7 +2747,7 @@ export default function Mentor() {
     }
     if (operation === "feedmill" && !(form.flutes > 0)) missing.push("Flute Count");
     if (operation === "drilling" && !(form.drill_hole_depth > 0) && !(drillMultiDia && pdfExtracted)) missing.push("Hole Depth");
-    if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0)) missing.push("Pre-Drill / Existing Hole Diameter");
+    if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0) && !(reamMultiDia && pdfExtracted)) missing.push("Pre-Drill / Existing Hole Diameter");
     if (missing.length > 0) {
       setRunWarnings(missing);
       return;
@@ -7646,7 +7646,7 @@ ${stabSection}
                   <span className="text-zinc-400">Tolerance Band ({reamTolClass})</span>
                   <span className="font-mono text-indigo-300">{reamTolBand(form.tool_dia, reamTolClass)}</span>
                 </div>
-                {(() => {
+                {!reamMultiDia && (() => {
                   const stock = reamStockRange(form.tool_dia);
                   if (!stock) return null;
                   const ideal = +(form.tool_dia - stock.ideal).toFixed(4);
