@@ -10089,11 +10089,13 @@ ${stabSection}
                     <p className="mb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Drill Stability Triangle</p>
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { label: "Feed",      status: s.feed_status,  sub: `${(s.feed_ratio * 100).toFixed(0)}% of min` },
+                        { label: "Feed", status: drillResult.chip_warning ? "at_min" : s.feed_status, sub: drillResult.chip_warning ? "At min floor" : `${(s.feed_ratio * 100).toFixed(0)}% of min` },
                         { label: "Chip Evac", status: s.evac_status,  sub: drillResult.cycle },
                         { label: "Depth",     status: s.depth_status, sub: `${s.depth_xd}×D` },
                       ].map(({ label, status, sub }) => {
-                        const c = cfg(status);
+                        const c = status === "at_min"
+                          ? { border: "border-sky-500/50", bg: "bg-sky-500/10", badge: "bg-sky-500/20 text-sky-300", label: "AT MINIMUM" }
+                          : cfg(status);
                         return (
                           <div key={label} className={`rounded-lg border ${c.border} ${c.bg} px-2 py-2.5 text-center`}>
                             <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${c.badge}`}>{c.label}</span>
