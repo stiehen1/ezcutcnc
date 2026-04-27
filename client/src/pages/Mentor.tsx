@@ -1667,7 +1667,21 @@ export default function Mentor() {
           fetch("/api/specials", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: _saveEmail, token: _saveToken, cc_number: e.tool_number, description: _descParts.join(", "), notes: "" }),
+            body: JSON.stringify({
+              email: _saveEmail, token: _saveToken,
+              cc_number: e.tool_number,
+              description: _descParts.join(", "),
+              notes: "",
+              tool_dia: e.tool_dia > 0 ? e.tool_dia : undefined,
+              flutes: e.flutes > 0 ? e.flutes : undefined,
+              loc: e.loc > 0 ? e.loc : undefined,
+              oal: e.oal > 0 ? e.oal : undefined,
+              point_angle: e.drill_point_angle > 0 ? e.drill_point_angle : undefined,
+              step_diameters: e.drill_step_diameters?.length > 0 ? e.drill_step_diameters
+                            : e.ream_step_diameters?.length > 0 ? e.ream_step_diameters
+                            : undefined,
+              step_lengths: e.drill_step_lengths?.length > 0 ? e.drill_step_lengths : undefined,
+            }),
           }).catch(() => {});
         }
       }
@@ -1936,7 +1950,17 @@ export default function Mentor() {
       try {
         const data = JSON.parse(saved);
         // Support both old format (data = form directly) and new format (data = { inputs, operation, ... })
-        const inputs = data.inputs ?? data;
+        const rawInputs = data.inputs ?? data;
+        // Postgres NUMERIC columns come back as strings — coerce known numeric fields
+        const NUM_FIELDS = ["tool_dia","loc","lbs","stickout","corner_radius","shank_dia",
+          "woc_pct","doc_xd","drill_hole_depth","ream_pre_drill_dia","existing_hole_dia",
+          "machine_hp","max_rpm","flutes","drill_point_angle","drill_steps","ream_steps"];
+        const inputs: Record<string, any> = { ...rawInputs };
+        for (const f of NUM_FIELDS) if (inputs[f] !== undefined) inputs[f] = Number(inputs[f]) || 0;
+        if (inputs.drill_step_diameters) inputs.drill_step_diameters = inputs.drill_step_diameters.map(Number).filter(Boolean);
+        if (inputs.drill_step_lengths)   inputs.drill_step_lengths   = inputs.drill_step_lengths.map(Number).filter(Boolean);
+        if (inputs.ream_step_diameters)  inputs.ream_step_diameters  = inputs.ream_step_diameters.map(Number).filter(Boolean);
+        if (inputs.ream_step_lengths)    inputs.ream_step_lengths    = inputs.ream_step_lengths.map(Number).filter(Boolean);
         setForm(f => ({ ...f, ...inputs }));
         // Sync milling text display fields
         const _rDia = Number(inputs.tool_dia) || 0;
@@ -1949,6 +1973,7 @@ export default function Mentor() {
         if (inputs.corner_radius) setCrText(Number(inputs.corner_radius).toFixed(4));
         if (inputs.shank_dia)     setShankDiaText(Number(inputs.shank_dia).toFixed(3));
         // Sync drilling text fields
+        if (inputs.oal)              setPdfOalText(Number(inputs.oal).toFixed(3));
         if (inputs.drill_hole_depth) setDrillHoleDepthText(Number(inputs.drill_hole_depth).toFixed(3));
         if (inputs.drill_steps > 0) {
           setDrillMultiDia(true);

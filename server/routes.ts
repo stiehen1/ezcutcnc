@@ -257,6 +257,25 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS job_number TEXT NOT NULL DEFAULT ''`);
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS job_description TEXT NOT NULL DEFAULT ''`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS user_specials_email_cc_idx ON user_specials (email, cc_number)`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS tool_dia NUMERIC`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS flutes INTEGER`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS loc NUMERIC`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS step_diameters JSONB`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS point_angle INTEGER`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS oal NUMERIC`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS step_lengths JSONB`);
+    // Back-fill geometry from description for existing rows that have nulls
+    // Description format: "Ø0.103", 2-fl, step drill, 0.625" LOC, A-MAX"
+    await pool.query(`
+      UPDATE user_specials SET
+        tool_dia = CASE WHEN tool_dia IS NULL AND description ~ 'Ø[0-9]+\\.[0-9]+'
+                        THEN (regexp_match(description, 'Ø([0-9]+\\.[0-9]+)'))[1]::NUMERIC ELSE tool_dia END,
+        flutes   = CASE WHEN flutes IS NULL AND description ~ '[0-9]+-fl'
+                        THEN (regexp_match(description, '([0-9]+)-fl'))[1]::INTEGER ELSE flutes END,
+        loc      = CASE WHEN loc IS NULL AND description ~ '[0-9]+\\.[0-9]+" LOC'
+                        THEN (regexp_match(description, '([0-9]+\\.[0-9]+)" LOC'))[1]::NUMERIC ELSE loc END
+      WHERE tool_dia IS NULL OR flutes IS NULL OR loc IS NULL
+    `);
   } catch (err: any) {
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
@@ -4596,33 +4615,44 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const rows = await pool.query(
-      `SELECT id, cc_number, description, notes, job_number, job_description, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
+      `SELECT id, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, step_lengths, point_angle, oal, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
       [email.toLowerCase()]
     );
     res.json(rows.rows);
   });
 
   app.post("/api/specials", async (req, res) => {
-    const { email, token, cc_number, description, notes, job_number, job_description } = req.body;
+    const { email, token, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, step_lengths, point_angle, oal } = req.body;
     if (!email || !token || !cc_number?.trim()) return res.status(400).json({ error: "CC# is required" });
     const { pool } = await import("./db");
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const row = await pool.query(
-      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (email, cc_number) DO NOTHING
+      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, step_lengths, point_angle, oal)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ON CONFLICT (email, cc_number) DO UPDATE SET
+         description    = EXCLUDED.description,
+         tool_dia       = COALESCE(EXCLUDED.tool_dia,       user_specials.tool_dia),
+         flutes         = COALESCE(EXCLUDED.flutes,         user_specials.flutes),
+         loc            = COALESCE(EXCLUDED.loc,            user_specials.loc),
+         step_diameters = COALESCE(EXCLUDED.step_diameters, user_specials.step_diameters),
+         step_lengths   = COALESCE(EXCLUDED.step_lengths,   user_specials.step_lengths),
+         point_angle    = COALESCE(EXCLUDED.point_angle,    user_specials.point_angle),
+         oal            = COALESCE(EXCLUDED.oal,            user_specials.oal)
        RETURNING *`,
-      [email.toLowerCase(), cc_number.trim().toUpperCase(), (description || "").trim(), (notes || "").trim(), (job_number || "").trim(), (job_description || "").trim()]
+      [
+        email.toLowerCase(), cc_number.trim().toUpperCase(),
+        (description || "").trim(), (notes || "").trim(),
+        (job_number || "").trim(), (job_description || "").trim(),
+        tool_dia > 0 ? tool_dia : null,
+        flutes > 0 ? flutes : null,
+        loc > 0 ? loc : null,
+        step_diameters?.length ? JSON.stringify(step_diameters) : null,
+        step_lengths?.length   ? JSON.stringify(step_lengths)   : null,
+        point_angle > 0 ? point_angle : null,
+        oal > 0 ? oal : null,
+      ]
     );
-    // ON CONFLICT DO NOTHING returns empty rows — fetch existing row so caller always gets a row back
-    if (!row.rows.length) {
-      const existing = await pool.query(
-        `SELECT id, cc_number, description, notes, job_number, job_description, created_at FROM user_specials WHERE email = $1 AND cc_number = $2`,
-        [email.toLowerCase(), cc_number.trim().toUpperCase()]
-      );
-      return res.json({ ...existing.rows[0], _duplicate: true });
-    }
     res.json(row.rows[0]);
   });
 

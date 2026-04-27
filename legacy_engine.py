@@ -2081,6 +2081,11 @@ def run_reaming(payload: dict) -> dict:
     D            = float(payload.get("tool_dia", 0.5) or 0.5)
     pre_drill    = float(payload.get("ream_pre_drill_dia", 0) or 0)
     depth        = float(payload.get("ream_hole_depth", 0) or 0)
+    # For step reamers with no hole depth entered, fall back to LOC as depth proxy
+    if depth <= 0:
+        _loc = float(payload.get("loc", 0) or 0)
+        if _loc > 0:
+            depth = _loc
     blind        = bool(payload.get("ream_blind", False))
     coolant_fed  = bool(payload.get("ream_coolant_fed", False))
     lead_chamfer = str(payload.get("ream_lead_chamfer", "standard") or "standard")
