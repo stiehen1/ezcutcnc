@@ -774,7 +774,37 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    localStorage.setItem("cc_restore_form", JSON.stringify({ inputs: { edp: fav.edp, ...(fav.data?.inputs ?? fav.data) }, operation: fav.data?.operation, isoCategory: fav.data?.isoCategory, activeMachineId: fav.data?.activeMachineId, activeMachineName: fav.data?.activeMachineName }));
+                                    const d = fav.data ?? {};
+                                    // Saved calc setup — has inputs/operation sub-keys
+                                    if (d.inputs) {
+                                      localStorage.setItem("cc_restore_form", JSON.stringify({
+                                        inputs: { edp: fav.edp, ...d.inputs },
+                                        operation: d.operation,
+                                        isoCategory: d.isoCategory,
+                                        edpText: fav.edp,
+                                        skuDescription: d.skuDescription,
+                                        activeMachineId: d.activeMachineId,
+                                        activeMachineName: d.activeMachineName,
+                                      }));
+                                    } else {
+                                      // Raw SKU favorite — map SKU fields to form fields
+                                      localStorage.setItem("cc_restore_form", JSON.stringify({
+                                        inputs: {
+                                          edp: fav.edp,
+                                          tool_dia: d.cutting_diameter_in ?? 0,
+                                          flutes: d.flutes ?? 0,
+                                          loc: d.loc_in ?? 0,
+                                          lbs: d.lbs_in ?? 0,
+                                          corner_radius: d.corner_radius_in ?? 0,
+                                          shank_dia: d.shank_dia_in ?? 0,
+                                          variable_pitch: d.variable_pitch ?? false,
+                                          variable_helix: d.variable_helix ?? false,
+                                        },
+                                        operation: "milling",
+                                        edpText: fav.edp,
+                                        skuDescription: [d.series, d.description1, d.description2].filter(Boolean).join(" · "),
+                                      }));
+                                    }
                                     window.location.href = "/";
                                   }}
                                   className="text-[11px] px-2 py-1 rounded-md bg-indigo-800/50 hover:bg-indigo-700/60 text-indigo-300 font-semibold transition-colors"
