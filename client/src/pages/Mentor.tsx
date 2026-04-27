@@ -1354,6 +1354,14 @@ export default function Mentor() {
       setTbSaved(true);
       setTbItemCount(c => c !== null ? c + 1 : 1);
       setTimeout(() => setTbSaved(false), 3000);
+      // If a CC special was auto-saved on PDF upload, patch it with job# and part name now
+      if (pdfToolNumber && (tbJobNo.trim() || tbPartName.trim())) {
+        fetch("/api/specials/by-cc", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: e, token: t, cc_number: pdfToolNumber, job_number: tbJobNo.trim(), job_description: tbPartName.trim() }),
+        }).catch(() => {});
+      }
     } finally { setTbSaving(false); }
   }
 
