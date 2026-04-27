@@ -562,7 +562,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                   <p className="text-xs text-zinc-400 border-t border-zinc-800 pt-2 mb-2">{item.notes}</p>
                 )}
                 <button
-                  className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                  className="text-[11px] px-2 py-1 rounded-md bg-indigo-800/50 hover:bg-indigo-700/60 text-indigo-300 font-semibold transition-colors"
                   onClick={() => {
                     if (d?.inputs) localStorage.setItem("cc_restore_form", JSON.stringify(d));
                     window.location.href = "/";
@@ -756,7 +756,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                   <span className="text-amber-400 text-lg">★</span>
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="text-sm font-mono font-bold text-indigo-400">{fav.edp}</div>
+                                  <div className="text-sm font-mono font-bold text-indigo-400"><span className="text-zinc-500 font-normal text-xs">EDP# </span>{fav.edp}</div>
                                   <div className="text-[11px] text-zinc-400 truncate">
                                     {[fav.data?.series, fav.data?.description1, fav.data?.description2].filter(Boolean).join(" · ") || "—"}
                                   </div>
@@ -774,7 +774,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    localStorage.setItem("cc_restore_form", JSON.stringify({ inputs: { edp: fav.edp, ...fav.data } }));
+                                    localStorage.setItem("cc_restore_form", JSON.stringify({ inputs: { edp: fav.edp, ...(fav.data?.inputs ?? fav.data) }, operation: fav.data?.operation, isoCategory: fav.data?.isoCategory, activeMachineId: fav.data?.activeMachineId, activeMachineName: fav.data?.activeMachineName }));
                                     window.location.href = "/";
                                   }}
                                   className="text-[11px] px-2 py-1 rounded-md bg-indigo-800/50 hover:bg-indigo-700/60 text-indigo-300 font-semibold transition-colors"
@@ -946,7 +946,20 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    localStorage.setItem("cc_restore_form", JSON.stringify({ inputs: { edp: sp.cc_number } }));
+                                    const desc = (sp.description ?? "").toLowerCase();
+                                    let op = "milling";
+                                    if (desc.includes("step drill") || desc.includes("step_drill")) op = "drilling";
+                                    else if (desc.includes("drill")) op = "drilling";
+                                    else if (desc.includes("reamer") || desc.includes("ream")) op = "reaming";
+                                    else if (desc.includes("feedmill") || desc.includes("feed mill")) op = "feedmill";
+                                    else if (desc.includes("threadmill") || desc.includes("thread mill")) op = "threadmilling";
+                                    else if (desc.includes("keyseat")) op = "keyseat";
+                                    else if (desc.includes("dovetail")) op = "dovetail";
+                                    localStorage.setItem("cc_restore_form", JSON.stringify({
+                                      inputs: { edp: sp.cc_number },
+                                      operation: op,
+                                      tool_number: sp.cc_number,
+                                    }));
                                     window.location.href = "/";
                                   }}
                                   className="text-[11px] px-2 py-1 rounded-md bg-indigo-800/50 hover:bg-indigo-700/60 text-indigo-300 font-semibold transition-colors"

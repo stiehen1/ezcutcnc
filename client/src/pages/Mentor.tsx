@@ -1938,15 +1938,34 @@ export default function Mentor() {
         // Support both old format (data = form directly) and new format (data = { inputs, operation, ... })
         const inputs = data.inputs ?? data;
         setForm(f => ({ ...f, ...inputs }));
-        // Sync text display fields
-        if (inputs.tool_dia)      setToolDiaText(Number(inputs.tool_dia).toFixed(4));
+        // Sync milling text display fields
         const _rDia = Number(inputs.tool_dia) || 0;
+        if (inputs.tool_dia)      setToolDiaText(Number(inputs.tool_dia).toFixed(4));
         if (inputs.woc_pct && _rDia) setWocText(((Number(inputs.woc_pct) / 100) * _rDia).toFixed(4));
         if (inputs.doc_xd  && _rDia) setDocText((Number(inputs.doc_xd) * _rDia).toFixed(3));
         if (inputs.loc)           setLocText(Number(inputs.loc).toFixed(3));
         if (inputs.stickout)      setStickoutText(Number(inputs.stickout).toFixed(3));
         if (inputs.lbs)           setLbsText(Number(inputs.lbs).toFixed(3));
         if (inputs.corner_radius) setCrText(Number(inputs.corner_radius).toFixed(4));
+        if (inputs.shank_dia)     setShankDiaText(Number(inputs.shank_dia).toFixed(3));
+        // Sync drilling text fields
+        if (inputs.drill_hole_depth) setDrillHoleDepthText(Number(inputs.drill_hole_depth).toFixed(3));
+        if (inputs.drill_steps > 0) {
+          setDrillMultiDia(true);
+          if (inputs.drill_step_diameters?.length) setStepDiaTexts(inputs.drill_step_diameters.map((d: number) => d.toFixed(4)));
+          if (inputs.drill_step_lengths?.length)   setStepLenTexts(inputs.drill_step_lengths.map((l: number) => l > 0 ? l.toFixed(3) : ""));
+        }
+        // Sync reaming text fields
+        if (inputs.ream_steps > 0) {
+          setReamMultiDia(true);
+          if (inputs.ream_step_diameters?.[0]) setReamStepDiaText(Number(inputs.ream_step_diameters[0]).toFixed(4));
+          if (inputs.ream_step_lengths?.[0])   setReamStepLenText(Number(inputs.ream_step_lengths[0]).toFixed(3));
+        }
+        // Restore pdfToolNumber if saved with the setup
+        if (data.tool_number) {
+          setPdfExtracted(true);
+          setPdfToolNumber(data.tool_number);
+        }
         // Restore separate states
         if (data.operation)        setOperation(data.operation);
         if (data.isoCategory)      setIsoCategory(data.isoCategory);
