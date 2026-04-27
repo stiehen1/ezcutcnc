@@ -4637,6 +4637,23 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     res.json({ ok: true });
   });
 
+  // PATCH by cc_number — used when auto-save happened at PDF upload and job fields filled in later
+  app.patch("/api/specials/by-cc", async (req, res) => {
+    const { email, token, cc_number, job_number, job_description } = req.body;
+    if (!email || !token || !cc_number?.trim()) return res.status(400).json({ error: "Missing fields" });
+    const { pool } = await import("./db");
+    const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
+    if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
+    await pool.query(
+      `UPDATE user_specials SET
+         job_number = COALESCE(NULLIF($1, ''), job_number),
+         job_description = COALESCE(NULLIF($2, ''), job_description)
+       WHERE email = $3 AND cc_number = $4`,
+      [job_number?.trim() ?? '', job_description?.trim() ?? '', email.toLowerCase(), cc_number.trim().toUpperCase()]
+    );
+    res.json({ ok: true });
+  });
+
   app.patch("/api/specials/:id", async (req, res) => {
     const { email, token, description, notes, job_number, job_description } = req.body;
     const id = parseInt(req.params.id);
