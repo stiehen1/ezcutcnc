@@ -1675,9 +1675,12 @@ export default function Mentor() {
               tool_dia: e.tool_dia > 0 ? e.tool_dia : undefined,
               flutes: e.flutes > 0 ? e.flutes : undefined,
               loc: e.loc > 0 ? e.loc : undefined,
+              oal: e.oal > 0 ? e.oal : undefined,
+              point_angle: e.drill_point_angle > 0 ? e.drill_point_angle : undefined,
               step_diameters: e.drill_step_diameters?.length > 0 ? e.drill_step_diameters
                             : e.ream_step_diameters?.length > 0 ? e.ream_step_diameters
                             : undefined,
+              step_lengths: e.drill_step_lengths?.length > 0 ? e.drill_step_lengths : undefined,
             }),
           }).catch(() => {});
         }
@@ -1970,6 +1973,7 @@ export default function Mentor() {
         if (inputs.corner_radius) setCrText(Number(inputs.corner_radius).toFixed(4));
         if (inputs.shank_dia)     setShankDiaText(Number(inputs.shank_dia).toFixed(3));
         // Sync drilling text fields
+        if (inputs.oal)              setPdfOalText(Number(inputs.oal).toFixed(3));
         if (inputs.drill_hole_depth) setDrillHoleDepthText(Number(inputs.drill_hole_depth).toFixed(3));
         if (inputs.drill_steps > 0) {
           setDrillMultiDia(true);

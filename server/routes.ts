@@ -261,6 +261,9 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS flutes INTEGER`);
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS loc NUMERIC`);
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS step_diameters JSONB`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS point_angle INTEGER`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS oal NUMERIC`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS step_lengths JSONB`);
     // Back-fill geometry from description for existing rows that have nulls
     // Description format: "Ø0.103", 2-fl, step drill, 0.625" LOC, A-MAX"
     await pool.query(`
@@ -4612,27 +4615,30 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const rows = await pool.query(
-      `SELECT id, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
+      `SELECT id, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, step_lengths, point_angle, oal, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
       [email.toLowerCase()]
     );
     res.json(rows.rows);
   });
 
   app.post("/api/specials", async (req, res) => {
-    const { email, token, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters } = req.body;
+    const { email, token, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, step_lengths, point_angle, oal } = req.body;
     if (!email || !token || !cc_number?.trim()) return res.status(400).json({ error: "CC# is required" });
     const { pool } = await import("./db");
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const row = await pool.query(
-      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, step_lengths, point_angle, oal)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        ON CONFLICT (email, cc_number) DO UPDATE SET
-         description   = EXCLUDED.description,
-         tool_dia      = COALESCE(EXCLUDED.tool_dia, user_specials.tool_dia),
-         flutes        = COALESCE(EXCLUDED.flutes,   user_specials.flutes),
-         loc           = COALESCE(EXCLUDED.loc,      user_specials.loc),
-         step_diameters = COALESCE(EXCLUDED.step_diameters, user_specials.step_diameters)
+         description    = EXCLUDED.description,
+         tool_dia       = COALESCE(EXCLUDED.tool_dia,       user_specials.tool_dia),
+         flutes         = COALESCE(EXCLUDED.flutes,         user_specials.flutes),
+         loc            = COALESCE(EXCLUDED.loc,            user_specials.loc),
+         step_diameters = COALESCE(EXCLUDED.step_diameters, user_specials.step_diameters),
+         step_lengths   = COALESCE(EXCLUDED.step_lengths,   user_specials.step_lengths),
+         point_angle    = COALESCE(EXCLUDED.point_angle,    user_specials.point_angle),
+         oal            = COALESCE(EXCLUDED.oal,            user_specials.oal)
        RETURNING *`,
       [
         email.toLowerCase(), cc_number.trim().toUpperCase(),
@@ -4642,6 +4648,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         flutes > 0 ? flutes : null,
         loc > 0 ? loc : null,
         step_diameters?.length ? JSON.stringify(step_diameters) : null,
+        step_lengths?.length   ? JSON.stringify(step_lengths)   : null,
+        point_angle > 0 ? point_angle : null,
+        oal > 0 ? oal : null,
       ]
     );
     res.json(row.rows[0]);

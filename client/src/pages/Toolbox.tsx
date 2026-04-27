@@ -22,7 +22,10 @@ type SpecialItem = {
   tool_dia: number | null;
   flutes: number | null;
   loc: number | null;
+  oal: number | null;
+  point_angle: number | null;
   step_diameters: number[] | null;
+  step_lengths: number[] | null;
   created_at: string;
 };
 
@@ -992,12 +995,15 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                     else if (desc.includes("keyseat")) op = "keyseat";
                                     else if (desc.includes("dovetail")) op = "dovetail";
                                     const extraInputs: Record<string, any> = {};
-                                    if (sp.tool_dia) extraInputs.tool_dia = sp.tool_dia;
-                                    if (sp.flutes)   extraInputs.flutes   = sp.flutes;
-                                    if (sp.loc)      extraInputs.loc      = sp.loc;
+                                    if (sp.tool_dia)    extraInputs.tool_dia          = sp.tool_dia;
+                                    if (sp.flutes)      extraInputs.flutes            = sp.flutes;
+                                    if (sp.loc)         extraInputs.loc               = sp.loc;
+                                    if (sp.oal)         extraInputs.oal               = sp.oal;
+                                    if (sp.point_angle) extraInputs.drill_point_angle = sp.point_angle;
                                     if (isStepDrill) {
                                       extraInputs.drill_steps = 1;
                                       if (sp.step_diameters?.length) extraInputs.drill_step_diameters = sp.step_diameters;
+                                      if (sp.step_lengths?.length)   extraInputs.drill_step_lengths   = sp.step_lengths;
                                     }
                                     if (isStepReam) {
                                       extraInputs.ream_steps = 1;
