@@ -1642,6 +1642,25 @@ export default function Mentor() {
       setPdfConvertedFromMm(!!e._converted_from_mm);
       const _oal = e.oal > 0 ? e.oal : 0;
       setPdfOal(_oal);
+      // Auto-save to Toolbox special tools if user is logged in and CC# was extracted
+      if (e.tool_number) {
+        const _saveEmail = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
+        const _saveToken = localStorage.getItem("tb_token");
+        if (_saveEmail && _saveToken) {
+          const _tt = (e.tool_type ?? "").toLowerCase().replace(/_/g, " ");
+          const _descParts: string[] = [];
+          if (e.tool_dia > 0) _descParts.push(`Ø${e.tool_dia.toFixed(3)}"`);
+          if (e.flutes > 0) _descParts.push(`${e.flutes}-fl`);
+          if (_tt) _descParts.push(_tt);
+          if (e.loc > 0) _descParts.push(`${e.loc.toFixed(3)}" LOC`);
+          if (e.coating) _descParts.push(e.coating);
+          fetch("/api/specials", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: _saveEmail, token: _saveToken, cc_number: e.tool_number, description: _descParts.join(", "), notes: "" }),
+          }).catch(() => {});
+        }
+      }
       setPdfOalText(_oal > 0 ? _oal.toFixed(3) : "");
       // locText already set above from e.loc for drills/reamers
       if (e.drill_step_diameters?.length > 0) {
