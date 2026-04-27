@@ -4691,7 +4691,8 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
-          {/* Finished Hole Dia — moved here from tool geometry */}
+          {/* Finished Hole Dia — hidden for step reamers (diameters come from tool geometry section) */}
+          {form.ream_steps === 0 && (
           <div className="space-y-1.5 mb-3">
             <FieldLabel hint="The finished hole diameter called out on the print. The reamer will be ground to this nominal size.">
               {UL("Finished Hole Dia (in.)", "Finished Hole Dia (mm)")}
@@ -4711,6 +4712,7 @@ ${stabSection}
               }}
             />
           </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <FieldLabel hint="Total depth of the hole to be reamed. Used to calculate depth-to-diameter ratio and apply depth correction factors.">{UL("Hole Depth (in.)", "Hole Depth (mm)")}</FieldLabel>
