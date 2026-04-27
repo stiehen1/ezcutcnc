@@ -2719,7 +2719,7 @@ export default function Mentor() {
       }
     }
     if (operation === "feedmill" && !(form.flutes > 0)) missing.push("Flute Count");
-    if (operation === "drilling" && !(form.drill_hole_depth > 0)) missing.push("Hole Depth");
+    if (operation === "drilling" && !(form.drill_hole_depth > 0) && !(drillMultiDia && pdfExtracted)) missing.push("Hole Depth");
     if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0)) missing.push("Pre-Drill / Existing Hole Diameter");
     if (missing.length > 0) {
       setRunWarnings(missing);
@@ -4648,7 +4648,7 @@ ${stabSection}
             <div className="space-y-2">
               <FieldLabel hint={form.drill_steps > 0 ? `How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. For step drills, this must be greater than the last step length (${(Math.max(...form.drill_step_lengths.slice(0, form.drill_steps).filter(l => l > 0)) || 0).toFixed(3)}") so all diameters fully engage. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle.` : "How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle."}>Hole Depth (in)</FieldLabel>
               <Input
-                type="text" inputMode="decimal" className={`no-spinners ${!(form.drill_hole_depth > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
+                type="text" inputMode="decimal" className={`no-spinners ${!(form.drill_hole_depth > 0) && !drillMultiDia ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
                 placeholder="e.g. 1.25"
                 value={drillHoleDepthText}
                 onChange={(e) => setDrillHoleDepthText(e.target.value)}
