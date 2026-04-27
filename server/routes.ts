@@ -4627,7 +4627,12 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const row = await pool.query(
       `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (email, cc_number) DO NOTHING
+       ON CONFLICT (email, cc_number) DO UPDATE SET
+         description   = EXCLUDED.description,
+         tool_dia      = COALESCE(EXCLUDED.tool_dia, user_specials.tool_dia),
+         flutes        = COALESCE(EXCLUDED.flutes,   user_specials.flutes),
+         loc           = COALESCE(EXCLUDED.loc,      user_specials.loc),
+         step_diameters = COALESCE(EXCLUDED.step_diameters, user_specials.step_diameters)
        RETURNING *`,
       [
         email.toLowerCase(), cc_number.trim().toUpperCase(),
@@ -4639,14 +4644,6 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         step_diameters?.length ? JSON.stringify(step_diameters) : null,
       ]
     );
-    // ON CONFLICT DO NOTHING returns empty rows — fetch existing row so caller always gets a row back
-    if (!row.rows.length) {
-      const existing = await pool.query(
-        `SELECT id, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, created_at FROM user_specials WHERE email = $1 AND cc_number = $2`,
-        [email.toLowerCase(), cc_number.trim().toUpperCase()]
-      );
-      return res.json({ ...existing.rows[0], _duplicate: true });
-    }
     res.json(row.rows[0]);
   });
 
