@@ -4742,7 +4742,7 @@ ${stabSection}
             />
           </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          {!reamMultiDia && <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <FieldLabel hint="Total depth of the hole to be reamed. Used to calculate depth-to-diameter ratio and apply depth correction factors.">{UL("Hole Depth (in.)", "Hole Depth (mm)")}</FieldLabel>
               <Input type="number" step={metric ? "0.1" : "0.001"} className="no-spinners"
@@ -4764,7 +4764,7 @@ ${stabSection}
                 ))}
               </div>
             </div>
-          </div>
+          </div>}
 
           </>)}
 
