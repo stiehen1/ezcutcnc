@@ -1863,8 +1863,24 @@ def run_drilling(payload: dict) -> dict:
     ipm = rpm * ipr
     mrr = (math.pi / 4.0) * sfm_dia ** 2 * ipm
 
-    # Depth metrics — use entry dia for most conservative depth/D ratio
-    depth_to_dia = depth / feed_dia if feed_dia > 0 else 0.0
+    # Depth metrics — worst-case depth/D across all steps drives peck recommendation.
+    # For a step drill: step N cuts from (sum of previous step lengths) to total depth,
+    # using its own diameter. Entry diameter cuts from 0 to its step length (or total if no steps).
+    raw_step_lengths = payload.get("drill_step_lengths") or []
+    step_lengths = [float(l) for l in raw_step_lengths if l and float(l) > 0]
+    if step_diameters and step_lengths and len(step_lengths) == len(step_diameters):
+        # Entry dia: cuts from 0 to first step length
+        entry_depth = step_lengths[0]
+        entry_ratio = entry_depth / feed_dia if feed_dia > 0 else 0.0
+        # Each step dia: cuts from its step-length start to total hole depth
+        step_ratios = []
+        for i, sd in enumerate(step_diameters):
+            step_start = step_lengths[i]
+            step_cut_depth = max(0.0, depth - step_start)
+            step_ratios.append(step_cut_depth / sd if sd > 0 else 0.0)
+        depth_to_dia = max([entry_ratio] + step_ratios)
+    else:
+        depth_to_dia = depth / feed_dia if feed_dia > 0 else 0.0
 
     # Force / torque / HP — based on largest dia (total cross-section area being cut)
     # All step shoulders cut simultaneously; total load ≈ drilling sfm_dia from solid.
