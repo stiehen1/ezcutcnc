@@ -1947,7 +1947,17 @@ export default function Mentor() {
       try {
         const data = JSON.parse(saved);
         // Support both old format (data = form directly) and new format (data = { inputs, operation, ... })
-        const inputs = data.inputs ?? data;
+        const rawInputs = data.inputs ?? data;
+        // Postgres NUMERIC columns come back as strings — coerce known numeric fields
+        const NUM_FIELDS = ["tool_dia","loc","lbs","stickout","corner_radius","shank_dia",
+          "woc_pct","doc_xd","drill_hole_depth","ream_pre_drill_dia","existing_hole_dia",
+          "machine_hp","max_rpm","flutes","drill_point_angle","drill_steps","ream_steps"];
+        const inputs: Record<string, any> = { ...rawInputs };
+        for (const f of NUM_FIELDS) if (inputs[f] !== undefined) inputs[f] = Number(inputs[f]) || 0;
+        if (inputs.drill_step_diameters) inputs.drill_step_diameters = inputs.drill_step_diameters.map(Number).filter(Boolean);
+        if (inputs.drill_step_lengths)   inputs.drill_step_lengths   = inputs.drill_step_lengths.map(Number).filter(Boolean);
+        if (inputs.ream_step_diameters)  inputs.ream_step_diameters  = inputs.ream_step_diameters.map(Number).filter(Boolean);
+        if (inputs.ream_step_lengths)    inputs.ream_step_lengths    = inputs.ream_step_lengths.map(Number).filter(Boolean);
         setForm(f => ({ ...f, ...inputs }));
         // Sync milling text display fields
         const _rDia = Number(inputs.tool_dia) || 0;
