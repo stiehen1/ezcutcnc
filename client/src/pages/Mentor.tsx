@@ -1506,7 +1506,7 @@ export default function Mentor() {
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
-        if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); }
+        if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); next.ream_shank_dia = e.shank_dia; }
         if (e.coating) next.coating = e.coating;
         if (e.keyseat_arbor_dia > 0) next.keyseat_arbor_dia = e.keyseat_arbor_dia;
         if (e.dovetail_angle > 0) next.dovetail_angle = e.dovetail_angle;
@@ -3720,6 +3720,7 @@ ${stabSection}
       // ── NOTES ────────────────────────────────────
       const drillNotes: string[] = [];
       if (drillResult.geometry_tip)  drillNotes.push(drillResult.geometry_tip);
+      if (drillResult.step_fragility_warning) drillNotes.push(`⚠ ${drillResult.step_fragility_warning}`);
       if (drillResult.chip_warning)  drillNotes.push(`⚠ Chip warning: ${drillResult.chip_warning}`);
       if (drillResult.flute_warning) drillNotes.push(`⚠ ${drillResult.flute_warning}`);
       if (drillNotes.length > 0) {
@@ -7765,20 +7766,6 @@ ${stabSection}
               <Input type="number" step="1" className="no-spinners"
                 placeholder={String(reamFlutes(form.tool_dia))}
                 value={form.flutes || ""} onChange={onNum("flutes")} />
-              {form.tool_dia > 0 && (
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground">
-                    Standard: <span className="font-semibold text-foreground">{reamFlutes(form.tool_dia)}-flute</span>
-                  </span>
-                  {form.flutes > 0 && form.flutes !== reamFlutes(form.tool_dia) && (
-                    <button type="button"
-                      className="rounded bg-indigo-600/30 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300 hover:bg-indigo-600/50 transition-colors"
-                      onClick={() => setForm((p) => ({ ...p, flutes: reamFlutes(form.tool_dia) }))}>
-                      Use standard
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
             <div>
               <FieldLabel hint="Shank diameter. Defaults to cut diameter if left blank.">{UL("Shank Dia (in.)", "Shank Dia (mm)")}</FieldLabel>
@@ -10160,6 +10147,13 @@ ${stabSection}
               )}
 
               {/* Chip thickness advisory — informational, feed already auto-corrected */}
+              {drillResult.step_fragility_warning && (
+                <div className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-300 space-y-0.5">
+                  <div className="font-semibold">⚠ Step Drill Fragility Warning</div>
+                  <div>{drillResult.step_fragility_warning}</div>
+                </div>
+              )}
+
               {drillResult.chip_warning && (
                 <div className="rounded-lg border border-zinc-600 bg-zinc-800/60 px-3 py-2 text-xs text-zinc-300">
                   ℹ {drillResult.chip_warning}

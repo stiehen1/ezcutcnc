@@ -1857,14 +1857,50 @@ def run_drilling(payload: dict) -> dict:
     ipr_base *= feed_util                               # feed utilization — default 0.90 (safety margin)
     if coolant_fed:
         ipr_base *= 1.10                                # through-coolant flushes chips → allows 10% heavier feed
+
+    # Step drill fragility derate — when largest dia is much bigger than entry dia,
+    # the entry web carries full torque at the step shoulder. Back off feed to protect it.
+    step_dia_ratio = sfm_dia / feed_dia if feed_dia > 0 and sfm_dia > feed_dia else 1.0
+    step_fragility_warning = None
+    if step_dia_ratio >= 2.0:
+        ipr_base *= 0.70   # severe step — 30% derate
+        step_fragility_warning = (
+            f"Fragile entry step: largest dia ({sfm_dia:.4f}\") is {step_dia_ratio:.1f}× the entry dia "
+            f"({feed_dia:.4f}\"). Feed derated 30% to protect the small-dia web. "
+            f"Use a pilot hole if possible, peck aggressively, and listen for any chatter."
+        )
+    elif step_dia_ratio >= 1.5:
+        ipr_base *= 0.85   # moderate step — 15% derate
+        step_fragility_warning = (
+            f"Step drill caution: largest dia ({sfm_dia:.4f}\") is {step_dia_ratio:.1f}× the entry dia "
+            f"({feed_dia:.4f}\"). Feed derated 15% — the entry step is the weak link. "
+            f"Do not force feed; let the drill lead."
+        )
+
     ipr = max(0.0005, ipr_base)
 
     # Feed — IPM at entry dia chip load, RPM from largest dia
     ipm = rpm * ipr
     mrr = (math.pi / 4.0) * sfm_dia ** 2 * ipm
 
-    # Depth metrics — use entry dia for most conservative depth/D ratio
-    depth_to_dia = depth / feed_dia if feed_dia > 0 else 0.0
+    # Depth metrics — worst-case depth/D across all steps drives peck recommendation.
+    # For a step drill: step N cuts from (sum of previous step lengths) to total depth,
+    # using its own diameter. Entry diameter cuts from 0 to its step length (or total if no steps).
+    raw_step_lengths = payload.get("drill_step_lengths") or []
+    step_lengths = [float(l) for l in raw_step_lengths if l and float(l) > 0]
+    if step_diameters and step_lengths and len(step_lengths) == len(step_diameters):
+        # Entry dia: cuts from 0 to first step length
+        entry_depth = step_lengths[0]
+        entry_ratio = entry_depth / feed_dia if feed_dia > 0 else 0.0
+        # Each step dia: cuts from its step-length start to total hole depth
+        step_ratios = []
+        for i, sd in enumerate(step_diameters):
+            step_start = step_lengths[i]
+            step_cut_depth = max(0.0, depth - step_start)
+            step_ratios.append(step_cut_depth / sd if sd > 0 else 0.0)
+        depth_to_dia = max([entry_ratio] + step_ratios)
+    else:
+        depth_to_dia = depth / feed_dia if feed_dia > 0 else 0.0
 
     # Force / torque / HP — based on largest dia (total cross-section area being cut)
     # All step shoulders cut simultaneously; total load ≈ drilling sfm_dia from solid.
@@ -2021,6 +2057,7 @@ def run_drilling(payload: dict) -> dict:
             "peck_schedule": peck_schedule,
             "flute_warning": flute_warning,
             "chip_warning": chip_warning,
+            "step_fragility_warning": step_fragility_warning,
             "geometry_tip": geometry_tip,
             "drill_stability": drill_stability,
             "entry_dia": round(feed_dia, 4),
