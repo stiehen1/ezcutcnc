@@ -261,6 +261,18 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS flutes INTEGER`);
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS loc NUMERIC`);
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS step_diameters JSONB`);
+    // Back-fill geometry from description for existing rows that have nulls
+    // Description format: "Ø0.103", 2-fl, step drill, 0.625" LOC, A-MAX"
+    await pool.query(`
+      UPDATE user_specials SET
+        tool_dia = CASE WHEN tool_dia IS NULL AND description ~ 'Ø[0-9]+\\.[0-9]+'
+                        THEN (regexp_match(description, 'Ø([0-9]+\\.[0-9]+)'))[1]::NUMERIC ELSE tool_dia END,
+        flutes   = CASE WHEN flutes IS NULL AND description ~ '[0-9]+-fl'
+                        THEN (regexp_match(description, '([0-9]+)-fl'))[1]::INTEGER ELSE flutes END,
+        loc      = CASE WHEN loc IS NULL AND description ~ '[0-9]+\\.[0-9]+" LOC'
+                        THEN (regexp_match(description, '([0-9]+\\.[0-9]+)" LOC'))[1]::NUMERIC ELSE loc END
+      WHERE tool_dia IS NULL OR flutes IS NULL OR loc IS NULL
+    `);
   } catch (err: any) {
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
