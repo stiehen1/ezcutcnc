@@ -17,6 +17,8 @@ type SpecialItem = {
   cc_number: string;
   description: string;
   notes: string;
+  job_number: string;
+  job_description: string;
   created_at: string;
 };
 
@@ -155,11 +157,15 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
   const [spCcNumber, setSpCcNumber] = React.useState("");
   const [spDescription, setSpDescription] = React.useState("");
   const [spNotes, setSpNotes] = React.useState("");
+  const [spJobNumber, setSpJobNumber] = React.useState("");
+  const [spJobDesc, setSpJobDesc] = React.useState("");
   const [spSaving, setSpSaving] = React.useState(false);
   const [spError, setSpError] = React.useState("");
   const [editingSpecialId, setEditingSpecialId] = React.useState<number | null>(null);
   const [editSpDesc, setEditSpDesc] = React.useState("");
   const [editSpNotes, setEditSpNotes] = React.useState("");
+  const [editSpJobNumber, setEditSpJobNumber] = React.useState("");
+  const [editSpJobDesc, setEditSpJobDesc] = React.useState("");
 
   React.useEffect(() => {
     if (step === "items") loadItems();
@@ -382,12 +388,12 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     try {
       const r = await fetch("/api/specials", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: e, token: t, cc_number: spCcNumber, description: spDescription, notes: spNotes }),
+        body: JSON.stringify({ email: e, token: t, cc_number: spCcNumber, description: spDescription, notes: spNotes, job_number: spJobNumber, job_description: spJobDesc }),
       });
       const d = await r.json();
       if (!r.ok) { setSpError(d.error || "Failed to save"); return; }
-      setSpecials(prev => [d, ...prev]);
-      setSpCcNumber(""); setSpDescription(""); setSpNotes(""); setAddingSpecial(false);
+      if (!d._duplicate) setSpecials(prev => [d, ...prev]);
+      setSpCcNumber(""); setSpDescription(""); setSpNotes(""); setSpJobNumber(""); setSpJobDesc(""); setAddingSpecial(false);
     } catch { setSpError("Network error"); }
     finally { setSpSaving(false); }
   }
@@ -407,7 +413,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
     const t = localStorage.getItem("tb_token");
     const r = await fetch(`/api/specials/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: e, token: t, description: editSpDesc, notes: editSpNotes }),
+      body: JSON.stringify({ email: e, token: t, description: editSpDesc, notes: editSpNotes, job_number: editSpJobNumber, job_description: editSpJobDesc }),
     });
     if (r.ok) {
       const d = await r.json();
@@ -826,22 +832,40 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-zinc-400 mb-1 block uppercase tracking-wide">Description</label>
+                              <label className="text-[10px] text-zinc-400 mb-1 block uppercase tracking-wide">Job #</label>
                               <input
-                                type="text" placeholder="e.g. 3/8 5FL .750 LOC P-Max"
-                                value={spDescription} onChange={e => setSpDescription(e.target.value)}
-                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                                type="text" placeholder="e.g. 4412"
+                                value={spJobNumber} onChange={e => setSpJobNumber(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
                               />
                             </div>
                           </div>
                           <div>
-                            <label className="text-[10px] text-zinc-400 mb-1 block uppercase tracking-wide">Notes <span className="text-zinc-600 font-normal normal-case">(optional — job#, material, application…)</span></label>
+                            <label className="text-[10px] text-zinc-400 mb-1 block uppercase tracking-wide">Description</label>
                             <input
-                              type="text" placeholder="e.g. Titanium bracket, Job# 4412"
-                              value={spNotes} onChange={e => setSpNotes(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter") addSpecial(); }}
+                              type="text" placeholder="e.g. 3/8 5FL .750 LOC P-Max"
+                              value={spDescription} onChange={e => setSpDescription(e.target.value)}
                               className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
                             />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-zinc-400 mb-1 block uppercase tracking-wide">Job Description</label>
+                              <input
+                                type="text" placeholder="e.g. Titanium bracket, customer XYZ"
+                                value={spJobDesc} onChange={e => setSpJobDesc(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-400 mb-1 block uppercase tracking-wide">Notes <span className="text-zinc-600 font-normal normal-case">(optional)</span></label>
+                              <input
+                                type="text" placeholder="e.g. Blind pocket, 316SS"
+                                value={spNotes} onChange={e => setSpNotes(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") addSpecial(); }}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+                              />
+                            </div>
                           </div>
                           {spError && <p className="text-xs text-red-400">{spError}</p>}
                           <div className="flex gap-2">
@@ -851,7 +875,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                             >{spSaving ? "Saving…" : "Save Special Tool"}</button>
                             <button
                               type="button"
-                              onClick={() => { setAddingSpecial(false); setSpCcNumber(""); setSpDescription(""); setSpNotes(""); setSpError(""); }}
+                              onClick={() => { setAddingSpecial(false); setSpCcNumber(""); setSpDescription(""); setSpNotes(""); setSpJobNumber(""); setSpJobDesc(""); setSpError(""); }}
                               className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm"
                             >Cancel</button>
                           </div>
@@ -870,11 +894,23 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                           {editingSpecialId === sp.id ? (
                             <div className="px-4 py-3 bg-zinc-900/80 space-y-2">
                               <p className="text-[10px] text-orange-400 font-semibold uppercase tracking-wide">Editing {sp.cc_number}</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="text" placeholder="Tool Description"
+                                  value={editSpDesc} onChange={e => setEditSpDesc(e.target.value)}
+                                  className="w-full bg-zinc-800 border border-orange-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                                  autoFocus
+                                />
+                                <input
+                                  type="text" placeholder="Job #"
+                                  value={editSpJobNumber} onChange={e => setEditSpJobNumber(e.target.value)}
+                                  className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none"
+                                />
+                              </div>
                               <input
-                                type="text" placeholder="Description"
-                                value={editSpDesc} onChange={e => setEditSpDesc(e.target.value)}
-                                className="w-full bg-zinc-800 border border-orange-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                                autoFocus
+                                type="text" placeholder="Job Description (e.g. Titanium bracket, customer XYZ)"
+                                value={editSpJobDesc} onChange={e => setEditSpJobDesc(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                               />
                               <input
                                 type="text" placeholder="Notes"
@@ -898,8 +934,10 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-sm font-mono font-bold text-orange-400">{sp.cc_number}</span>
-                                    {sp.description && <span className="text-xs text-zinc-300 truncate">{sp.description}</span>}
+                                    {sp.job_number && <span className="text-[11px] font-mono bg-zinc-700/60 text-zinc-300 px-1.5 py-0.5 rounded">Job #{sp.job_number}</span>}
                                   </div>
+                                  {sp.description && <div className="text-xs text-zinc-300 mt-0.5 truncate">{sp.description}</div>}
+                                  {sp.job_description && <div className="text-[11px] text-zinc-400 mt-0.5 truncate">{sp.job_description}</div>}
                                   {sp.notes && <div className="text-[11px] text-zinc-500 mt-0.5 truncate">{sp.notes}</div>}
                                   <div className="text-[10px] text-zinc-700 mt-0.5">{formatDate(sp.created_at)}</div>
                                 </div>
@@ -915,7 +953,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                 >Use in Calc →</button>
                                 <button
                                   type="button"
-                                  onClick={() => { setEditingSpecialId(sp.id); setEditSpDesc(sp.description); setEditSpNotes(sp.notes); }}
+                                  onClick={() => { setEditingSpecialId(sp.id); setEditSpDesc(sp.description); setEditSpNotes(sp.notes); setEditSpJobNumber(sp.job_number); setEditSpJobDesc(sp.job_description); }}
                                   className="text-[11px] px-2 py-1 rounded-md bg-zinc-700/50 hover:bg-zinc-600 text-zinc-300 font-medium transition-colors"
                                 >Edit</button>
                                 <button

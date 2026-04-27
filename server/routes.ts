@@ -254,6 +254,9 @@ export async function registerRoutes(
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS user_specials_email_idx ON user_specials (email)`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS job_number TEXT NOT NULL DEFAULT ''`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS job_description TEXT NOT NULL DEFAULT ''`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS user_specials_email_cc_idx ON user_specials (email, cc_number)`);
   } catch (err: any) {
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
@@ -4582,10 +4585,10 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   });
 
   // ── User Specials: per-user repository of custom CC tools ─────────────────
-  // GET    /api/specials?email=&token=          → [{ id, cc_number, description, notes, created_at }]
-  // POST   /api/specials  { email, token, cc_number, description, notes }  → row
+  // GET    /api/specials?email=&token=          → [{ id, cc_number, description, notes, job_number, job_description, created_at }]
+  // POST   /api/specials  { email, token, cc_number, description, notes, job_number, job_description }  → row (no-op if duplicate cc_number)
   // DELETE /api/specials/:id  { email, token }  → { ok }
-  // PATCH  /api/specials/:id  { email, token, description?, notes? }  → row
+  // PATCH  /api/specials/:id  { email, token, description?, notes?, job_number?, job_description? }  → row
   app.get("/api/specials", async (req, res) => {
     const { email, token } = req.query as { email: string; token: string };
     if (!email || !token) return res.status(400).json({ error: "Missing fields" });
@@ -4593,22 +4596,33 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const rows = await pool.query(
-      `SELECT id, cc_number, description, notes, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
+      `SELECT id, cc_number, description, notes, job_number, job_description, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
       [email.toLowerCase()]
     );
     res.json(rows.rows);
   });
 
   app.post("/api/specials", async (req, res) => {
-    const { email, token, cc_number, description, notes } = req.body;
+    const { email, token, cc_number, description, notes, job_number, job_description } = req.body;
     if (!email || !token || !cc_number?.trim()) return res.status(400).json({ error: "CC# is required" });
     const { pool } = await import("./db");
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const row = await pool.query(
-      `INSERT INTO user_specials (email, cc_number, description, notes) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [email.toLowerCase(), cc_number.trim().toUpperCase(), (description || "").trim(), (notes || "").trim()]
+      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (email, cc_number) DO NOTHING
+       RETURNING *`,
+      [email.toLowerCase(), cc_number.trim().toUpperCase(), (description || "").trim(), (notes || "").trim(), (job_number || "").trim(), (job_description || "").trim()]
     );
+    // ON CONFLICT DO NOTHING returns empty rows — fetch existing row so caller always gets a row back
+    if (!row.rows.length) {
+      const existing = await pool.query(
+        `SELECT id, cc_number, description, notes, job_number, job_description, created_at FROM user_specials WHERE email = $1 AND cc_number = $2`,
+        [email.toLowerCase(), cc_number.trim().toUpperCase()]
+      );
+      return res.json({ ...existing.rows[0], _duplicate: true });
+    }
     res.json(row.rows[0]);
   });
 
@@ -4624,15 +4638,20 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   });
 
   app.patch("/api/specials/:id", async (req, res) => {
-    const { email, token, description, notes } = req.body;
+    const { email, token, description, notes, job_number, job_description } = req.body;
     const id = parseInt(req.params.id);
     if (!email || !token) return res.status(400).json({ error: "Missing fields" });
     const { pool } = await import("./db");
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const row = await pool.query(
-      `UPDATE user_specials SET description = COALESCE($1, description), notes = COALESCE($2, notes) WHERE id = $3 AND email = $4 RETURNING *`,
-      [description?.trim() ?? null, notes?.trim() ?? null, id, email.toLowerCase()]
+      `UPDATE user_specials SET
+         description = COALESCE($1, description),
+         notes = COALESCE($2, notes),
+         job_number = COALESCE($3, job_number),
+         job_description = COALESCE($4, job_description)
+       WHERE id = $5 AND email = $6 RETURNING *`,
+      [description?.trim() ?? null, notes?.trim() ?? null, job_number?.trim() ?? null, job_description?.trim() ?? null, id, email.toLowerCase()]
     );
     if (!row.rows.length) return res.status(404).json({ error: "Not found" });
     res.json(row.rows[0]);
