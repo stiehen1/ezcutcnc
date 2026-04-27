@@ -1857,6 +1857,26 @@ def run_drilling(payload: dict) -> dict:
     ipr_base *= feed_util                               # feed utilization — default 0.90 (safety margin)
     if coolant_fed:
         ipr_base *= 1.10                                # through-coolant flushes chips → allows 10% heavier feed
+
+    # Step drill fragility derate — when largest dia is much bigger than entry dia,
+    # the entry web carries full torque at the step shoulder. Back off feed to protect it.
+    step_dia_ratio = sfm_dia / feed_dia if feed_dia > 0 and sfm_dia > feed_dia else 1.0
+    step_fragility_warning = None
+    if step_dia_ratio >= 2.0:
+        ipr_base *= 0.70   # severe step — 30% derate
+        step_fragility_warning = (
+            f"Fragile entry step: largest dia ({sfm_dia:.4f}\") is {step_dia_ratio:.1f}× the entry dia "
+            f"({feed_dia:.4f}\"). Feed derated 30% to protect the small-dia web. "
+            f"Use a pilot hole if possible, peck aggressively, and listen for any chatter."
+        )
+    elif step_dia_ratio >= 1.5:
+        ipr_base *= 0.85   # moderate step — 15% derate
+        step_fragility_warning = (
+            f"Step drill caution: largest dia ({sfm_dia:.4f}\") is {step_dia_ratio:.1f}× the entry dia "
+            f"({feed_dia:.4f}\"). Feed derated 15% — the entry step is the weak link. "
+            f"Do not force feed; let the drill lead."
+        )
+
     ipr = max(0.0005, ipr_base)
 
     # Feed — IPM at entry dia chip load, RPM from largest dia
@@ -2037,6 +2057,7 @@ def run_drilling(payload: dict) -> dict:
             "peck_schedule": peck_schedule,
             "flute_warning": flute_warning,
             "chip_warning": chip_warning,
+            "step_fragility_warning": step_fragility_warning,
             "geometry_tip": geometry_tip,
             "drill_stability": drill_stability,
             "entry_dia": round(feed_dia, 4),

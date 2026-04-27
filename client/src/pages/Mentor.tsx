@@ -3720,6 +3720,7 @@ ${stabSection}
       // ── NOTES ────────────────────────────────────
       const drillNotes: string[] = [];
       if (drillResult.geometry_tip)  drillNotes.push(drillResult.geometry_tip);
+      if (drillResult.step_fragility_warning) drillNotes.push(`⚠ ${drillResult.step_fragility_warning}`);
       if (drillResult.chip_warning)  drillNotes.push(`⚠ Chip warning: ${drillResult.chip_warning}`);
       if (drillResult.flute_warning) drillNotes.push(`⚠ ${drillResult.flute_warning}`);
       if (drillNotes.length > 0) {
@@ -10146,6 +10147,13 @@ ${stabSection}
               )}
 
               {/* Chip thickness advisory — informational, feed already auto-corrected */}
+              {drillResult.step_fragility_warning && (
+                <div className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-300 space-y-0.5">
+                  <div className="font-semibold">⚠ Step Drill Fragility Warning</div>
+                  <div>{drillResult.step_fragility_warning}</div>
+                </div>
+              )}
+
               {drillResult.chip_warning && (
                 <div className="rounded-lg border border-zinc-600 bg-zinc-800/60 px-3 py-2 text-xs text-zinc-300">
                   ℹ {drillResult.chip_warning}
