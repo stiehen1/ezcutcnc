@@ -1515,6 +1515,7 @@ export default function Mentor() {
         if (e.drill_step_diameters?.length > 0) {
           next.drill_step_diameters = e.drill_step_diameters;
           next.drill_steps = e.drill_step_diameters.length;
+          setDrillMultiDia(true);
         }
         if (e.drill_step_lengths?.length > 0) next.drill_step_lengths = e.drill_step_lengths;
         if (e.drill_point_angle && [118, 130, 135, 140, 145].includes(Number(e.drill_point_angle))) {
@@ -1526,6 +1527,7 @@ export default function Mentor() {
           next.ream_steps = e.ream_step_diameters.length;
           setReamStepDiaText(e.ream_step_diameters[0].toFixed(4));
           if (e.ream_step_lengths?.[0] > 0) setReamStepLenText(e.ream_step_lengths[0].toFixed(3));
+          setReamMultiDia(true);
         }
         if (e.ream_step_lengths?.length > 0) next.ream_step_lengths = e.ream_step_lengths;
         // ream_flute_length deprecated — LOC (form.loc) is the cut depth for reamers
@@ -2220,6 +2222,8 @@ export default function Mentor() {
   const [targetHoleText, setTargetHoleText] = React.useState("");
   const [drillFluteLenText, setDrillFluteLenText] = React.useState("");
   const [drillHoleDepthText, setDrillHoleDepthText] = React.useState("");
+  const [drillMultiDia, setDrillMultiDia] = React.useState(false);
+  const [reamMultiDia, setReamMultiDia] = React.useState(false);
   const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
   const [stepLenTexts, setStepLenTexts] = React.useState<string[]>([]);
   const [reamStepDiaText, setReamStepDiaText] = React.useState("");
@@ -2581,6 +2585,8 @@ export default function Mentor() {
     setPdfOal(0);
     setPdfOalText("");
     setPdfFluteWash(0);
+    setDrillMultiDia(false);
+    setReamMultiDia(false);
     setPdfFluteWashText("");
     setDpSpecialTool(false);
     // Reset all form fields that PDF upload populates
@@ -4625,6 +4631,18 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
+          <div className="flex gap-2 mb-3">
+            {([{ val: false, label: "Single Diameter" }, { val: true, label: "Multi-Diameter" }] as const).map(({ val, label }) => (
+              <button key={label} type="button"
+                onClick={() => { setDrillMultiDia(val); if (!val) setForm(p => ({ ...p, drill_steps: 0, drill_step_diameters: [], drill_step_lengths: [] })); }}
+                className="flex-1 rounded py-1.5 text-xs font-semibold border transition-all"
+                style={{ backgroundColor: drillMultiDia === val ? "#6366f1" : "transparent", borderColor: "#6366f1", color: drillMultiDia === val ? "#fff" : "#6366f1" }}
+              >{label}</button>
+            ))}
+          </div>
+          {drillMultiDia ? (
+            <p className="text-xs text-zinc-400 mb-3">Upload a special print below — step diameters and lengths will be extracted automatically.</p>
+          ) : (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <FieldLabel hint={form.drill_steps > 0 ? `How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. For step drills, this must be greater than the last step length (${(Math.max(...form.drill_step_lengths.slice(0, form.drill_steps).filter(l => l > 0)) || 0).toFixed(3)}") so all diameters fully engage. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle.` : "How deep the drill travels into the part — measured from the part's top surface down to the full bottom of the hole, to drill point. Through hole: enter full material thickness. Blind hole: enter the required full depth. Used to determine total depth-to-diameter ratio and recommend the correct G-code peck cycle."}>Hole Depth (in)</FieldLabel>
@@ -4669,6 +4687,7 @@ ${stabSection}
               </div>
             </div>
           </div>
+          )}
 
           {/* Feed Safety Factor — auto-applied based on depth and material, not shown to user */}
           {operation === "drilling" && (() => {
@@ -4691,8 +4710,18 @@ ${stabSection}
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
-          {/* Finished Hole Dia — hidden for step reamers (diameters come from tool geometry section) */}
-          {form.ream_steps === 0 && (
+          <div className="flex gap-2 mb-3">
+            {([{ val: false, label: "Single Diameter" }, { val: true, label: "Multi-Diameter" }] as const).map(({ val, label }) => (
+              <button key={label} type="button"
+                onClick={() => { setReamMultiDia(val); if (!val) setForm(p => ({ ...p, ream_steps: 0, ream_step_diameters: [], ream_step_lengths: [] })); }}
+                className="flex-1 rounded py-1.5 text-xs font-semibold border transition-all"
+                style={{ backgroundColor: reamMultiDia === val ? "#6366f1" : "transparent", borderColor: "#6366f1", color: reamMultiDia === val ? "#fff" : "#6366f1" }}
+              >{label}</button>
+            ))}
+          </div>
+          {reamMultiDia ? (
+            <p className="text-xs text-zinc-400 mb-3">Upload a special print below — step diameters and lengths will be extracted automatically.</p>
+          ) : (
           <div className="space-y-1.5 mb-3">
             <FieldLabel hint="The finished hole diameter called out on the print. The reamer will be ground to this nominal size.">
               {UL("Finished Hole Dia (in.)", "Finished Hole Dia (mm)")}
