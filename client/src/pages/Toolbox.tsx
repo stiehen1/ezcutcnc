@@ -19,6 +19,10 @@ type SpecialItem = {
   notes: string;
   job_number: string;
   job_description: string;
+  tool_dia: number | null;
+  flutes: number | null;
+  loc: number | null;
+  step_diameters: number[] | null;
   created_at: string;
 };
 
@@ -977,7 +981,6 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                   type="button"
                                   onClick={() => {
                                     const desc = (sp.description ?? "").toLowerCase();
-                                    const descRaw = sp.description ?? "";
                                     let op = "milling";
                                     const isStepDrill = desc.includes("step drill") || desc.includes("step_drill");
                                     const isStepReam = desc.includes("step reamer") || desc.includes("step_reamer");
@@ -988,13 +991,18 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                     else if (desc.includes("threadmill") || desc.includes("thread mill")) op = "threadmilling";
                                     else if (desc.includes("keyseat")) op = "keyseat";
                                     else if (desc.includes("dovetail")) op = "dovetail";
-                                    // Parse diameter from description e.g. "Ø0.103""
-                                    const diaMatch = descRaw.match(/Ø([\d.]+)/);
-                                    const parsedDia = diaMatch ? parseFloat(diaMatch[1]) : 0;
                                     const extraInputs: Record<string, any> = {};
-                                    if (parsedDia > 0) extraInputs.tool_dia = parsedDia;
-                                    if (isStepDrill) extraInputs.drill_steps = 1;
-                                    if (isStepReam)  extraInputs.ream_steps  = 1;
+                                    if (sp.tool_dia) extraInputs.tool_dia = sp.tool_dia;
+                                    if (sp.flutes)   extraInputs.flutes   = sp.flutes;
+                                    if (sp.loc)      extraInputs.loc      = sp.loc;
+                                    if (isStepDrill) {
+                                      extraInputs.drill_steps = 1;
+                                      if (sp.step_diameters?.length) extraInputs.drill_step_diameters = sp.step_diameters;
+                                    }
+                                    if (isStepReam) {
+                                      extraInputs.ream_steps = 1;
+                                      if (sp.step_diameters?.length) extraInputs.ream_step_diameters = sp.step_diameters;
+                                    }
                                     localStorage.setItem("cc_restore_form", JSON.stringify({
                                       inputs: { edp: sp.cc_number, ...extraInputs },
                                       operation: op,

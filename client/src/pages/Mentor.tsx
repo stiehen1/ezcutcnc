@@ -1667,7 +1667,18 @@ export default function Mentor() {
           fetch("/api/specials", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: _saveEmail, token: _saveToken, cc_number: e.tool_number, description: _descParts.join(", "), notes: "" }),
+            body: JSON.stringify({
+              email: _saveEmail, token: _saveToken,
+              cc_number: e.tool_number,
+              description: _descParts.join(", "),
+              notes: "",
+              tool_dia: e.tool_dia > 0 ? e.tool_dia : undefined,
+              flutes: e.flutes > 0 ? e.flutes : undefined,
+              loc: e.loc > 0 ? e.loc : undefined,
+              step_diameters: e.drill_step_diameters?.length > 0 ? e.drill_step_diameters
+                            : e.ream_step_diameters?.length > 0 ? e.ream_step_diameters
+                            : undefined,
+            }),
           }).catch(() => {});
         }
       }

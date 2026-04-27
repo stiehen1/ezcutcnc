@@ -257,6 +257,10 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS job_number TEXT NOT NULL DEFAULT ''`);
     await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS job_description TEXT NOT NULL DEFAULT ''`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS user_specials_email_cc_idx ON user_specials (email, cc_number)`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS tool_dia NUMERIC`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS flutes INTEGER`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS loc NUMERIC`);
+    await pool.query(`ALTER TABLE user_specials ADD COLUMN IF NOT EXISTS step_diameters JSONB`);
   } catch (err: any) {
     console.warn("[Toolbox migration]", err?.message ?? err);
   }
@@ -4596,29 +4600,37 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const rows = await pool.query(
-      `SELECT id, cc_number, description, notes, job_number, job_description, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
+      `SELECT id, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, created_at FROM user_specials WHERE email = $1 ORDER BY created_at DESC`,
       [email.toLowerCase()]
     );
     res.json(rows.rows);
   });
 
   app.post("/api/specials", async (req, res) => {
-    const { email, token, cc_number, description, notes, job_number, job_description } = req.body;
+    const { email, token, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters } = req.body;
     if (!email || !token || !cc_number?.trim()) return res.status(400).json({ error: "CC# is required" });
     const { pool } = await import("./db");
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const row = await pool.query(
-      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO user_specials (email, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (email, cc_number) DO NOTHING
        RETURNING *`,
-      [email.toLowerCase(), cc_number.trim().toUpperCase(), (description || "").trim(), (notes || "").trim(), (job_number || "").trim(), (job_description || "").trim()]
+      [
+        email.toLowerCase(), cc_number.trim().toUpperCase(),
+        (description || "").trim(), (notes || "").trim(),
+        (job_number || "").trim(), (job_description || "").trim(),
+        tool_dia > 0 ? tool_dia : null,
+        flutes > 0 ? flutes : null,
+        loc > 0 ? loc : null,
+        step_diameters?.length ? JSON.stringify(step_diameters) : null,
+      ]
     );
     // ON CONFLICT DO NOTHING returns empty rows — fetch existing row so caller always gets a row back
     if (!row.rows.length) {
       const existing = await pool.query(
-        `SELECT id, cc_number, description, notes, job_number, job_description, created_at FROM user_specials WHERE email = $1 AND cc_number = $2`,
+        `SELECT id, cc_number, description, notes, job_number, job_description, tool_dia, flutes, loc, step_diameters, created_at FROM user_specials WHERE email = $1 AND cc_number = $2`,
         [email.toLowerCase(), cc_number.trim().toUpperCase()]
       );
       return res.json({ ...existing.rows[0], _duplicate: true });
