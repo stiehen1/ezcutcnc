@@ -779,11 +779,27 @@ _DRILL_MIN_IPR = {
     "Inconel":     0.005,
 }
 
+# Minimum chip thickness as fraction of diameter — governs small-drill floors.
+# Validated: 17-4 SS .103" drill → 0.0009–0.0012 IPR = ~1.0–1.2% D.
+# Material floor is capped at 1.5%×D so small drills never get over-floored.
+_DRILL_MIN_IPR_PCT_D = {
+    "Aluminum":    0.008,   # 0.8%×D
+    "Non-Ferrous": 0.008,
+    "Plastics":    0.005,
+    "Steel":       0.010,   # 1.0%×D
+    "Stainless":   0.010,   # 1.0%×D (shop-validated: .103" → ~0.001 IPR)
+    "Cast Iron":   0.010,
+    "Titanium":    0.010,
+    "Inconel":     0.012,   # 1.2%×D
+}
+
 def drill_min_ipr(D: float, material_group: str) -> float:
-    """Minimum feed per rev to maintain cutting (not rubbing). Scales with drill diameter."""
-    mat_floor = _DRILL_MIN_IPR.get(material_group, 0.003)
-    dia_floor  = 0.002 * D   # 0.002×D rule — steel baseline
-    return max(mat_floor, dia_floor)
+    """Minimum feed per rev to maintain cutting (not rubbing). Scales with drill diameter.
+    Uses the smaller of: fixed material floor OR diameter-scaled floor, so small drills
+    are never forced into feeds that would snap the web."""
+    fixed_floor = _DRILL_MIN_IPR.get(material_group, 0.003)
+    pct_floor   = _DRILL_MIN_IPR_PCT_D.get(material_group, 0.010) * D
+    return min(fixed_floor, max(pct_floor, 0.0005))
 
 # Thrust force constants by material group (Kronenberg model: F = Kf × D^0.8 × IPR^0.8)
 _DRILL_THRUST_K = {
