@@ -9681,8 +9681,8 @@ ${stabSection}
                 <Kpi label="Depth / D"    hint="Hole depth as a multiple of reamer diameter. Deep reamers (above 3×D) are prone to deflection and chatter — consider a longer-shank reamer or guide bushing above 5×D." value={`${fmtNum(reamResult.depth_xd, 1)}×`} />
               </div>
 
-              {/* Coating recommendation */}
-              {(() => { const cr = getCoatingRec(isoCategory); return (
+              {/* Coating recommendation — hidden when print uploaded (coating is locked by print) */}
+              {!pdfExtracted && (() => { const cr = getCoatingRec(isoCategory); return (
                 <div className="flex items-center gap-2 px-1 text-xs">
                   <span className="text-muted-foreground">Recommended Coating:</span>
                   <span className="font-bold text-orange-400">{cr.code}</span>
@@ -10060,8 +10060,8 @@ ${stabSection}
                 <Kpi label="Depth / D"     hint="Hole depth expressed as a multiple of drill diameter. Below 3×D: standard cycle. 3–5×D: consider chip-breaking peck. Above 5×D: peck drilling recommended. Above 8×D: high-helix or parabolic flute strongly advised." value={`${fmtNum(drillResult.depth_to_dia, 1)}×`} />
               </div>
 
-              {/* Coating recommendation */}
-              {(() => { const cr = getCoatingRec(isoCategory); return (
+              {/* Coating recommendation — hidden when print uploaded (coating is locked by print) */}
+              {!pdfExtracted && (() => { const cr = getCoatingRec(isoCategory); return (
                 <div className="flex items-center gap-2 px-1 text-xs">
                   <span className="text-muted-foreground">Recommended Coating:</span>
                   <span className="font-bold text-orange-400">{cr.code}</span>
@@ -10221,10 +10221,10 @@ ${stabSection}
                           )}
                         </div>
                       ))}
-                      <div className="col-span-2">
+                      {!pdfExtracted && <div className="col-span-2">
                         <span className="text-zinc-500">Recommended Coating</span>
                         <span className="ml-2 font-bold text-orange-400">{getCoatingRec(isoCategory).code}</span>
-                      </div>
+                      </div>}
                     </div>
                   </div>
                 );
@@ -11543,7 +11543,7 @@ ${stabSection}
                         </span>
                       )}
                     </div>
-                    {incompatible && (
+                    {incompatible && !pdfExtracted && (
                       <div className="text-amber-400 font-medium">
                         ⚠ {form.coating} is not recommended for {isoCategory}-category materials — coating reacts at cutting temperatures. Switch to A-Max or T-Max.
                       </div>
