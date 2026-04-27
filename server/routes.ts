@@ -4544,7 +4544,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     const auth = await pool.query(`SELECT id FROM toolbox_sessions WHERE email = $1 AND token = $2`, [email.toLowerCase(), token]);
     if (!auth.rows.length) return res.status(401).json({ error: "Unauthorized" });
     const rows = await pool.query(
-      `SELECT data->>'edp' AS edp, id FROM toolbox_items WHERE email = $1 AND type = 'favorite' ORDER BY created_at DESC`,
+      `SELECT data->>'edp' AS edp, id, data FROM toolbox_items WHERE email = $1 AND type = 'favorite' ORDER BY created_at DESC`,
       [email.toLowerCase()]
     );
     res.json(rows.rows);
