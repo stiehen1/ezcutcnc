@@ -977,16 +977,26 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                   type="button"
                                   onClick={() => {
                                     const desc = (sp.description ?? "").toLowerCase();
+                                    const descRaw = sp.description ?? "";
                                     let op = "milling";
-                                    if (desc.includes("step drill") || desc.includes("step_drill")) op = "drilling";
+                                    const isStepDrill = desc.includes("step drill") || desc.includes("step_drill");
+                                    const isStepReam = desc.includes("step reamer") || desc.includes("step_reamer");
+                                    if (isStepDrill) op = "drilling";
                                     else if (desc.includes("drill")) op = "drilling";
-                                    else if (desc.includes("reamer") || desc.includes("ream")) op = "reaming";
+                                    else if (isStepReam || desc.includes("reamer") || desc.includes("ream")) op = "reaming";
                                     else if (desc.includes("feedmill") || desc.includes("feed mill")) op = "feedmill";
                                     else if (desc.includes("threadmill") || desc.includes("thread mill")) op = "threadmilling";
                                     else if (desc.includes("keyseat")) op = "keyseat";
                                     else if (desc.includes("dovetail")) op = "dovetail";
+                                    // Parse diameter from description e.g. "Ø0.103""
+                                    const diaMatch = descRaw.match(/Ø([\d.]+)/);
+                                    const parsedDia = diaMatch ? parseFloat(diaMatch[1]) : 0;
+                                    const extraInputs: Record<string, any> = {};
+                                    if (parsedDia > 0) extraInputs.tool_dia = parsedDia;
+                                    if (isStepDrill) extraInputs.drill_steps = 1;
+                                    if (isStepReam)  extraInputs.ream_steps  = 1;
                                     localStorage.setItem("cc_restore_form", JSON.stringify({
-                                      inputs: { edp: sp.cc_number },
+                                      inputs: { edp: sp.cc_number, ...extraInputs },
                                       operation: op,
                                       tool_number: sp.cc_number,
                                     }));
