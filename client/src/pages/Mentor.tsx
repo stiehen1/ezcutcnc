@@ -2747,7 +2747,7 @@ export default function Mentor() {
     }
     if (operation === "feedmill" && !(form.flutes > 0)) missing.push("Flute Count");
     if (operation === "drilling" && !(form.drill_hole_depth > 0) && !(drillMultiDia && pdfExtracted)) missing.push("Hole Depth");
-    if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0)) missing.push("Pre-Drill / Existing Hole Diameter");
+    if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0) && !(reamMultiDia && pdfExtracted)) missing.push("Pre-Drill / Existing Hole Diameter");
     if (missing.length > 0) {
       setRunWarnings(missing);
       return;
