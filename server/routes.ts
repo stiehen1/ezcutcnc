@@ -310,6 +310,7 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS base_torque_ftlb NUMERIC(8,2)`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_ftlb NUMERIC(8,2)`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_rpm INTEGER`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_rpm INTEGER`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS curve_confidence TEXT`);
@@ -540,6 +541,67 @@ export async function registerRoutes(
     }
     // Fix any rows inserted under old brand names so search aliases work
     await pool.query(`UPDATE machines SET brand = 'Doosan/DN Solutions' WHERE model ILIKE 'PUMA 2100SY II' AND brand ILIKE 'DN Solutions'`);
+
+    // ── Giddings & Lewis catalog (43 models) ─────────────────────────────────
+    // Heavy boring mills, VTLs, HMCs, and modern MAG platform.
+    // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type]
+    const gnlMachines: [string, string, string, number, number, number, number, number, string, string][] = [
+      // Floor-type HBM
+      ["G60-FX",   "hbm", "CAT50",  2500, 50,  650, 1500, 400, "box", "gear"],
+      ["G60-FXi",  "hbm", "CAT50",  3000, 60,  700, 1600, 450, "box", "gear"],
+      ["G50-FX",   "hbm", "CAT50",  2500, 40,  520, 1200, 400, "box", "gear"],
+      ["G70-FX",   "hbm", "CAT50",  2200, 60,  780, 1800, 350, "box", "gear"],
+      ["G80-FX",   "hbm", "CAT50",  2000, 75,  950, 2200, 300, "box", "gear"],
+      ["G90-FX",   "hbm", "CAT50",  1800, 100, 1200, 3000, 250, "box", "gear"],
+      ["G100-FX",  "hbm", "CAT50",  1500, 125, 1500, 4000, 200, "box", "gear"],
+      // Table-type HBM
+      ["MC40",     "hbm", "CAT50",  3000, 30,  400, 900,  500, "box", "gear"],
+      ["MC50",     "hbm", "CAT50",  2500, 40,  525, 1200, 400, "box", "gear"],
+      ["MC60",     "hbm", "CAT50",  2500, 50,  650, 1500, 400, "box", "gear"],
+      ["MC60-2P",  "hbm", "CAT50",  2500, 50,  650, 1500, 400, "box", "gear"],
+      ["MC70",     "hbm", "CAT50",  2200, 60,  750, 1700, 350, "box", "gear"],
+      ["MC80",     "hbm", "CAT50",  2000, 60,  800, 1800, 350, "box", "gear"],
+      ["MC100",    "hbm", "CAT50",  1800, 75,  1000, 2500, 300, "box", "gear"],
+      // Legacy / classic boring mills
+      ["300",      "hbm", "CAT50",  1200, 50,  1100, 2500, 200, "box", "gear"],
+      ["340T",     "hbm", "CAT50",  1600, 60,  900, 2200, 300, "box", "gear"],
+      ["350T",     "hbm", "CAT50",  1500, 75,  1200, 3000, 250, "box", "gear"],
+      ["360T",     "hbm", "CAT50",  1400, 100, 1400, 3500, 250, "box", "gear"],
+      ["380T",     "hbm", "CAT50",  1200, 125, 1600, 4200, 200, "box", "gear"],
+      ["70H6T",    "hbm", "CAT50",  2000, 50,  650, 1600, 350, "box", "gear"],
+      // VTLs (older CAT50/KM80)
+      ["48 VTC",   "lathe","CAT50", 300,  20,  350, 900,  150, "box", "gear"],
+      ["60 VTC",   "lathe","CAT50", 280,  25,  470, 1200, 150, "box", "gear"],
+      ["72 VTC",   "lathe","KM80",  250,  30,  600, 1500, 120, "box", "gear"],
+      ["84 VTC",   "lathe","KM80",  220,  40,  800, 2000, 120, "box", "gear"],
+      ["96 VTC",   "lathe","KM80",  200,  50,  1000, 2500, 100, "box", "gear"],
+      // VTLs (modern Capto C8)
+      ["VTC1600",  "lathe","CAPTO C8", 2000, 30,  400, 900,  300, "linear", "direct"],
+      ["VTC2000",  "lathe","CAPTO C8", 2000, 35,  500, 1100, 300, "linear", "direct"],
+      ["VTC2500",  "lathe","CAPTO C8", 1800, 40,  600, 1400, 250, "linear", "direct"],
+      ["VTC3000",  "lathe","CAPTO C8", 1500, 45,  750, 1700, 250, "linear", "direct"],
+      ["VTC3500",  "lathe","CAPTO C8", 1200, 50,  900, 2000, 200, "linear", "direct"],
+      // Orion HMCs
+      ["Orion 2000", "hmc", "CAT50", 6000, 35,  300, 500,  1200, "box", "gear"],
+      ["Orion 2300", "hmc", "CAT50", 6000, 40,  350, 600,  1000, "box", "gear"],
+      ["Orion 3000", "hmc", "CAT50", 8000, 50,  330, 550,  1500, "box", "gear"],
+      ["Orion 4000", "hmc", "CAT50", 8000, 60,  400, 650,  1500, "box", "gear"],
+      ["MC1250",   "hmc", "CAT50",  6000, 40,  350, 600,  1200, "box", "gear"],
+      ["MC1600",   "hmc", "CAT50",  6000, 50,  400, 700,  1200, "box", "gear"],
+      // Modern MAG platform (HSK100, linear ways, direct drive)
+      ["MAG RT1000", "hbm", "HSK100", 10000, 50, 260, 420, 2000, "linear", "direct"],
+      ["MAG RT1250", "hbm", "HSK100", 10000, 60, 315, 500, 2000, "linear", "direct"],
+      ["MAG XT",     "hmc", "HSK100", 12000, 70, 300, 480, 2500, "linear", "direct"],
+      ["MAG FTV",    "hbm", "HSK100", 8000,  80, 500, 900, 1500, "linear", "direct"],
+    ];
+    for (const m of gnlMachines) {
+      const [model, mtype, taper, maxRpm, hp, baseTq, peakTq, peakRpm, wayType, driveType] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence)
+        SELECT 'Giddings & Lewis', $1, $2, $3, $4, $5, false, '{flood}', $6, $7, $8, $9, $10, $10, 'medium'
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Giddings%' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq, peakTq, peakRpm]);
+    }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }

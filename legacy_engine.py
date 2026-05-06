@@ -446,6 +446,7 @@ SPINDLE_TORQUE_CAPACITY = {
     "HSK63":  460,
     "HSK100": 950,
     "HSK125": 2100,  # HSK-A125 — heavy-duty (Makino T4, large aerospace HMC)
+    "KM80":   1100,  # Kennametal KM80 — quick-change boring interface (G&L large VTLs)
     # Lathe live-tool turret interfaces — lower torque than machining center tapers
     "VDI30":   90,
     "VDI40":  180,
