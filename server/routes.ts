@@ -604,6 +604,69 @@ export async function registerRoutes(
     }
     // Backfill: any older rows already inserted without the (G&L) alias
     await pool.query(`UPDATE machines SET brand = 'Giddings & Lewis (G&L)' WHERE brand = 'Giddings & Lewis'`);
+
+    // ── Starrag catalog ──────────────────────────────────────────────────────
+    // Multi-spindle architecture: each spindle variant loaded as a separate row
+    // so users pick the spindle config they're running.
+    // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, way_type, drive_type]
+    const starragMachines: [string, string, string, number, number, number, string, string][] = [];
+    // STC series — 10 base models × 4 spindles = 40 rows (HMC, 5-axis aerospace structural)
+    const stcSizes = ["500", "630", "800", "1000", "1250", "1600", "1800", "2000", "2500", "3000"];
+    for (const sz of stcSizes) {
+      // Motor spindle 18k HSK100 — high-speed titanium/aerospace
+      starragMachines.push([`STC ${sz} (Motor 18k)`,    "5axis", "HSK100", 18000, 107, 184,  "linear", "direct"]);
+      // Gear High 12k HSK100
+      starragMachines.push([`STC ${sz} (Gear High 12k)`, "5axis", "HSK100", 12000, 50,  457,  "linear", "gear"]);
+      // Gear Mid 8k HSK100
+      starragMachines.push([`STC ${sz} (Gear Mid 8k)`,   "5axis", "HSK100", 8000,  50,  693,  "linear", "gear"]);
+      // Gear Low 5.6k HSK100 — max torque for heavy roughing
+      starragMachines.push([`STC ${sz} (Gear Low 5.6k)`, "5axis", "HSK100", 5600,  50,  958,  "linear", "gear"]);
+    }
+    // STC X series — high-speed aluminum, 30k motor spindle HSK63 (6 rows)
+    for (const sz of ["1000", "1250", "1600", "1800", "2000", "2500"]) {
+      starragMachines.push([`STC ${sz} X`, "5axis", "HSK63", 30000, 161, 61, "linear", "direct"]);
+    }
+    // NB series — blisk machines, motor spindle HSK100 (6 rows)
+    for (const sz of ["151", "251", "351", "451", "551", "651"]) {
+      starragMachines.push([`NB ${sz}`, "5axis", "HSK100", 18000, 80, 184, "linear", "direct"]);
+    }
+    // LX series — blade machines (8 rows)
+    starragMachines.push(["LX 021", "5axis", "HSK32", 30000, 25, 44,  "linear", "direct"]);
+    starragMachines.push(["LX 031", "5axis", "HSK32", 30000, 25, 44,  "linear", "direct"]);
+    starragMachines.push(["LX 041", "5axis", "HSK32", 30000, 25, 44,  "linear", "direct"]);
+    starragMachines.push(["LX 051", "5axis", "HSK63", 18000, 37, 120, "linear", "direct"]);
+    starragMachines.push(["LX 101", "5axis", "HSK63", 18000, 37, 120, "linear", "direct"]);
+    starragMachines.push(["LX 151", "5axis", "HSK63", 18000, 38, 133, "linear", "direct"]);
+    starragMachines.push(["LX 251", "5axis", "HSK63", 18000, 38, 133, "linear", "direct"]);
+    starragMachines.push(["LX 351", "5axis", "HSK63", 18000, 38, 133, "linear", "direct"]);
+    // Ecospeed series — large aero structures (5 rows)
+    starragMachines.push(["Ecospeed F", "5axis", "HSK63",  30000, 120, 60,  "linear", "direct"]);
+    starragMachines.push(["Ecospeed B", "5axis", "HSK63",  30000, 120, 60,  "linear", "direct"]);
+    starragMachines.push(["Ecospeed C", "5axis", "HSK63",  24000, 100, 90,  "linear", "direct"]);
+    starragMachines.push(["Ecospeed D", "5axis", "HSK100", 18000, 80,  180, "linear", "direct"]);
+    starragMachines.push(["Ecospeed E", "5axis", "HSK100", 12000, 70,  250, "linear", "direct"]);
+    // Heckert series — horizontal production (5 rows)
+    starragMachines.push(["HEC 500",  "hmc", "HSK63",  12000, 50,  150, "linear", "direct"]);
+    starragMachines.push(["HEC 630",  "hmc", "HSK63",  12000, 60,  180, "linear", "direct"]);
+    starragMachines.push(["HEC 800",  "hmc", "HSK100", 10000, 70,  220, "linear", "direct"]);
+    starragMachines.push(["HEC 1000", "hmc", "HSK100", 8000,  80,  300, "linear", "direct"]);
+    starragMachines.push(["HEC 1250", "hmc", "HSK100", 6000,  100, 500, "box",    "gear"]);
+    // Droop+Rein — portal/gantry (6 rows)
+    starragMachines.push(["FOGS NEO",  "5axis", "HSK100", 6000,  54,  920, "box",    "gear"]);
+    starragMachines.push(["TFS NEO",   "5axis", "HSK100", 6000,  80,  800, "box",    "gear"]);
+    starragMachines.push(["G Series",  "5axis", "HSK100", 8000,  100, 600, "linear", "direct"]);
+    starragMachines.push(["GF Series", "5axis", "HSK100", 10000, 120, 500, "linear", "direct"]);
+    starragMachines.push(["T Series",  "5axis", "HSK100", 6000,  80,  700, "box",    "gear"]);
+    starragMachines.push(["TF Series", "5axis", "HSK100", 6000,  90,  750, "box",    "gear"]);
+
+    for (const m of starragMachines) {
+      const [model, mtype, taper, maxRpm, hp, baseTq, wayType, driveType] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, rated_rpm, curve_confidence)
+        SELECT 'Starrag', $1, $2, $3, $4, $5, true, '{flood,tsc}', $6, $7, $8, $2, 'medium'
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Starrag%' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq]);
+    }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
