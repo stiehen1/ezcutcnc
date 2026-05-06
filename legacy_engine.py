@@ -131,6 +131,7 @@ BASE_SFM = {
     "stainless_fm":          290,   # 303/416 free-machining — midpoint 240–340 SFM
     "stainless_ferritic":    230,   # 409/430/441 ferritic — midpoint 180–280 SFM
     "stainless_410":         215,   # 410 martensitic — midpoint 170–260 SFM
+    "stainless_trimrite":    185,   # TrimRite (S42010) — between 410 and 420; good machinability for martensitic
     "stainless_420":         180,   # 420 martensitic (annealed) — midpoint 140–220 SFM
     "stainless_440c":        200,   # 440C — high-carbon, abrasive; behaves closer to tool steel
     "stainless_304":         180,   # 304/304L/321 — midpoint 140–220 SFM (was 225 — too high)
@@ -208,6 +209,7 @@ HP_PER_CUIN = {
     "stainless_fm":          0.95,   # 303/416 free-machining
     "stainless_ferritic":    0.95,   # 409/430/441 ferritic — cuts like steel
     "stainless_410":         1.00,   # 410 martensitic
+    "stainless_trimrite":    1.02,   # TrimRite — slightly above 410
     "stainless_420":         1.05,   # 420 martensitic — harder than 410
     "stainless_440c":        1.20,   # 440C — high carbide content
     "stainless_304":         1.10,   # 304/321 austenitic — gummy, high unit power
@@ -632,6 +634,7 @@ IPT_FRAC = {
     "stainless_fm":          0.0048,  # 303/416 — midpoint 0.0018–0.0030 on 0.5" = 0.48%×D
     "stainless_ferritic":    0.0041,  # 409/430/441 — midpoint 0.0015–0.0026 on 0.5" = 0.41%×D
     "stainless_410":         0.0040,  # 410 — midpoint 0.0014–0.0025 on 0.5" = 0.40%×D
+    "stainless_trimrite":    0.0037,  # TrimRite — between 410 and 420; moderate chip load
     "stainless_420":         0.0034,  # 420 annealed — midpoint 0.0012–0.0022 on 0.5" = 0.34%×D
     "stainless_440c":        0.0030,  # 440C — conservative; abrasive
     "stainless_304":         0.0034,  # 304/321 — midpoint 0.0012–0.0022 on 0.5" = 0.34%×D
@@ -697,6 +700,7 @@ HEM_IPT_MULT = {
     "stainless_fm":          2.0,
     "stainless_ferritic":    2.0,
     "stainless_410":         2.0,
+    "stainless_trimrite":    1.9,   # TrimRite — between 410 and 420
     "stainless_420":         1.8,   # 420 — slightly conservative
     "stainless_440c":        1.5,   # 440C — conservative HEM boost
     "stainless_304":         2.0,
@@ -773,6 +777,7 @@ _ISO_KEY_TO_GROUP = {
     "stainless_fm":          "Stainless",
     "stainless_ferritic":    "Stainless",
     "stainless_410":         "Stainless",
+    "stainless_trimrite":    "Stainless",
     "stainless_420":         "Stainless",
     "stainless_440c":        "Stainless",
     "stainless_304":         "Stainless",
@@ -1449,7 +1454,7 @@ DRILL_SFM = {
     # Base = flood external coolant, non-coolant-fed drill. coolant_fed × 1.15 bonus brings these up to through-coolant target.
     # stainless_304 validated: 60 SFM non-coolant-fed → 69 SFM coolant-fed ≈ 70 reference target.
     "stainless_304": 60, "stainless_316": 52,
-    "stainless_410": 74, "stainless_420": 70, "stainless_440c": 57,
+    "stainless_410": 74, "stainless_trimrite": 71, "stainless_420": 70, "stainless_440c": 57,
     "stainless_martensitic": 74, "stainless_fm": 87, "stainless_ferritic": 78,
     "stainless_ph": 52, "stainless_duplex": 48, "stainless_superduplex": 39,
     "stainless_austenitic": 57,
@@ -1476,7 +1481,7 @@ DRILL_IPR_BASE = {
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
     "stainless_304": 0.0055, "stainless_316": 0.0050,
-    "stainless_410": 0.0062, "stainless_420": 0.0056, "stainless_440c": 0.0047,
+    "stainless_410": 0.0062, "stainless_trimrite": 0.0059, "stainless_420": 0.0056, "stainless_440c": 0.0047,
     "stainless_martensitic": 0.0059, "stainless_fm": 0.0064, "stainless_ferritic": 0.0059,
     "stainless_ph": 0.0044, "stainless_duplex": 0.0047, "stainless_superduplex": 0.0040,
     "stainless_austenitic": 0.0050,
@@ -2564,6 +2569,7 @@ KEYSEAT_SFM = {
     "stainless_fm":      200,
     "stainless_ferritic":160,
     "stainless_410":     150,
+    "stainless_trimrite": 135,
     "stainless_420":     130,
     "stainless_440c":    140,
     "stainless_304":     120,
@@ -2635,6 +2641,7 @@ FEEDMILL_SFM = {
     "stainless_fm":            300,
     "stainless_ferritic":      250,
     "stainless_410":           230,
+    "stainless_trimrite":      210,
     "stainless_420":           200,
     "stainless_440c":          210,
     "stainless_304":           225,
