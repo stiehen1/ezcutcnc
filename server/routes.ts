@@ -598,10 +598,12 @@ export async function registerRoutes(
       const [model, mtype, taper, maxRpm, hp, baseTq, peakTq, peakRpm, wayType, driveType] = m;
       await pool.query(`
         INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence)
-        SELECT 'Giddings & Lewis', $1, $2, $3, $4, $5, false, '{flood}', $6, $7, $8, $9, $10, $10, 'medium'
-        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Giddings%' AND model ILIKE $1)
+        SELECT 'Giddings & Lewis (G&L)', $1, $2, $3, $4, $5, false, '{flood}', $6, $7, $8, $9, $10, $10, 'medium'
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE (brand ILIKE 'Giddings%' OR brand ILIKE 'G&L%') AND model ILIKE $1)
       `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq, peakTq, peakRpm]);
     }
+    // Backfill: any older rows already inserted without the (G&L) alias
+    await pool.query(`UPDATE machines SET brand = 'Giddings & Lewis (G&L)' WHERE brand = 'Giddings & Lewis'`);
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
