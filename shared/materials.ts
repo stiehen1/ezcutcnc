@@ -21,6 +21,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "stainless_fm":        "303 and 416 are the sulfur-added free-machining grades — the easiest stainless to cut by a wide margin. Fast, clean chips; runs significantly faster than 304.",
   "stainless_ferritic":  "Machines more like carbon steel than austenitic SS — far less work-hardening and gumminess. A good option when corrosion resistance is needed without the headaches of 304/316.",
   "stainless_410":       "Standard martensitic stainless — harder and more force-intensive than austenitic grades, but less gummy. Keep SFM up to prevent built-up edge; TiAlN coating helps.",
+  "stainless_trimrite":  "Carpenter TrimRite® (S42010) — improved 420 martensitic with better corrosion resistance and ductility. Machines like 410/420; heat-treatable to ~50 HRC. Push chip load — rubbing causes work hardening fast.",
   "stainless_420":       "Higher carbon than 410 and more wear-resistant. In the annealed state it cuts like firm 410; in the hardened condition treat it more like a hardened steel.",
   "stainless_440c":      "High-carbon martensitic SS — abrasive and hard (up to 60 HRC hardened). Treat it like a tool steel; conservative chip load, AlTiN coating required.",
   "stainless_304":       "Work-hardens instantly if the tool rubs or dwells. Maintain a positive, consistent chip load at all times — any hesitation notches the edge.",
@@ -96,6 +97,7 @@ export const ISO_SUBCATEGORIES = [
   { iso: "M" as IsoCategory, key: "stainless_fm",          label: "303 / 416 Free-Machining Stainless",          hardness: { value: 85, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_ferritic",    label: "Ferritic Stainless (409 / 430 / 441)",         hardness: { value: 80, scale: "hrb" as const } },
   { iso: "M" as IsoCategory, key: "stainless_410",         label: "410 Martensitic Stainless",                   hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_trimrite",    label: "TrimRite® Stainless (S42010 / Carpenter)",    hardness: { value: 25, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_420",         label: "420 Martensitic Stainless",                   hardness: { value: 25, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_440c",        label: "440C Stainless",                              hardness: { value: 58, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_316",         label: "316 / 316L Stainless (Mo-bearing)",           hardness: { value: 85, scale: "hrb" as const } },
@@ -154,6 +156,7 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "stainless_fm":        { min: 65, max: 95,  scale: "hrb", note: "303/416 free-machining stainless ranges 65–95 HRB — sulfur additives prevent heat-treat hardening." },
   "stainless_ferritic":  { min: 65, max: 95,  scale: "hrb", note: "Ferritic stainless (409/430/441) cannot be hardened by heat treatment — HRB scale only." },
   "stainless_410":       { min: 20, max: 40,  scale: "hrc", note: "410 martensitic stainless: annealed ~80 HRB, hardened up to ~40 HRC." },
+  "stainless_trimrite":  { min: 22, max: 51,  scale: "hrc", note: "TrimRite® (S42010): annealed ~92 HRB, heat-treatable to ~50–51 HRC." },
   "stainless_420":       { min: 22, max: 52,  scale: "hrc", note: "420 can reach 50–52 HRC fully hardened; annealed condition is ~92 HRB." },
   "stainless_440c":      { min: 55, max: 62,  scale: "hrc", note: "440C is the highest-hardness common stainless — 55–62 HRC fully hardened." },
   "stainless_304":       { min: 65, max: 95,  scale: "hrb", note: "304/316/321 austenitic stainless cannot be hardened by heat treatment — HRB scale only." },
@@ -370,6 +373,8 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   // ── 410 Martensitic ───────────────────────────────────────────────────────
   "410": "stainless_410", "410s": "stainless_410", "414": "stainless_410",
   "greek ascoloy": "stainless_410", "1.4006": "stainless_410",
+  // ── TrimRite (S42010) ─────────────────────────────────────────────────────
+  "trimrite": "stainless_trimrite", "s42010": "stainless_trimrite", "42010": "stainless_trimrite",
   // ── 420 Martensitic ───────────────────────────────────────────────────────
   "420": "stainless_420", "420hc": "stainless_420", "1.4028": "stainless_420",
   "1.4034": "stainless_420",

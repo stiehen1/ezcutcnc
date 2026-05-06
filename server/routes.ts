@@ -310,6 +310,7 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS way_type TEXT`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS base_torque_ftlb NUMERIC(8,2)`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_ftlb NUMERIC(8,2)`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_rpm INTEGER`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_rpm INTEGER`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS curve_confidence TEXT`);
@@ -482,6 +483,22 @@ export async function registerRoutes(
       WHERE brand ILIKE 'Hurco%' AND way_type IS NULL
     `);
 
+    // ── Giddings & Lewis horizontal boring mills: box-way, gear drive, CAT50 ──
+    // High torque, low RPM, extreme rigidity. Older PC/HBM series = CAT50;
+    // newer HMC-class machines may use HSK100. Box-way construction is standard.
+    await pool.query(`
+      UPDATE machines SET way_type = 'box', drive_type = 'gear', machine_type = 'hbm'
+      WHERE (brand ILIKE 'Giddings%' OR brand ILIKE 'G&L%' OR brand ILIKE 'G %26 L%')
+        AND way_type IS NULL
+    `);
+    // Default older G&L PC/HBM models to CAT50 if taper not set
+    await pool.query(`
+      UPDATE machines SET taper = 'CAT50'
+      WHERE (brand ILIKE 'Giddings%' OR brand ILIKE 'G&L%')
+        AND taper IS NULL
+        AND (model ILIKE 'PC%' OR model ILIKE 'HBM%' OR model ILIKE '%boring%')
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]
@@ -524,6 +541,132 @@ export async function registerRoutes(
     }
     // Fix any rows inserted under old brand names so search aliases work
     await pool.query(`UPDATE machines SET brand = 'Doosan/DN Solutions' WHERE model ILIKE 'PUMA 2100SY II' AND brand ILIKE 'DN Solutions'`);
+
+    // ── Giddings & Lewis catalog (43 models) ─────────────────────────────────
+    // Heavy boring mills, VTLs, HMCs, and modern MAG platform.
+    // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type]
+    const gnlMachines: [string, string, string, number, number, number, number, number, string, string][] = [
+      // Floor-type HBM
+      ["G60-FX",   "hbm", "CAT50",  2500, 50,  650, 1500, 400, "box", "gear"],
+      ["G60-FXi",  "hbm", "CAT50",  3000, 60,  700, 1600, 450, "box", "gear"],
+      ["G50-FX",   "hbm", "CAT50",  2500, 40,  520, 1200, 400, "box", "gear"],
+      ["G70-FX",   "hbm", "CAT50",  2200, 60,  780, 1800, 350, "box", "gear"],
+      ["G80-FX",   "hbm", "CAT50",  2000, 75,  950, 2200, 300, "box", "gear"],
+      ["G90-FX",   "hbm", "CAT50",  1800, 100, 1200, 3000, 250, "box", "gear"],
+      ["G100-FX",  "hbm", "CAT50",  1500, 125, 1500, 4000, 200, "box", "gear"],
+      // Table-type HBM
+      ["MC40",     "hbm", "CAT50",  3000, 30,  400, 900,  500, "box", "gear"],
+      ["MC50",     "hbm", "CAT50",  2500, 40,  525, 1200, 400, "box", "gear"],
+      ["MC60",     "hbm", "CAT50",  2500, 50,  650, 1500, 400, "box", "gear"],
+      ["MC60-2P",  "hbm", "CAT50",  2500, 50,  650, 1500, 400, "box", "gear"],
+      ["MC70",     "hbm", "CAT50",  2200, 60,  750, 1700, 350, "box", "gear"],
+      ["MC80",     "hbm", "CAT50",  2000, 60,  800, 1800, 350, "box", "gear"],
+      ["MC100",    "hbm", "CAT50",  1800, 75,  1000, 2500, 300, "box", "gear"],
+      // Legacy / classic boring mills
+      ["300",      "hbm", "CAT50",  1200, 50,  1100, 2500, 200, "box", "gear"],
+      ["340T",     "hbm", "CAT50",  1600, 60,  900, 2200, 300, "box", "gear"],
+      ["350T",     "hbm", "CAT50",  1500, 75,  1200, 3000, 250, "box", "gear"],
+      ["360T",     "hbm", "CAT50",  1400, 100, 1400, 3500, 250, "box", "gear"],
+      ["380T",     "hbm", "CAT50",  1200, 125, 1600, 4200, 200, "box", "gear"],
+      ["70H6T",    "hbm", "CAT50",  2000, 50,  650, 1600, 350, "box", "gear"],
+      // VTLs (older CAT50/KM80)
+      ["48 VTC",   "lathe","CAT50", 300,  20,  350, 900,  150, "box", "gear"],
+      ["60 VTC",   "lathe","CAT50", 280,  25,  470, 1200, 150, "box", "gear"],
+      ["72 VTC",   "lathe","KM80",  250,  30,  600, 1500, 120, "box", "gear"],
+      ["84 VTC",   "lathe","KM80",  220,  40,  800, 2000, 120, "box", "gear"],
+      ["96 VTC",   "lathe","KM80",  200,  50,  1000, 2500, 100, "box", "gear"],
+      // VTLs (modern Capto C8)
+      ["VTC1600",  "lathe","CAPTO C8", 2000, 30,  400, 900,  300, "linear", "direct"],
+      ["VTC2000",  "lathe","CAPTO C8", 2000, 35,  500, 1100, 300, "linear", "direct"],
+      ["VTC2500",  "lathe","CAPTO C8", 1800, 40,  600, 1400, 250, "linear", "direct"],
+      ["VTC3000",  "lathe","CAPTO C8", 1500, 45,  750, 1700, 250, "linear", "direct"],
+      ["VTC3500",  "lathe","CAPTO C8", 1200, 50,  900, 2000, 200, "linear", "direct"],
+      // Orion HMCs
+      ["Orion 2000", "hmc", "CAT50", 6000, 35,  300, 500,  1200, "box", "gear"],
+      ["Orion 2300", "hmc", "CAT50", 6000, 40,  350, 600,  1000, "box", "gear"],
+      ["Orion 3000", "hmc", "CAT50", 8000, 50,  330, 550,  1500, "box", "gear"],
+      ["Orion 4000", "hmc", "CAT50", 8000, 60,  400, 650,  1500, "box", "gear"],
+      ["MC1250",   "hmc", "CAT50",  6000, 40,  350, 600,  1200, "box", "gear"],
+      ["MC1600",   "hmc", "CAT50",  6000, 50,  400, 700,  1200, "box", "gear"],
+      // Modern MAG platform (HSK100, linear ways, direct drive)
+      ["MAG RT1000", "hbm", "HSK100", 10000, 50, 260, 420, 2000, "linear", "direct"],
+      ["MAG RT1250", "hbm", "HSK100", 10000, 60, 315, 500, 2000, "linear", "direct"],
+      ["MAG XT",     "hmc", "HSK100", 12000, 70, 300, 480, 2500, "linear", "direct"],
+      ["MAG FTV",    "hbm", "HSK100", 8000,  80, 500, 900, 1500, "linear", "direct"],
+    ];
+    for (const m of gnlMachines) {
+      const [model, mtype, taper, maxRpm, hp, baseTq, peakTq, peakRpm, wayType, driveType] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence)
+        SELECT 'Giddings & Lewis (G&L)', $1, $2, $3, $4, $5, false, '{flood}', $6, $7, $8, $9, $10, $10, 'medium'
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE (brand ILIKE 'Giddings%' OR brand ILIKE 'G&L%') AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq, peakTq, peakRpm]);
+    }
+    // Backfill: any older rows already inserted without the (G&L) alias
+    await pool.query(`UPDATE machines SET brand = 'Giddings & Lewis (G&L)' WHERE brand = 'Giddings & Lewis'`);
+
+    // ── Starrag catalog ──────────────────────────────────────────────────────
+    // Multi-spindle architecture: each spindle variant loaded as a separate row
+    // so users pick the spindle config they're running.
+    // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, way_type, drive_type]
+    const starragMachines: [string, string, string, number, number, number, string, string][] = [];
+    // STC series — 10 base models × 4 spindles = 40 rows (HMC, 5-axis aerospace structural)
+    const stcSizes = ["500", "630", "800", "1000", "1250", "1600", "1800", "2000", "2500", "3000"];
+    for (const sz of stcSizes) {
+      // Motor spindle 18k HSK100 — high-speed titanium/aerospace
+      starragMachines.push([`STC ${sz} (Motor 18k)`,    "5axis", "HSK100", 18000, 107, 184,  "linear", "direct"]);
+      // Gear High 12k HSK100
+      starragMachines.push([`STC ${sz} (Gear High 12k)`, "5axis", "HSK100", 12000, 50,  457,  "linear", "gear"]);
+      // Gear Mid 8k HSK100
+      starragMachines.push([`STC ${sz} (Gear Mid 8k)`,   "5axis", "HSK100", 8000,  50,  693,  "linear", "gear"]);
+      // Gear Low 5.6k HSK100 — max torque for heavy roughing
+      starragMachines.push([`STC ${sz} (Gear Low 5.6k)`, "5axis", "HSK100", 5600,  50,  958,  "linear", "gear"]);
+    }
+    // STC X series — high-speed aluminum, 30k motor spindle HSK63 (6 rows)
+    for (const sz of ["1000", "1250", "1600", "1800", "2000", "2500"]) {
+      starragMachines.push([`STC ${sz} X`, "5axis", "HSK63", 30000, 161, 61, "linear", "direct"]);
+    }
+    // NB series — blisk machines, motor spindle HSK100 (6 rows)
+    for (const sz of ["151", "251", "351", "451", "551", "651"]) {
+      starragMachines.push([`NB ${sz}`, "5axis", "HSK100", 18000, 80, 184, "linear", "direct"]);
+    }
+    // LX series — blade machines (8 rows)
+    starragMachines.push(["LX 021", "5axis", "HSK32", 30000, 25, 44,  "linear", "direct"]);
+    starragMachines.push(["LX 031", "5axis", "HSK32", 30000, 25, 44,  "linear", "direct"]);
+    starragMachines.push(["LX 041", "5axis", "HSK32", 30000, 25, 44,  "linear", "direct"]);
+    starragMachines.push(["LX 051", "5axis", "HSK63", 18000, 37, 120, "linear", "direct"]);
+    starragMachines.push(["LX 101", "5axis", "HSK63", 18000, 37, 120, "linear", "direct"]);
+    starragMachines.push(["LX 151", "5axis", "HSK63", 18000, 38, 133, "linear", "direct"]);
+    starragMachines.push(["LX 251", "5axis", "HSK63", 18000, 38, 133, "linear", "direct"]);
+    starragMachines.push(["LX 351", "5axis", "HSK63", 18000, 38, 133, "linear", "direct"]);
+    // Ecospeed series — large aero structures (5 rows)
+    starragMachines.push(["Ecospeed F", "5axis", "HSK63",  30000, 120, 60,  "linear", "direct"]);
+    starragMachines.push(["Ecospeed B", "5axis", "HSK63",  30000, 120, 60,  "linear", "direct"]);
+    starragMachines.push(["Ecospeed C", "5axis", "HSK63",  24000, 100, 90,  "linear", "direct"]);
+    starragMachines.push(["Ecospeed D", "5axis", "HSK100", 18000, 80,  180, "linear", "direct"]);
+    starragMachines.push(["Ecospeed E", "5axis", "HSK100", 12000, 70,  250, "linear", "direct"]);
+    // Heckert series — horizontal production (5 rows)
+    starragMachines.push(["HEC 500",  "hmc", "HSK63",  12000, 50,  150, "linear", "direct"]);
+    starragMachines.push(["HEC 630",  "hmc", "HSK63",  12000, 60,  180, "linear", "direct"]);
+    starragMachines.push(["HEC 800",  "hmc", "HSK100", 10000, 70,  220, "linear", "direct"]);
+    starragMachines.push(["HEC 1000", "hmc", "HSK100", 8000,  80,  300, "linear", "direct"]);
+    starragMachines.push(["HEC 1250", "hmc", "HSK100", 6000,  100, 500, "box",    "gear"]);
+    // Droop+Rein — portal/gantry (6 rows)
+    starragMachines.push(["FOGS NEO",  "5axis", "HSK100", 6000,  54,  920, "box",    "gear"]);
+    starragMachines.push(["TFS NEO",   "5axis", "HSK100", 6000,  80,  800, "box",    "gear"]);
+    starragMachines.push(["G Series",  "5axis", "HSK100", 8000,  100, 600, "linear", "direct"]);
+    starragMachines.push(["GF Series", "5axis", "HSK100", 10000, 120, 500, "linear", "direct"]);
+    starragMachines.push(["T Series",  "5axis", "HSK100", 6000,  80,  700, "box",    "gear"]);
+    starragMachines.push(["TF Series", "5axis", "HSK100", 6000,  90,  750, "box",    "gear"]);
+
+    for (const m of starragMachines) {
+      const [model, mtype, taper, maxRpm, hp, baseTq, wayType, driveType] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, rated_rpm, curve_confidence)
+        SELECT 'Starrag', $1, $2, $3, $4, $5, true, '{flood,tsc}', $6, $7, $8, $2, 'medium'
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Starrag%' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq]);
+    }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
