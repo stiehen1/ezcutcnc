@@ -1098,6 +1098,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                 className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
                                 <option value="vmc">VMC</option>
                                 <option value="hmc">HMC</option>
+                                <option value="hbm">HBM (Horizontal Boring Mill)</option>
                                 <option value="5axis">5-Axis</option>
                                 <option value="lathe">Lathe</option>
                                 <option value="mill_turn">Mill-Turn</option>

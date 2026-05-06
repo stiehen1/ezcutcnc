@@ -482,6 +482,22 @@ export async function registerRoutes(
       WHERE brand ILIKE 'Hurco%' AND way_type IS NULL
     `);
 
+    // ── Giddings & Lewis horizontal boring mills: box-way, gear drive, CAT50 ──
+    // High torque, low RPM, extreme rigidity. Older PC/HBM series = CAT50;
+    // newer HMC-class machines may use HSK100. Box-way construction is standard.
+    await pool.query(`
+      UPDATE machines SET way_type = 'box', drive_type = 'gear', machine_type = 'hbm'
+      WHERE (brand ILIKE 'Giddings%' OR brand ILIKE 'G&L%' OR brand ILIKE 'G %26 L%')
+        AND way_type IS NULL
+    `);
+    // Default older G&L PC/HBM models to CAT50 if taper not set
+    await pool.query(`
+      UPDATE machines SET taper = 'CAT50'
+      WHERE (brand ILIKE 'Giddings%' OR brand ILIKE 'G&L%')
+        AND taper IS NULL
+        AND (model ILIKE 'PC%' OR model ILIKE 'HBM%' OR model ILIKE '%boring%')
+    `);
+
     // Insert live-tool lathe catalog entries (INSERT … WHERE NOT EXISTS to stay idempotent)
     const liveToolMachines = [
       // [brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, machine_type, control, lt_rpm, lt_hp, lt_coolant, lt_conn, lt_drive]

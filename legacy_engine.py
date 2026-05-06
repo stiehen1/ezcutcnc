@@ -917,6 +917,9 @@ def rigidity_factor(data):
     taper = data.get("spindle_taper", "CAT40")
     if taper and taper.startswith("HSK"):
         r *= 1.05
+    # Horizontal boring mills: massive castings, box ways, gear drive — extreme rigidity
+    if str(data.get("machine_type", "")).lower() == "hbm":
+        r *= 1.15
     return r
 
 def hem_target_woc_pct(data, material_group, flutes):
