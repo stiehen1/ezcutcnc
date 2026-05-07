@@ -504,7 +504,12 @@ export default function Mentor() {
     const adminEmails = ["scott@corecutterusa.com"];
     const stored = localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "";
     if (adminEmails.includes(stored.toLowerCase())) return false;
-    return !localStorage.getItem("cc_user_name");
+    // Already registered if any identity field is present (cc_user_name is the
+    // canonical key but legacy users may only have cc_first_name or welcome_seen)
+    if (localStorage.getItem("cc_user_name")) return false;
+    if (localStorage.getItem("cc_first_name")) return false;
+    if (localStorage.getItem("welcome_seen")) return false;
+    return true;
   });
   const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
   const [welcomeLastName, setWelcomeLastName] = React.useState("");
