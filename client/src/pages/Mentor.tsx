@@ -504,11 +504,11 @@ export default function Mentor() {
     const adminEmails = ["scott@corecutterusa.com"];
     const stored = localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "";
     if (adminEmails.includes(stored.toLowerCase())) return false;
-    // Already registered if any identity field is present (cc_user_name is the
-    // canonical key but legacy users may only have cc_first_name or welcome_seen)
-    if (localStorage.getItem("cc_user_name")) return false;
-    if (localStorage.getItem("cc_first_name")) return false;
-    if (localStorage.getItem("welcome_seen")) return false;
+    // Already identified through ANY path: welcome modal, toolbox login,
+    // favorite gate, lead capture, or legacy walkthrough. Any of these means
+    // the user has already registered — never show the welcome modal again.
+    const REGISTRATION_KEYS = ["cc_user_name", "cc_first_name", "welcome_seen", "tb_email", "er_email"];
+    if (REGISTRATION_KEYS.some(k => localStorage.getItem(k))) return false;
     return true;
   });
   const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
