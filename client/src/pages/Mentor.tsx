@@ -4761,69 +4761,31 @@ ${stabSection}
           })()}
           </>)}
 
-          {/* Hole Details — reaming */}
-          {operation === "reaming" && (<>
+          {/* Hole Details — reaming. Reamers are always special prints (CC makes no
+              standard reamers), so finished dia and hole depth come from the PDF.
+              Only Hole Type (Through/Blind) is needed from the user since that's
+              about the part, not the tool. Fields hidden until PDF is uploaded. */}
+          {operation === "reaming" && pdfExtracted && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Hole Details</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
-          <div className="flex gap-2 mb-3">
-            {([{ val: false, label: "Single Diameter" }, { val: true, label: "Multi-Diameter" }] as const).map(({ val, label }) => (
-              <button key={label} type="button"
-                onClick={() => { setReamMultiDia(val); if (!val) setForm(p => ({ ...p, ream_steps: 0, ream_step_diameters: [], ream_step_lengths: [] })); }}
-                className="flex-1 rounded py-1.5 text-xs font-semibold border transition-all"
-                style={{ backgroundColor: reamMultiDia === val ? "#6366f1" : "transparent", borderColor: "#6366f1", color: reamMultiDia === val ? "#fff" : "#6366f1" }}
-              >{label}</button>
-            ))}
-          </div>
-          {reamMultiDia ? (
-            <p className="text-xs text-zinc-400 mb-3">Upload a special print below — step diameters and lengths will be extracted automatically.</p>
-          ) : (
-          <div className="space-y-1.5 mb-3">
-            <FieldLabel hint="The finished hole diameter called out on the print. The reamer will be ground to this nominal size.">
-              {UL("Finished Hole Dia (in.)", "Finished Hole Dia (mm)")}
-            </FieldLabel>
-            <Input type="text" inputMode="decimal" className={`no-spinners ${!(form.tool_dia > 0) ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : ""}`}
-              placeholder={metric ? "e.g. 12.700" : "e.g. 0.5000"}
-              value={reamFinishedDiaText}
-              onChange={(e) => setReamFinishedDiaText(e.target.value)}
-              onBlur={() => {
-                const n = parseDim(reamFinishedDiaText);
-                if (Number.isFinite(n) && n > 0) {
-                  const stock = reamStockRange(n);
-                  const preDrill = stock ? +(n - stock.ideal).toFixed(4) : 0;
-                  setForm((p) => ({ ...p, tool_dia: n, ream_pre_drill_dia: preDrill }));
-                  setReamFinishedDiaText(metric ? (n * 25.4).toFixed(3) : n.toFixed(4));
-                }
-              }}
-            />
-          </div>
-          )}
-          {!reamMultiDia && <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <FieldLabel hint="Total depth of the hole to be reamed. Used to calculate depth-to-diameter ratio and apply depth correction factors.">{UL("Hole Depth (in.)", "Hole Depth (mm)")}</FieldLabel>
-              <Input type="number" step={metric ? "0.1" : "0.001"} className="no-spinners"
-                value={form.ream_hole_depth ? (metric ? (form.ream_hole_depth * 25.4).toFixed(2) : form.ream_hole_depth) : ""}
-                onChange={onUnitNum("ream_hole_depth", 25.4)} />
+          <div className="space-y-2 max-w-xs">
+            <FieldLabel hint="Through holes allow chips to exit ahead of the reamer. Blind holes trap chips — coolant-fed is strongly recommended for blind holes in any difficult material.">Hole Type</FieldLabel>
+            <div className="flex gap-2 pt-1">
+              {([{ val: false, label: "Through" }, { val: true, label: "Blind" }] as const).map(({ val, label }) => (
+                <button key={label} type="button"
+                  onClick={() => setForm((p) => ({ ...p, ream_blind: val }))}
+                  className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
+                  style={{
+                    backgroundColor: form.ream_blind === val ? "#6366f1" : "transparent",
+                    borderColor: "#6366f1", color: form.ream_blind === val ? "#fff" : "#6366f1",
+                  }}
+                >{label}</button>
+              ))}
             </div>
-            <div className="space-y-2">
-              <FieldLabel hint="Through holes allow chips to exit ahead of the reamer. Blind holes trap chips — coolant-fed is strongly recommended for blind holes in any difficult material.">Hole Type</FieldLabel>
-              <div className="flex gap-2 pt-1">
-                {([{ val: false, label: "Through" }, { val: true, label: "Blind" }] as const).map(({ val, label }) => (
-                  <button key={label} type="button"
-                    onClick={() => setForm((p) => ({ ...p, ream_blind: val }))}
-                    className="flex-1 rounded py-2 text-xs font-semibold border transition-all"
-                    style={{
-                      backgroundColor: form.ream_blind === val ? "#6366f1" : "transparent",
-                      borderColor: "#6366f1", color: form.ream_blind === val ? "#fff" : "#6366f1",
-                    }}
-                  >{label}</button>
-                ))}
-              </div>
-            </div>
-          </div>}
-
+          </div>
           </>)}
 
           {/* Thread Details — thread milling */}
