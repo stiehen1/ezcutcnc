@@ -676,6 +676,34 @@ export async function registerRoutes(
       UPDATE machines SET mill_spindle_max_rpm = 15000, mill_spindle_hp = 30, mill_spindle_taper = 'HSK63'
       WHERE brand = 'Matsuura' AND model = 'CUBLEX-63' AND mill_spindle_max_rpm IS NULL
     `);
+    // Bumotec s-181 (HSK-E40 ≈ HSK50 in our enum): 30k RPM, 7.4 HP, HSK50
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 30000, mill_spindle_hp = 7.4, mill_spindle_taper = 'HSK50'
+      WHERE brand = 'Bumotec' AND model = 's-181' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Bumotec s-191 / s-191+: 36k RPM, 11 HP, HSK50 (HSK-E40)
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 36000, mill_spindle_hp = 11, mill_spindle_taper = 'HSK50'
+      WHERE brand = 'Bumotec' AND model IN ('s-191','s-191+') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Index G220 (HSK-T63 config): 12k RPM, 22.8 HP, HSK63
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 22.8, mill_spindle_taper = 'HSK63'
+      WHERE brand = 'Index' AND model = 'G220' AND mill_spindle_hp IS NULL
+    `);
+    // Hyundai WIA L300LMC / L400LMC: actually Y-axis box-way live-tool lathes,
+    // not B-axis mill-turns. Re-tag from mill_turn to lathe.
+    await pool.query(`
+      UPDATE machines SET machine_type = 'lathe'
+      WHERE brand = 'Hyundai WIA' AND model IN ('L300LMC','L400LMC') AND machine_type = 'mill_turn'
+    `);
+    // Matsuura MX-520T: 5-axis trunnion VMC with C-axis turning, NOT a B-axis
+    // head mill-turn. Re-tag to 5axis (uses main spindle for both milling + turning).
+    await pool.query(`
+      UPDATE machines SET machine_type = '5axis',
+        mill_spindle_max_rpm = NULL, mill_spindle_hp = NULL, mill_spindle_taper = NULL
+      WHERE brand = 'Matsuura' AND model = 'MX-520T' AND machine_type = 'mill_turn'
+    `);
 
     // ── Giddings & Lewis catalog (43 models) ─────────────────────────────────
     // Heavy boring mills, VTLs, HMCs, and modern MAG platform.
