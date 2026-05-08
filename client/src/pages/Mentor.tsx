@@ -1107,7 +1107,7 @@ export default function Mentor() {
     const m: Record<string, string> = {
       mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", hbm: "HBM (Horizontal Boring Mill)", lathe: "Lathe",
       "5-axis vmc": "5-Axis VMC", "5-axis hmc": "5-Axis HMC",
-      swiss: "Swiss", "double column": "Double Column",
+      swiss: "Swiss", double_column: "Double Column", "double column": "Double Column",
     };
     return m[t.trim().toLowerCase()] ?? t;
   };
@@ -1192,11 +1192,17 @@ export default function Mentor() {
     const validTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","VDI30","VDI40","VDI50","BMT45","BMT55","BMT65","CAPTO C6","CAPTO C8"];
     const rawTaper = (_taperNorm && validTapers.includes(_taperNorm)) ? _taperNorm : _taperRaw;
     const rawDrive = typeof m.drive_type === "string" ? m.drive_type.trim().toLowerCase() : null;
-    const rawMachType = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
+    const rawMachTypeStr = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
+    // Normalize legacy/free-form machine_type values to the canonical Zod enum
+    const rawMachType = rawMachTypeStr
+      ?.replace(/\s+/g, "_")
+      .replace(/^5-axis_vmc$/, "5axis")
+      .replace(/^5-axis_hmc$/, "5axis")
+      .replace(/^5-axis$/, "5axis") ?? null;
     const validDrives = ["direct", "belt", "gear"];
-    const validMachTypes = ["vmc", "hmc", "hbm", "5axis", "mill_turn", "lathe", "5-axis vmc", "5-axis hmc", "swiss", "double column"];
+    const validMachTypes = ["vmc", "hmc", "hbm", "5axis", "mill_turn", "lathe", "swiss", "double_column"];
     const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
-    const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : null) ?? m.machine_type;
+    const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : "vmc");
     const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
     // Normalize mill spindle taper the same way as main taper
     const _millTaperRaw = typeof m.mill_spindle_taper === "string" ? m.mill_spindle_taper.trim() : null;
@@ -1820,7 +1826,7 @@ export default function Mentor() {
     chamfer_depth: 0,
 
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "HSK125" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8" | "KM80",
-    machine_type: "vmc" as "vmc" | "hmc" | "hbm" | "5axis" | "mill_turn" | "lathe",
+    machine_type: "vmc" as "vmc" | "hmc" | "hbm" | "5axis" | "mill_turn" | "lathe" | "swiss" | "double_column",
     mill_spindle_rpm: 0,        // B-axis mill spindle RPM (mill_turn only)
     mill_spindle_hp: 0,         // B-axis mill spindle HP (mill_turn only)
     sub_spindle_rpm: 0,         // C-axis sub spindle RPM (mill_turn only)
