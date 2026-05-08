@@ -1842,7 +1842,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -6045,7 +6045,7 @@ ${stabSection}
                   { key: "hmc",       label: "HMC",        hint: "Horizontal Machining Center — spindle is horizontal. Chips fall away from the cut, better for deep pockets and high-volume production. Typically stiffer than VMC." },
                   { key: "5axis",     label: "5-Axis",     hint: "5-Axis simultaneous machining — spindle can tilt and rotate. Enables complex contoured surfaces in one setup, but shorter effective stickout required for stability." },
                   { key: "mill_turn", label: "Mill/Turn",  hint: "Mill/Turn machine (e.g. Mazak Integrex, DMG NTX) — dedicated multi-tasking center with full milling spindle and turning capability. Live tool RPM and HP are typically lower than a VMC." },
-                  { key: "lathe",     label: "Lathe (Live Tool)", hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
+                  { key: "lathe",     label: "Lathe (LT)", hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
                   { key: "swiss",     label: "Swiss",      hint: "Swiss-style sliding-headstock lathe (Tornos, Citizen, Star, Tsugami). Live tool stations have very limited HP (typically 1–3 HP) and RPM ceilings around 8,000–10,000. Small tool diameters, short stickout, light cuts." },
                 ] as const).map(({ key, label, hint }) => (
                   <Tooltip key={key}>
@@ -6079,7 +6079,7 @@ ${stabSection}
                             p.spindle_taper;
                           return { ...p, machine_type: key, workholding: defaultWH, toolholder: thReset, spindle_taper: taperReset };
                         })}
-                        className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                        className="rounded px-2.5 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
                         style={{
                           backgroundColor: form.machine_type === key ? "#6366f1" : "transparent",
                           borderColor: "#6366f1",
@@ -6111,7 +6111,9 @@ ${stabSection}
               }>Spindle Interface</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  (form.machine_type === "lathe" || form.machine_type === "swiss")
+                  form.machine_type === "swiss"
+                  ? (["VDI30","VDI40","BMT45","HSK32","CAPTO C6"] as const)  /* Swiss: smaller VDI/BMT + HSK-E32 (HSK32) + Capto C4 (~C6) on premium */
+                  : form.machine_type === "lathe"
                   ? (["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const)
                   : form.machine_type === "hmc"
                   ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100","HSK125"] as const)
@@ -6477,7 +6479,17 @@ ${stabSection}
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  (form.machine_type === "lathe" || form.machine_type === "swiss" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
+                  form.machine_type === "swiss"
+                  ? ([
+                      /* Swiss-specific ordering — collet is the standard, gang tooling is the most rigid mounting */
+                      { key: "gang_tooling",        label: "Gang Tooling"        },
+                      { key: "guide_bushing",       label: "Guide Bushing"       },
+                      { key: "collet_chuck",        label: "Dead-Length Collet"  },
+                      { key: "soft_jaws",           label: "Soft/Emergency Collet" },
+                      { key: "step_jaws",           label: "Step Collet"         },
+                      { key: "expanding_mandrel",   label: "Expanding Collet"    },
+                    ] as const)
+                  : (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? ([
                       /* Tier 1 — best contact/conformity under C-axis milling side loads */
                       { key: "soft_jaws",           label: "Soft Jaws"         },
@@ -6492,13 +6504,11 @@ ${stabSection}
                       { key: "3_jaw_chuck",         label: "3-Jaw Hard Jaws"   },
                       { key: "step_jaws",           label: "Step Jaws"         },
                       { key: "expanding_mandrel",   label: "Expanding Mandrel" },
-                      /* Support — lathe only (sub-spindle has no tailstock/steady rest; Swiss uses guide bushing instead) */
+                      /* Support — lathe only (sub-spindle has no tailstock/steady rest) */
                       ...(form.machine_type === "lathe" ? [
                         { key: "tailstock_supported" as const, label: "Tailstock"       },
                         { key: "between_centers"     as const, label: "Between Centers" },
                         { key: "steady_rest"         as const, label: "Steady Rest"     },
-                      ] : form.machine_type === "swiss" ? [
-                        { key: "guide_bushing"       as const, label: "Guide Bushing"   },
                       ] : []),
                     ] as const)
                   : form.machine_type === "mill_turn"
