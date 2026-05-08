@@ -6715,6 +6715,10 @@ ${stabSection}
             <div className="mt-3">
               <FieldLabel hint={(() => {
                 const w = form.workholding;
+                const isSwiss = form.machine_type === "swiss";
+                // On Swiss, every option in the workholding list is a collet of some kind
+                if (isSwiss && (w === "expanding_mandrel" || w === "step_jaws" || w === "soft_jaws" || w === "collet_chuck"))
+                  return "Distance from the collet face to the cut location. On Swiss work, overhang is normally sub-inch since the part is supported by the guide bushing — long overhang past the collet means the bushing isn't engaged.";
                 if (w === "collet_chuck") return "Distance from the collet face to the cut location. Long overhang past the collet adds significant compliance — every extra diameter of stickout multiplies deflection. Leave blank if the cut is close to the collet.";
                 if (w === "guide_bushing") return "Distance from the guide bushing face to the cut location. Swiss machines work right at the bushing — overhang is normally tiny (<0.5×D). If your cut is far from the bushing, the bar acts as a cantilever again.";
                 if (w === "gang_tooling") return "Distance from the gang slide reference face to the cut location. Gang tooling minimizes this by design — sub-inch overhang is typical.";
@@ -6723,6 +6727,17 @@ ${stabSection}
                 return "Distance from the workholding face to the cut location. Longer part overhang adds compliance — a long part deflects far more than a stubby one.";
               })()}>{(() => {
                 const w = form.workholding;
+                const isSwiss = form.machine_type === "swiss";
+                // Swiss: all of expanding_mandrel/step_jaws/soft_jaws/collet_chuck are
+                // displayed as collet variants — match the overhang label to the button
+                if (isSwiss) {
+                  if (w === "collet_chuck")      return "Overhang Past Dead-Length Collet (in)";
+                  if (w === "soft_jaws")         return "Overhang Past Soft/Emergency Collet (in)";
+                  if (w === "step_jaws")         return "Overhang Past Step Collet (in)";
+                  if (w === "expanding_mandrel") return "Overhang Past Expanding Collet (in)";
+                  if (w === "guide_bushing")     return "Overhang Past Guide Bushing (in)";
+                  if (w === "gang_tooling")      return "Overhang Past Gang Slide (in)";
+                }
                 if (w === "collet_chuck") return "Part Overhang Past Collet (in)";
                 if (w === "guide_bushing") return "Overhang Past Guide Bushing (in)";
                 if (w === "gang_tooling") return "Overhang Past Gang Slide (in)";
