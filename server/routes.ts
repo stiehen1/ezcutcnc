@@ -605,6 +605,22 @@ export async function registerRoutes(
     // Backfill: any older rows already inserted without the (G&L) alias
     await pool.query(`UPDATE machines SET brand = 'Giddings & Lewis (G&L)' WHERE brand = 'Giddings & Lewis'`);
 
+    // ── Swiss machines: re-tag from 'lathe' to 'swiss' and populate sub-spindle ─
+    await pool.query(`
+      UPDATE machines SET machine_type = 'swiss'
+      WHERE machine_type = 'lathe'
+        AND (
+          brand ILIKE 'Citizen%' OR brand ILIKE 'Tsugami%' OR brand ILIKE 'Tornos%'
+          OR brand ILIKE 'Star %' OR brand = 'Star' OR brand ILIKE 'Star CNC%'
+        )
+    `);
+    // Swiss machines almost always have a sub-spindle for back-working —
+    // default sub_spindle_rpm to the live_tool RPM if not set
+    await pool.query(`
+      UPDATE machines SET sub_spindle_rpm = COALESCE(sub_spindle_rpm, live_tool_max_rpm, max_rpm)
+      WHERE machine_type = 'swiss' AND sub_spindle_rpm IS NULL
+    `);
+
     // ── Starrag catalog ──────────────────────────────────────────────────────
     // Multi-spindle architecture: each spindle variant loaded as a separate row
     // so users pick the spindle config they're running.

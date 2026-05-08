@@ -1265,6 +1265,8 @@ export default function Mentor() {
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
       sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
+      // Auto-enable sub-spindle flag if the catalog machine has one
+      lathe_has_sub_spindle: isLiveToolType && (_machData.sub_rpm ?? 0) > 0 ? true : p.lathe_has_sub_spindle,
       live_tool_connection: (typeof m.live_tool_connection === "string" ? m.live_tool_connection : "") || "",
       live_tool_hp: _machData.live_hp ?? 0,
     }));
@@ -5817,7 +5819,10 @@ ${stabSection}
           {(form.machine_type === "lathe" || form.machine_type === "swiss") && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <FieldLabel hint="Enable if your lathe has a sub-spindle (e.g. Mazak QTN, Nakamura-Tome, Doosan Lynx). Adds a Main / Sub selector so the engine knows which spindle is doing the work.">Sub-Spindle</FieldLabel>
+                <FieldLabel hint={form.machine_type === "swiss"
+                  ? "Enable if your Swiss has a sub-spindle for back-working (most modern Tornos / Citizen / Star / Tsugami machines do). Adds a Main / Sub selector. Swiss sub-spindles typically use ER11 or ER16 collets and have lower HP than the main spindle."
+                  : "Enable if your lathe has a sub-spindle (e.g. Mazak QTN, Nakamura-Tome, Doosan Lynx). Adds a Main / Sub selector so the engine knows which spindle is doing the work."
+                }>Sub-Spindle</FieldLabel>
                 <button
                   type="button"
                   onClick={() => {
@@ -6462,7 +6467,9 @@ ${stabSection}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
               <FieldLabel hint={
                 form.machine_type === "swiss"
-                  ? "Swiss-specific workholding. Bar is gripped by a dead-length collet on the main spindle and supported at the cut zone by the guide bushing — the bushing acts as a secondary workholder right at the cutting plane. Most rigid to least rigid: Gang Tooling → Guide Bushing → Dead-Length Collet → Soft/Emergency Collet → Step Collet → Expanding Collet. Hover any option for details."
+                  ? (selectedSpindle === "sub"
+                      ? "Swiss sub-spindle workholding — pickoff/back-working. ER collet (typically ER11 or ER16) is the standard. Soft/emergency collets for unusual geometries; step collets for second-op work; expanding collets for ID-grip on finished ODs. No gang slide or guide bushing on the sub-spindle."
+                      : "Swiss main spindle workholding. Bar is gripped by a dead-length collet and supported at the cut zone by the guide bushing — the bushing acts as a secondary workholder right at the cutting plane. Most rigid to least rigid: Gang Tooling → Guide Bushing → Dead-Length Collet → Soft/Emergency Collet → Step Collet → Expanding Collet. Hover any option for details.")
                   : (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? (form.machine_type === "lathe"
                     ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (great runout, watch torque capacity). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel. Add Tailstock or Steady Rest for long parts."
@@ -6482,15 +6489,24 @@ ${stabSection}
               <div className="flex flex-wrap gap-1.5">
                 {(
                   form.machine_type === "swiss"
-                  ? ([
-                      /* Swiss-specific ordering — collet is the standard, gang tooling is the most rigid mounting */
-                      { key: "gang_tooling",        label: "Gang Tooling"        },
-                      { key: "guide_bushing",       label: "Guide Bushing"       },
-                      { key: "collet_chuck",        label: "Dead-Length Collet"  },
-                      { key: "soft_jaws",           label: "Soft/Emergency Collet" },
-                      { key: "step_jaws",           label: "Step Collet"         },
-                      { key: "expanding_mandrel",   label: "Expanding Collet"    },
-                    ] as const)
+                  ? (selectedSpindle === "sub"
+                      ? ([
+                          /* Swiss sub-spindle — pickoff for back-working. No gang slide or guide bushing. */
+                          { key: "collet_chuck",        label: "ER Collet"             },
+                          { key: "soft_jaws",           label: "Soft/Emergency Collet" },
+                          { key: "step_jaws",           label: "Step Collet"           },
+                          { key: "expanding_mandrel",   label: "Expanding Collet"      },
+                        ] as const)
+                      : ([
+                          /* Swiss main spindle — bar-fed through guide bushing, gang slide tooling */
+                          { key: "gang_tooling",        label: "Gang Tooling"        },
+                          { key: "guide_bushing",       label: "Guide Bushing"       },
+                          { key: "collet_chuck",        label: "Dead-Length Collet"  },
+                          { key: "soft_jaws",           label: "Soft/Emergency Collet" },
+                          { key: "step_jaws",           label: "Step Collet"         },
+                          { key: "expanding_mandrel",   label: "Expanding Collet"    },
+                        ] as const)
+                  )
                   : (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? ([
                       /* Tier 1 — best contact/conformity under C-axis milling side loads */
