@@ -5962,7 +5962,7 @@ ${stabSection}
                   >
                     <div>{label}</div>
                     <div className="text-xs font-normal mt-0.5 opacity-75 flex-1">{note}</div>
-                    <div className="text-xs font-bold mt-1">{rpm.toLocaleString()} RPM · {hp} HP</div>
+                    <div className="text-xs font-bold mt-1 whitespace-nowrap">{rpm.toLocaleString()} RPM · {hp} HP</div>
                   </button>
                 ))}
               </div>
