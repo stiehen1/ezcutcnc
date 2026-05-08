@@ -5873,37 +5873,77 @@ ${stabSection}
           {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
           {form.machine_type === "mill_turn" && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
-              <FieldLabel hint="Select which spindle this operation runs on. B-axis / milling spindle is the dedicated high-speed milling head — use this for all milling ops. A-axis / main spindle is the turning spindle (lower RPM, higher torque). C-axis / sub spindle for backwork.">Active Spindle</FieldLabel>
+              {(() => {
+                const _hasSub = !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0);
+                const diagram = _hasSub
+                  ? `     ┌──────────────┐
+     │   B-AXIS     │  ← milling head
+     │  (Capto/HSK) │     (cutting tool)
+     └──────┬───────┘
+            │ cuts ↓
+    ╔═══════╪═══════╗
+    ║ A-AXIS│C-AXIS ║  ← workpiece
+    ║ (main)│ (sub) ║     (chuck/collet)
+    ╚═══════╧═══════╝`
+                  : `   ┌──────────────┐
+   │   B-AXIS     │  ← milling head
+   │  (Capto/HSK) │     (cutting tool)
+   └──────┬───────┘
+          │ cuts ↓
+   ╔══════╧══════╗
+   ║   A-AXIS    ║  ← workpiece
+   ║   (main)    ║     (chuck/collet)
+   ╚═════════════╝
+   (no sub-spindle on this machine)`;
+                return (
+              <FieldLabel hint={<div className="space-y-1.5">
+                <p>Select the cutting context for this operation.</p>
+                <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">{diagram}</pre>
+                <p><strong>A-Axis Spindle</strong> = turning op (lower RPM, higher torque).</p>
+                <p><strong>B-Axis (Main Workholding)</strong> = B-axis milling head, part in A-axis main chuck.</p>
+                {_hasSub && <p><strong>B-Axis (Sub Workholding)</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>}
+                <p className="text-zinc-400 italic">The B-axis drives all milling cuts regardless of which chuck holds the part — only the workholding context changes.</p>
+              </div>}>Active Spindle</FieldLabel>
+                );
+              })()}
               <div className="flex gap-2 flex-wrap">
-                {([
-                  { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
-                    rpm: activeMachineData?.main_rpm ?? form.max_rpm,
-                    hp:  activeMachineData?.main_hp  ?? form.machine_hp,
-                    show: true },
-                  { key: "mill" as const, label: "B-Axis Spindle", note: "High-speed milling head",
-                    rpm: form.mill_spindle_rpm || activeMachineData?.mill_rpm || 0,
-                    hp:  form.mill_spindle_hp  || activeMachineData?.mill_hp  || form.machine_hp,
-                    show: !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm) },
-                  { key: "sub"  as const, label: "C-Axis Spindle", note: "Sub spindle / backwork",
-                    rpm: form.sub_spindle_rpm  || activeMachineData?.sub_rpm  || manualSubRpm,
-                    hp:  activeMachineData?.main_hp ?? form.machine_hp,
-                    show: !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0) },
-                ].filter(o => o.show)).map(({ key, label, note, rpm, hp }) => (
+                {(() => {
+                  // B-axis (milling head) is what actually drives the cut — even when the
+                  // workpiece is on the C-axis sub-spindle. So 'sub' uses B-axis cutting
+                  // specs but C-axis workholding context.
+                  const bAxisRpm   = form.mill_spindle_rpm || activeMachineData?.mill_rpm || 0;
+                  const bAxisHp    = form.mill_spindle_hp  || activeMachineData?.mill_hp  || form.machine_hp;
+                  const hasBAxis   = !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm);
+                  const hasSubChuck = !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0);
+                  return [
+                    { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
+                      rpm: activeMachineData?.main_rpm ?? form.max_rpm,
+                      hp:  activeMachineData?.main_hp  ?? form.machine_hp,
+                      show: true },
+                    { key: "mill" as const, label: "B-Axis (Main Workholding)", note: "B-axis milling head, part on A-axis chuck",
+                      rpm: bAxisRpm,
+                      hp:  bAxisHp,
+                      show: hasBAxis },
+                    { key: "sub"  as const, label: "B-Axis (Sub Workholding)", note: "B-axis milling head, part on C-axis sub-spindle",
+                      rpm: bAxisRpm,        /* still cutting with the B-axis */
+                      hp:  bAxisHp,         /* still B-axis HP */
+                      show: hasBAxis && hasSubChuck },
+                  ];
+                })().filter(o => o.show).map(({ key, label, note, rpm, hp }) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => {
                       setSelectedSpindle(key);
                       setForm(p => {
-                        // Taper: B-axis uses mill spindle taper, others keep current
+                        // B-axis taper applies whenever cut is happening on the milling head
+                        // (both 'mill' = part-in-A-axis and 'sub' = part-in-C-axis).
                         const _millTaper = activeMachineDataRef.current?.mill_taper ?? activeMachineData?.mill_taper;
-                        const newTaper = key === "mill" && _millTaper
+                        const newTaper = (key === "mill" || key === "sub") && _millTaper
                           ? _millTaper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
-                        // Workholding: C-axis → collet_chuck (sub has its own chuck options now)
-                        // B-axis → clear anything that doesn't apply to part-in-chuck milling
-                        // A-axis → keep current unless it was a C-axis-only choice
+                        // Workholding switches by part-holding spindle context
                         const bAxisIncompat = ["sub_spindle", "tailstock_supported", "between_centers", "steady_rest", "tombstone", "5th_axis_vise", "vise", "toe_clamps"] as string[];
                         const cAxisIncompat = ["tailstock_supported", "between_centers", "steady_rest", "expanding_mandrel", "dovetail", "rigid_fixture", "modular_quickchange", "secondary_op_vise", "tombstone", "5th_axis_vise", "vise", "toe_clamps", "sub_spindle"] as string[];
                         const newWH = key === "sub"  && cAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
@@ -6671,12 +6711,31 @@ ${stabSection}
           </div>
 
           {/* Part Stickout — shown when workholding is a chuck or trunnion */}
-          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers"] as string[]).includes(form.workholding) && (
+          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck","step_jaws","expanding_mandrel","form_jaws","pie_jaws","soft_jaws","tailstock_supported","steady_rest","gang_tooling","guide_bushing"] as string[]).includes(form.workholding) && (
             <div className="mt-3">
-              <FieldLabel hint="Distance from the chuck jaw face (or trunnion fixture face) to the cut location. Longer part overhang adds compliance — a long part sticking out of a chuck deflects far more than a stubby one. Leave blank if the cut is close to the jaws.">Part Overhang Past Jaws (in)</FieldLabel>
+              <FieldLabel hint={(() => {
+                const w = form.workholding;
+                if (w === "collet_chuck") return "Distance from the collet face to the cut location. Long overhang past the collet adds significant compliance — every extra diameter of stickout multiplies deflection. Leave blank if the cut is close to the collet.";
+                if (w === "guide_bushing") return "Distance from the guide bushing face to the cut location. Swiss machines work right at the bushing — overhang is normally tiny (<0.5×D). If your cut is far from the bushing, the bar acts as a cantilever again.";
+                if (w === "gang_tooling") return "Distance from the gang slide reference face to the cut location. Gang tooling minimizes this by design — sub-inch overhang is typical.";
+                if (w === "trunnion_4th") return "Distance from the trunnion fixture face to the cut location.";
+                if (w === "between_centers" || w === "tailstock_supported" || w === "steady_rest") return "Distance from the supported end (chuck/center/rest) to the cut location.";
+                return "Distance from the workholding face to the cut location. Longer part overhang adds compliance — a long part deflects far more than a stubby one.";
+              })()}>{(() => {
+                const w = form.workholding;
+                if (w === "collet_chuck") return "Part Overhang Past Collet (in)";
+                if (w === "guide_bushing") return "Overhang Past Guide Bushing (in)";
+                if (w === "gang_tooling") return "Overhang Past Gang Slide (in)";
+                if (w === "trunnion_4th") return "Part Overhang Past Trunnion Face (in)";
+                if (w === "expanding_mandrel") return "Part Overhang Past Mandrel Face (in)";
+                if (w === "between_centers" || w === "tailstock_supported" || w === "steady_rest") return "Distance from Support to Cut (in)";
+                if (w === "step_jaws" || w === "form_jaws" || w === "pie_jaws" || w === "soft_jaws") return "Part Overhang Past Jaw Face (in)";
+                if (w === "hydraulic_chuck" || w === "power_chuck") return "Part Overhang Past Chuck Face (in)";
+                return "Part Overhang Past Jaws (in)";
+              })()}</FieldLabel>
               <Input
                 type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 2.500"
+                placeholder={(form.workholding === "guide_bushing" || form.workholding === "gang_tooling") ? "e.g. 0.250" : form.workholding === "collet_chuck" ? "e.g. 1.000" : "e.g. 2.500"}
                 value={form.part_stickout > 0 ? form.part_stickout.toFixed(3) : ""}
                 onChange={e => {
                   const n = parseFloat(e.target.value);
