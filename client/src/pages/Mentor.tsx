@@ -6053,7 +6053,15 @@ ${stabSection}
               </div>
             )}
             <div className="space-y-2">
-              <FieldLabel hint={(form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool station HP — typically 5–10 HP on most lathes (1–3 HP on Swiss). The engine uses this for milling power calcs." : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."}>{(form.machine_type === "lathe" || form.machine_type === "swiss") ? UL("Live Tool HP", "Live Tool kW") : UL("Machine HP", "Machine kW")}</FieldLabel>
+              <FieldLabel hint={
+                (form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool station HP — typically 5–10 HP on most lathes (1–3 HP on Swiss). The engine uses this for milling power calcs."
+                : form.machine_type === "mill_turn" ? "A-axis main turning spindle HP — used when running an A-axis turning operation. Milling cuts use B-Axis HP instead."
+                : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."
+              }>{
+                (form.machine_type === "lathe" || form.machine_type === "swiss") ? UL("Live Tool HP", "Live Tool kW")
+                : form.machine_type === "mill_turn" ? UL("A-Axis HP", "A-Axis kW")
+                : UL("Machine HP", "Machine kW")
+              }</FieldLabel>
               <Input
                 type="number"
                 step={metric ? "0.1" : "0.5"}
