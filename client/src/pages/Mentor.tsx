@@ -5873,37 +5873,62 @@ ${stabSection}
           {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
           {form.machine_type === "mill_turn" && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
-              <FieldLabel hint="Select which spindle this operation runs on. B-axis / milling spindle is the dedicated high-speed milling head — use this for all milling ops. A-axis / main spindle is the turning spindle (lower RPM, higher torque). C-axis / sub spindle for backwork.">Active Spindle</FieldLabel>
+              <FieldLabel hint={<div className="space-y-1.5">
+                <p>Select the cutting context for this operation.</p>
+                <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">
+{`     ┌──────────────┐
+     │   B-AXIS     │  ← milling head
+     │  (Capto/HSK) │     (cutting tool)
+     └──────┬───────┘
+            │ cuts ↓
+    ╔═══════╪═══════╗
+    ║ A-AXIS│C-AXIS ║  ← workpiece
+    ║ (main)│ (sub) ║     (chuck/collet)
+    ╚═══════╧═══════╝`}
+                </pre>
+                <p><strong>A-Axis Spindle</strong> = turning op (lower RPM, higher torque).</p>
+                <p><strong>B-Axis (Main Workholding)</strong> = B-axis milling head, part in A-axis main chuck.</p>
+                <p><strong>B-Axis (Sub Workholding)</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>
+                <p className="text-zinc-400 italic">The B-axis drives all milling cuts regardless of which chuck holds the part — only the workholding context changes.</p>
+              </div>}>Active Spindle</FieldLabel>
               <div className="flex gap-2 flex-wrap">
-                {([
-                  { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
-                    rpm: activeMachineData?.main_rpm ?? form.max_rpm,
-                    hp:  activeMachineData?.main_hp  ?? form.machine_hp,
-                    show: true },
-                  { key: "mill" as const, label: "B-Axis Spindle", note: "High-speed milling head",
-                    rpm: form.mill_spindle_rpm || activeMachineData?.mill_rpm || 0,
-                    hp:  form.mill_spindle_hp  || activeMachineData?.mill_hp  || form.machine_hp,
-                    show: !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm) },
-                  { key: "sub"  as const, label: "C-Axis Spindle", note: "Sub spindle / backwork",
-                    rpm: form.sub_spindle_rpm  || activeMachineData?.sub_rpm  || manualSubRpm,
-                    hp:  activeMachineData?.main_hp ?? form.machine_hp,
-                    show: !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0) },
-                ].filter(o => o.show)).map(({ key, label, note, rpm, hp }) => (
+                {(() => {
+                  // B-axis (milling head) is what actually drives the cut — even when the
+                  // workpiece is on the C-axis sub-spindle. So 'sub' uses B-axis cutting
+                  // specs but C-axis workholding context.
+                  const bAxisRpm   = form.mill_spindle_rpm || activeMachineData?.mill_rpm || 0;
+                  const bAxisHp    = form.mill_spindle_hp  || activeMachineData?.mill_hp  || form.machine_hp;
+                  const hasBAxis   = !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm);
+                  const hasSubChuck = !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0);
+                  return [
+                    { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
+                      rpm: activeMachineData?.main_rpm ?? form.max_rpm,
+                      hp:  activeMachineData?.main_hp  ?? form.machine_hp,
+                      show: true },
+                    { key: "mill" as const, label: "B-Axis (Main Workholding)", note: "B-axis milling head, part on A-axis chuck",
+                      rpm: bAxisRpm,
+                      hp:  bAxisHp,
+                      show: hasBAxis },
+                    { key: "sub"  as const, label: "B-Axis (Sub Workholding)", note: "B-axis milling head, part on C-axis sub-spindle",
+                      rpm: bAxisRpm,        /* still cutting with the B-axis */
+                      hp:  bAxisHp,         /* still B-axis HP */
+                      show: hasBAxis && hasSubChuck },
+                  ];
+                })().filter(o => o.show).map(({ key, label, note, rpm, hp }) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => {
                       setSelectedSpindle(key);
                       setForm(p => {
-                        // Taper: B-axis uses mill spindle taper, others keep current
+                        // B-axis taper applies whenever cut is happening on the milling head
+                        // (both 'mill' = part-in-A-axis and 'sub' = part-in-C-axis).
                         const _millTaper = activeMachineDataRef.current?.mill_taper ?? activeMachineData?.mill_taper;
-                        const newTaper = key === "mill" && _millTaper
+                        const newTaper = (key === "mill" || key === "sub") && _millTaper
                           ? _millTaper as typeof p.spindle_taper
                           : p.spindle_taper;
                         const newDual = newTaper?.startsWith("HSK") || newTaper?.startsWith("CAPTO") || p.dual_contact;
-                        // Workholding: C-axis → collet_chuck (sub has its own chuck options now)
-                        // B-axis → clear anything that doesn't apply to part-in-chuck milling
-                        // A-axis → keep current unless it was a C-axis-only choice
+                        // Workholding switches by part-holding spindle context
                         const bAxisIncompat = ["sub_spindle", "tailstock_supported", "between_centers", "steady_rest", "tombstone", "5th_axis_vise", "vise", "toe_clamps"] as string[];
                         const cAxisIncompat = ["tailstock_supported", "between_centers", "steady_rest", "expanding_mandrel", "dovetail", "rigid_fixture", "modular_quickchange", "secondary_op_vise", "tombstone", "5th_axis_vise", "vise", "toe_clamps", "sub_spindle"] as string[];
                         const newWH = key === "sub"  && cAxisIncompat.includes(p.workholding) ? "collet_chuck" as typeof p.workholding
