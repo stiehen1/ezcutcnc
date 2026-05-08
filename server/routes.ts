@@ -288,6 +288,8 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS status_note TEXT`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS maintenance_date DATE`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS sub_spindle_rpm INTEGER`);
+    // sub_spindle_rpm also needs to exist on the catalog (machines) table — was missing
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS sub_spindle_rpm INTEGER`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_max_rpm INTEGER`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_hp NUMERIC(6,2)`);
     await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS live_tool_connection TEXT`);
