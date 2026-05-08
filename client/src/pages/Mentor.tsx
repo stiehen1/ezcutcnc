@@ -5873,10 +5873,10 @@ ${stabSection}
           {/* Mill-Turn spindle selector — show whenever machine type is mill_turn */}
           {form.machine_type === "mill_turn" && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
-              <FieldLabel hint={<div className="space-y-1.5">
-                <p>Select the cutting context for this operation.</p>
-                <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">
-{`     ┌──────────────┐
+              {(() => {
+                const _hasSub = !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0);
+                const diagram = _hasSub
+                  ? `     ┌──────────────┐
      │   B-AXIS     │  ← milling head
      │  (Capto/HSK) │     (cutting tool)
      └──────┬───────┘
@@ -5884,13 +5884,28 @@ ${stabSection}
     ╔═══════╪═══════╗
     ║ A-AXIS│C-AXIS ║  ← workpiece
     ║ (main)│ (sub) ║     (chuck/collet)
-    ╚═══════╧═══════╝`}
-                </pre>
+    ╚═══════╧═══════╝`
+                  : `   ┌──────────────┐
+   │   B-AXIS     │  ← milling head
+   │  (Capto/HSK) │     (cutting tool)
+   └──────┬───────┘
+          │ cuts ↓
+   ╔══════╧══════╗
+   ║   A-AXIS    ║  ← workpiece
+   ║   (main)    ║     (chuck/collet)
+   ╚═════════════╝
+   (no sub-spindle on this machine)`;
+                return (
+              <FieldLabel hint={<div className="space-y-1.5">
+                <p>Select the cutting context for this operation.</p>
+                <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">{diagram}</pre>
                 <p><strong>A-Axis Spindle</strong> = turning op (lower RPM, higher torque).</p>
                 <p><strong>B-Axis (Main Workholding)</strong> = B-axis milling head, part in A-axis main chuck.</p>
-                <p><strong>B-Axis (Sub Workholding)</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>
+                {_hasSub && <p><strong>B-Axis (Sub Workholding)</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>}
                 <p className="text-zinc-400 italic">The B-axis drives all milling cuts regardless of which chuck holds the part — only the workholding context changes.</p>
               </div>}>Active Spindle</FieldLabel>
+                );
+              })()}
               <div className="flex gap-2 flex-wrap">
                 {(() => {
                   // B-axis (milling head) is what actually drives the cut — even when the
