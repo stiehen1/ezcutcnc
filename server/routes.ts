@@ -544,6 +544,209 @@ export async function registerRoutes(
     // Fix any rows inserted under old brand names so search aliases work
     await pool.query(`UPDATE machines SET brand = 'Doosan/DN Solutions' WHERE model ILIKE 'PUMA 2100SY II' AND brand ILIKE 'DN Solutions'`);
 
+    // ── Re-categorize Y-axis live-tool lathes from 'mill_turn' → 'lathe' ──────
+    // True mill-turns have a dedicated tilting B-axis milling spindle (CAPTO/HSK,
+    // 25–80 HP). Y-axis live-tool lathes only have small VDI/BMT tools in the turret.
+    // The two have completely different cutting physics — they need different calc paths.
+    await pool.query(`
+      UPDATE machines SET machine_type = 'lathe'
+      WHERE machine_type = 'mill_turn' AND (
+        (brand = 'DMG Mori' AND (model ILIKE 'CLX %' OR model = 'CTX alpha 500' OR model ILIKE 'NLX %'))
+        OR (brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND model NOT ILIKE '%SMX%' AND (
+          model ILIKE '%LM' OR model ILIKE '%LSY%' OR model ILIKE '%LY%' OR model ILIKE '%SY%'
+          OR model ILIKE '%Y II%' OR model ILIKE '%YB%' OR model ILIKE 'Lynx%'
+        ))
+        OR (brand = 'Hardinge' AND (model ILIKE 'CONQUEST%' OR model ILIKE 'TALENT%'))
+        OR (brand = 'Hwacheon')
+        OR (brand = 'Hyundai WIA' AND model NOT IN ('L300LMC','L400LMC'))
+        OR (brand = 'Mazak' AND (model ILIKE 'QT-%MY' OR model ILIKE 'QTN-%MY'))
+        OR (brand = 'Miyano')
+        OR (brand = 'Mori Seiki' AND model ILIKE 'NL%')
+        OR (brand = 'Muratec')
+        OR (brand = 'Nakamura-Tome' AND model NOT ILIKE 'NTRX%')
+        OR (brand = 'Okuma' AND (model ILIKE 'GENOS L%' OR model ILIKE 'LB%'))
+      )
+    `);
+
+    // ── B-axis (milling spindle) specs for true mill-turn platforms ──────────
+    // Only applied when fields are NULL (idempotent — won't overwrite user edits).
+    // Sources: OEM spec sheets (Mazak, DMG, Okuma, WFL, Doosan/DN, Matsuura, Grob).
+    // Mazak Integrex i-100/i-200: 12k RPM, 30 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 30, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Mazak' AND machine_type = 'mill_turn'
+        AND (model ILIKE 'INTEGREX i-100' OR model ILIKE 'Integrex i-100' OR model ILIKE 'INTEGREX i-200' OR model ILIKE 'Integrex i-200')
+        AND mill_spindle_max_rpm IS NULL
+    `);
+    // Mazak Integrex i-300/i-400: 12k RPM, 35 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 35, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Mazak' AND machine_type = 'mill_turn'
+        AND (model ILIKE 'INTEGREX i-300' OR model ILIKE 'Integrex i-300' OR model ILIKE 'INTEGREX i-400' OR model ILIKE 'Integrex i-400')
+        AND mill_spindle_max_rpm IS NULL
+    `);
+    // Mazak Integrex j-series: 12k RPM, 25 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 25, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Mazak' AND machine_type = 'mill_turn' AND model ILIKE 'Integrex j-%'
+        AND mill_spindle_max_rpm IS NULL
+    `);
+    // Mazak Integrex e-410H / e-670H / e-1060V (each different HP/taper)
+    await pool.query(`UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 30, mill_spindle_taper = 'CAPTO C6' WHERE brand = 'Mazak' AND model = 'Integrex e-410H' AND mill_spindle_max_rpm IS NULL`);
+    await pool.query(`UPDATE machines SET mill_spindle_max_rpm = 10000, mill_spindle_hp = 40, mill_spindle_taper = 'CAPTO C8' WHERE brand = 'Mazak' AND model = 'Integrex e-670H' AND mill_spindle_max_rpm IS NULL`);
+    await pool.query(`UPDATE machines SET mill_spindle_max_rpm = 6000,  mill_spindle_hp = 50, mill_spindle_taper = 'CAPTO C8' WHERE brand = 'Mazak' AND model = 'Integrex e-1060V' AND mill_spindle_max_rpm IS NULL`);
+    // Mazak Variaxis i-500T / i-700T: 12k RPM, 35 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 35, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Mazak' AND machine_type = 'mill_turn' AND model ILIKE 'Variaxis i-%T'
+        AND mill_spindle_max_rpm IS NULL
+    `);
+    // DMG Mori NTX 1000/2000: 12k RPM, 25 HP, HSK63
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 25, mill_spindle_taper = 'HSK63'
+      WHERE brand = 'DMG Mori' AND model IN ('NTX 1000','NTX 2000') AND mill_spindle_max_rpm IS NULL
+    `);
+    // DMG Mori CTX beta TC: 12k RPM, 30 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 30, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'DMG Mori' AND model IN ('CTX beta 450 TC','CTX beta 800 TC') AND mill_spindle_max_rpm IS NULL
+    `);
+    // DMG Mori CTX gamma 2000 TC: 10k RPM, 40 HP, CAPTO C8
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 10000, mill_spindle_hp = 40, mill_spindle_taper = 'CAPTO C8'
+      WHERE brand = 'DMG Mori' AND model = 'CTX gamma 2000 TC' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Okuma Multus B250/B300/B400: 12k RPM, 30 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 30, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Okuma' AND model IN ('MULTUS B250','MULTUS B300','MULTUS B400') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Okuma Multus B750: 6k RPM, 50 HP, CAPTO C8
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 6000, mill_spindle_hp = 50, mill_spindle_taper = 'CAPTO C8'
+      WHERE brand = 'Okuma' AND model = 'MULTUS B750' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Okuma Multus U3000/U4000: 12k RPM, 25 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 25, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Okuma' AND model IN ('MULTUS U3000','MULTUS U4000') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Doosan/DN SMX 2600/2600ST: 10k RPM, 25 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 10000, mill_spindle_hp = 25, mill_spindle_taper = 'CAPTO C6'
+      WHERE (brand = 'DN Solutions' OR brand = 'Doosan') AND model IN ('PUMA SMX2600ST','Puma SMX 2600') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Doosan/DN SMX 3100 family: 10k RPM, 30 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 10000, mill_spindle_hp = 30, mill_spindle_taper = 'CAPTO C6'
+      WHERE (brand = 'DN Solutions' OR brand = 'Doosan') AND model IN ('PUMA SMX3100L','PUMA SMX3100ST','Puma SMX 3100') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Doosan/DN SMX 5100L: 8k RPM, 35 HP, CAPTO C8
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 8000, mill_spindle_hp = 35, mill_spindle_taper = 'CAPTO C8'
+      WHERE (brand = 'DN Solutions' OR brand = 'Doosan') AND model = 'PUMA SMX5100L' AND mill_spindle_max_rpm IS NULL
+    `);
+    // WFL M35/M65: 6k RPM, 50 HP, CAPTO C8
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 6000, mill_spindle_hp = 50, mill_spindle_taper = 'CAPTO C8'
+      WHERE brand = 'WFL' AND model IN ('M35 Millturn','M65 Millturn') AND mill_spindle_max_rpm IS NULL
+    `);
+    // WFL M80/M120 (large): 5k RPM, 70 HP, CAPTO C8
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 5000, mill_spindle_hp = 70, mill_spindle_taper = 'CAPTO C8'
+      WHERE brand = 'WFL' AND model IN ('M80 Millturn','M120 Millturn') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Nakamura-Tome NTRX-300: 12k RPM, 25 HP, CAPTO C6
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 25, mill_spindle_taper = 'CAPTO C6'
+      WHERE brand = 'Nakamura-Tome' AND model = 'NTRX-300' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Grob G350T/G550T: 18k RPM, 35 HP, HSK63
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 18000, mill_spindle_hp = 35, mill_spindle_taper = 'HSK63'
+      WHERE brand = 'Grob' AND model IN ('G350T','G550T') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Matsuura CUBLEX-35: 20k RPM, 25 HP, HSK63
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 20000, mill_spindle_hp = 25, mill_spindle_taper = 'HSK63'
+      WHERE brand = 'Matsuura' AND model = 'CUBLEX-35' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Matsuura CUBLEX-63: 15k RPM, 30 HP, HSK63
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 15000, mill_spindle_hp = 30, mill_spindle_taper = 'HSK63'
+      WHERE brand = 'Matsuura' AND model = 'CUBLEX-63' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Bumotec s-181 (HSK-E40 ≈ HSK50 in our enum): 30k RPM, 7.4 HP, HSK50
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 30000, mill_spindle_hp = 7.4, mill_spindle_taper = 'HSK50'
+      WHERE brand = 'Bumotec' AND model = 's-181' AND mill_spindle_max_rpm IS NULL
+    `);
+    // Bumotec s-191 / s-191+: 36k RPM, 11 HP, HSK50 (HSK-E40)
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 36000, mill_spindle_hp = 11, mill_spindle_taper = 'HSK50'
+      WHERE brand = 'Bumotec' AND model IN ('s-191','s-191+') AND mill_spindle_max_rpm IS NULL
+    `);
+    // Index G220 (HSK-T63 config): 12k RPM, 22.8 HP, HSK63
+    await pool.query(`
+      UPDATE machines SET mill_spindle_max_rpm = 12000, mill_spindle_hp = 22.8, mill_spindle_taper = 'HSK63'
+      WHERE brand = 'Index' AND model = 'G220' AND mill_spindle_hp IS NULL
+    `);
+    // Hyundai WIA L300LMC / L400LMC: actually Y-axis box-way live-tool lathes,
+    // not B-axis mill-turns. Re-tag from mill_turn to lathe.
+    await pool.query(`
+      UPDATE machines SET machine_type = 'lathe'
+      WHERE brand = 'Hyundai WIA' AND model IN ('L300LMC','L400LMC') AND machine_type = 'mill_turn'
+    `);
+    // Matsuura MX-520T: 5-axis trunnion VMC with C-axis turning, NOT a B-axis
+    // head mill-turn. Re-tag to 5axis (uses main spindle for both milling + turning).
+    await pool.query(`
+      UPDATE machines SET machine_type = '5axis',
+        mill_spindle_max_rpm = NULL, mill_spindle_hp = NULL, mill_spindle_taper = NULL
+      WHERE brand = 'Matsuura' AND model = 'MX-520T' AND machine_type = 'mill_turn'
+    `);
+
+    // ── Live-tool turret connection by brand for Y-axis live-tool lathes ─────
+    // (Group A: machines that already had RPM/HP but were missing taper)
+    await pool.query(`UPDATE machines SET live_tool_connection = 'VDI40' WHERE brand = 'DMG Mori' AND model IN ('CLX 350','CLX 550','CTX alpha 500','NLX 2500|700','NLX 3000|700') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND (model ILIKE '%2100%' OR model ILIKE '%2600%' OR model = 'Lynx 2100LM') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT65' WHERE brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND model = 'Puma 3100LM' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'VDI40' WHERE brand = 'Hardinge' AND model IN ('CONQUEST GT27','TALENT 8/52','TALENT 10/78') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Hwacheon' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Hyundai WIA' AND model IN ('L300LMC','L3100SY') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT65' WHERE brand = 'Hyundai WIA' AND model = 'L400LMC' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Mazak' AND (model ILIKE 'QT-%MY' OR model ILIKE 'QTN-%MY') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT45' WHERE brand = 'Miyano' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Mori Seiki' AND model ILIKE 'NL%' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'VDI40' WHERE brand = 'Muratec' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Nakamura-Tome' AND model NOT ILIKE 'NTRX%' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Okuma' AND (model ILIKE 'GENOS L%' OR model ILIKE 'LB%') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+
+    // Group B: lathes missing live_tool_max_rpm/hp — apply DN/Hyundai house spec (6k RPM, 7.5 HP)
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = 6000, live_tool_hp = 7.5
+      WHERE brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND model IN ('LYNX 2100','LYNX 2600','PUMA GT2100M','PUMA GT2100MB')
+        AND (live_tool_max_rpm IS NULL OR live_tool_max_rpm = 0)
+    `);
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = 6000, live_tool_hp = 7.5
+      WHERE brand = 'Hyundai WIA' AND model IN ('L160','L2000','L230','L2600','L280','L3000')
+        AND (live_tool_max_rpm IS NULL OR live_tool_max_rpm = 0)
+    `);
+
+    // Group C: G&L Vertical Turning Centers are turning-only — clear any live tool data
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = NULL, live_tool_hp = NULL, live_tool_connection = NULL
+      WHERE brand ILIKE 'Giddings%' AND model ILIKE '%VTC%'
+    `);
+
+    // Group D: Swiss live tool defaults — 5000 RPM, 1.5 HP (Citizen A32 reference).
+    // live_tool_connection left NULL since Swiss rotary blocks aren't VDI/BMT.
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = 5000, live_tool_hp = 1.5
+      WHERE machine_type = 'swiss' AND model IN ('A32','R07','MS16C','MS22C','MS32C','DECO 13','DECO 20','MultiSwiss 6x16','SIGMA 20','SIGMA 32')
+        AND (live_tool_max_rpm IS NULL OR live_tool_max_rpm = 0)
+    `);
+
     // ── Giddings & Lewis catalog (43 models) ─────────────────────────────────
     // Heavy boring mills, VTLs, HMCs, and modern MAG platform.
     // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type]
