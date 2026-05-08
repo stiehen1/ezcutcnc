@@ -544,6 +544,30 @@ export async function registerRoutes(
     // Fix any rows inserted under old brand names so search aliases work
     await pool.query(`UPDATE machines SET brand = 'Doosan/DN Solutions' WHERE model ILIKE 'PUMA 2100SY II' AND brand ILIKE 'DN Solutions'`);
 
+    // ── Re-categorize Y-axis live-tool lathes from 'mill_turn' → 'lathe' ──────
+    // True mill-turns have a dedicated tilting B-axis milling spindle (CAPTO/HSK,
+    // 25–80 HP). Y-axis live-tool lathes only have small VDI/BMT tools in the turret.
+    // The two have completely different cutting physics — they need different calc paths.
+    await pool.query(`
+      UPDATE machines SET machine_type = 'lathe'
+      WHERE machine_type = 'mill_turn' AND (
+        (brand = 'DMG Mori' AND (model ILIKE 'CLX %' OR model = 'CTX alpha 500' OR model ILIKE 'NLX %'))
+        OR (brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND model NOT ILIKE '%SMX%' AND (
+          model ILIKE '%LM' OR model ILIKE '%LSY%' OR model ILIKE '%LY%' OR model ILIKE '%SY%'
+          OR model ILIKE '%Y II%' OR model ILIKE '%YB%' OR model ILIKE 'Lynx%'
+        ))
+        OR (brand = 'Hardinge' AND (model ILIKE 'CONQUEST%' OR model ILIKE 'TALENT%'))
+        OR (brand = 'Hwacheon')
+        OR (brand = 'Hyundai WIA' AND model NOT IN ('L300LMC','L400LMC'))
+        OR (brand = 'Mazak' AND (model ILIKE 'QT-%MY' OR model ILIKE 'QTN-%MY'))
+        OR (brand = 'Miyano')
+        OR (brand = 'Mori Seiki' AND model ILIKE 'NL%')
+        OR (brand = 'Muratec')
+        OR (brand = 'Nakamura-Tome' AND model NOT ILIKE 'NTRX%')
+        OR (brand = 'Okuma' AND (model ILIKE 'GENOS L%' OR model ILIKE 'LB%'))
+      )
+    `);
+
     // ── Giddings & Lewis catalog (43 models) ─────────────────────────────────
     // Heavy boring mills, VTLs, HMCs, and modern MAG platform.
     // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type]
