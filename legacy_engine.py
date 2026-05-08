@@ -481,6 +481,8 @@ GEOMETRY_KC_FACTOR = {
 
 # Workholding compliance — multiplies chatter_index
 WORKHOLDING_COMPLIANCE = {
+    "gang_tooling":    0.72,  # Swiss gang slide — tools clamped to flat rail right at guide bushing, lowest possible overhang
+    "guide_bushing":   0.78,  # Swiss guide bushing — supports bar at the cutting zone, minimizes deflection
     "between_centers": 0.75,  # shaft between centers — most rigid setup possible
     "rigid_fixture":   0.80,  # bolted/doweled fixture plate
     "tombstone":       0.82,  # HMC pallet tombstone — bolted, very rigid

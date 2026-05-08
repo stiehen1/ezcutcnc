@@ -1236,21 +1236,23 @@ export default function Mentor() {
     // For mill_turn: default to B-axis milling spindle if present, else main
     const isMillTurnType = machType === "mill_turn";
     const isLatheType    = machType === "lathe";
+    const isSwissType    = machType === "swiss";
+    const isLiveToolType = isLatheType || isSwissType;
     if (isMillTurnType && _machData.mill_rpm) {
       setSelectedSpindle("mill");
     } else {
       setSelectedSpindle("main");
     }
-    const effectiveRpm   = isLatheType && _machData.live_rpm  ? _machData.live_rpm
+    const effectiveRpm   = isLiveToolType && _machData.live_rpm  ? _machData.live_rpm
                          : isMillTurnType && _machData.mill_rpm ? _machData.mill_rpm
                          : _machData.main_rpm;
-    const effectiveHp    = isLatheType && _machData.live_hp   ? _machData.live_hp
+    const effectiveHp    = isLiveToolType && _machData.live_hp   ? _machData.live_hp
                          : isMillTurnType && _machData.mill_hp ? _machData.mill_hp
                          : _machData.main_hp;
     // For mill_turn with B-axis spindle, use mill taper; otherwise use main taper
     const effectiveTaper = (isMillTurnType && _machData.mill_rpm && millTaper) ? millTaper : rawTaper;
     const rawLtDrive     = typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type.trim().toLowerCase() : null;
-    const effectiveDrive = (isLatheType && rawLtDrive && ["direct","belt","gear"].includes(rawLtDrive) ? rawLtDrive : drive) as typeof drive;
+    const effectiveDrive = (isLiveToolType && rawLtDrive && ["direct","belt","gear"].includes(rawLtDrive) ? rawLtDrive : drive) as typeof drive;
     const millDualContact = effectiveTaper?.startsWith("HSK") || effectiveTaper?.startsWith("CAPTO");
     setForm(p => ({
       ...p,
@@ -1840,7 +1842,7 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -5812,7 +5814,7 @@ ${stabSection}
 
 
           {/* Lathe sub-spindle toggle + selector */}
-          {form.machine_type === "lathe" && (
+          {(form.machine_type === "lathe" || form.machine_type === "swiss") && (
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Enable if your lathe has a sub-spindle (e.g. Mazak QTN, Nakamura-Tome, Doosan Lynx). Adds a Main / Sub selector so the engine knows which spindle is doing the work.">Sub-Spindle</FieldLabel>
@@ -5924,7 +5926,7 @@ ${stabSection}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool (driven turret) RPM limit. Main spindle turning RPM is not used for milling calcs — only the live tool station RPM matters here." : "Spindle speed ceiling from your machine spec. The engine will not exceed this value."}>{form.machine_type === "mill_turn" ? "A-Axis RPM" : form.machine_type === "lathe" ? "Live Tool RPM" : "Max RPM"}</FieldLabel>
+              <FieldLabel hint={(form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool (driven turret) RPM limit. Main spindle turning RPM is not used for milling calcs — only the live tool station RPM matters here." : "Spindle speed ceiling from your machine spec. The engine will not exceed this value."}>{form.machine_type === "mill_turn" ? "A-Axis RPM" : (form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live Tool RPM" : "Max RPM"}</FieldLabel>
               <Input
                 type="number"
                 step="10"
@@ -5938,7 +5940,7 @@ ${stabSection}
                 }}
               />
             </div>
-            {form.machine_type === "lathe" && activeMachineData && (
+            {(form.machine_type === "lathe" || form.machine_type === "swiss") && activeMachineData && (
               <div className="space-y-2">
                 <FieldLabel hint="A-axis / main turning spindle RPM — shown for reference only. Not used for milling calculations.">A-Axis RPM</FieldLabel>
                 <div className="rounded px-3 py-2 text-sm text-zinc-400 bg-zinc-800/60 border border-zinc-700/40">
@@ -5969,7 +5971,7 @@ ${stabSection}
               </div>
             )}
             <div className="space-y-2">
-              <FieldLabel hint={form.machine_type === "lathe" ? "Live tool station HP — typically 5–10 HP on most lathes, much less than the main turning spindle. The engine uses this for milling power calcs." : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."}>{form.machine_type === "lathe" ? UL("Live Tool HP", "Live Tool kW") : UL("Machine HP", "Machine kW")}</FieldLabel>
+              <FieldLabel hint={(form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool station HP — typically 5–10 HP on most lathes (1–3 HP on Swiss). The engine uses this for milling power calcs." : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."}>{(form.machine_type === "lathe" || form.machine_type === "swiss") ? UL("Live Tool HP", "Live Tool kW") : UL("Machine HP", "Machine kW")}</FieldLabel>
               <Input
                 type="number"
                 step={metric ? "0.1" : "0.5"}
@@ -6043,7 +6045,8 @@ ${stabSection}
                   { key: "hmc",       label: "HMC",        hint: "Horizontal Machining Center — spindle is horizontal. Chips fall away from the cut, better for deep pockets and high-volume production. Typically stiffer than VMC." },
                   { key: "5axis",     label: "5-Axis",     hint: "5-Axis simultaneous machining — spindle can tilt and rotate. Enables complex contoured surfaces in one setup, but shorter effective stickout required for stability." },
                   { key: "mill_turn", label: "Mill/Turn",  hint: "Mill/Turn machine (e.g. Mazak Integrex, DMG NTX) — dedicated multi-tasking center with full milling spindle and turning capability. Live tool RPM and HP are typically lower than a VMC." },
-                  { key: "lathe",     label: "Lathe (Live Tool)", hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
+                  { key: "lathe",     label: "Lathe (LT)", hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
+                  { key: "swiss",     label: "Swiss",      hint: "Swiss-style sliding-headstock lathe (Tornos, Citizen, Star, Tsugami). Live tool stations have very limited HP (typically 1–3 HP) and RPM ceilings around 8,000–10,000. Small tool diameters, short stickout, light cuts." },
                 ] as const).map(({ key, label, hint }) => (
                   <Tooltip key={key}>
                     <TooltipTrigger asChild>
@@ -6051,8 +6054,9 @@ ${stabSection}
                         type="button"
                         onClick={() => setForm((p) => {
                           const isLathe    = key === "lathe";
+                          const isSwiss    = key === "swiss";
                           const isMillTurn = key === "mill_turn";
-                          const isLatheLike = isLathe || isMillTurn;
+                          const isLatheLike = isLathe || isSwiss || isMillTurn;
                           // workholding default
                           const defaultWH = isLatheLike ? "collet_chuck" as const : key === "hmc" ? "rigid_fixture" as const : "vise" as const;
                           // toolholder — reset if switching away from a lathe-incompatible holder
@@ -6061,6 +6065,7 @@ ${stabSection}
                           // spindle taper default per machine type
                           const defaultTaper = (
                             isLathe    ? "VDI40"      :
+                            isSwiss    ? "VDI40"      :
                             isMillTurn ? "CAPTO C6"  :
                             key === "5axis" ? "HSK63" :
                             "CAT40"
@@ -6069,12 +6074,12 @@ ${stabSection}
                           const latheTapers  = ["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const;
                           const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const;
                           const taperReset =
-                            isLathe && !(latheTapers as readonly string[]).includes(p.spindle_taper)  ? defaultTaper :
-                            !isLathe && !(millingTapers as readonly string[]).includes(p.spindle_taper) ? defaultTaper :
+                            isLatheLike && !(latheTapers as readonly string[]).includes(p.spindle_taper)  ? defaultTaper :
+                            !isLatheLike && !(millingTapers as readonly string[]).includes(p.spindle_taper) ? defaultTaper :
                             p.spindle_taper;
                           return { ...p, machine_type: key, workholding: defaultWH, toolholder: thReset, spindle_taper: taperReset };
                         })}
-                        className="rounded px-3 py-1 text-xs font-semibold border transition-all"
+                        className="rounded px-2.5 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
                         style={{
                           backgroundColor: form.machine_type === key ? "#6366f1" : "transparent",
                           borderColor: "#6366f1",
@@ -6090,7 +6095,7 @@ ${stabSection}
               </div>
 
               {/* Lathe note — live tooling implied, turning not yet supported */}
-              {form.machine_type === "lathe" && (
+              {(form.machine_type === "lathe" || form.machine_type === "swiss") && (
                 <p className="mt-2 text-xs text-gray-400">
                   Live tooling assumed. Turning operations (dead tooling) are not yet supported.
                 </p>
@@ -6100,13 +6105,15 @@ ${stabSection}
             {/* Spindle Interface */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-sky-500 p-3 space-y-1.5">
               <FieldLabel hint={
-                form.machine_type === "lathe"
+                (form.machine_type === "lathe" || form.machine_type === "swiss")
                   ? "Live tool turret interface standard. VDI (DIN 69880) is most common on CNC lathes. BMT (Built-in Motor Turret) offers higher rigidity and RPM on modern machines."
                   : "Spindle interface standard. CV40 (CAT40) is most common in VMCs. BT50 and CAT50 handle higher torque on large HMCs. HSK is inherently dual-contact and stiffer at high RPM."
               }>Spindle Interface</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  form.machine_type === "lathe"
+                  form.machine_type === "swiss"
+                  ? (["VDI30","VDI40","BMT45","HSK32","CAPTO C6"] as const)  /* Swiss: smaller VDI/BMT + HSK-E32 (HSK32) + Capto C4 (~C6) on premium */
+                  : form.machine_type === "lathe"
                   ? (["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const)
                   : form.machine_type === "hmc"
                   ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100","HSK125"] as const)
@@ -6167,13 +6174,13 @@ ${stabSection}
                 <FieldLabel hint={
                   form.machine_type === "mill_turn"
                     ? "Toolholder rigidity affects deflection, runout, and live/B-axis milling stability. Capto and shrink fit are top choices for heavy B-axis milling — maximum rigidity and runout control. Hydraulic is ideal for finishing. ER collet is the most common and versatile turret option. Ordered most to least rigid."
-                    : (form.machine_type === "lathe")
+                    : (form.machine_type === "lathe" || form.machine_type === "swiss")
                     ? "Toolholder rigidity affects deflection, runout, and chatter on live tool ops. Ordered most to least rigid. ER collet is the most common turret holder; hydraulic or shrink fit for precision or heavy milling."
                     : "Toolholder rigidity affects deflection, runout, and chatter. Buttons are ordered most rigid to least rigid (left to right). Hover each holder for details."
                 }>Tool Holder</FieldLabel>
                 <div className="flex flex-wrap gap-1.5">
                   {(
-                    (form.machine_type === "lathe" || form.machine_type === "mill_turn")
+                    (form.machine_type === "lathe" || form.machine_type === "swiss" || form.machine_type === "mill_turn")
                     ? ([
                         { key: "capto",      label: "Capto",      hint: "Sandvik Capto polygon taper — designed for turning/milling centres. Exceptional rigidity and fast changeover on live tool turrets." },
                         { key: "shrink_fit", label: "Shrink Fit", hint: "Thermally shrunk onto shank — maximum grip and <1 µm runout. Available on high-end live tool turret stations." },
@@ -6454,9 +6461,9 @@ ${stabSection}
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
               <FieldLabel hint={
-                (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
-                  ? (form.machine_type === "lathe"
-                    ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (great runout, watch torque capacity). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel (avoid heavy radial WOC). Add Tailstock or Steady Rest for long parts."
+                (form.machine_type === "lathe" || form.machine_type === "swiss" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
+                  ? ((form.machine_type === "lathe" || form.machine_type === "swiss")
+                    ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Swiss: parts are bar-fed through guide bushing, so guide bushing or collet (small dia) are the primary holders. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (Swiss default). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel."
                     : "C-axis / sub-spindle — part transferred for backside ops. Same tiered logic as main spindle: Soft/Form Jaws and 6-Jaw first; collet for small-diameter finish work. No tailstock or steady rest on sub-spindle.")
                   : form.machine_type === "mill_turn"
                   ? (selectedSpindle === "sub" /* handled above — dead branch */
@@ -6472,7 +6479,17 @@ ${stabSection}
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
+                  form.machine_type === "swiss"
+                  ? ([
+                      /* Swiss-specific ordering — collet is the standard, gang tooling is the most rigid mounting */
+                      { key: "gang_tooling",        label: "Gang Tooling"        },
+                      { key: "guide_bushing",       label: "Guide Bushing"       },
+                      { key: "collet_chuck",        label: "Dead-Length Collet"  },
+                      { key: "soft_jaws",           label: "Soft/Emergency Collet" },
+                      { key: "step_jaws",           label: "Step Collet"         },
+                      { key: "expanding_mandrel",   label: "Expanding Collet"    },
+                    ] as const)
+                  : (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
                   ? ([
                       /* Tier 1 — best contact/conformity under C-axis milling side loads */
                       { key: "soft_jaws",           label: "Soft Jaws"         },
