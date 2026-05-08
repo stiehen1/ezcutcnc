@@ -5995,6 +5995,25 @@ ${stabSection}
             )}
             {form.machine_type === "mill_turn" && (
               <div className="space-y-2">
+                <FieldLabel hint="B-axis milling spindle RPM — the dedicated milling head that holds the cutting tool. This is what drives all milling/drilling/reaming calcs on a mill-turn. Typical range 6,000–12,000 RPM. Leave 0 if your machine has no B-axis milling head (turning-only lathe).">B-Axis RPM</FieldLabel>
+                <Input
+                  type="number"
+                  step="10"
+                  className="no-spinners"
+                  placeholder="e.g. 10000"
+                  value={form.mill_spindle_rpm || (activeMachineData?.mill_rpm ?? "")}
+                  onChange={e => {
+                    const v = Number(e.target.value) || 0;
+                    setForm(p => ({ ...p, mill_spindle_rpm: v }));
+                    if (activeMachineData) setActiveMachineData(p => p ? { ...p, mill_rpm: v || null } : p);
+                    // If currently on B-axis milling, update max_rpm live
+                    if (selectedSpindle === "mill") setForm(p => ({ ...p, max_rpm: v }));
+                  }}
+                />
+              </div>
+            )}
+            {form.machine_type === "mill_turn" && (
+              <div className="space-y-2">
                 <FieldLabel hint="C-axis / sub spindle RPM — typically runs faster than the A-axis main spindle, ideal for backworking and finishing ops. Enter 0 or leave blank if your machine has no sub spindle.">C-Axis RPM</FieldLabel>
                 <Input
                   type="number"
@@ -6011,6 +6030,24 @@ ${stabSection}
                     }
                     // If currently on sub spindle, update max_rpm live
                     if (selectedSpindle === "sub") setForm(p => ({ ...p, max_rpm: v }));
+                  }}
+                />
+              </div>
+            )}
+            {form.machine_type === "mill_turn" && (
+              <div className="space-y-2">
+                <FieldLabel hint="B-axis milling spindle HP. Typically 30–50 HP on Integrex e-series, 15–30 HP on smaller Integrex i-series. This is what drives milling power calcs.">B-Axis HP</FieldLabel>
+                <Input
+                  type="number"
+                  step="0.5"
+                  className="no-spinners"
+                  placeholder="e.g. 40"
+                  value={form.mill_spindle_hp || (activeMachineData?.mill_hp ?? "")}
+                  onChange={e => {
+                    const v = Number(e.target.value) || 0;
+                    setForm(p => ({ ...p, mill_spindle_hp: v }));
+                    if (activeMachineData) setActiveMachineData(p => p ? { ...p, mill_hp: v || null } : p);
+                    if (selectedSpindle === "mill") setForm(p => ({ ...p, machine_hp: v }));
                   }}
                 />
               </div>
