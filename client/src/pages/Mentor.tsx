@@ -5906,7 +5906,7 @@ ${stabSection}
               </div>}>Active Spindle</FieldLabel>
                 );
               })()}
-              <div className="flex gap-2 flex-wrap">
+              <div className="grid grid-cols-3 gap-2">
                 {(() => {
                   // B-axis (milling head) is what actually drives the cut — even when the
                   // workpiece is on the C-axis sub-spindle. So 'sub' uses B-axis cutting
@@ -6034,24 +6034,6 @@ ${stabSection}
                 />
               </div>
             )}
-            {form.machine_type === "mill_turn" && (
-              <div className="space-y-2">
-                <FieldLabel hint="B-axis milling spindle HP. Typically 30–50 HP on Integrex e-series, 15–30 HP on smaller Integrex i-series. This is what drives milling power calcs.">B-Axis HP</FieldLabel>
-                <Input
-                  type="number"
-                  step="0.5"
-                  className="no-spinners"
-                  placeholder="e.g. 40"
-                  value={form.mill_spindle_hp || (activeMachineData?.mill_hp ?? "")}
-                  onChange={e => {
-                    const v = Number(e.target.value) || 0;
-                    setForm(p => ({ ...p, mill_spindle_hp: v }));
-                    if (activeMachineData) setActiveMachineData(p => p ? { ...p, mill_hp: v || null } : p);
-                    if (selectedSpindle === "mill") setForm(p => ({ ...p, machine_hp: v }));
-                  }}
-                />
-              </div>
-            )}
             <div className="space-y-2">
               <FieldLabel hint={
                 (form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool station HP — typically 5–10 HP on most lathes (1–3 HP on Swiss). The engine uses this for milling power calcs."
@@ -6070,6 +6052,24 @@ ${stabSection}
                 onChange={onUnitNum("machine_hp", 0.7457)}
               />
             </div>
+            {form.machine_type === "mill_turn" && (
+              <div className="space-y-2">
+                <FieldLabel hint="B-axis milling spindle HP. Typically 30–50 HP on Integrex e-series, 15–30 HP on smaller Integrex i-series. This is what drives milling power calcs.">B-Axis HP</FieldLabel>
+                <Input
+                  type="number"
+                  step="0.5"
+                  className="no-spinners"
+                  placeholder="e.g. 40"
+                  value={form.mill_spindle_hp || (activeMachineData?.mill_hp ?? "")}
+                  onChange={e => {
+                    const v = Number(e.target.value) || 0;
+                    setForm(p => ({ ...p, mill_spindle_hp: v }));
+                    if (activeMachineData) setActiveMachineData(p => p ? { ...p, mill_hp: v || null } : p);
+                    if (selectedSpindle === "mill") setForm(p => ({ ...p, machine_hp: v }));
+                  }}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <FieldLabel hint="Spindle drive type determines power transmission efficiency. Direct drive (servo-direct, HSK): 96%. Belt drive (most VMC/HMC): 92%. Gear drive (older machines): 88%. Nameplate HP is derated accordingly.">Spindle Drive</FieldLabel>
               <div className="flex gap-1">
