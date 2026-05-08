@@ -6461,9 +6461,11 @@ ${stabSection}
             {/* Workholding */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-purple-500 p-3 space-y-1.5">
               <FieldLabel hint={
-                (form.machine_type === "lathe" || form.machine_type === "swiss" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
-                  ? ((form.machine_type === "lathe" || form.machine_type === "swiss")
-                    ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Swiss: parts are bar-fed through guide bushing, so guide bushing or collet (small dia) are the primary holders. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (Swiss default). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel."
+                form.machine_type === "swiss"
+                  ? "Swiss-specific workholding. Bar is gripped by a dead-length collet on the main spindle and supported at the cut zone by the guide bushing — the bushing acts as a secondary workholder right at the cutting plane. Most rigid to least rigid: Gang Tooling → Guide Bushing → Dead-Length Collet → Soft/Emergency Collet → Step Collet → Expanding Collet. Hover any option for details."
+                  : (form.machine_type === "lathe" || (form.machine_type === "mill_turn" && selectedSpindle === "sub"))
+                  ? (form.machine_type === "lathe"
+                    ? "C-axis / live tool lathe — part indexed in spindle for milling. Contact area and conformity matter most under radial milling loads. Tier 1 (best): Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws. Tier 2: Hydraulic/Power → Collet (great runout, watch torque capacity). Tier 3: 3-Jaw (penalizes runout), Step Jaws, Expanding Mandrel. Add Tailstock or Steady Rest for long parts."
                     : "C-axis / sub-spindle — part transferred for backside ops. Same tiered logic as main spindle: Soft/Form Jaws and 6-Jaw first; collet for small-diameter finish work. No tailstock or steady rest on sub-spindle.")
                   : form.machine_type === "mill_turn"
                   ? (selectedSpindle === "sub" /* handled above — dead branch */
@@ -6613,6 +6615,15 @@ ${stabSection}
                     autochuck:   "DMG MORI autoCHUCK 2.0 — automated rapid jaw-change system that eliminates manual jaw swaps between jobs. Reduces setup time significantly in high-mix production. Standard chuck rigidity.",
                     zero_point:  "Zero-point / pallet system (RockLock, EROWA, Schunk VERO-S) — founding plate with precision receiver bores allows sub-second fixture swap at micron-level repeatability. Rigidity equivalent to a rigid fixture. Best choice for 5-axis high-mix or lights-out production.",
                     pyramid:     "Pyramid fixture — 3 or 4-sided multi-face mount that loads multiple small parts per cycle. Maximizes spindle utilization on small components. Rigidity depends on how securely parts are clamped to the pyramid faces.",
+                    form_jaws:        "Form jaws — soft jaws machined to match a specific OD/profile. Maximum contact area distributes clamping force evenly, minimizing distortion on thin-wall or finished parts. Top tier for live-tool side loads when concentricity matters.",
+                    pie_jaws:         "Pie jaws — radial wedge-shaped jaws that contact the part along an arc rather than a point. Excellent for thin-walled rings and tubes; resists ovalization under clamping.",
+                    hydraulic_chuck:  "Hydraulic power chuck (Kitagawa, Schunk Rota-S, etc.) — even clamping force across all jaws via hydraulic actuator. High repeatability, fast cycle, ideal for production. Watch jaw torque rating on aggressive milling.",
+                    power_chuck:      "Pneumatic / power-operated chuck — automated jaw actuation, common on production lathes. Similar rigidity to hydraulic chucks; clamp force depends on pressure setting.",
+                    step_jaws:        "Step jaws — soft jaws machined with a shoulder/step that grips on a pre-machined feature. Used for second-op work where the first-op finished OD is the reference. Good concentricity, moderate rigidity.",
+                    steady_rest:      "Steady rest — supports a long shaft mid-span between the chuck and tailstock. Reduces deflection on slender turning ops. Required for L/D > 8–10× when a tailstock alone isn't enough.",
+                    modular_quickchange: "Modular quick-change fixture system (e.g. Erowa ITS, Hainbuch Centro, Schunk Vero-S). Sub-second fixture swap with micron-level repeatability. Rigidity equivalent to a rigid fixture once locked.",
+                    gang_tooling:     "Swiss gang slide — tools clamped directly to a flat rail right next to the guide bushing. Lowest possible tool overhang of any setup, exceptional rigidity, very short cycle time. The hallmark Swiss configuration.",
+                    guide_bushing:    "Swiss guide bushing — supports the bar stock at the cutting zone. Fixed bushing is most common; rotating bushing for pre-finished bar to avoid surface marking. Bushing must match bar dia within 0.001–0.002\" for proper support.",
                   };
                   const tooltip = WH_TOOLTIPS[key];
                   const btn = (
