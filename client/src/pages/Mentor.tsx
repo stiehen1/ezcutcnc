@@ -5899,14 +5899,14 @@ ${stabSection}
               <FieldLabel hint={<div className="space-y-1.5">
                 <p>Select the cutting context for this operation.</p>
                 <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">{diagram}</pre>
-                <p><strong>A-Axis Spindle</strong> = turning op (lower RPM, higher torque).</p>
-                <p><strong>B-Axis (Main Workholding)</strong> = B-axis milling head, part in A-axis main chuck.</p>
-                {_hasSub && <p><strong>B-Axis (Sub Workholding)</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>}
+                <p><strong>A-Axis</strong> = turning op (lower RPM, higher torque).</p>
+                <p><strong>B-Axis</strong> = B-axis milling head, part in A-axis main chuck.</p>
+                {_hasSub && <p><strong>C-Axis</strong> = part transferred to C-axis sub-spindle for backside ops (B-axis still drives the cut).</p>}
                 <p className="text-zinc-400 italic">The B-axis drives all milling cuts regardless of which chuck holds the part — only the workholding context changes.</p>
               </div>}>Active Spindle</FieldLabel>
                 );
               })()}
-              <div className="flex gap-2 flex-wrap">
+              <div className="grid grid-cols-3 gap-2">
                 {(() => {
                   // B-axis (milling head) is what actually drives the cut — even when the
                   // workpiece is on the C-axis sub-spindle. So 'sub' uses B-axis cutting
@@ -5916,15 +5916,15 @@ ${stabSection}
                   const hasBAxis   = !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm);
                   const hasSubChuck = !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0);
                   return [
-                    { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
+                    { key: "main" as const, label: "A-Axis", note: "Main turning / heavy roughing",
                       rpm: activeMachineData?.main_rpm ?? form.max_rpm,
                       hp:  activeMachineData?.main_hp  ?? form.machine_hp,
                       show: true },
-                    { key: "mill" as const, label: "B-Axis (Main Workholding)", note: "B-axis milling head, part on A-axis chuck",
+                    { key: "mill" as const, label: "B-Axis", note: "Milling on A-axis main chuck",
                       rpm: bAxisRpm,
                       hp:  bAxisHp,
                       show: hasBAxis },
-                    { key: "sub"  as const, label: "B-Axis (Sub Workholding)", note: "B-axis milling head, part on C-axis sub-spindle",
+                    { key: "sub"  as const, label: "C-Axis", note: "Milling on sub-spindle (B-axis cuts)",
                       rpm: bAxisRpm,        /* still cutting with the B-axis */
                       hp:  bAxisHp,         /* still B-axis HP */
                       show: hasBAxis && hasSubChuck },
@@ -5953,7 +5953,7 @@ ${stabSection}
                         return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual, workholding: newWH };
                       });
                     }}
-                    className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
+                    className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left flex flex-col"
                     style={{
                       backgroundColor: selectedSpindle === key ? (key === "mill" ? "#6366f1" : "#f59e0b") : "transparent",
                       borderColor: key === "mill" ? "#6366f1" : "#f59e0b",
@@ -5961,8 +5961,8 @@ ${stabSection}
                     }}
                   >
                     <div>{label}</div>
-                    <div className="text-xs font-normal mt-0.5 opacity-75">{note}</div>
-                    <div className="text-xs font-bold mt-0.5">{rpm.toLocaleString()} RPM · {hp} HP</div>
+                    <div className="text-xs font-normal mt-0.5 opacity-75 flex-1">{note}</div>
+                    <div className="text-xs font-bold mt-1 whitespace-nowrap">{rpm.toLocaleString()} RPM · {hp} HP</div>
                   </button>
                 ))}
               </div>
@@ -6034,6 +6034,24 @@ ${stabSection}
                 />
               </div>
             )}
+            <div className="space-y-2">
+              <FieldLabel hint={
+                (form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool station HP — typically 5–10 HP on most lathes (1–3 HP on Swiss). The engine uses this for milling power calcs."
+                : form.machine_type === "mill_turn" ? "A-axis main turning spindle HP — used when running an A-axis turning operation. Milling cuts use B-Axis HP instead."
+                : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."
+              }>{
+                (form.machine_type === "lathe" || form.machine_type === "swiss") ? UL("Live Tool HP", "Live Tool kW")
+                : form.machine_type === "mill_turn" ? UL("A-Axis HP", "A-Axis kW")
+                : UL("Machine HP", "Machine kW")
+              }</FieldLabel>
+              <Input
+                type="number"
+                step={metric ? "0.1" : "0.5"}
+                className="no-spinners"
+                value={form.machine_hp === 0 ? "" : metric ? (form.machine_hp * 0.7457).toFixed(1) : form.machine_hp}
+                onChange={onUnitNum("machine_hp", 0.7457)}
+              />
+            </div>
             {form.machine_type === "mill_turn" && (
               <div className="space-y-2">
                 <FieldLabel hint="B-axis milling spindle HP. Typically 30–50 HP on Integrex e-series, 15–30 HP on smaller Integrex i-series. This is what drives milling power calcs.">B-Axis HP</FieldLabel>
@@ -6052,16 +6070,6 @@ ${stabSection}
                 />
               </div>
             )}
-            <div className="space-y-2">
-              <FieldLabel hint={(form.machine_type === "lathe" || form.machine_type === "swiss") ? "Live tool station HP — typically 5–10 HP on most lathes (1–3 HP on Swiss). The engine uses this for milling power calcs." : "Rated nameplate spindle power. The engine applies a drive efficiency factor (Direct 96%, Belt 92%, Gear 88%) to get available cutting HP."}>{(form.machine_type === "lathe" || form.machine_type === "swiss") ? UL("Live Tool HP", "Live Tool kW") : UL("Machine HP", "Machine kW")}</FieldLabel>
-              <Input
-                type="number"
-                step={metric ? "0.1" : "0.5"}
-                className="no-spinners"
-                value={form.machine_hp === 0 ? "" : metric ? (form.machine_hp * 0.7457).toFixed(1) : form.machine_hp}
-                onChange={onUnitNum("machine_hp", 0.7457)}
-              />
-            </div>
             <div className="space-y-2">
               <FieldLabel hint="Spindle drive type determines power transmission efficiency. Direct drive (servo-direct, HSK): 96%. Belt drive (most VMC/HMC): 92%. Gear drive (older machines): 88%. Nameplate HP is derated accordingly.">Spindle Drive</FieldLabel>
               <div className="flex gap-1">
