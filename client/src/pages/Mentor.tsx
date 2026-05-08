@@ -6671,12 +6671,31 @@ ${stabSection}
           </div>
 
           {/* Part Stickout — shown when workholding is a chuck or trunnion */}
-          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers"] as string[]).includes(form.workholding) && (
+          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck","step_jaws","expanding_mandrel","form_jaws","pie_jaws","soft_jaws","tailstock_supported","steady_rest","gang_tooling","guide_bushing"] as string[]).includes(form.workholding) && (
             <div className="mt-3">
-              <FieldLabel hint="Distance from the chuck jaw face (or trunnion fixture face) to the cut location. Longer part overhang adds compliance — a long part sticking out of a chuck deflects far more than a stubby one. Leave blank if the cut is close to the jaws.">Part Overhang Past Jaws (in)</FieldLabel>
+              <FieldLabel hint={(() => {
+                const w = form.workholding;
+                if (w === "collet_chuck") return "Distance from the collet face to the cut location. Long overhang past the collet adds significant compliance — every extra diameter of stickout multiplies deflection. Leave blank if the cut is close to the collet.";
+                if (w === "guide_bushing") return "Distance from the guide bushing face to the cut location. Swiss machines work right at the bushing — overhang is normally tiny (<0.5×D). If your cut is far from the bushing, the bar acts as a cantilever again.";
+                if (w === "gang_tooling") return "Distance from the gang slide reference face to the cut location. Gang tooling minimizes this by design — sub-inch overhang is typical.";
+                if (w === "trunnion_4th") return "Distance from the trunnion fixture face to the cut location.";
+                if (w === "between_centers" || w === "tailstock_supported" || w === "steady_rest") return "Distance from the supported end (chuck/center/rest) to the cut location.";
+                return "Distance from the workholding face to the cut location. Longer part overhang adds compliance — a long part deflects far more than a stubby one.";
+              })()}>{(() => {
+                const w = form.workholding;
+                if (w === "collet_chuck") return "Part Overhang Past Collet (in)";
+                if (w === "guide_bushing") return "Overhang Past Guide Bushing (in)";
+                if (w === "gang_tooling") return "Overhang Past Gang Slide (in)";
+                if (w === "trunnion_4th") return "Part Overhang Past Trunnion Face (in)";
+                if (w === "expanding_mandrel") return "Part Overhang Past Mandrel Face (in)";
+                if (w === "between_centers" || w === "tailstock_supported" || w === "steady_rest") return "Distance from Support to Cut (in)";
+                if (w === "step_jaws" || w === "form_jaws" || w === "pie_jaws" || w === "soft_jaws") return "Part Overhang Past Jaw Face (in)";
+                if (w === "hydraulic_chuck" || w === "power_chuck") return "Part Overhang Past Chuck Face (in)";
+                return "Part Overhang Past Jaws (in)";
+              })()}</FieldLabel>
               <Input
                 type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 2.500"
+                placeholder={(form.workholding === "guide_bushing" || form.workholding === "gang_tooling") ? "e.g. 0.250" : form.workholding === "collet_chuck" ? "e.g. 1.000" : "e.g. 2.500"}
                 value={form.part_stickout > 0 ? form.part_stickout.toFixed(3) : ""}
                 onChange={e => {
                   const n = parseFloat(e.target.value);
