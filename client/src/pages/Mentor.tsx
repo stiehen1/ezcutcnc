@@ -5901,7 +5901,7 @@ ${stabSection}
                 <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">{diagram}</pre>
                 <p><strong>A-Axis</strong> = turning op (lower RPM, higher torque).</p>
                 <p><strong>B-Axis</strong> = B-axis milling head, part in A-axis main chuck.</p>
-                {_hasSub && <p><strong>B + C-Axis</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>}
+                {_hasSub && <p><strong>C-Axis</strong> = part transferred to C-axis sub-spindle for backside ops (B-axis still drives the cut).</p>}
                 <p className="text-zinc-400 italic">The B-axis drives all milling cuts regardless of which chuck holds the part — only the workholding context changes.</p>
               </div>}>Active Spindle</FieldLabel>
                 );
@@ -5924,7 +5924,7 @@ ${stabSection}
                       rpm: bAxisRpm,
                       hp:  bAxisHp,
                       show: hasBAxis },
-                    { key: "sub"  as const, label: "B + C-Axis", note: "Milling on C-axis sub-spindle",
+                    { key: "sub"  as const, label: "C-Axis", note: "Milling on sub-spindle (B-axis cuts)",
                       rpm: bAxisRpm,        /* still cutting with the B-axis */
                       hp:  bAxisHp,         /* still B-axis HP */
                       show: hasBAxis && hasSubChuck },
@@ -5953,7 +5953,7 @@ ${stabSection}
                         return { ...p, max_rpm: rpm, machine_hp: hp, spindle_taper: newTaper, dual_contact: !!newDual, workholding: newWH };
                       });
                     }}
-                    className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left"
+                    className="flex-1 rounded px-3 py-2 text-sm font-semibold border transition-all text-left flex flex-col"
                     style={{
                       backgroundColor: selectedSpindle === key ? (key === "mill" ? "#6366f1" : "#f59e0b") : "transparent",
                       borderColor: key === "mill" ? "#6366f1" : "#f59e0b",
@@ -5961,8 +5961,8 @@ ${stabSection}
                     }}
                   >
                     <div>{label}</div>
-                    <div className="text-xs font-normal mt-0.5 opacity-75">{note}</div>
-                    <div className="text-xs font-bold mt-0.5">{rpm.toLocaleString()} RPM · {hp} HP</div>
+                    <div className="text-xs font-normal mt-0.5 opacity-75 flex-1">{note}</div>
+                    <div className="text-xs font-bold mt-1">{rpm.toLocaleString()} RPM · {hp} HP</div>
                   </button>
                 ))}
               </div>
