@@ -5899,9 +5899,9 @@ ${stabSection}
               <FieldLabel hint={<div className="space-y-1.5">
                 <p>Select the cutting context for this operation.</p>
                 <pre className="font-mono text-[10px] leading-tight bg-zinc-900/60 rounded px-2 py-1.5 my-1">{diagram}</pre>
-                <p><strong>A-Axis Spindle</strong> = turning op (lower RPM, higher torque).</p>
-                <p><strong>B-Axis (Main Workholding)</strong> = B-axis milling head, part in A-axis main chuck.</p>
-                {_hasSub && <p><strong>B-Axis (Sub Workholding)</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>}
+                <p><strong>A-Axis</strong> = turning op (lower RPM, higher torque).</p>
+                <p><strong>B-Axis</strong> = B-axis milling head, part in A-axis main chuck.</p>
+                {_hasSub && <p><strong>B + C-Axis</strong> = B-axis milling head, part transferred to C-axis sub-spindle for backside ops.</p>}
                 <p className="text-zinc-400 italic">The B-axis drives all milling cuts regardless of which chuck holds the part — only the workholding context changes.</p>
               </div>}>Active Spindle</FieldLabel>
                 );
@@ -5916,15 +5916,15 @@ ${stabSection}
                   const hasBAxis   = !!(form.mill_spindle_rpm || activeMachineData?.mill_rpm);
                   const hasSubChuck = !!(form.sub_spindle_rpm || activeMachineData?.sub_rpm || manualSubRpm > 0);
                   return [
-                    { key: "main" as const, label: "A-Axis Spindle", note: "Main turning / heavy roughing",
+                    { key: "main" as const, label: "A-Axis", note: "Main turning / heavy roughing",
                       rpm: activeMachineData?.main_rpm ?? form.max_rpm,
                       hp:  activeMachineData?.main_hp  ?? form.machine_hp,
                       show: true },
-                    { key: "mill" as const, label: "B-Axis (Main Workholding)", note: "B-axis milling head, part on A-axis chuck",
+                    { key: "mill" as const, label: "B-Axis", note: "Milling on A-axis main chuck",
                       rpm: bAxisRpm,
                       hp:  bAxisHp,
                       show: hasBAxis },
-                    { key: "sub"  as const, label: "B-Axis (Sub Workholding)", note: "B-axis milling head, part on C-axis sub-spindle",
+                    { key: "sub"  as const, label: "B + C-Axis", note: "Milling on C-axis sub-spindle",
                       rpm: bAxisRpm,        /* still cutting with the B-axis */
                       hp:  bAxisHp,         /* still B-axis HP */
                       show: hasBAxis && hasSubChuck },
