@@ -705,6 +705,48 @@ export async function registerRoutes(
       WHERE brand = 'Matsuura' AND model = 'MX-520T' AND machine_type = 'mill_turn'
     `);
 
+    // ── Live-tool turret connection by brand for Y-axis live-tool lathes ─────
+    // (Group A: machines that already had RPM/HP but were missing taper)
+    await pool.query(`UPDATE machines SET live_tool_connection = 'VDI40' WHERE brand = 'DMG Mori' AND model IN ('CLX 350','CLX 550','CTX alpha 500','NLX 2500|700','NLX 3000|700') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND (model ILIKE '%2100%' OR model ILIKE '%2600%' OR model = 'Lynx 2100LM') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT65' WHERE brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND model = 'Puma 3100LM' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'VDI40' WHERE brand = 'Hardinge' AND model IN ('CONQUEST GT27','TALENT 8/52','TALENT 10/78') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Hwacheon' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Hyundai WIA' AND model IN ('L300LMC','L3100SY') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT65' WHERE brand = 'Hyundai WIA' AND model = 'L400LMC' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Mazak' AND (model ILIKE 'QT-%MY' OR model ILIKE 'QTN-%MY') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT45' WHERE brand = 'Miyano' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Mori Seiki' AND model ILIKE 'NL%' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'VDI40' WHERE brand = 'Muratec' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Nakamura-Tome' AND model NOT ILIKE 'NTRX%' AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+    await pool.query(`UPDATE machines SET live_tool_connection = 'BMT55' WHERE brand = 'Okuma' AND (model ILIKE 'GENOS L%' OR model ILIKE 'LB%') AND (live_tool_connection IS NULL OR live_tool_connection = '')`);
+
+    // Group B: lathes missing live_tool_max_rpm/hp — apply DN/Hyundai house spec (6k RPM, 7.5 HP)
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = 6000, live_tool_hp = 7.5
+      WHERE brand IN ('Doosan','DN Solutions','Doosan/DN Solutions') AND model IN ('LYNX 2100','LYNX 2600','PUMA GT2100M','PUMA GT2100MB')
+        AND (live_tool_max_rpm IS NULL OR live_tool_max_rpm = 0)
+    `);
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = 6000, live_tool_hp = 7.5
+      WHERE brand = 'Hyundai WIA' AND model IN ('L160','L2000','L230','L2600','L280','L3000')
+        AND (live_tool_max_rpm IS NULL OR live_tool_max_rpm = 0)
+    `);
+
+    // Group C: G&L Vertical Turning Centers are turning-only — clear any live tool data
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = NULL, live_tool_hp = NULL, live_tool_connection = NULL
+      WHERE brand ILIKE 'Giddings%' AND model ILIKE '%VTC%'
+    `);
+
+    // Group D: Swiss live tool defaults — 5000 RPM, 1.5 HP (Citizen A32 reference).
+    // live_tool_connection left NULL since Swiss rotary blocks aren't VDI/BMT.
+    await pool.query(`
+      UPDATE machines SET live_tool_max_rpm = 5000, live_tool_hp = 1.5
+      WHERE machine_type = 'swiss' AND model IN ('A32','R07','MS16C','MS22C','MS32C','DECO 13','DECO 20','MultiSwiss 6x16','SIGMA 20','SIGMA 32')
+        AND (live_tool_max_rpm IS NULL OR live_tool_max_rpm = 0)
+    `);
+
     // ── Giddings & Lewis catalog (43 models) ─────────────────────────────────
     // Heavy boring mills, VTLs, HMCs, and modern MAG platform.
     // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type]
