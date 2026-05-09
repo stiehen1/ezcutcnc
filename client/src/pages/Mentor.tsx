@@ -11985,7 +11985,7 @@ ${stabSection}
                   {(customer.notes as string[]).map((note, i) => (
                     <div key={i}>{note}</div>
                   ))}
-                  {(customer as any).cb_upgrade?.suggested_edps?.length > 0 && (
+                  {(customer as any).cb_upgrade?.suggested_edps?.length > 0 ? (
                     <div className="mt-2 pt-2 border-t border-emerald-500/20">
                       <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold">Chipbreaker options:</span>{" "}
                       <span className="font-mono text-emerald-200">
@@ -11997,7 +11997,27 @@ ${stabSection}
                         </span>
                       )}
                     </div>
-                  )}
+                  ) : (customer as any).cb_upgrade ? (
+                    <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[11px] leading-relaxed">
+                      <span className="uppercase tracking-wider text-emerald-400 font-semibold">No stocked chipbreaker</span>
+                      {" "}at Ø{Number((customer as any).cb_upgrade.tool_dia).toFixed(4)}", {(customer as any).cb_upgrade.flutes}-flute,{" "}
+                      {Number((customer as any).cb_upgrade.lookup_loc).toFixed(3)}" LOC —{" "}
+                      <a
+                        href={`mailto:sales@corecutterusa.com?subject=${encodeURIComponent("Custom Chipbreaker Quote Request")}&body=${encodeURIComponent(
+                          `Hello,\n\nI'd like a quote on a custom chipbreaker endmill:\n\n` +
+                          `Diameter: ${Number((customer as any).cb_upgrade.tool_dia).toFixed(4)}"\n` +
+                          `Flutes: ${(customer as any).cb_upgrade.flutes}\n` +
+                          `LOC: ${Number((customer as any).cb_upgrade.lookup_loc).toFixed(3)}"\n` +
+                          ((customer as any).cb_upgrade.lookup_lbs > 0 ? `LBS: ${Number((customer as any).cb_upgrade.lookup_lbs).toFixed(3)}"\n` : "") +
+                          (Number((customer as any).cb_upgrade.lookup_cr) > 0 ? `Corner Radius: ${Number((customer as any).cb_upgrade.lookup_cr).toFixed(4)}"\n` : "") +
+                          `Reference standard EDP: ${(customer as any).cb_upgrade.current_edp || "(see calc setup)"}\n` +
+                          `\nThanks!`
+                        )}`}
+                        className="text-emerald-300 underline hover:text-emerald-200 font-semibold"
+                      >request a custom build →</a>
+                      <span className="text-emerald-400/70"> (we can grind this geometry to spec)</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
