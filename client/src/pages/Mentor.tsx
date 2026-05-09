@@ -1528,7 +1528,7 @@ export default function Mentor() {
         if (e.helix_angle !== undefined) next.helix_angle = Number(e.helix_angle);
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
-        if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
+        if (e.corner_radius > 0) { next.corner_radius = e.corner_radius; setCrText(e.corner_radius.toFixed(4)); }
         if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); next.ream_shank_dia = e.shank_dia; }
         if (e.coating) next.coating = e.coating;
         if (e.keyseat_arbor_dia > 0) next.keyseat_arbor_dia = e.keyseat_arbor_dia;
