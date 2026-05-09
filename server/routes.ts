@@ -4232,7 +4232,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "lbs": <number, REACH / length below shank — the LONG dimension from shank step to tip on reduced-neck tools (e.g. 3.25). 0 if no neck>,
   "helix_angle": <integer degrees, 0 if not shown>,
   "corner_condition": "square|corner_radius|ball",
-  "corner_radius": <number in inches, 0 if square>,
+  "corner_radius": <number in inches. CRITICAL: Look CAREFULLY for "R.XXX" callouts at the cutting end of the tool — these are typically small text annotations near the corner of the cutting profile, like "R.010", "R.015", "R.030", "R.060". Endmill prints almost ALWAYS have a corner radius callout (even ".010" small CR on a "square" endmill is common — it's an edge prep). If you find ANY R.XXX callout at the cutting tip corner, set corner_condition = "corner_radius" and corner_radius = the R value (e.g. R.010 → 0.010). Only return 0 / "square" if you are CERTAIN there is no R callout anywhere on the cutting end. If the print shows a ball nose (full hemisphere at tip with R = tool_dia/2), set corner_condition = "ball" and corner_radius = tool_dia/2.>,
   "shank_dia": <number in inches, 0 if same as cutting dia>,
   "coating": <string or null>,
   "material": "carbide|hss",
