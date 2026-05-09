@@ -5788,6 +5788,14 @@ def run(payload=None):
     _is_nonferrous_clean = _mat_group_cc in ("aluminum", "non-ferrous", "non_ferrous", "brass", "copper")
     if _is_nonferrous_clean and _max_slot_xd is not None:
         _max_slot_xd = max(_max_slot_xd, 1.5)
+    # Chipbreaker / truncated rougher slotting boost: segmented chips evacuate
+    # far more readily than a smooth flute under deep DOC — give these tools
+    # an extra 0.5×D headroom (capped at 1.5×D total) before the chip-packing
+    # warning fires. Standard geometry tools stay at the conservative limit.
+    _geom_cc = str(data.get("geometry", "standard") or "standard").lower()
+    _is_cb_geom = _geom_cc in ("chipbreaker", "truncated_rougher")
+    if _is_cb_geom and _max_slot_xd is not None:
+        _max_slot_xd = min(1.5, _max_slot_xd + 0.5)
 
     if (data.get("mode") or "").lower() in ("face", "circ_interp"):
         pass  # face: high WOC is intentional stepover; circ_interp: WOC = radial wall, not chip-clearance concern
@@ -5806,6 +5814,22 @@ def run(payload=None):
                 f"Max recommended DOC for {_fl_cc}-flute slotting is {_max_slot_xd:.1f}×D."
             )
             _cc_risk = "caution"
+        # Positive upgrade path: deep slotting on standard geometry — suggest
+        # a chipbreaker version. Fires at 0.75×D for ferrous (steel/stainless/
+        # cast iron/titanium) and 1.0×D for aluminum/non-ferrous (since clean
+        # non-ferrous can already hit 1.5×D on standard geometry).
+        elif (_geom_cc == "standard"):
+            _deep_threshold = 1.0 if _is_nonferrous_clean else 0.75
+            if _doc_xd_cc >= _deep_threshold:
+                _cb_max_xd = min(1.5, _max_slot_xd + 0.5)
+                _cc_notes.append(
+                    f"💡 Deep slot at {_doc_xd_cc:.2f}×D — a chipbreaker version of this tool would let you "
+                    f"safely run up to {_cb_max_xd:.1f}×D DOC and 10–20% higher feed at the same SFM. "
+                    f"Segmented chips evacuate cleanly in deep slots, reducing chip packing and load spikes. "
+                    f"Look for the matching -CB SKU."
+                )
+                if _cc_risk is None:
+                    _cc_risk = "info"
     elif _woc_pct_cc > _max_side_woc:
         # Side milling too heavy for flute count
         _over = round(_woc_pct_cc - _max_side_woc, 1)
