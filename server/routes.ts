@@ -4253,8 +4253,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "shank_type": <string or null — look in the title block, notes section, or shank detail for shank type callouts. Return "weldon" if "WELDON FLAT", "WELDON", or "W/FLAT" is noted. Return "safe_lock" if "SAFE LOCK", "SAFELOCK", "SAFE-LOCK", "HAIMER", or "HAIMER SAFE-LOCK" is noted. Return null if no special shank type is noted.>,
   "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>,
   "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>,
-  "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". false otherwise.>,
-  "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". false otherwise.>,
+  "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable pitch by design). false otherwise.>,
+  "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable helix by design). false otherwise.>,
   "tool_series": <string or null — look in the NOTES section for a series callout like "QTR3-STYLE", "QTR3-RN", "QTR3". Return "QTR3-RN" if noted, "QTR3" if "QTR3-STYLE" or "QTR3" is noted, null otherwise.>
 }`;
 
@@ -4368,6 +4368,14 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         console.log(`LOC/LBS swap detected: loc=${eLoc} lbs=${eLbs} — swapping`);
         extracted.loc = eLbs;
         extracted.lbs = eLoc;
+      }
+
+      // QTR3 series tools always have variable pitch + variable helix by design.
+      // If the model identified a QTR3 series tool but missed either flag, force both true.
+      const _series = typeof extracted.tool_series === "string" ? extracted.tool_series.toUpperCase() : "";
+      if (_series.startsWith("QTR3")) {
+        if (extracted.variable_pitch !== true) extracted.variable_pitch = true;
+        if (extracted.variable_helix !== true) extracted.variable_helix = true;
       }
 
       return res.json({ ok: true, extracted });
