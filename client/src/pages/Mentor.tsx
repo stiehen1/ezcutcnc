@@ -11978,11 +11978,26 @@ ${stabSection}
                 <div className={`rounded-xl border p-3 text-sm space-y-1 ${
                   customer.risk === "warning"
                     ? "border-red-500/40 bg-red-500/8 text-red-300"
+                    : customer.risk === "info"
+                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
                     : "border-amber-500/30 bg-amber-500/5 text-amber-300"
                 }`}>
                   {(customer.notes as string[]).map((note, i) => (
                     <div key={i}>{note}</div>
                   ))}
+                  {(customer as any).cb_upgrade?.suggested_edps?.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-emerald-500/20">
+                      <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold">Chipbreaker options:</span>{" "}
+                      <span className="font-mono text-emerald-200">
+                        {(customer as any).cb_upgrade.suggested_edps.slice(0, 3).join(", ")}
+                      </span>
+                      {(customer as any).cb_upgrade.suggested_series && (
+                        <span className="text-[11px] text-emerald-400/70 ml-2">
+                          ({(customer as any).cb_upgrade.suggested_series})
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : null}
 

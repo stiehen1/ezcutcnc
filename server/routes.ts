@@ -1900,6 +1900,52 @@ export async function registerRoutes(
             } catch (_) { /* skip */ }
           }
         }
+
+        // Chipbreaker upgrade EDP lookup — when the deep-slot advisory fired in
+        // the engine, find chipbreaker SKUs at the same dia / flute / corner /
+        // sufficient LOC so the UI can offer concrete "-CB" alternatives.
+        const cbUp = (raw as any)?.customer?.cb_upgrade;
+        if (cbUp && cbUp.tool_dia > 0 && cbUp.flutes > 0) {
+          try {
+            const cbDia    = Number(cbUp.tool_dia);
+            const cbFlutes = Number(cbUp.flutes);
+            const cbLoc    = Number(cbUp.lookup_loc ?? cbUp.loc ?? 0);
+            const cbCorner = String(cbUp.lookup_corner ?? "").toLowerCase();
+            const cbCr     = Number(cbUp.lookup_cr ?? 0);
+            const cbLbs    = Number(cbUp.lookup_lbs ?? 0);
+            const cbInputHasCr = cbCorner !== "square" && cbCorner !== "ball" && cbCr > 0;
+            const cbCornerStr = (cbCorner === "square" || cbCorner === "ball") ? cbCorner : String(parseFloat(cbCr.toFixed(4)));
+            const cbCrFilter = cbInputHasCr
+              ? ` AND CASE WHEN s.corner_condition ~ '^[0-9]' THEN s.corner_condition::numeric ELSE 999 END <= ${cbCr}`
+              : "";
+            const cbLbsFilter = cbLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${cbLbs}` : "";
+            // First try: exact dia + same/more flutes + sufficient LOC + matching corner
+            const cbQ = await pool.query(
+              `SELECT s.edp, s.series, s.loc_in, s.flutes
+               FROM skus s
+               JOIN sku_uploads u ON s.upload_id = u.id
+               WHERE u.is_current = TRUE
+                 AND LOWER(COALESCE(s.geometry, '')) = 'chipbreaker'
+                 AND ABS(s.cutting_diameter_in - $1) < 0.001
+                 AND s.flutes >= $2
+                 AND COALESCE(s.loc_in, 0) >= $3
+                 AND (LOWER(s.corner_condition) = LOWER($4) OR LOWER(s.corner_condition) NOT IN ('square','ball'))
+                 ${cbCrFilter}
+                 ${cbLbsFilter}
+                 ${matClause}
+               ORDER BY s.flutes ASC, s.loc_in ASC, s.edp
+               LIMIT 5`,
+              [cbDia, cbFlutes, cbLoc, cbCornerStr]
+            );
+            if (cbQ.rows.length > 0) {
+              cbUp.suggested_edps = cbQ.rows.map((r: any) => r.edp);
+              cbUp.suggested_edp  = cbUp.suggested_edps[0];
+              cbUp.suggested_series = cbQ.rows[0].series;
+              cbUp.suggested_loc    = Number(cbQ.rows[0].loc_in);
+              cbUp.suggested_flutes = Number(cbQ.rows[0].flutes);
+            }
+          } catch (_) { /* skip on error */ }
+        }
       }
 
       const out = mentorSchemas.response.safeParse(raw);

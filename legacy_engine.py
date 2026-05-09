@@ -5775,6 +5775,7 @@ def run(payload=None):
     # at the light axial DOC used for facing passes.
     _cc_notes  = []
     _cc_risk   = None
+    _cb_upgrade = None  # populated when chipbreaker upgrade advisory fires
     _fl_cc     = int(data.get("flutes", 4) or 4)
     _woc_pct_cc = float(data.get("woc_pct", 0) or 0)
     _doc_xd_cc  = float(data.get("doc_xd", 1.0) or 1.0)
@@ -5825,11 +5826,24 @@ def run(payload=None):
                 _cc_notes.append(
                     f"💡 Deep slot at {_doc_xd_cc:.2f}×D — a chipbreaker version of this tool would let you "
                     f"safely run up to {_cb_max_xd:.1f}×D DOC and 10–20% higher feed at the same SFM. "
-                    f"Segmented chips evacuate cleanly in deep slots, reducing chip packing and load spikes. "
-                    f"Look for the matching -CB SKU."
+                    f"Segmented chips evacuate cleanly in deep slots, reducing chip packing and load spikes."
                 )
                 if _cc_risk is None:
                     _cc_risk = "info"
+                # Emit a structured upgrade payload so the server can look up
+                # matching chipbreaker EDPs and surface them inline.
+                _cb_upgrade = {
+                    "type": "chipbreaker_upgrade",
+                    "current_edp": str(data.get("edp") or ""),
+                    "tool_dia":  float(data.get("tool_dia", 0) or 0),
+                    "flutes":    _fl_cc,
+                    "loc":       float(data.get("loc", 0) or 0),
+                    "lookup_dia":     float(data.get("tool_dia", 0) or 0),
+                    "lookup_loc":     float(data.get("loc", 0) or 0),
+                    "lookup_corner":  str(data.get("corner_condition", "") or ""),
+                    "lookup_cr":      float(data.get("corner_radius", 0) or 0),
+                    "lookup_lbs":     float(data.get("lbs", 0) or 0),
+                }
     elif _woc_pct_cc > _max_side_woc:
         # Side milling too heavy for flute count
         _over = round(_woc_pct_cc - _max_side_woc, 1)
@@ -5924,6 +5938,7 @@ def run(payload=None):
             "status_hint": feed_limiter_hint,
             "risk": _cc_risk,
             "notes": _cc_notes if _cc_notes else None,
+            "cb_upgrade": _cb_upgrade,
         },
         "engineering": {
             "deflection_in": locals().get("deflection", 0.0),
