@@ -1602,16 +1602,20 @@ export default function Mentor() {
       // Flute wash: estimate 20% of LOC, but 0 for reduced-shank tools (tapered neck — no parallel relief)
       const _pdfLoc = e.loc > 0 ? e.loc : 0;
       const _pdfDia = e.tool_dia > 0 ? e.tool_dia : 0;
+      const _pdfLbs = e.lbs > 0 ? e.lbs : 0;
+      const _pdfShankDia = e.shank_dia > 0 ? e.shank_dia : 0;
       const _isReducedShank = e.shank_dia > 0 && e.shank_dia > e.tool_dia * 1.05;
+      // Necked tool detection: lbs significantly exceeds loc means there's a neck/reach
+      // even when shank_dia equals tool_dia (e.g. CC-14426 — Ø.250 shank/cutter, lbs=1.25)
+      const _isNeckedTool = _pdfLbs > 0 && _pdfLoc > 0 && _pdfLbs >= _pdfLoc * 1.5;
       const _fwEst = (_pdfLoc > 0 && !_isReducedShank) ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
       setPdfFluteWash(_fwEst);
       setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
       // Set default stickout
       // For reduced-shank tools: try DB lookup on closest standard QTR3 SKU first.
       // Falls back to taper geometry formula (30° included = 15° half-angle) if no DB match.
+      // Necked tools (lbs > loc, equal shank/cutter dia): lbs + 1×D minimum.
       // Standard tools: LOC + flute_wash + 0.33×cutting_dia
-      const _pdfLbs = e.lbs > 0 ? e.lbs : 0;
-      const _pdfShankDia = e.shank_dia > 0 ? e.shank_dia : 0;
       if (_pdfLoc > 0 && _pdfDia > 0) {
         let _defaultSo: number;
         if (_isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0) {
@@ -1632,6 +1636,9 @@ export default function Mentor() {
             const taperLen = radialDelta / Math.tan(15 * Math.PI / 180);
             _defaultSo = Math.ceil((_pdfLbs + taperLen + 0.52 * _pdfShankDia) * 200) / 200;
           }
+        } else if (_isNeckedTool) {
+          // Necked endmill (lbs measured shank-face to tip): clear the neck + 1×D
+          _defaultSo = Math.ceil((_pdfLbs + _pdfDia) * 200) / 200;
         } else {
           _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
         }
