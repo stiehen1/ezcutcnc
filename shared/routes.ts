@@ -188,6 +188,23 @@ export const mentorSchemas = {
       status_hint: z.string().nullable().optional(),
       risk: z.string().nullable().optional(),
       notes: z.array(z.string()).nullable().optional(),
+      cb_upgrade: z.object({
+        type: z.string().optional(),
+        current_edp: z.string().optional(),
+        tool_dia: z.number().optional(),
+        flutes: z.number().optional(),
+        loc: z.number().optional(),
+        lookup_dia: z.number().optional(),
+        lookup_loc: z.number().optional(),
+        lookup_corner: z.string().optional(),
+        lookup_cr: z.number().optional(),
+        lookup_lbs: z.number().optional(),
+        suggested_edp: z.string().optional(),
+        suggested_edps: z.array(z.string()).optional(),
+        suggested_series: z.string().nullable().optional(),
+        suggested_loc: z.number().optional(),
+        suggested_flutes: z.number().optional(),
+      }).nullable().optional(),
     }),
 
     engineering: z.object({

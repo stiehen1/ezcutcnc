@@ -5775,10 +5775,28 @@ def run(payload=None):
     # at the light axial DOC used for facing passes.
     _cc_notes  = []
     _cc_risk   = None
+    _cb_upgrade = None  # populated when chipbreaker upgrade advisory fires
     _fl_cc     = int(data.get("flutes", 4) or 4)
     _woc_pct_cc = float(data.get("woc_pct", 0) or 0)
     _doc_xd_cc  = float(data.get("doc_xd", 1.0) or 1.0)
     _max_slot_xd, _max_side_woc = flute_woc_limits(_fl_cc)
+    # Non-ferrous slotting boost: aluminum/brass/copper (non-abrasive) produce
+    # clean chips with excellent evacuation under flood/air blast — 1.5×D slotting
+    # is realistic. Excludes "Abrasive Non-Ferrous" (manganese bronze, silicon
+    # bronze, copper beryllium) which behave like cast iron and need the
+    # standard 1.0×D limit.
+    _mat_group_cc = (material_group or "").lower()
+    _is_nonferrous_clean = _mat_group_cc in ("aluminum", "non-ferrous", "non_ferrous", "brass", "copper")
+    if _is_nonferrous_clean and _max_slot_xd is not None:
+        _max_slot_xd = max(_max_slot_xd, 1.5)
+    # Chipbreaker / truncated rougher slotting boost: segmented chips evacuate
+    # far more readily than a smooth flute under deep DOC — give these tools
+    # an extra 0.5×D headroom (capped at 1.5×D total) before the chip-packing
+    # warning fires. Standard geometry tools stay at the conservative limit.
+    _geom_cc = str(data.get("geometry", "standard") or "standard").lower()
+    _is_cb_geom = _geom_cc in ("chipbreaker", "truncated_rougher")
+    if _is_cb_geom and _max_slot_xd is not None:
+        _max_slot_xd = min(1.5, _max_slot_xd + 0.5)
 
     if (data.get("mode") or "").lower() in ("face", "circ_interp"):
         pass  # face: high WOC is intentional stepover; circ_interp: WOC = radial wall, not chip-clearance concern
@@ -5797,6 +5815,35 @@ def run(payload=None):
                 f"Max recommended DOC for {_fl_cc}-flute slotting is {_max_slot_xd:.1f}×D."
             )
             _cc_risk = "caution"
+        # Positive upgrade path: deep slotting on standard geometry — suggest
+        # a chipbreaker version. Fires at 0.75×D for ferrous (steel/stainless/
+        # cast iron/titanium) and 1.0×D for aluminum/non-ferrous (since clean
+        # non-ferrous can already hit 1.5×D on standard geometry).
+        elif (_geom_cc == "standard"):
+            _deep_threshold = 1.0 if _is_nonferrous_clean else 0.75
+            if _doc_xd_cc >= _deep_threshold:
+                _cb_max_xd = min(1.5, _max_slot_xd + 0.5)
+                _cc_notes.append(
+                    f"💡 Deep slot at {_doc_xd_cc:.2f}×D — a chipbreaker version of this tool would let you "
+                    f"safely run up to {_cb_max_xd:.1f}×D DOC and 10–20% higher feed at the same SFM. "
+                    f"Segmented chips evacuate cleanly in deep slots, reducing chip packing and load spikes."
+                )
+                if _cc_risk is None:
+                    _cc_risk = "info"
+                # Emit a structured upgrade payload so the server can look up
+                # matching chipbreaker EDPs and surface them inline.
+                _cb_upgrade = {
+                    "type": "chipbreaker_upgrade",
+                    "current_edp": str(data.get("edp") or ""),
+                    "tool_dia":  float(data.get("tool_dia", 0) or 0),
+                    "flutes":    _fl_cc,
+                    "loc":       float(data.get("loc", 0) or 0),
+                    "lookup_dia":     float(data.get("tool_dia", 0) or 0),
+                    "lookup_loc":     float(data.get("loc", 0) or 0),
+                    "lookup_corner":  str(data.get("corner_condition", "") or ""),
+                    "lookup_cr":      float(data.get("corner_radius", 0) or 0),
+                    "lookup_lbs":     float(data.get("lbs", 0) or 0),
+                }
     elif _woc_pct_cc > _max_side_woc:
         # Side milling too heavy for flute count
         _over = round(_woc_pct_cc - _max_side_woc, 1)
@@ -5891,6 +5938,7 @@ def run(payload=None):
             "status_hint": feed_limiter_hint,
             "risk": _cc_risk,
             "notes": _cc_notes if _cc_notes else None,
+            "cb_upgrade": _cb_upgrade,
         },
         "engineering": {
             "deflection_in": locals().get("deflection", 0.0),

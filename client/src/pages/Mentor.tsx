@@ -1528,7 +1528,7 @@ export default function Mentor() {
         if (e.helix_angle !== undefined) next.helix_angle = Number(e.helix_angle);
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
-        if (e.corner_radius > 0) next.corner_radius = e.corner_radius;
+        if (e.corner_radius > 0) { next.corner_radius = e.corner_radius; setCrText(e.corner_radius.toFixed(4)); }
         if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); next.ream_shank_dia = e.shank_dia; }
         if (e.coating) next.coating = e.coating;
         if (e.keyseat_arbor_dia > 0) next.keyseat_arbor_dia = e.keyseat_arbor_dia;
@@ -2811,12 +2811,26 @@ export default function Mentor() {
         setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
         return;
       }
+      // Slotting DOC ceiling — material- and geometry-aware:
+      //   Standard geometry: 1.0×D (1.5×D for clean non-ferrous since chip evacuation is excellent)
+      //   Chipbreaker / Truncated Rougher: 1.5×D (segmented chips evacuate even in deep slots)
+      const _cleanNonFerrous = (() => {
+        const k = String(form.material || "").toLowerCase();
+        return k.startsWith("aluminum") || k === "brass" || k === "copper" || k === "non_ferrous" || k === "non-ferrous" || k.startsWith("plastic");
+      })();
+      const _isCbGeom = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
+      const _slotMaxXd = (_isCbGeom || _cleanNonFerrous) ? 1.5 : 1.0;
       if (fl === 5 && form.doc_xd > 0.5) {
-        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool for 1×D DOC.`]);
+        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool for ${_slotMaxXd}×D DOC.`]);
         return;
       }
-      if (fl <= 4 && form.doc_xd > 1.0) {
-        setRunWarnings([`Slotting DOC is limited to 1×D maximum. Reduce axial depth.`]);
+      if (fl <= 4 && form.doc_xd > _slotMaxXd) {
+        const _hint = _isCbGeom
+          ? `Chipbreaker slotting DOC ceiling is 1.5×D.`
+          : _cleanNonFerrous
+            ? `Non-ferrous slotting DOC ceiling is 1.5×D.`
+            : `Slotting DOC is limited to 1×D for steel/stainless/cast iron — switch to a chipbreaker geometry to safely run up to 1.5×D.`;
+        setRunWarnings([`${_hint} Reduce axial depth or change geometry.`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
@@ -11978,11 +11992,46 @@ ${stabSection}
                 <div className={`rounded-xl border p-3 text-sm space-y-1 ${
                   customer.risk === "warning"
                     ? "border-red-500/40 bg-red-500/8 text-red-300"
+                    : customer.risk === "info"
+                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
                     : "border-amber-500/30 bg-amber-500/5 text-amber-300"
                 }`}>
                   {(customer.notes as string[]).map((note, i) => (
                     <div key={i}>{note}</div>
                   ))}
+                  {(customer as any).cb_upgrade?.suggested_edps?.length > 0 ? (
+                    <div className="mt-2 pt-2 border-t border-emerald-500/20">
+                      <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold">Chipbreaker options:</span>{" "}
+                      <span className="font-mono text-emerald-200">
+                        {(customer as any).cb_upgrade.suggested_edps.slice(0, 3).join(", ")}
+                      </span>
+                      {(customer as any).cb_upgrade.suggested_series && (
+                        <span className="text-[11px] text-emerald-400/70 ml-2">
+                          ({(customer as any).cb_upgrade.suggested_series})
+                        </span>
+                      )}
+                    </div>
+                  ) : (customer as any).cb_upgrade ? (
+                    <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[11px] leading-relaxed">
+                      <span className="uppercase tracking-wider text-emerald-400 font-semibold">No stocked chipbreaker</span>
+                      {" "}at Ø{Number((customer as any).cb_upgrade.tool_dia).toFixed(4)}", {(customer as any).cb_upgrade.flutes}-flute,{" "}
+                      {Number((customer as any).cb_upgrade.lookup_loc).toFixed(3)}" LOC —{" "}
+                      <a
+                        href={`mailto:sales@corecutterusa.com?subject=${encodeURIComponent("Custom Chipbreaker Quote Request")}&body=${encodeURIComponent(
+                          `Hello,\n\nI'd like a quote on a custom chipbreaker endmill:\n\n` +
+                          `Diameter: ${Number((customer as any).cb_upgrade.tool_dia).toFixed(4)}"\n` +
+                          `Flutes: ${(customer as any).cb_upgrade.flutes}\n` +
+                          `LOC: ${Number((customer as any).cb_upgrade.lookup_loc).toFixed(3)}"\n` +
+                          ((customer as any).cb_upgrade.lookup_lbs > 0 ? `LBS: ${Number((customer as any).cb_upgrade.lookup_lbs).toFixed(3)}"\n` : "") +
+                          (Number((customer as any).cb_upgrade.lookup_cr) > 0 ? `Corner Radius: ${Number((customer as any).cb_upgrade.lookup_cr).toFixed(4)}"\n` : "") +
+                          `Reference standard EDP: ${(customer as any).cb_upgrade.current_edp || "(see calc setup)"}\n` +
+                          `\nThanks!`
+                        )}`}
+                        className="text-emerald-300 underline hover:text-emerald-200 font-semibold"
+                      >request a custom build →</a>
+                      <span className="text-emerald-400/70"> (we can grind this geometry to spec)</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
