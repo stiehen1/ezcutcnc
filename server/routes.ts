@@ -2599,7 +2599,7 @@ export async function registerRoutes(
           results_text ?? "(no results attached)",
           "",
           "─────────────────────────────────────",
-          "Questions? Contact us at sales@corecutterusa.com",
+          "Questions? Contact us at sales@corecutterusa.com or call us at 207-588-7519",
           "corecutcnc.com",
         ].join("\n"),
       }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
