@@ -2811,12 +2811,26 @@ export default function Mentor() {
         setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
         return;
       }
+      // Slotting DOC ceiling — material- and geometry-aware:
+      //   Standard geometry: 1.0×D (1.5×D for clean non-ferrous since chip evacuation is excellent)
+      //   Chipbreaker / Truncated Rougher: 1.5×D (segmented chips evacuate even in deep slots)
+      const _cleanNonFerrous = (() => {
+        const k = String(form.material || "").toLowerCase();
+        return k.startsWith("aluminum") || k === "brass" || k === "copper" || k === "non_ferrous" || k === "non-ferrous" || k.startsWith("plastic");
+      })();
+      const _isCbGeom = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
+      const _slotMaxXd = (_isCbGeom || _cleanNonFerrous) ? 1.5 : 1.0;
       if (fl === 5 && form.doc_xd > 0.5) {
-        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool for 1×D DOC.`]);
+        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool for ${_slotMaxXd}×D DOC.`]);
         return;
       }
-      if (fl <= 4 && form.doc_xd > 1.0) {
-        setRunWarnings([`Slotting DOC is limited to 1×D maximum. Reduce axial depth.`]);
+      if (fl <= 4 && form.doc_xd > _slotMaxXd) {
+        const _hint = _isCbGeom
+          ? `Chipbreaker slotting DOC ceiling is 1.5×D.`
+          : _cleanNonFerrous
+            ? `Non-ferrous slotting DOC ceiling is 1.5×D.`
+            : `Slotting DOC is limited to 1×D for steel/stainless/cast iron — switch to a chipbreaker geometry to safely run up to 1.5×D.`;
+        setRunWarnings([`${_hint} Reduce axial depth or change geometry.`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
