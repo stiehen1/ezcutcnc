@@ -5779,6 +5779,15 @@ def run(payload=None):
     _woc_pct_cc = float(data.get("woc_pct", 0) or 0)
     _doc_xd_cc  = float(data.get("doc_xd", 1.0) or 1.0)
     _max_slot_xd, _max_side_woc = flute_woc_limits(_fl_cc)
+    # Non-ferrous slotting boost: aluminum/brass/copper (non-abrasive) produce
+    # clean chips with excellent evacuation under flood/air blast — 1.5×D slotting
+    # is realistic. Excludes "Abrasive Non-Ferrous" (manganese bronze, silicon
+    # bronze, copper beryllium) which behave like cast iron and need the
+    # standard 1.0×D limit.
+    _mat_group_cc = (material_group or "").lower()
+    _is_nonferrous_clean = _mat_group_cc in ("aluminum", "non-ferrous", "non_ferrous", "brass", "copper")
+    if _is_nonferrous_clean and _max_slot_xd is not None:
+        _max_slot_xd = max(_max_slot_xd, 1.5)
 
     if (data.get("mode") or "").lower() in ("face", "circ_interp"):
         pass  # face: high WOC is intentional stepover; circ_interp: WOC = radial wall, not chip-clearance concern
