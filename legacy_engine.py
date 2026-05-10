@@ -5933,10 +5933,13 @@ def run(payload=None):
         _ra_cr_eff = float(data.get("tool_dia") or data.get("diameter") or 0) / 2.0
     else:
         _ra_cr_eff = _ra_cr if _ra_cr > 0 else 0.0005
-    # Runout floor: TIR contributes directly to the scallop, derated 80% (worst case
-    # is when runout aligns with feed direction; typical ≈ 80% of TIR shows in Ra).
+    # Runout floor: TIR creates uneven scallop heights between teeth. The peak-to-
+    # valley deviation is ~TIR, but Ra (the *average* deviation) is much smaller —
+    # roughly 5% of TIR in microinches. Calibrated against shop data: 0.5 mil TIR
+    # → ~25 µin Ra floor; 1 mil TIR → ~50 µin; 2 mil TIR → ~100 µin (matching
+    # real-world finishes from typical ER vs. shrink-fit holders).
     _ra_tir = float(data.get("runout_in", 0) or 0)
-    _ra_tir_floor_uin = (_ra_tir * 0.8) * 1_000_000  # in µin
+    _ra_tir_floor_uin = (_ra_tir * 1_000_000) * 0.05  # in µin (5% factor, not 80%)
     if _ra_eligible and _ra_cr_eff > 0:
         _fz_scallop_uin = (_ipt_base ** 2 * 1_000_000) / (8 * _ra_cr_eff)
         _ra_actual = round(max(_fz_scallop_uin, _ra_tir_floor_uin), 2)
