@@ -1850,6 +1850,7 @@ export default function Mentor() {
     dual_contact: false,
     holder_gage_length: 0,
     holder_nose_dia: 0,
+    runout_in: 0,  // measured TIR at tool tip in spindle (0 = not measured)
     extension_holder: false,
     workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
@@ -2292,6 +2293,7 @@ export default function Mentor() {
   }, [form.tool_type, form.mode]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
+  const [runoutText, setRunoutText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
   const [targetHoleText, setTargetHoleText] = React.useState("");
   const [drillFluteLenText, setDrillFluteLenText] = React.useState("");
@@ -6370,6 +6372,67 @@ ${stabSection}
                     }}
                   />
                 </div>
+              </div>
+
+              {/* Runout (TIR) — measured at tool tip in spindle */}
+              <div className="pt-2 border-t border-border/50 space-y-1.5">
+                <FieldLabel hint={`Runout (TIR) measured at the tool tip with the tool seated in the holder, in the spindle. Critical for chip load consistency, surface finish, and tool life — every 0.0001" above 0.0005" reduces tool life roughly 10–15%, and high TIR makes one tooth do most of the cutting (uneven wear, edge fracture). Use a test indicator on a ground gage diameter at the LOC. Typical: shrink fit 0.0002–0.0004", hydraulic 0.0003–0.0005", ER collet 0.0008–0.0015", worn holders 0.002"+. If not measured, the engine uses a default for your selected holder type.`}>
+                  Runout / TIR (in) <span className="text-zinc-500 font-normal">— measured at tool tip</span>
+                </FieldLabel>
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  {[
+                    { v: 0.0002, label: "0.0002\"", note: "shrink fit" },
+                    { v: 0.0005, label: "0.0005\"", note: "hydraulic" },
+                    { v: 0.001,  label: "0.001\"",  note: "ER quality" },
+                    { v: 0.002,  label: "0.002\"",  note: "worn ER" },
+                  ].map(({ v, label, note }) => (
+                    <button key={v} type="button"
+                      onClick={() => { setForm(p => ({ ...p, runout_in: v })); setRunoutText(v.toFixed(4)); }}
+                      className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                      style={{
+                        backgroundColor: Math.abs(form.runout_in - v) < 1e-6 ? "#06b6d4" : "transparent",
+                        borderColor: "#06b6d4",
+                        color: Math.abs(form.runout_in - v) < 1e-6 ? "#fff" : "#06b6d4",
+                      }}
+                    >{label} <span className="font-normal opacity-70">({note})</span></button>
+                  ))}
+                  <Input
+                    type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-24 h-8 text-xs"
+                    value={runoutText}
+                    onChange={e => setRunoutText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(runoutText);
+                      if (Number.isFinite(n) && n > 0 && n <= 0.01) {
+                        setForm(p => ({ ...p, runout_in: n }));
+                        setRunoutText(n.toFixed(4));
+                      } else {
+                        setForm(p => ({ ...p, runout_in: 0 }));
+                        setRunoutText("");
+                      }
+                    }}
+                  />
+                  <button type="button"
+                    onClick={() => { setForm(p => ({ ...p, runout_in: 0 })); setRunoutText(""); }}
+                    className="rounded px-2.5 py-1 text-xs font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+                    style={{
+                      backgroundColor: form.runout_in === 0 ? "#3f3f46" : "transparent",
+                      color: form.runout_in === 0 ? "#fff" : "#a1a1aa",
+                    }}
+                  >Not measured</button>
+                </div>
+                {form.runout_in === 0 && (
+                  <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                    Runout not measured — the engine will use a default for your holder type.
+                    For accurate tool life and surface finish predictions, measure TIR at the
+                    tool tip with a 0.0001" test indicator.
+                  </p>
+                )}
+                {form.runout_in > 0.001 && (
+                  <p className="text-[11px] text-amber-400 leading-relaxed">
+                    ⚠ {(form.runout_in * 1000).toFixed(1)} mil TIR is high — tool life will be
+                    significantly reduced. Consider a tighter holder (shrink fit, hydraulic).
+                  </p>
+                )}
               </div>
 
               {/* Yes/No question rows */}

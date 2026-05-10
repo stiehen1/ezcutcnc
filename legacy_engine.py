@@ -3709,8 +3709,13 @@ def run(payload=None):
 
     _ipt_frac = IPT_FRAC.get(_mat_key, IPT_FRAC.get(material_group, 0.005))
     ipt = _ipt_frac * data["diameter"]
-    # Apply holder runout correction: lower runout holders can exploit more of the rated IPT
-    _runout_factor = HOLDER_RUNOUT_FACTOR.get(data.get("toolholder", "er_collet"), 0.92)
+    # Apply holder runout correction: lower runout holders can exploit more of the rated IPT.
+    # If user measured TIR at tool tip (runout_in > 0), use that — more accurate than the
+    # holder-type-based default (which assumes typical runout for that holder class).
+    from engine.physics import runout_ipt_factor as _ro_ipt
+    _user_runout = float(data.get("runout_in", 0) or 0)
+    _runout_override = _ro_ipt(_user_runout)
+    _runout_factor = _runout_override if _runout_override is not None else HOLDER_RUNOUT_FACTOR.get(data.get("toolholder", "er_collet"), 0.92)
     ipt *= _runout_factor
     # Workholding feed scaler: weak workholding (toe clamps, soft jaws) requires backing off
     # chip load to avoid chattering the part loose. Rigid fixtures allow a small boost.
@@ -5100,6 +5105,15 @@ def run(payload=None):
     elif _corner_cond == "ball":
         tool_life_min *= 1.20  # full-radius geometry, no sharp corner
 
+    # Runout derate: high TIR at the tool tip causes one tooth to carry most of the
+    # cutting load, accelerating edge wear and chipping. Only applied when the user
+    # has measured TIR (otherwise we trust the holder-type-based defaults).
+    from engine.physics import runout_life_factor as _ro_life
+    _user_tir = float(data.get("runout_in", 0) or 0)
+    if _user_tir > 0:
+        _life_runout_factor = _ro_life(_user_tir)
+        tool_life_min *= _life_runout_factor
+
     hp_required = (force_lbf * sfm_actual) / 33000.0 if (force_lbf > 0 and sfm_actual > 0) else 0.0
     # --- HP Required (cutting power estimate) ---
     force_val = float(locals().get("force_lbf", locals().get("force", 0.0)) or 0.0)
@@ -5853,6 +5867,18 @@ def run(payload=None):
         )
         _cc_risk = "caution"
     # ── end chip-clearance check ─────────────────────────────────────────────
+
+    # ── Runout advisory (high TIR reduces tool life and Ra prediction accuracy) ──
+    _user_tir_cc = float(data.get("runout_in", 0) or 0)
+    if _user_tir_cc > 0.001:
+        _life_pct_lost = round((1.0 - _ro_life(_user_tir_cc)) * 100, 0)
+        _cc_notes.append(
+            f"⚠ High runout ({_user_tir_cc*1000:.1f} mil TIR) — tool life prediction reduced "
+            f"~{_life_pct_lost:.0f}%. One tooth carries most of the load, accelerating edge wear. "
+            f"A tighter holder (shrink fit, hydraulic) would significantly improve tool life and finish."
+        )
+        if _cc_risk is None:
+            _cc_risk = "caution"
 
     # ── RPM-limited SFM warning (micro tools) ────────────────────────────────
     if _rpm_limited:

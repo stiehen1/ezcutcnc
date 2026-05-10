@@ -611,6 +611,54 @@ def tool_life(material_group, coating, load, coolant,
     load_factor = max(0.4, 1.2 - load)
     return base * coat_factor * coolant_factor * fluid_factor * load_factor
 
+
+def runout_life_factor(tir_in):
+    """Tool life multiplier from measured TIR at the tool tip in the spindle.
+    Below 0.0005" — no penalty (excellent holders).
+    0.0005"-0.001" — gradual: 0% → 25% reduction.
+    0.001"-0.002"  — steep:    25% → 60% reduction.
+    Above 0.002"   — capped at 60% reduction (one-tooth-cutting territory).
+    Returns 1.0 if tir_in <= 0 (not measured — no override applied)."""
+    try:
+        t = float(tir_in or 0)
+    except (TypeError, ValueError):
+        return 1.0
+    if t <= 0:
+        return 1.0
+    if t <= 0.0005:
+        return 1.0
+    if t <= 0.001:
+        # 0.0005→0.001 maps to 1.0→0.75 (linear)
+        return 1.0 - 0.25 * ((t - 0.0005) / 0.0005)
+    if t <= 0.002:
+        # 0.001→0.002 maps to 0.75→0.40 (linear)
+        return 0.75 - 0.35 * ((t - 0.001) / 0.001)
+    return 0.40
+
+
+def runout_ipt_factor(tir_in, fallback=0.92):
+    """User-measured TIR override for HOLDER_RUNOUT_FACTOR (chip load multiplier).
+    At very low TIR the chip load is even across teeth — no derate.
+    At higher TIR one tooth carries more load, so we back off the rated IPT.
+    fallback is used when TIR is not measured (caller falls back to holder-type table)."""
+    try:
+        t = float(tir_in or 0)
+    except (TypeError, ValueError):
+        return None
+    if t <= 0:
+        return None  # signals "not measured" — caller uses HOLDER_RUNOUT_FACTOR
+    if t <= 0.0003:
+        return 1.00
+    if t <= 0.0005:
+        return 0.99
+    if t <= 0.001:
+        return 0.95
+    if t <= 0.0015:
+        return 0.90
+    if t <= 0.002:
+        return 0.85
+    return 0.78
+
 import math
 
 DEFLECTION_LIMITS = {
