@@ -6380,7 +6380,15 @@ ${stabSection}
                 <FieldLabel hint={`Runout (TIR) measured at the tool tip with the tool seated in the holder, in the spindle. Critical for chip load consistency, surface finish, and tool life — every 0.0001" above 0.0005" reduces tool life roughly 10–15%, and high TIR makes one tooth do most of the cutting (uneven wear, edge fracture). Use a test indicator on a ground gage diameter at the LOC. Typical: shrink fit 0.0002–0.0004", hydraulic 0.0003–0.0005", ER collet 0.0008–0.0015", worn holders 0.002"+. If not measured, the engine uses a default for your selected holder type.`}>
                   Runout / TIR (in) <span className="text-zinc-500 font-normal">— measured at tool tip</span>
                 </FieldLabel>
-                <div className="flex flex-wrap gap-1.5 items-center">
+                <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
+                  <button type="button"
+                    onClick={() => { setForm(p => ({ ...p, runout_in: 0 })); setRunoutText(""); }}
+                    className="rounded px-2 py-1 text-xs font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                    style={{
+                      backgroundColor: form.runout_in === 0 ? "#3f3f46" : "transparent",
+                      color: form.runout_in === 0 ? "#fff" : "#a1a1aa",
+                    }}
+                  >Not measured</button>
                   {[
                     { v: 0.0002, label: "0.0002\"", tip: "Typical for a Shrink Fit holder" },
                     { v: 0.0005, label: "0.0005\"", tip: "Typical for a Hydraulic holder" },
@@ -6393,7 +6401,7 @@ ${stabSection}
                         <TooltipTrigger asChild>
                           <button type="button"
                             onClick={() => { setForm(p => ({ ...p, runout_in: v })); setRunoutText(v.toFixed(4)); }}
-                            className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                            className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
                             style={{
                               backgroundColor: selected ? "#06b6d4" : "transparent",
                               borderColor: "#06b6d4",
@@ -6406,7 +6414,7 @@ ${stabSection}
                     );
                   })}
                   <Input
-                    type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-24 h-8 text-xs"
+                    type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
                     value={runoutText}
                     onChange={e => setRunoutText(e.target.value)}
                     onBlur={() => {
@@ -6420,14 +6428,6 @@ ${stabSection}
                       }
                     }}
                   />
-                  <button type="button"
-                    onClick={() => { setForm(p => ({ ...p, runout_in: 0 })); setRunoutText(""); }}
-                    className="rounded px-2.5 py-1 text-xs font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
-                    style={{
-                      backgroundColor: form.runout_in === 0 ? "#3f3f46" : "transparent",
-                      color: form.runout_in === 0 ? "#fff" : "#a1a1aa",
-                    }}
-                  >Not measured</button>
                 </div>
                 {form.runout_in === 0 && (
                   <p className="text-[11px] text-amber-400/80 leading-relaxed">
