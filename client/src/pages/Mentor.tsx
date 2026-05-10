@@ -6421,7 +6421,8 @@ ${stabSection}
                       const n = parseFloat(runoutText);
                       if (Number.isFinite(n) && n > 0 && n <= 0.01) {
                         setForm(p => ({ ...p, runout_in: n }));
-                        setRunoutText(n.toFixed(4));
+                        // Use 5 decimals so values down to 0.00001" (1 millionth) display correctly
+                        setRunoutText(n.toFixed(5));
                       } else {
                         setForm(p => ({ ...p, runout_in: 0 }));
                         setRunoutText("");
