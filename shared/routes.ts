@@ -34,6 +34,8 @@ export const mentorSchemas = {
     helix_angle: z.number().min(0).max(90).default(0),
     coating: z.string().default(""),
     target_ra_uin: z.number().min(0).default(0),
+    reduce_wall_taper: z.boolean().default(false),  // legacy — kept for backwards compat; replaced by max_wall_taper_in
+    max_wall_taper_in: z.number().min(0).max(0.05).default(0),  // target max wall taper (in). 0 = no target
 
     // Surfacing (3D contouring) specific
     surfacing_input_mode: z.enum(["scallop", "stepover"]).default("scallop"),
@@ -54,6 +56,7 @@ export const mentorSchemas = {
     toolholder: z.enum(["shrink_fit", "hydraulic", "hp_collet", "er_collet", "milling_chuck", "weldon", "press_fit", "capto", "right_angle_head"]).default("er_collet"),
     holder_gage_length: z.number().min(0).default(0),
     holder_nose_dia: z.number().min(0).default(0),
+    runout_in: z.number().min(0).max(0.01).default(0),  // measured TIR at tool tip in spindle
     dual_contact: z.boolean().default(false),
     speeder_enabled: z.boolean().default(false),
     speeder_ratio: z.number().min(1).max(20).default(4),
@@ -205,6 +208,9 @@ export const mentorSchemas = {
         suggested_loc: z.number().optional(),
         suggested_flutes: z.number().optional(),
       }).nullable().optional(),
+      predicted_wall_taper_in: z.number().nullable().optional(),
+      wall_taper_target_in: z.number().nullable().optional(),
+      recommended_woc_pct: z.number().nullable().optional(),
     }),
 
     engineering: z.object({

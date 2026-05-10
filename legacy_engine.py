@@ -3709,8 +3709,13 @@ def run(payload=None):
 
     _ipt_frac = IPT_FRAC.get(_mat_key, IPT_FRAC.get(material_group, 0.005))
     ipt = _ipt_frac * data["diameter"]
-    # Apply holder runout correction: lower runout holders can exploit more of the rated IPT
-    _runout_factor = HOLDER_RUNOUT_FACTOR.get(data.get("toolholder", "er_collet"), 0.92)
+    # Apply holder runout correction: lower runout holders can exploit more of the rated IPT.
+    # If user measured TIR at tool tip (runout_in > 0), use that — more accurate than the
+    # holder-type-based default (which assumes typical runout for that holder class).
+    from engine.physics import runout_ipt_factor as _ro_ipt
+    _user_runout = float(data.get("runout_in", 0) or 0)
+    _runout_override = _ro_ipt(_user_runout)
+    _runout_factor = _runout_override if _runout_override is not None else HOLDER_RUNOUT_FACTOR.get(data.get("toolholder", "er_collet"), 0.92)
     ipt *= _runout_factor
     # Workholding feed scaler: weak workholding (toe clamps, soft jaws) requires backing off
     # chip load to avoid chattering the part loose. Rigid fixtures allow a small boost.
@@ -5100,6 +5105,15 @@ def run(payload=None):
     elif _corner_cond == "ball":
         tool_life_min *= 1.20  # full-radius geometry, no sharp corner
 
+    # Runout derate: high TIR at the tool tip causes one tooth to carry most of the
+    # cutting load, accelerating edge wear and chipping. Only applied when the user
+    # has measured TIR (otherwise we trust the holder-type-based defaults).
+    from engine.physics import runout_life_factor as _ro_life
+    _user_tir = float(data.get("runout_in", 0) or 0)
+    if _user_tir > 0:
+        _life_runout_factor = _ro_life(_user_tir)
+        tool_life_min *= _life_runout_factor
+
     hp_required = (force_lbf * sfm_actual) / 33000.0 if (force_lbf > 0 and sfm_actual > 0) else 0.0
     # --- HP Required (cutting power estimate) ---
     force_val = float(locals().get("force_lbf", locals().get("force", 0.0)) or 0.0)
@@ -5854,6 +5868,18 @@ def run(payload=None):
         _cc_risk = "caution"
     # ── end chip-clearance check ─────────────────────────────────────────────
 
+    # ── Runout advisory (high TIR reduces tool life and Ra prediction accuracy) ──
+    _user_tir_cc = float(data.get("runout_in", 0) or 0)
+    if _user_tir_cc > 0.001:
+        _life_pct_lost = round((1.0 - _ro_life(_user_tir_cc)) * 100, 0)
+        _cc_notes.append(
+            f"⚠ High runout ({_user_tir_cc*1000:.1f} mil TIR) — tool life prediction reduced "
+            f"~{_life_pct_lost:.0f}%. One tooth carries most of the load, accelerating edge wear. "
+            f"A tighter holder (shrink fit, hydraulic) would significantly improve tool life and finish."
+        )
+        if _cc_risk is None:
+            _cc_risk = "caution"
+
     # ── RPM-limited SFM warning (micro tools) ────────────────────────────────
     if _rpm_limited:
         _sfm_deficit_pct = round(100.0 - _sfm_pct_of_target, 0)
@@ -5888,25 +5914,191 @@ def run(payload=None):
     _face_cr = float(data.get("corner_radius") or 0)
     _rec_so = round((_face_tool_dia - 2 * _face_cr) * 0.75, 5) if _face_mode and _face_tool_dia > 0 else None
 
-    # Surface finish (Ra) cap for face mode
+    # Surface finish (Ra) cap — applied in face, finish, and deep_pocket modes.
+    # Math: Ra ≈ fz² / (8 × Rc) for peripheral cuts (CR or square endmill).
+    # Runout adds to the scallop floor — high TIR makes a target Ra unachievable
+    # regardless of feed.
     _target_ra = float(data.get("target_ra_uin") or 0)
     _ra_actual = None
     _ra_feed_capped = False
-    if _face_mode and _face_cr > 0:
-        _ra_actual = round((_ipt_base ** 2 * 1_000_000) / (8 * _face_cr), 2)
+    _ra_unachievable = False
+    _mode_lower = (data.get("mode") or "").lower()
+    _ra_eligible = _mode_lower in ("face", "finish", "deep_pocket")
+    # Effective corner radius: real CR for CR endmill, ~0.0005" edge prep on a "square"
+    _ra_cr = float(data.get("corner_radius") or 0)
+    _ra_corner_cond = (data.get("corner_condition") or "square").lower()
+    if _ra_corner_cond == "square" and _ra_cr <= 0:
+        _ra_cr_eff = 0.0005  # square endmills have a small edge prep that limits achievable Ra
+    elif _ra_corner_cond == "ball":
+        _ra_cr_eff = float(data.get("tool_dia") or data.get("diameter") or 0) / 2.0
+    else:
+        _ra_cr_eff = _ra_cr if _ra_cr > 0 else 0.0005
+    # Runout floor: TIR creates uneven scallop heights between teeth. The peak-to-
+    # valley deviation is ~TIR, but Ra (the *average* deviation) is much smaller —
+    # roughly 5% of TIR in microinches. Calibrated against shop data: 0.5 mil TIR
+    # → ~25 µin Ra floor; 1 mil TIR → ~50 µin; 2 mil TIR → ~100 µin (matching
+    # real-world finishes from typical ER vs. shrink-fit holders).
+    _ra_tir = float(data.get("runout_in", 0) or 0)
+    _ra_tir_floor_uin = (_ra_tir * 1_000_000) * 0.05  # in µin (5% factor, not 80%)
+    if _ra_eligible and _ra_cr_eff > 0:
+        _fz_scallop_uin = (_ipt_base ** 2 * 1_000_000) / (8 * _ra_cr_eff)
+        _ra_actual = round(max(_fz_scallop_uin, _ra_tir_floor_uin), 2)
         if _target_ra > 0:
-            _max_fpt = math.sqrt(_target_ra * 8 * _face_cr / 1_000_000)
-            if _ipt_base > _max_fpt:
-                _ipt_base = _max_fpt
-                ipt = _max_fpt  # no chip thinning adjustment for facing (WOC ≈ full dia)
-                feed_ipm = round(rpm * ipt * float(data.get("flutes", flutes)), 2)
-                _ra_actual = round(_target_ra, 2)  # capped to exactly the target
-                _ra_feed_capped = True
-                # Recalculate MRR and HP with the capped feed
-                _mrr_for_hp = float(doc) * float(woc) * float(feed_ipm)
-                hp_required = _mrr_for_hp * HP_PER_CUIN.get(
-                    data.get("material", material_group), HP_PER_CUIN.get(material_group, 1.0)
-                ) * _geom_hp_factor * _hardness_hp_factor
+            # Net Ra budget after subtracting runout floor (can't go below TIR floor)
+            _ra_budget = _target_ra - _ra_tir_floor_uin
+            if _ra_budget <= 0:
+                # Runout alone exceeds the target — feed cap won't help
+                _ra_unachievable = True
+                _ra_actual = round(_ra_tir_floor_uin, 2)
+            else:
+                _max_fpt = math.sqrt(_ra_budget * 8 * _ra_cr_eff / 1_000_000)
+                if _ipt_base > _max_fpt:
+                    _ipt_base = _max_fpt
+                    ipt = _max_fpt
+                    feed_ipm = round(rpm * ipt * float(data.get("flutes", flutes)), 2)
+                    _ra_actual = round(_target_ra, 2)
+                    _ra_feed_capped = True
+                    # Recalculate MRR and HP with the capped feed
+                    _mrr_for_hp = float(doc) * float(woc) * float(feed_ipm)
+                    hp_required = _mrr_for_hp * HP_PER_CUIN.get(
+                        data.get("material", material_group), HP_PER_CUIN.get(material_group, 1.0)
+                    ) * _geom_hp_factor * _hardness_hp_factor
+
+    # Append Ra-related notes
+    if _ra_eligible and _target_ra > 0:
+        if _ra_unachievable:
+            _cc_notes.append(
+                f"⚠ Target Ra {_target_ra:.0f} µin is below the runout floor "
+                f"({_ra_tir_floor_uin:.1f} µin from {_ra_tir*1000:.1f} mil TIR). "
+                f"No feed reduction can hit the target — a tighter holder is required, "
+                f"or use a tool with a larger corner radius / ball nose to reduce scallop sensitivity to runout."
+            )
+            if _cc_risk != "warning":
+                _cc_risk = "warning"
+        elif _ra_feed_capped:
+            _ra_msg = f"💡 Feed capped to {feed_ipm:.1f} IPM to hit Ra ≤ {_target_ra:.0f} µin target (fz = {ipt:.5f}\")."
+            if _ra_tir <= 0:
+                _ra_msg += " ⚠ Runout not measured — actual Ra may be 50–100% worse than predicted."
+            _cc_notes.append(_ra_msg)
+            if _cc_risk is None:
+                _cc_risk = "info"
+
+    # Wall taper target mode — predicts taper from deflection geometry and
+    # iteratively backs off WOC and SFM until the prediction meets the target.
+    # Predicted wall taper ≈ deflection_at_top × (LOC / stickout) + thermal_term.
+    # Reality is messier: holder runout, material lot, and coolant flow all
+    # affect actual taper, so we attach a ±50% caveat in the user-facing note.
+    _max_taper_target = float(data.get("max_wall_taper_in", 0) or 0)
+    _wall_taper_active_legacy = bool(data.get("reduce_wall_taper"))  # legacy checkbox path
+    _predicted_taper = None
+    if (_max_taper_target > 0 or _wall_taper_active_legacy) and _ra_eligible:
+        _wt_loc = float(data.get("loc", 0) or 0)
+        _wt_stickout = float(data.get("stickout", 0) or 0)
+        _wt_dia = float(data.get("diameter", 0) or 0)
+        _wt_deflection = float(locals().get("deflection", 0) or 0)
+        # Geometric ratio: tip deflection × (LOC / stickout) gives top-to-bottom delta.
+        # Capped at 1.0 since deflection above the engagement point doesn't translate
+        # 1:1 into wall taper (cantilever curvature, not pure rotation).
+        _geom_ratio = min(1.0, (_wt_loc / _wt_stickout) if _wt_stickout > 0 else 0.5)
+        # Thermal contribution: very rough — 5% of deflection for steel, 10% for stainless/Ti
+        _therm_mult = 1.10 if material_group in ("Stainless", "Titanium", "Inconel") else 1.05
+        _predicted_taper = round(_wt_deflection * _geom_ratio * _therm_mult, 6)
+
+        if _max_taper_target > 0:
+            # Bidirectional target solver — find the HIGHEST WOC that still meets
+            # the target, regardless of whether current WOC is over or under.
+            # This way the Optimal button always reflects "best case under target".
+            #
+            # Math: predicted_taper scales linearly with WOC (radial force ∝ engagement).
+            # If current WOC = W gives taper T, then taper at WOC W' = T × (W'/W).
+            # Solving for W' = W × (target / T) gives the WOC where taper = target.
+            _current_woc_pct = float(data.get("woc_pct", 0) or 0)
+            _woc_floor_pct = 3.0   # rubbing floor — going below this hurts finish
+            _woc_ceiling_pct = 25.0  # finishing ceiling — above this isn't really finishing anymore
+            if _current_woc_pct > 0 and _predicted_taper > 0:
+                # Solve for max WOC that hits target
+                _woc_at_target = _current_woc_pct * (_max_taper_target / _predicted_taper)
+                _max_woc_pct = max(_woc_floor_pct, min(_woc_ceiling_pct, _woc_at_target))
+            else:
+                _max_woc_pct = _current_woc_pct
+            _woc_target_pct = round(_max_woc_pct, 1)
+
+            # Compute predicted taper at the recommended WOC (for the banner)
+            _final_taper = _predicted_taper * (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else _predicted_taper
+
+            # Decide if we need to also trim IPT/SFM — only if even the WOC ceiling
+            # can't get us under target (i.e. tool is too long, holder too loose, etc.)
+            _ipt_reduction = 0.0
+            _sfm_reduction = 0.0
+            if _final_taper > _max_taper_target:
+                # WOC alone can't hit the target — drop IPT in 5% steps up to 25%
+                for _step in range(5):
+                    if _final_taper <= _max_taper_target:
+                        break
+                    _ipt_reduction += 0.05
+                    _final_taper = _predicted_taper * (_woc_target_pct / _current_woc_pct) * (1.0 - _ipt_reduction)
+                # Heat-sensitive thermal nudge as last resort
+                if _final_taper > _max_taper_target and material_group in ("Stainless", "Titanium", "Inconel"):
+                    _sfm_reduction = min(0.10, (_final_taper / _max_taper_target - 1.0) * 0.5)
+                    _final_taper = _final_taper * (1.0 - _sfm_reduction * 0.3)
+
+            # Apply IPT and SFM reductions to feed_ipm and RPM
+            if _ipt_reduction > 0:
+                feed_ipm = round(feed_ipm * (1.0 - _ipt_reduction), 2)
+            if _sfm_reduction > 0:
+                rpm = round(rpm * (1.0 - _sfm_reduction))
+                sfm_actual = round((rpm * _wt_dia) / 3.82, 1)
+                feed_ipm = round(feed_ipm * (1.0 - _sfm_reduction), 2)
+
+            _predicted_taper = round(_final_taper, 6)
+
+            # Build the user-facing note. Three cases:
+            #   A) Recommended WOC > current WOC: "you have headroom — push WOC up to X%"
+            #   B) Recommended WOC < current WOC: "drop WOC to X% to meet target"
+            #   C) Recommended WOC ≈ current WOC: "you're at the limit"
+            _woc_delta = _woc_target_pct - _current_woc_pct
+            if abs(_woc_delta) < 0.5:
+                _woc_note = f"WOC at {_current_woc_pct:.0f}% is at the target limit"
+            elif _woc_delta > 0:
+                _woc_note = f"WOC headroom — Optimal recommends {_woc_target_pct:.0f}% (current {_current_woc_pct:.0f}%) for max MRR within target"
+            else:
+                _woc_note = f"WOC reduce to ≤{_woc_target_pct:.0f}% (was {_current_woc_pct:.0f}%) — biggest lever for taper"
+
+            _msg_parts = [f"💡 Wall taper target {_max_taper_target*1000:.2f} mil"]
+            _msg_parts.append(_woc_note)
+            if _ipt_reduction > 0:
+                _msg_parts.append(f"feed/IPT reduced {_ipt_reduction*100:.0f}%")
+            if _sfm_reduction > 0:
+                _msg_parts.append(f"SFM trimmed {_sfm_reduction*100:.0f}% (thermal)")
+            _msg_parts.append(f"Predicted taper at recommended WOC: {_predicted_taper*1000:.2f} mil ±50%")
+            _cc_notes.append(" — ".join(_msg_parts) + ". Click Optimal · taper above to apply.")
+
+            if _final_taper > _max_taper_target * 1.2:
+                _cc_notes.append(
+                    f"⚠ Even at minimum WOC, predicted taper still exceeds target. "
+                    f"Consider: shorter stickout, tighter holder (lower TIR), reduced LOC/D ratio, "
+                    f"or multi-pass finish strategy."
+                )
+                if _cc_risk != "warning":
+                    _cc_risk = "caution"
+            elif _cc_risk is None:
+                _cc_risk = "info"
+
+            # Always set _woc_reduction so recommended_woc_pct gets exposed in the result.
+            # (Engine output uses _woc_reduction > 0 as the gate; we set a tiny positive
+            # value here to signal "target is set, here's the recommended WOC".)
+            _woc_reduction = max(1e-9, 1.0 - (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else 1e-9)
+        elif _wall_taper_active_legacy:
+            # Legacy checkbox path — keep the old behavior (15% SFM cut)
+            rpm = round(rpm * 0.85)
+            sfm_actual = round((rpm * _wt_dia) / 3.82, 1)
+            feed_ipm = round(feed_ipm * 0.85, 2)
+            _cc_notes.append(
+                f"💡 Wall taper reduction active — SFM and feed reduced 15%. "
+                f"For a numeric target, set Max Wall Taper above instead of the checkbox."
+            )
+            if _cc_risk is None:
+                _cc_risk = "info"
 
     result = {
         "customer": {
@@ -5939,6 +6131,9 @@ def run(payload=None):
             "risk": _cc_risk,
             "notes": _cc_notes if _cc_notes else None,
             "cb_upgrade": _cb_upgrade,
+            "predicted_wall_taper_in": _predicted_taper,
+            "wall_taper_target_in": _max_taper_target if _max_taper_target > 0 else None,
+            "recommended_woc_pct": locals().get("_woc_target_pct") if locals().get("_woc_reduction", 0) > 0 else None,
         },
         "engineering": {
             "deflection_in": locals().get("deflection", 0.0),

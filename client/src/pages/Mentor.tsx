@@ -1807,6 +1807,8 @@ export default function Mentor() {
     shank_dia: 0,
     coating: "",
     target_ra_uin: 0,
+    reduce_wall_taper: false,
+    max_wall_taper_in: 0,  // 0 = no taper target
     tool_series: "",
     helix_angle: 0,
 
@@ -1850,6 +1852,7 @@ export default function Mentor() {
     dual_contact: false,
     holder_gage_length: 0,
     holder_nose_dia: 0,
+    runout_in: 0,  // measured TIR at tool tip in spindle (0 = not measured)
     extension_holder: false,
     workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
@@ -2292,6 +2295,9 @@ export default function Mentor() {
   }, [form.tool_type, form.mode]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
+  const [runoutText, setRunoutText] = React.useState("");
+  const [targetRaText, setTargetRaText] = React.useState("");
+  const [maxWallTaperText, setMaxWallTaperText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
   const [targetHoleText, setTargetHoleText] = React.useState("");
   const [drillFluteLenText, setDrillFluteLenText] = React.useState("");
@@ -6372,6 +6378,109 @@ ${stabSection}
                 </div>
               </div>
 
+              {/* Runout (TIR) — measured at tool tip in spindle */}
+              <div className="pt-2 border-t border-border/50 space-y-1.5">
+                <FieldLabel hint={`Runout (TIR) measured at the tool tip with the tool seated in the holder, in the spindle. Critical for chip load consistency, surface finish, and tool life — every 0.0001" above 0.0005" reduces tool life roughly 10–15%, and high TIR makes one tooth do most of the cutting (uneven wear, edge fracture). Use a test indicator on a ground gage diameter at the LOC. Typical: shrink fit 0.0002–0.0004", hydraulic 0.0003–0.0005", ER collet 0.0008–0.0015", worn holders 0.002"+. If not measured, the engine uses a default for your selected holder type.`}>
+                  Runout / TIR (in) <span className="text-zinc-500 font-normal">— measured at tool tip</span>
+                </FieldLabel>
+                <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
+                  <button type="button"
+                    onClick={() => { setForm(p => ({ ...p, runout_in: 0 })); setRunoutText(""); }}
+                    className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                    style={{
+                      backgroundColor: form.runout_in === 0 ? "#3f3f46" : "transparent",
+                      color: form.runout_in === 0 ? "#fff" : "#a1a1aa",
+                    }}
+                  >Not measured</button>
+                  {[
+                    { v: 0.0002, label: "0.0002\"", tip: "Typical for a Shrink Fit holder" },
+                    { v: 0.0005, label: "0.0005\"", tip: "Typical for a Hydraulic holder" },
+                    { v: 0.001,  label: "0.001\"",  tip: "Typical for a quality ER Collet holder" },
+                    { v: 0.002,  label: "0.002\"",  tip: "Typical for a worn ER Collet holder" },
+                  ].map(({ v, label, tip }) => {
+                    const selected = Math.abs(form.runout_in - v) < 1e-6;
+                    return (
+                      <Tooltip key={v}>
+                        <TooltipTrigger asChild>
+                          <button type="button"
+                            onClick={() => { setForm(p => ({ ...p, runout_in: v })); setRunoutText(v.toFixed(4)); }}
+                            className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
+                            style={{
+                              backgroundColor: selected ? "#06b6d4" : "transparent",
+                              borderColor: "#06b6d4",
+                              color: selected ? "#fff" : "#06b6d4",
+                            }}
+                          >{label}</button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{tip}</TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                  <Input
+                    type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
+                    value={runoutText}
+                    onChange={e => setRunoutText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(runoutText);
+                      if (Number.isFinite(n) && n > 0 && n <= 0.01) {
+                        setForm(p => ({ ...p, runout_in: n }));
+                        // Use 5 decimals so values down to 0.00001" (1 millionth) display correctly
+                        setRunoutText(n.toFixed(5));
+                      } else {
+                        setForm(p => ({ ...p, runout_in: 0 }));
+                        setRunoutText("");
+                      }
+                    }}
+                  />
+                </div>
+                {form.runout_in === 0 && (
+                  <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                    Runout not measured — the engine will use a default for your holder type.
+                    For accurate tool life and surface finish predictions, measure TIR at the
+                    tool tip with a 0.0001" test indicator.
+                  </p>
+                )}
+                {form.runout_in > 0.001 && (
+                  <p className="text-[11px] text-amber-400 leading-relaxed">
+                    ⚠ {(form.runout_in * 1000).toFixed(1)} mil TIR is high — tool life will be
+                    significantly reduced. Consider a tighter holder (shrink fit, hydraulic).
+                  </p>
+                )}
+                {/* Holder/TIR mismatch detection — typical ranges by holder type */}
+                {(() => {
+                  if (form.runout_in <= 0) return null;
+                  const tir = form.runout_in;
+                  const h = form.toolholder;
+                  // Typical TIR ranges by holder class
+                  const expected: Record<string, [number, number, string]> = {
+                    shrink_fit:    [0.00010, 0.00045, "Shrink Fit"],
+                    hydraulic:     [0.00020, 0.00060, "Hydraulic"],
+                    capto:         [0.00010, 0.00040, "Capto"],
+                    press_fit:     [0.00020, 0.00060, "Press Fit (Lobed)"],
+                    milling_chuck: [0.00030, 0.00080, "Milling Chuck"],
+                    hp_collet:     [0.00050, 0.00150, "HP Collet"],
+                    er_collet:     [0.00080, 0.00200, "ER Collet"],
+                    weldon:        [0.00050, 0.00200, "Weldon"],
+                  };
+                  const range = expected[h];
+                  if (!range) return null;
+                  const [lo, hi, label] = range;
+                  // Only flag if user is way outside the typical range
+                  if (tir < lo * 0.5 || tir > hi * 1.5) {
+                    const tirStr = (tir * 1000).toFixed(1);
+                    const loStr = (lo * 1000).toFixed(1);
+                    const hiStr = (hi * 1000).toFixed(1);
+                    return (
+                      <p className="text-[11px] text-cyan-400/90 leading-relaxed">
+                        ℹ {tirStr} mil TIR is unusual for a {label} holder (typical: {loStr}–{hiStr} mil).
+                        Verify the measured value, or check that the toolholder selection above matches your setup.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
               {/* Yes/No question rows */}
               <div className="pt-2 border-t border-border/50 space-y-0">
                 {/* Extension Holder */}
@@ -8006,6 +8115,131 @@ ${stabSection}
           </div>
           </>)}
 
+          {/* Finishing Quality — Target Ra + Wall Taper (finish, face, deep_pocket modes) */}
+          {operation === "milling" && form.tool_type !== "chamfer_mill" &&
+           (form.mode === "finish" || form.mode === "face" || form.mode === "deep_pocket") && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Finishing Quality</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="space-y-3">
+            {/* Target Surface Finish */}
+            <div className="space-y-1.5">
+              <FieldLabel hint={`Target surface finish (Ra in microinches). When set, the engine caps feed-per-tooth so the predicted Ra meets the target. Math: Ra ≈ fz² / (8 × corner_radius). High runout adds to the scallop floor — measure TIR for accurate predictions. Typical Ra grades: 8 µin (mirror), 16 µin (precision finish), 32 µin (general finish), 63 µin (semi-finish), 125 µin (rough finish).`}>
+                Target Surface Finish <span className="text-zinc-500 font-normal">— optional, µin Ra</span>
+              </FieldLabel>
+              <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
+                <button type="button"
+                  onClick={() => { setForm(p => ({ ...p, target_ra_uin: 0 })); setTargetRaText(""); }}
+                  className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                  style={{
+                    backgroundColor: form.target_ra_uin === 0 ? "#3f3f46" : "transparent",
+                    color: form.target_ra_uin === 0 ? "#fff" : "#a1a1aa",
+                  }}
+                >No target</button>
+                {[8, 16, 32, 63, 125].map(v => (
+                  <button key={v} type="button"
+                    onClick={() => { setForm(p => ({ ...p, target_ra_uin: v })); setTargetRaText(""); }}
+                    className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
+                    style={{
+                      backgroundColor: form.target_ra_uin === v ? "#f97316" : "transparent",
+                      borderColor: "#f97316",
+                      color: form.target_ra_uin === v ? "#fff" : "#f97316",
+                    }}
+                  >{v} µin</button>
+                ))}
+                <Input
+                  type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
+                  value={targetRaText}
+                  onChange={e => setTargetRaText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(targetRaText);
+                    if (Number.isFinite(n) && n > 0) {
+                      setForm(p => ({ ...p, target_ra_uin: n }));
+                    } else if (targetRaText === "") {
+                      setForm(p => ({ ...p, target_ra_uin: 0 }));
+                    }
+                  }}
+                />
+              </div>
+              {form.target_ra_uin > 0 && form.runout_in === 0 && (
+                <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                  ⚠ Runout not measured — actual Ra may be 50–100% worse than predicted.
+                  For accurate finish prediction, measure TIR at the tool tip and enter it
+                  in the Tool Holder section above.
+                </p>
+              )}
+            </div>
+            {/* Max Wall Taper target */}
+            <div className="space-y-1.5 pt-1 border-t border-border/30">
+              <FieldLabel hint={`Target maximum wall taper (top-to-bottom deviation across the cut depth). Engine predicts taper from deflection at the engagement point and iteratively reduces WOC and SFM until predicted taper meets your target. Caps WOC at 25% and SFM at 80% of nominal in worst cases. Prediction is ±50% accurate — depends on holder runout, material lot, and coolant flow. Always verify on the first part. Common targets: 0.0002" (precision), 0.0005" (typical), 0.001" (loose), 0.002" (rough).`}>
+                Max Wall Taper <span className="text-zinc-500 font-normal">— optional, target across cut depth</span>
+              </FieldLabel>
+              <div className="flex flex-nowrap gap-1 items-center">
+                <button type="button"
+                  onClick={() => { setForm(p => ({ ...p, max_wall_taper_in: 0 })); setMaxWallTaperText(""); }}
+                  className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 whitespace-nowrap"
+                  style={{
+                    backgroundColor: form.max_wall_taper_in === 0 ? "#3f3f46" : "transparent",
+                    color: form.max_wall_taper_in === 0 ? "#fff" : "#a1a1aa",
+                  }}
+                >No target</button>
+                {[
+                  { v: 0.0002, label: "0.0002\"", tip: "Precision — tight CMM tolerance" },
+                  { v: 0.0005, label: "0.0005\"", tip: "Typical — most production work" },
+                  { v: 0.001,  label: "0.001\"",  tip: "Loose — general parts" },
+                  { v: 0.002,  label: "0.002\"",  tip: "Rough — pre-finish or non-critical" },
+                ].map(({ v, label, tip }) => {
+                  const selected = Math.abs(form.max_wall_taper_in - v) < 1e-7;
+                  return (
+                    <Tooltip key={v}>
+                      <TooltipTrigger asChild>
+                        <button type="button"
+                          onClick={() => { setForm(p => ({ ...p, max_wall_taper_in: v })); setMaxWallTaperText(""); }}
+                          className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
+                          style={{
+                            backgroundColor: selected ? "#f97316" : "transparent",
+                            borderColor: "#f97316",
+                            color: selected ? "#fff" : "#f97316",
+                          }}
+                        >{label}</button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-72 text-xs">{tip}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+                <Input
+                  type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
+                  value={maxWallTaperText}
+                  onChange={e => setMaxWallTaperText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(maxWallTaperText);
+                    if (Number.isFinite(n) && n > 0 && n <= 0.05) {
+                      setForm(p => ({ ...p, max_wall_taper_in: n }));
+                      setMaxWallTaperText(n.toFixed(5));
+                    } else if (maxWallTaperText === "") {
+                      setForm(p => ({ ...p, max_wall_taper_in: 0 }));
+                    }
+                  }}
+                />
+              </div>
+              {form.loc > 0 && form.tool_dia > 0 && form.loc / form.tool_dia >= 2.0 && form.max_wall_taper_in === 0 && (
+                <p className="text-[10px] text-amber-400/80 leading-relaxed">
+                  Long-reach tool ({(form.loc / form.tool_dia).toFixed(1)}×D LOC) — wall taper is a common
+                  failure mode. Set a target above to have the engine optimize WOC/SFM for it.
+                </p>
+              )}
+              {form.max_wall_taper_in > 0 && (
+                <p className="text-[10px] text-zinc-500 leading-relaxed italic">
+                  Prediction accuracy ±50% — actual taper depends on holder runout, material lot, and
+                  coolant flow. Always verify on the first part.
+                </p>
+              )}
+            </div>
+          </div>
+          </>)}
+
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
@@ -8019,24 +8253,40 @@ ${stabSection}
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
-                {WOC_PRESETS[form.mode] && (
-                  <button
-                    type="button"
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
-                    style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
-                    onClick={() => {
-                      const wp = WOC_PRESETS[form.mode];
-                      if (!wp) return;
-                      const dia = form.tool_dia || 0.5;
-                      // WOC Optimal = Med for HEM (shop-set targets already in wp.med per material)
-                      let optPct = wp.med;
-                      setForm((p) => ({ ...p, woc_pct: optPct }));
-                      setWocText(((optPct / 100) * dia).toFixed(4));
-                      const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
-                      setWocPreset(wocMatch ?? "optimal");
-                    }}
-                  >Optimal</button>
-                )}
+                {WOC_PRESETS[form.mode] && (() => {
+                  // If a wall taper target is set and the engine recommended a tighter WOC,
+                  // use that instead of the generic mode-based preset. Visually flag so
+                  // the user knows the Optimal value is taper-driven.
+                  const taperRecPct = (customer as any)?.recommended_woc_pct ?? null;
+                  const taperDriven = taperRecPct != null && taperRecPct > 0;
+                  return (
+                    <button
+                      type="button"
+                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                      style={
+                        wocPreset === "optimal"
+                          ? (taperDriven
+                              ? { borderColor: "#22c55e", background: "#22c55e", color: "#000" }
+                              : { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" })
+                          : (taperDriven
+                              ? { borderColor: "rgba(34,197,94,0.5)", color: "#22c55e" }
+                              : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" })
+                      }
+                      title={taperDriven ? `Wall-taper driven: ${taperRecPct.toFixed(0)}% WOC respects your max taper target.` : undefined}
+                      onClick={() => {
+                        const wp = WOC_PRESETS[form.mode];
+                        if (!wp) return;
+                        const dia = form.tool_dia || 0.5;
+                        // Prefer engine's taper-driven WOC if available, else fall back to Med preset
+                        const optPct = taperDriven ? taperRecPct : wp.med;
+                        setForm((p) => ({ ...p, woc_pct: optPct }));
+                        setWocText(((optPct / 100) * dia).toFixed(4));
+                        const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
+                        setWocPreset(taperDriven ? "optimal" : (wocMatch ?? "optimal"));
+                      }}
+                    >Optimal{taperDriven ? " · taper" : ""}</button>
+                  );
+                })()}
               </div>
               <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!wocText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                 <input
