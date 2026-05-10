@@ -6004,38 +6004,43 @@ def run(payload=None):
         _therm_mult = 1.10 if material_group in ("Stainless", "Titanium", "Inconel") else 1.05
         _predicted_taper = round(_wt_deflection * _geom_ratio * _therm_mult, 6)
 
-        if _max_taper_target > 0 and _predicted_taper > _max_taper_target:
-            # Iterative back-off in physically-correct lever order:
-            #   1. Reduce WOC — biggest lever (radial force scales ~linearly with arc engagement)
-            #   2. Reduce IPT/feed — also linear with cutting force
-            #   3. Optional thermal nudge: 5% SFM trim if material is heat-sensitive
-            # Predicted taper ≈ deflection ∝ radial_force ∝ WOC × IPT
-            _woc_reduction = 0.0
+        if _max_taper_target > 0:
+            # Bidirectional target solver — find the HIGHEST WOC that still meets
+            # the target, regardless of whether current WOC is over or under.
+            # This way the Optimal button always reflects "best case under target".
+            #
+            # Math: predicted_taper scales linearly with WOC (radial force ∝ engagement).
+            # If current WOC = W gives taper T, then taper at WOC W' = T × (W'/W).
+            # Solving for W' = W × (target / T) gives the WOC where taper = target.
+            _current_woc_pct = float(data.get("woc_pct", 0) or 0)
+            _woc_floor_pct = 3.0   # rubbing floor — going below this hurts finish
+            _woc_ceiling_pct = 25.0  # finishing ceiling — above this isn't really finishing anymore
+            if _current_woc_pct > 0 and _predicted_taper > 0:
+                # Solve for max WOC that hits target
+                _woc_at_target = _current_woc_pct * (_max_taper_target / _predicted_taper)
+                _max_woc_pct = max(_woc_floor_pct, min(_woc_ceiling_pct, _woc_at_target))
+            else:
+                _max_woc_pct = _current_woc_pct
+            _woc_target_pct = round(_max_woc_pct, 1)
+
+            # Compute predicted taper at the recommended WOC (for the banner)
+            _final_taper = _predicted_taper * (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else _predicted_taper
+
+            # Decide if we need to also trim IPT/SFM — only if even the WOC ceiling
+            # can't get us under target (i.e. tool is too long, holder too loose, etc.)
             _ipt_reduction = 0.0
             _sfm_reduction = 0.0
-            _adj_taper = _predicted_taper
-            _current_woc_pct = float(data.get("woc_pct", 0) or 0)
-            _woc_floor_pct = max(8.0, _current_woc_pct * 0.4)  # don't go below 40% of current or 8%, whichever is higher
-            _woc_target_pct = _current_woc_pct
-
-            # First pass — drop WOC in 10% relative steps
-            while _adj_taper > _max_taper_target and _woc_target_pct > _woc_floor_pct:
-                _woc_target_pct = max(_woc_floor_pct, _woc_target_pct * 0.9)
-                _woc_reduction = 1.0 - (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else 0
-                _adj_taper = _predicted_taper * (1.0 - _woc_reduction)
-
-            # Second pass — if still over, drop IPT/feed in 5% steps up to 25%
-            for _step in range(5):
-                if _adj_taper <= _max_taper_target:
-                    break
-                _ipt_reduction += 0.05
-                _adj_taper = _predicted_taper * (1.0 - _woc_reduction) * (1.0 - _ipt_reduction)
-
-            # Third pass — small thermal nudge for heat-sensitive materials only,
-            # capped at 10% SFM reduction (thermal contribution is real but small)
-            if _adj_taper > _max_taper_target and material_group in ("Stainless", "Titanium", "Inconel"):
-                _sfm_reduction = min(0.10, (_adj_taper / _max_taper_target - 1.0) * 0.5)
-                _adj_taper = _adj_taper * (1.0 - _sfm_reduction * 0.3)  # SFM only ~30% as effective as WOC/IPT
+            if _final_taper > _max_taper_target:
+                # WOC alone can't hit the target — drop IPT in 5% steps up to 25%
+                for _step in range(5):
+                    if _final_taper <= _max_taper_target:
+                        break
+                    _ipt_reduction += 0.05
+                    _final_taper = _predicted_taper * (_woc_target_pct / _current_woc_pct) * (1.0 - _ipt_reduction)
+                # Heat-sensitive thermal nudge as last resort
+                if _final_taper > _max_taper_target and material_group in ("Stainless", "Titanium", "Inconel"):
+                    _sfm_reduction = min(0.10, (_final_taper / _max_taper_target - 1.0) * 0.5)
+                    _final_taper = _final_taper * (1.0 - _sfm_reduction * 0.3)
 
             # Apply IPT and SFM reductions to feed_ipm and RPM
             if _ipt_reduction > 0:
@@ -6045,37 +6050,44 @@ def run(payload=None):
                 sfm_actual = round((rpm * _wt_dia) / 3.82, 1)
                 feed_ipm = round(feed_ipm * (1.0 - _sfm_reduction), 2)
 
-            _predicted_taper = round(_adj_taper, 6)
-            _msg_parts = [
-                f"💡 Wall taper target {_max_taper_target*1000:.2f} mil"
-            ]
-            if _woc_reduction > 0:
-                _msg_parts.append(f"WOC reduce to ≤{_woc_target_pct:.0f}% (was {_current_woc_pct:.0f}%) — biggest lever for taper")
+            _predicted_taper = round(_final_taper, 6)
+
+            # Build the user-facing note. Three cases:
+            #   A) Recommended WOC > current WOC: "you have headroom — push WOC up to X%"
+            #   B) Recommended WOC < current WOC: "drop WOC to X% to meet target"
+            #   C) Recommended WOC ≈ current WOC: "you're at the limit"
+            _woc_delta = _woc_target_pct - _current_woc_pct
+            if abs(_woc_delta) < 0.5:
+                _woc_note = f"WOC at {_current_woc_pct:.0f}% is at the target limit"
+            elif _woc_delta > 0:
+                _woc_note = f"WOC headroom — Optimal recommends {_woc_target_pct:.0f}% (current {_current_woc_pct:.0f}%) for max MRR within target"
+            else:
+                _woc_note = f"WOC reduce to ≤{_woc_target_pct:.0f}% (was {_current_woc_pct:.0f}%) — biggest lever for taper"
+
+            _msg_parts = [f"💡 Wall taper target {_max_taper_target*1000:.2f} mil"]
+            _msg_parts.append(_woc_note)
             if _ipt_reduction > 0:
                 _msg_parts.append(f"feed/IPT reduced {_ipt_reduction*100:.0f}%")
             if _sfm_reduction > 0:
                 _msg_parts.append(f"SFM trimmed {_sfm_reduction*100:.0f}% (thermal)")
-            _msg_parts.append(f"Predicted taper: {_predicted_taper*1000:.2f} mil ±50%")
-            _cc_notes.append(" — ".join(_msg_parts) + ". Verify on first part.")
-            if _adj_taper > _max_taper_target * 1.2:
+            _msg_parts.append(f"Predicted taper at recommended WOC: {_predicted_taper*1000:.2f} mil ±50%")
+            _cc_notes.append(" — ".join(_msg_parts) + ". Click Optimal · taper above to apply.")
+
+            if _final_taper > _max_taper_target * 1.2:
                 _cc_notes.append(
-                    f"⚠ Predicted taper {_predicted_taper*1000:.2f} mil still exceeds target "
-                    f"{_max_taper_target*1000:.2f} mil. Consider: shorter stickout, tighter holder "
-                    f"(lower TIR), reduced LOC/D ratio, or multi-pass finish strategy."
+                    f"⚠ Even at minimum WOC, predicted taper still exceeds target. "
+                    f"Consider: shorter stickout, tighter holder (lower TIR), reduced LOC/D ratio, "
+                    f"or multi-pass finish strategy."
                 )
                 if _cc_risk != "warning":
                     _cc_risk = "caution"
             elif _cc_risk is None:
                 _cc_risk = "info"
-        elif _max_taper_target > 0:
-            # Predicted taper already meets target — just inform
-            _cc_notes.append(
-                f"💡 Wall taper target {_max_taper_target*1000:.2f} mil — predicted: "
-                f"{_predicted_taper*1000:.2f} mil ±50% (within target). No SFM/WOC reduction needed. "
-                f"Verify on first part."
-            )
-            if _cc_risk is None:
-                _cc_risk = "info"
+
+            # Always set _woc_reduction so recommended_woc_pct gets exposed in the result.
+            # (Engine output uses _woc_reduction > 0 as the gate; we set a tiny positive
+            # value here to signal "target is set, here's the recommended WOC".)
+            _woc_reduction = max(1e-9, 1.0 - (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else 1e-9)
         elif _wall_taper_active_legacy:
             # Legacy checkbox path — keep the old behavior (15% SFM cut)
             rpm = round(rpm * 0.85)
