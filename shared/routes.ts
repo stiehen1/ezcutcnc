@@ -34,6 +34,7 @@ export const mentorSchemas = {
     helix_angle: z.number().min(0).max(90).default(0),
     coating: z.string().default(""),
     target_ra_uin: z.number().min(0).default(0),
+    reduce_wall_taper: z.boolean().default(false),  // opt-in: reduce SFM/feed 15% to limit thermal taper on long walls
 
     // Surfacing (3D contouring) specific
     surfacing_input_mode: z.enum(["scallop", "stepover"]).default("scallop"),

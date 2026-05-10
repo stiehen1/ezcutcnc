@@ -5914,25 +5914,89 @@ def run(payload=None):
     _face_cr = float(data.get("corner_radius") or 0)
     _rec_so = round((_face_tool_dia - 2 * _face_cr) * 0.75, 5) if _face_mode and _face_tool_dia > 0 else None
 
-    # Surface finish (Ra) cap for face mode
+    # Surface finish (Ra) cap — applied in face, finish, and deep_pocket modes.
+    # Math: Ra ≈ fz² / (8 × Rc) for peripheral cuts (CR or square endmill).
+    # Runout adds to the scallop floor — high TIR makes a target Ra unachievable
+    # regardless of feed.
     _target_ra = float(data.get("target_ra_uin") or 0)
     _ra_actual = None
     _ra_feed_capped = False
-    if _face_mode and _face_cr > 0:
-        _ra_actual = round((_ipt_base ** 2 * 1_000_000) / (8 * _face_cr), 2)
+    _ra_unachievable = False
+    _mode_lower = (data.get("mode") or "").lower()
+    _ra_eligible = _mode_lower in ("face", "finish", "deep_pocket")
+    # Effective corner radius: real CR for CR endmill, ~0.0005" edge prep on a "square"
+    _ra_cr = float(data.get("corner_radius") or 0)
+    _ra_corner_cond = (data.get("corner_condition") or "square").lower()
+    if _ra_corner_cond == "square" and _ra_cr <= 0:
+        _ra_cr_eff = 0.0005  # square endmills have a small edge prep that limits achievable Ra
+    elif _ra_corner_cond == "ball":
+        _ra_cr_eff = float(data.get("tool_dia") or data.get("diameter") or 0) / 2.0
+    else:
+        _ra_cr_eff = _ra_cr if _ra_cr > 0 else 0.0005
+    # Runout floor: TIR contributes directly to the scallop, derated 80% (worst case
+    # is when runout aligns with feed direction; typical ≈ 80% of TIR shows in Ra).
+    _ra_tir = float(data.get("runout_in", 0) or 0)
+    _ra_tir_floor_uin = (_ra_tir * 0.8) * 1_000_000  # in µin
+    if _ra_eligible and _ra_cr_eff > 0:
+        _fz_scallop_uin = (_ipt_base ** 2 * 1_000_000) / (8 * _ra_cr_eff)
+        _ra_actual = round(max(_fz_scallop_uin, _ra_tir_floor_uin), 2)
         if _target_ra > 0:
-            _max_fpt = math.sqrt(_target_ra * 8 * _face_cr / 1_000_000)
-            if _ipt_base > _max_fpt:
-                _ipt_base = _max_fpt
-                ipt = _max_fpt  # no chip thinning adjustment for facing (WOC ≈ full dia)
-                feed_ipm = round(rpm * ipt * float(data.get("flutes", flutes)), 2)
-                _ra_actual = round(_target_ra, 2)  # capped to exactly the target
-                _ra_feed_capped = True
-                # Recalculate MRR and HP with the capped feed
-                _mrr_for_hp = float(doc) * float(woc) * float(feed_ipm)
-                hp_required = _mrr_for_hp * HP_PER_CUIN.get(
-                    data.get("material", material_group), HP_PER_CUIN.get(material_group, 1.0)
-                ) * _geom_hp_factor * _hardness_hp_factor
+            # Net Ra budget after subtracting runout floor (can't go below TIR floor)
+            _ra_budget = _target_ra - _ra_tir_floor_uin
+            if _ra_budget <= 0:
+                # Runout alone exceeds the target — feed cap won't help
+                _ra_unachievable = True
+                _ra_actual = round(_ra_tir_floor_uin, 2)
+            else:
+                _max_fpt = math.sqrt(_ra_budget * 8 * _ra_cr_eff / 1_000_000)
+                if _ipt_base > _max_fpt:
+                    _ipt_base = _max_fpt
+                    ipt = _max_fpt
+                    feed_ipm = round(rpm * ipt * float(data.get("flutes", flutes)), 2)
+                    _ra_actual = round(_target_ra, 2)
+                    _ra_feed_capped = True
+                    # Recalculate MRR and HP with the capped feed
+                    _mrr_for_hp = float(doc) * float(woc) * float(feed_ipm)
+                    hp_required = _mrr_for_hp * HP_PER_CUIN.get(
+                        data.get("material", material_group), HP_PER_CUIN.get(material_group, 1.0)
+                    ) * _geom_hp_factor * _hardness_hp_factor
+
+    # Append Ra-related notes
+    if _ra_eligible and _target_ra > 0:
+        if _ra_unachievable:
+            _cc_notes.append(
+                f"⚠ Target Ra {_target_ra:.0f} µin is below the runout floor "
+                f"({_ra_tir_floor_uin:.1f} µin from {_ra_tir*1000:.1f} mil TIR). "
+                f"No feed reduction can hit the target — a tighter holder is required, "
+                f"or use a tool with a larger corner radius / ball nose to reduce scallop sensitivity to runout."
+            )
+            if _cc_risk != "warning":
+                _cc_risk = "warning"
+        elif _ra_feed_capped:
+            _ra_msg = f"💡 Feed capped to {feed_ipm:.1f} IPM to hit Ra ≤ {_target_ra:.0f} µin target (fz = {ipt:.5f}\")."
+            if _ra_tir <= 0:
+                _ra_msg += " ⚠ Runout not measured — actual Ra may be 50–100% worse than predicted."
+            _cc_notes.append(_ra_msg)
+            if _cc_risk is None:
+                _cc_risk = "info"
+
+    # Wall taper reduction mode — opt-in for long-LOC / deep wall finishing.
+    # Reduces SFM 15% to lower heat (= less thermal expansion = less taper bias).
+    # WOC and deflection target are informational here since this fires after the
+    # main calc — the user chose those inputs; we nudge feed/RPM and emit a note
+    # explaining the trade-off.
+    _wall_taper_active = bool(data.get("reduce_wall_taper"))
+    if _wall_taper_active and _ra_eligible:
+        rpm = round(rpm * 0.85)
+        sfm_actual = round((rpm * float(data.get("diameter", 0.5))) / 3.82, 1)
+        feed_ipm = round(feed_ipm * 0.85, 2)
+        _cc_notes.append(
+            f"💡 Wall taper reduction active — SFM and feed reduced 15% to lower heat and "
+            f"thermal expansion bias on the wall. For best results: also reduce WOC to ≤30% "
+            f"of diameter, climb mill, and verify holder runout is ≤0.0005\" TIR."
+        )
+        if _cc_risk is None:
+            _cc_risk = "info"
 
     result = {
         "customer": {

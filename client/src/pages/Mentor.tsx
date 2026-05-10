@@ -1807,6 +1807,7 @@ export default function Mentor() {
     shank_dia: 0,
     coating: "",
     target_ra_uin: 0,
+    reduce_wall_taper: false,
     tool_series: "",
     helix_angle: 0,
 
@@ -8065,6 +8066,82 @@ ${stabSection}
                   }}
                 >{label}</button>
               ))}
+            </div>
+          </div>
+          </>)}
+
+          {/* Finishing Quality — Target Ra + Wall Taper (finish, face, deep_pocket modes) */}
+          {operation === "milling" && form.tool_type !== "chamfer_mill" &&
+           (form.mode === "finish" || form.mode === "face" || form.mode === "deep_pocket") && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Finishing Quality</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          <div className="space-y-3">
+            {/* Target Surface Finish */}
+            <div className="space-y-1.5">
+              <FieldLabel hint={`Target surface finish (Ra in microinches). When set, the engine caps feed-per-tooth so the predicted Ra meets the target. Math: Ra ≈ fz² / (8 × corner_radius). High runout adds to the scallop floor — measure TIR for accurate predictions. Typical Ra grades: 8 µin (mirror), 16 µin (precision finish), 32 µin (general finish), 63 µin (semi-finish), 125 µin (rough finish).`}>
+                Target Surface Finish <span className="text-zinc-500 font-normal">— optional, µin Ra</span>
+              </FieldLabel>
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {[8, 16, 32, 63, 125].map(v => (
+                  <button key={v} type="button"
+                    onClick={() => setForm(p => ({ ...p, target_ra_uin: v }))}
+                    className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                    style={{
+                      backgroundColor: form.target_ra_uin === v ? "#f97316" : "transparent",
+                      borderColor: "#f97316",
+                      color: form.target_ra_uin === v ? "#fff" : "#f97316",
+                    }}
+                  >{v} µin</button>
+                ))}
+                <Input
+                  type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs"
+                  value={form.target_ra_uin > 0 && ![8,16,32,63,125].includes(form.target_ra_uin) ? String(form.target_ra_uin) : ""}
+                  onChange={e => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, target_ra_uin: n }));
+                    else if (e.target.value === "") setForm(p => ({ ...p, target_ra_uin: 0 }));
+                  }}
+                />
+                <button type="button"
+                  onClick={() => setForm(p => ({ ...p, target_ra_uin: 0 }))}
+                  className="rounded px-2.5 py-1 text-xs font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+                  style={{
+                    backgroundColor: form.target_ra_uin === 0 ? "#3f3f46" : "transparent",
+                    color: form.target_ra_uin === 0 ? "#fff" : "#a1a1aa",
+                  }}
+                >No target</button>
+              </div>
+              {form.target_ra_uin > 0 && form.runout_in === 0 && (
+                <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                  ⚠ Runout not measured — actual Ra may be 50–100% worse than predicted.
+                  For accurate finish prediction, measure TIR at the tool tip and enter it
+                  in the Tool Holder section above.
+                </p>
+              )}
+            </div>
+            {/* Reduce Wall Taper */}
+            <div className="flex items-start gap-2.5 pt-1 border-t border-border/30">
+              <input
+                type="checkbox"
+                id="reduce_wall_taper"
+                checked={!!form.reduce_wall_taper}
+                onChange={e => setForm(p => ({ ...p, reduce_wall_taper: e.target.checked }))}
+                className="mt-0.5 accent-orange-500 w-4 h-4 shrink-0"
+              />
+              <label htmlFor="reduce_wall_taper" className="cursor-pointer flex-1">
+                <span className="text-xs font-semibold text-zinc-200">Reduce Wall Taper</span>
+                {form.loc > 0 && form.tool_dia > 0 && form.loc / form.tool_dia >= 2.0 && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-400">recommended for long-reach tools</span>
+                )}
+                <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
+                  Reduces SFM/feed 15% to lower heat and thermal expansion bias on the wall.
+                  Best with WOC ≤30%, climb mill, and ≤0.0005" runout. Use on long-LOC walls
+                  where customers see top wider than bottom.
+                </p>
+              </label>
             </div>
           </div>
           </>)}
