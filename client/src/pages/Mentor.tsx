@@ -6382,21 +6382,29 @@ ${stabSection}
                 </FieldLabel>
                 <div className="flex flex-wrap gap-1.5 items-center">
                   {[
-                    { v: 0.0002, label: "0.0002\"", note: "shrink fit" },
-                    { v: 0.0005, label: "0.0005\"", note: "hydraulic" },
-                    { v: 0.001,  label: "0.001\"",  note: "ER quality" },
-                    { v: 0.002,  label: "0.002\"",  note: "worn ER" },
-                  ].map(({ v, label, note }) => (
-                    <button key={v} type="button"
-                      onClick={() => { setForm(p => ({ ...p, runout_in: v })); setRunoutText(v.toFixed(4)); }}
-                      className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
-                      style={{
-                        backgroundColor: Math.abs(form.runout_in - v) < 1e-6 ? "#06b6d4" : "transparent",
-                        borderColor: "#06b6d4",
-                        color: Math.abs(form.runout_in - v) < 1e-6 ? "#fff" : "#06b6d4",
-                      }}
-                    >{label} <span className="font-normal opacity-70">({note})</span></button>
-                  ))}
+                    { v: 0.0002, label: "0.0002\"", tip: "Typical for a Shrink Fit holder" },
+                    { v: 0.0005, label: "0.0005\"", tip: "Typical for a Hydraulic holder" },
+                    { v: 0.001,  label: "0.001\"",  tip: "Typical for a quality ER Collet holder" },
+                    { v: 0.002,  label: "0.002\"",  tip: "Typical for a worn ER Collet holder" },
+                  ].map(({ v, label, tip }) => {
+                    const selected = Math.abs(form.runout_in - v) < 1e-6;
+                    return (
+                      <Tooltip key={v}>
+                        <TooltipTrigger asChild>
+                          <button type="button"
+                            onClick={() => { setForm(p => ({ ...p, runout_in: v })); setRunoutText(v.toFixed(4)); }}
+                            className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                            style={{
+                              backgroundColor: selected ? "#06b6d4" : "transparent",
+                              borderColor: "#06b6d4",
+                              color: selected ? "#fff" : "#06b6d4",
+                            }}
+                          >{label}</button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{tip}</TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
                   <Input
                     type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-24 h-8 text-xs"
                     value={runoutText}
