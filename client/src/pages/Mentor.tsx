@@ -6383,7 +6383,7 @@ ${stabSection}
                 <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
                   <button type="button"
                     onClick={() => { setForm(p => ({ ...p, runout_in: 0 })); setRunoutText(""); }}
-                    className="rounded px-2 py-1 text-xs font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                    className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
                     style={{
                       backgroundColor: form.runout_in === 0 ? "#3f3f46" : "transparent",
                       color: form.runout_in === 0 ? "#fff" : "#a1a1aa",
