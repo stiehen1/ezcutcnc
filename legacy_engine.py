@@ -5983,23 +5983,97 @@ def run(payload=None):
             if _cc_risk is None:
                 _cc_risk = "info"
 
-    # Wall taper reduction mode — opt-in for long-LOC / deep wall finishing.
-    # Reduces SFM 15% to lower heat (= less thermal expansion = less taper bias).
-    # WOC and deflection target are informational here since this fires after the
-    # main calc — the user chose those inputs; we nudge feed/RPM and emit a note
-    # explaining the trade-off.
-    _wall_taper_active = bool(data.get("reduce_wall_taper"))
-    if _wall_taper_active and _ra_eligible:
-        rpm = round(rpm * 0.85)
-        sfm_actual = round((rpm * float(data.get("diameter", 0.5))) / 3.82, 1)
-        feed_ipm = round(feed_ipm * 0.85, 2)
-        _cc_notes.append(
-            f"💡 Wall taper reduction active — SFM and feed reduced 15% to lower heat and "
-            f"thermal expansion bias on the wall. For best results: also reduce WOC to ≤30% "
-            f"of diameter, climb mill, and verify holder runout is ≤0.0005\" TIR."
-        )
-        if _cc_risk is None:
-            _cc_risk = "info"
+    # Wall taper target mode — predicts taper from deflection geometry and
+    # iteratively backs off WOC and SFM until the prediction meets the target.
+    # Predicted wall taper ≈ deflection_at_top × (LOC / stickout) + thermal_term.
+    # Reality is messier: holder runout, material lot, and coolant flow all
+    # affect actual taper, so we attach a ±50% caveat in the user-facing note.
+    _max_taper_target = float(data.get("max_wall_taper_in", 0) or 0)
+    _wall_taper_active_legacy = bool(data.get("reduce_wall_taper"))  # legacy checkbox path
+    _predicted_taper = None
+    if (_max_taper_target > 0 or _wall_taper_active_legacy) and _ra_eligible:
+        _wt_loc = float(data.get("loc", 0) or 0)
+        _wt_stickout = float(data.get("stickout", 0) or 0)
+        _wt_dia = float(data.get("diameter", 0) or 0)
+        _wt_deflection = float(locals().get("deflection", 0) or 0)
+        # Geometric ratio: tip deflection × (LOC / stickout) gives top-to-bottom delta.
+        # Capped at 1.0 since deflection above the engagement point doesn't translate
+        # 1:1 into wall taper (cantilever curvature, not pure rotation).
+        _geom_ratio = min(1.0, (_wt_loc / _wt_stickout) if _wt_stickout > 0 else 0.5)
+        # Thermal contribution: very rough — 5% of deflection for steel, 10% for stainless/Ti
+        _therm_mult = 1.10 if material_group in ("Stainless", "Titanium", "Inconel") else 1.05
+        _predicted_taper = round(_wt_deflection * _geom_ratio * _therm_mult, 6)
+
+        if _max_taper_target > 0 and _predicted_taper > _max_taper_target:
+            # Iterative back-off: reduce SFM 5% per step (up to 20%), if still over
+            # target, also reduce WOC by 10% per step (down to 10% min). Predicted
+            # taper scales roughly linearly with cutting force, which scales with
+            # SFM and WOC. So a 15% SFM cut + 30% WOC cut ~= 40% taper reduction.
+            _sfm_reduction = 0.0
+            _woc_reduction = 0.0
+            _adj_taper = _predicted_taper
+            # First pass — drop SFM in 5% steps up to 20%
+            for _step in range(4):
+                if _adj_taper <= _max_taper_target:
+                    break
+                _sfm_reduction += 0.05
+                _adj_taper = _predicted_taper * (1.0 - _sfm_reduction)
+            # Second pass — if still over target, drop WOC. Each 10% WOC cut ~= 10%
+            # cutting force reduction = 10% taper reduction. Floor at 10% WOC total.
+            _current_woc_pct = float(data.get("woc_pct", 0) or 0)
+            _woc_floor_pct = 10.0
+            _woc_target_pct = _current_woc_pct
+            while _adj_taper > _max_taper_target and _woc_target_pct > _woc_floor_pct:
+                _woc_target_pct = max(_woc_floor_pct, _woc_target_pct - 5.0)
+                _woc_reduction = 1.0 - (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else 0
+                _adj_taper = _predicted_taper * (1.0 - _sfm_reduction) * (1.0 - _woc_reduction * 0.7)
+
+            # Apply the SFM reduction to RPM/feed
+            if _sfm_reduction > 0:
+                rpm = round(rpm * (1.0 - _sfm_reduction))
+                sfm_actual = round((rpm * _wt_dia) / 3.82, 1)
+                feed_ipm = round(feed_ipm * (1.0 - _sfm_reduction), 2)
+
+            _predicted_taper = round(_adj_taper, 6)
+            _msg_parts = [
+                f"💡 Wall taper target {_max_taper_target*1000:.2f} mil"
+            ]
+            if _sfm_reduction > 0:
+                _msg_parts.append(f"SFM reduced {_sfm_reduction*100:.0f}%")
+            if _woc_reduction > 0:
+                _msg_parts.append(f"WOC capped at {_woc_target_pct:.0f}% (was {_current_woc_pct:.0f}%) — adjust manually")
+            _msg_parts.append(f"Predicted taper: {_predicted_taper*1000:.2f} mil ±50%")
+            _cc_notes.append(" — ".join(_msg_parts) + ". Verify on first part.")
+            if _adj_taper > _max_taper_target * 1.2:
+                _cc_notes.append(
+                    f"⚠ Predicted taper {_predicted_taper*1000:.2f} mil still exceeds target "
+                    f"{_max_taper_target*1000:.2f} mil. Consider: shorter stickout, tighter holder "
+                    f"(lower TIR), reduced LOC/D ratio, or multi-pass finish strategy."
+                )
+                if _cc_risk != "warning":
+                    _cc_risk = "caution"
+            elif _cc_risk is None:
+                _cc_risk = "info"
+        elif _max_taper_target > 0:
+            # Predicted taper already meets target — just inform
+            _cc_notes.append(
+                f"💡 Wall taper target {_max_taper_target*1000:.2f} mil — predicted: "
+                f"{_predicted_taper*1000:.2f} mil ±50% (within target). No SFM/WOC reduction needed. "
+                f"Verify on first part."
+            )
+            if _cc_risk is None:
+                _cc_risk = "info"
+        elif _wall_taper_active_legacy:
+            # Legacy checkbox path — keep the old behavior (15% SFM cut)
+            rpm = round(rpm * 0.85)
+            sfm_actual = round((rpm * _wt_dia) / 3.82, 1)
+            feed_ipm = round(feed_ipm * 0.85, 2)
+            _cc_notes.append(
+                f"💡 Wall taper reduction active — SFM and feed reduced 15%. "
+                f"For a numeric target, set Max Wall Taper above instead of the checkbox."
+            )
+            if _cc_risk is None:
+                _cc_risk = "info"
 
     result = {
         "customer": {
@@ -6032,6 +6106,8 @@ def run(payload=None):
             "risk": _cc_risk,
             "notes": _cc_notes if _cc_notes else None,
             "cb_upgrade": _cb_upgrade,
+            "predicted_wall_taper_in": _predicted_taper,
+            "wall_taper_target_in": _max_taper_target if _max_taper_target > 0 else None,
         },
         "engineering": {
             "deflection_in": locals().get("deflection", 0.0),

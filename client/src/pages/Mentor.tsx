@@ -1808,6 +1808,7 @@ export default function Mentor() {
     coating: "",
     target_ra_uin: 0,
     reduce_wall_taper: false,
+    max_wall_taper_in: 0,  // 0 = no taper target
     tool_series: "",
     helix_angle: 0,
 
@@ -8164,26 +8165,66 @@ ${stabSection}
                 </p>
               )}
             </div>
-            {/* Reduce Wall Taper */}
-            <div className="flex items-start gap-2.5 pt-1 border-t border-border/30">
-              <input
-                type="checkbox"
-                id="reduce_wall_taper"
-                checked={!!form.reduce_wall_taper}
-                onChange={e => setForm(p => ({ ...p, reduce_wall_taper: e.target.checked }))}
-                className="mt-0.5 accent-orange-500 w-4 h-4 shrink-0"
-              />
-              <label htmlFor="reduce_wall_taper" className="cursor-pointer flex-1">
-                <span className="text-xs font-semibold text-zinc-200">Reduce Wall Taper</span>
-                {form.loc > 0 && form.tool_dia > 0 && form.loc / form.tool_dia >= 2.0 && (
-                  <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-400">recommended for long-reach tools</span>
-                )}
-                <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
-                  Reduces SFM/feed 15% to lower heat and thermal expansion bias on the wall.
-                  Best with WOC ≤30%, climb mill, and ≤0.0005" runout. Use on long-LOC walls
-                  where customers see top wider than bottom.
+            {/* Max Wall Taper target */}
+            <div className="space-y-1.5 pt-1 border-t border-border/30">
+              <FieldLabel hint={`Target maximum wall taper (top-to-bottom deviation across the cut depth). Engine predicts taper from deflection at the engagement point and iteratively reduces WOC and SFM until predicted taper meets your target. Caps WOC at 25% and SFM at 80% of nominal in worst cases. Prediction is ±50% accurate — depends on holder runout, material lot, and coolant flow. Always verify on the first part. Common targets: 0.0002" (precision), 0.0005" (typical), 0.001" (loose), 0.002" (rough).`}>
+                Max Wall Taper <span className="text-zinc-500 font-normal">— optional, target across cut depth</span>
+              </FieldLabel>
+              <div className="flex flex-nowrap gap-1 items-center">
+                <button type="button"
+                  onClick={() => setForm(p => ({ ...p, max_wall_taper_in: 0 }))}
+                  className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 whitespace-nowrap"
+                  style={{
+                    backgroundColor: form.max_wall_taper_in === 0 ? "#3f3f46" : "transparent",
+                    color: form.max_wall_taper_in === 0 ? "#fff" : "#a1a1aa",
+                  }}
+                >No target</button>
+                {[
+                  { v: 0.0002, label: "0.0002\"", tip: "Precision — tight CMM tolerance" },
+                  { v: 0.0005, label: "0.0005\"", tip: "Typical — most production work" },
+                  { v: 0.001,  label: "0.001\"",  tip: "Loose — general parts" },
+                  { v: 0.002,  label: "0.002\"",  tip: "Rough — pre-finish or non-critical" },
+                ].map(({ v, label, tip }) => {
+                  const selected = Math.abs(form.max_wall_taper_in - v) < 1e-7;
+                  return (
+                    <Tooltip key={v}>
+                      <TooltipTrigger asChild>
+                        <button type="button"
+                          onClick={() => setForm(p => ({ ...p, max_wall_taper_in: v }))}
+                          className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
+                          style={{
+                            backgroundColor: selected ? "#f97316" : "transparent",
+                            borderColor: "#f97316",
+                            color: selected ? "#fff" : "#f97316",
+                          }}
+                        >{label}</button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-72 text-xs">{tip}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+                <Input
+                  type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
+                  value={form.max_wall_taper_in > 0 && ![0.0002, 0.0005, 0.001, 0.002].some(v => Math.abs(form.max_wall_taper_in - v) < 1e-7) ? form.max_wall_taper_in.toFixed(5) : ""}
+                  onChange={e => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n) && n > 0 && n <= 0.05) setForm(p => ({ ...p, max_wall_taper_in: n }));
+                    else if (e.target.value === "") setForm(p => ({ ...p, max_wall_taper_in: 0 }));
+                  }}
+                />
+              </div>
+              {form.loc > 0 && form.tool_dia > 0 && form.loc / form.tool_dia >= 2.0 && form.max_wall_taper_in === 0 && (
+                <p className="text-[10px] text-amber-400/80 leading-relaxed">
+                  Long-reach tool ({(form.loc / form.tool_dia).toFixed(1)}×D LOC) — wall taper is a common
+                  failure mode. Set a target above to have the engine optimize WOC/SFM for it.
                 </p>
-              </label>
+              )}
+              {form.max_wall_taper_in > 0 && (
+                <p className="text-[10px] text-zinc-500 leading-relaxed italic">
+                  Prediction accuracy ±50% — actual taper depends on holder runout, material lot, and
+                  coolant flow. Always verify on the first part.
+                </p>
+              )}
             </div>
           </div>
           </>)}
