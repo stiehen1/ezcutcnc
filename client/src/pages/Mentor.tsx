@@ -8253,24 +8253,40 @@ ${stabSection}
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
-                {WOC_PRESETS[form.mode] && (
-                  <button
-                    type="button"
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
-                    style={wocPreset === "optimal" ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
-                    onClick={() => {
-                      const wp = WOC_PRESETS[form.mode];
-                      if (!wp) return;
-                      const dia = form.tool_dia || 0.5;
-                      // WOC Optimal = Med for HEM (shop-set targets already in wp.med per material)
-                      let optPct = wp.med;
-                      setForm((p) => ({ ...p, woc_pct: optPct }));
-                      setWocText(((optPct / 100) * dia).toFixed(4));
-                      const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
-                      setWocPreset(wocMatch ?? "optimal");
-                    }}
-                  >Optimal</button>
-                )}
+                {WOC_PRESETS[form.mode] && (() => {
+                  // If a wall taper target is set and the engine recommended a tighter WOC,
+                  // use that instead of the generic mode-based preset. Visually flag so
+                  // the user knows the Optimal value is taper-driven.
+                  const taperRecPct = (customer as any)?.recommended_woc_pct ?? null;
+                  const taperDriven = taperRecPct != null && taperRecPct > 0;
+                  return (
+                    <button
+                      type="button"
+                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                      style={
+                        wocPreset === "optimal"
+                          ? (taperDriven
+                              ? { borderColor: "#22c55e", background: "#22c55e", color: "#000" }
+                              : { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" })
+                          : (taperDriven
+                              ? { borderColor: "rgba(34,197,94,0.5)", color: "#22c55e" }
+                              : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" })
+                      }
+                      title={taperDriven ? `Wall-taper driven: ${taperRecPct.toFixed(0)}% WOC respects your max taper target.` : undefined}
+                      onClick={() => {
+                        const wp = WOC_PRESETS[form.mode];
+                        if (!wp) return;
+                        const dia = form.tool_dia || 0.5;
+                        // Prefer engine's taper-driven WOC if available, else fall back to Med preset
+                        const optPct = taperDriven ? taperRecPct : wp.med;
+                        setForm((p) => ({ ...p, woc_pct: optPct }));
+                        setWocText(((optPct / 100) * dia).toFixed(4));
+                        const wocMatch = (["low","med","high"] as const).find(k => Math.abs(wp[k] - optPct) < 0.5);
+                        setWocPreset(taperDriven ? "optimal" : (wocMatch ?? "optimal"));
+                      }}
+                    >Optimal{taperDriven ? " · taper" : ""}</button>
+                  );
+                })()}
               </div>
               <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!wocText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                 <input

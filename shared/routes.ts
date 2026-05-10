@@ -210,6 +210,7 @@ export const mentorSchemas = {
       }).nullable().optional(),
       predicted_wall_taper_in: z.number().nullable().optional(),
       wall_taper_target_in: z.number().nullable().optional(),
+      recommended_woc_pct: z.number().nullable().optional(),
     }),
 
     engineering: z.object({

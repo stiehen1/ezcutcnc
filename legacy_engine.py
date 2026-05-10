@@ -6121,6 +6121,7 @@ def run(payload=None):
             "cb_upgrade": _cb_upgrade,
             "predicted_wall_taper_in": _predicted_taper,
             "wall_taper_target_in": _max_taper_target if _max_taper_target > 0 else None,
+            "recommended_woc_pct": locals().get("_woc_target_pct") if locals().get("_woc_reduction", 0) > 0 else None,
         },
         "engineering": {
             "deflection_in": locals().get("deflection", 0.0),
