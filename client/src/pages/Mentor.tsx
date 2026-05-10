@@ -2296,6 +2296,8 @@ export default function Mentor() {
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [runoutText, setRunoutText] = React.useState("");
+  const [targetRaText, setTargetRaText] = React.useState("");
+  const [maxWallTaperText, setMaxWallTaperText] = React.useState("");
   const [existingHoleText, setExistingHoleText] = React.useState("");
   const [targetHoleText, setTargetHoleText] = React.useState("");
   const [drillFluteLenText, setDrillFluteLenText] = React.useState("");
@@ -8129,7 +8131,7 @@ ${stabSection}
               </FieldLabel>
               <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
                 <button type="button"
-                  onClick={() => setForm(p => ({ ...p, target_ra_uin: 0 }))}
+                  onClick={() => { setForm(p => ({ ...p, target_ra_uin: 0 })); setTargetRaText(""); }}
                   className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
                   style={{
                     backgroundColor: form.target_ra_uin === 0 ? "#3f3f46" : "transparent",
@@ -8138,7 +8140,7 @@ ${stabSection}
                 >No target</button>
                 {[8, 16, 32, 63, 125].map(v => (
                   <button key={v} type="button"
-                    onClick={() => setForm(p => ({ ...p, target_ra_uin: v }))}
+                    onClick={() => { setForm(p => ({ ...p, target_ra_uin: v })); setTargetRaText(""); }}
                     className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
                     style={{
                       backgroundColor: form.target_ra_uin === v ? "#f97316" : "transparent",
@@ -8149,11 +8151,15 @@ ${stabSection}
                 ))}
                 <Input
                   type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
-                  value={form.target_ra_uin > 0 && ![8,16,32,63,125].includes(form.target_ra_uin) ? String(form.target_ra_uin) : ""}
-                  onChange={e => {
-                    const n = parseFloat(e.target.value);
-                    if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, target_ra_uin: n }));
-                    else if (e.target.value === "") setForm(p => ({ ...p, target_ra_uin: 0 }));
+                  value={targetRaText}
+                  onChange={e => setTargetRaText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(targetRaText);
+                    if (Number.isFinite(n) && n > 0) {
+                      setForm(p => ({ ...p, target_ra_uin: n }));
+                    } else if (targetRaText === "") {
+                      setForm(p => ({ ...p, target_ra_uin: 0 }));
+                    }
                   }}
                 />
               </div>
@@ -8172,7 +8178,7 @@ ${stabSection}
               </FieldLabel>
               <div className="flex flex-nowrap gap-1 items-center">
                 <button type="button"
-                  onClick={() => setForm(p => ({ ...p, max_wall_taper_in: 0 }))}
+                  onClick={() => { setForm(p => ({ ...p, max_wall_taper_in: 0 })); setMaxWallTaperText(""); }}
                   className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 whitespace-nowrap"
                   style={{
                     backgroundColor: form.max_wall_taper_in === 0 ? "#3f3f46" : "transparent",
@@ -8190,7 +8196,7 @@ ${stabSection}
                     <Tooltip key={v}>
                       <TooltipTrigger asChild>
                         <button type="button"
-                          onClick={() => setForm(p => ({ ...p, max_wall_taper_in: v }))}
+                          onClick={() => { setForm(p => ({ ...p, max_wall_taper_in: v })); setMaxWallTaperText(""); }}
                           className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
                           style={{
                             backgroundColor: selected ? "#f97316" : "transparent",
@@ -8205,11 +8211,16 @@ ${stabSection}
                 })}
                 <Input
                   type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
-                  value={form.max_wall_taper_in > 0 && ![0.0002, 0.0005, 0.001, 0.002].some(v => Math.abs(form.max_wall_taper_in - v) < 1e-7) ? form.max_wall_taper_in.toFixed(5) : ""}
-                  onChange={e => {
-                    const n = parseFloat(e.target.value);
-                    if (Number.isFinite(n) && n > 0 && n <= 0.05) setForm(p => ({ ...p, max_wall_taper_in: n }));
-                    else if (e.target.value === "") setForm(p => ({ ...p, max_wall_taper_in: 0 }));
+                  value={maxWallTaperText}
+                  onChange={e => setMaxWallTaperText(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(maxWallTaperText);
+                    if (Number.isFinite(n) && n > 0 && n <= 0.05) {
+                      setForm(p => ({ ...p, max_wall_taper_in: n }));
+                      setMaxWallTaperText(n.toFixed(5));
+                    } else if (maxWallTaperText === "") {
+                      setForm(p => ({ ...p, max_wall_taper_in: 0 }));
+                    }
                   }}
                 />
               </div>
