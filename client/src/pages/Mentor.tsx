@@ -6434,6 +6434,39 @@ ${stabSection}
                     significantly reduced. Consider a tighter holder (shrink fit, hydraulic).
                   </p>
                 )}
+                {/* Holder/TIR mismatch detection — typical ranges by holder type */}
+                {(() => {
+                  if (form.runout_in <= 0) return null;
+                  const tir = form.runout_in;
+                  const h = form.toolholder;
+                  // Typical TIR ranges by holder class
+                  const expected: Record<string, [number, number, string]> = {
+                    shrink_fit:    [0.00010, 0.00045, "Shrink Fit"],
+                    hydraulic:     [0.00020, 0.00060, "Hydraulic"],
+                    capto:         [0.00010, 0.00040, "Capto"],
+                    press_fit:     [0.00020, 0.00060, "Press Fit (Lobed)"],
+                    milling_chuck: [0.00030, 0.00080, "Milling Chuck"],
+                    hp_collet:     [0.00050, 0.00150, "HP Collet"],
+                    er_collet:     [0.00080, 0.00200, "ER Collet"],
+                    weldon:        [0.00050, 0.00200, "Weldon"],
+                  };
+                  const range = expected[h];
+                  if (!range) return null;
+                  const [lo, hi, label] = range;
+                  // Only flag if user is way outside the typical range
+                  if (tir < lo * 0.5 || tir > hi * 1.5) {
+                    const tirStr = (tir * 1000).toFixed(1);
+                    const loStr = (lo * 1000).toFixed(1);
+                    const hiStr = (hi * 1000).toFixed(1);
+                    return (
+                      <p className="text-[11px] text-cyan-400/90 leading-relaxed">
+                        ℹ {tirStr} mil TIR is unusual for a {label} holder (typical: {loStr}–{hiStr} mil).
+                        Verify the measured value, or check that the toolholder selection above matches your setup.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Yes/No question rows */}
