@@ -8127,11 +8127,19 @@ ${stabSection}
               <FieldLabel hint={`Target surface finish (Ra in microinches). When set, the engine caps feed-per-tooth so the predicted Ra meets the target. Math: Ra ≈ fz² / (8 × corner_radius). High runout adds to the scallop floor — measure TIR for accurate predictions. Typical Ra grades: 8 µin (mirror), 16 µin (precision finish), 32 µin (general finish), 63 µin (semi-finish), 125 µin (rough finish).`}>
                 Target Surface Finish <span className="text-zinc-500 font-normal">— optional, µin Ra</span>
               </FieldLabel>
-              <div className="flex flex-wrap gap-1.5 items-center">
+              <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
+                <button type="button"
+                  onClick={() => setForm(p => ({ ...p, target_ra_uin: 0 }))}
+                  className="rounded px-2 py-1 text-[10px] font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                  style={{
+                    backgroundColor: form.target_ra_uin === 0 ? "#3f3f46" : "transparent",
+                    color: form.target_ra_uin === 0 ? "#fff" : "#a1a1aa",
+                  }}
+                >No target</button>
                 {[8, 16, 32, 63, 125].map(v => (
                   <button key={v} type="button"
                     onClick={() => setForm(p => ({ ...p, target_ra_uin: v }))}
-                    className="rounded px-2.5 py-1 text-xs font-semibold border transition-all"
+                    className="rounded px-2 py-1 text-xs font-semibold border transition-all whitespace-nowrap"
                     style={{
                       backgroundColor: form.target_ra_uin === v ? "#f97316" : "transparent",
                       borderColor: "#f97316",
@@ -8140,7 +8148,7 @@ ${stabSection}
                   >{v} µin</button>
                 ))}
                 <Input
-                  type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs"
+                  type="text" inputMode="decimal" placeholder="custom" className="no-spinners w-20 h-8 text-xs flex-shrink-0"
                   value={form.target_ra_uin > 0 && ![8,16,32,63,125].includes(form.target_ra_uin) ? String(form.target_ra_uin) : ""}
                   onChange={e => {
                     const n = parseFloat(e.target.value);
@@ -8148,14 +8156,6 @@ ${stabSection}
                     else if (e.target.value === "") setForm(p => ({ ...p, target_ra_uin: 0 }));
                   }}
                 />
-                <button type="button"
-                  onClick={() => setForm(p => ({ ...p, target_ra_uin: 0 }))}
-                  className="rounded px-2.5 py-1 text-xs font-medium border transition-all border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
-                  style={{
-                    backgroundColor: form.target_ra_uin === 0 ? "#3f3f46" : "transparent",
-                    color: form.target_ra_uin === 0 ? "#fff" : "#a1a1aa",
-                  }}
-                >No target</button>
               </div>
               {form.target_ra_uin > 0 && form.runout_in === 0 && (
                 <p className="text-[11px] text-amber-400/80 leading-relaxed">
