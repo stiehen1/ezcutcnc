@@ -6005,30 +6005,41 @@ def run(payload=None):
         _predicted_taper = round(_wt_deflection * _geom_ratio * _therm_mult, 6)
 
         if _max_taper_target > 0 and _predicted_taper > _max_taper_target:
-            # Iterative back-off: reduce SFM 5% per step (up to 20%), if still over
-            # target, also reduce WOC by 10% per step (down to 10% min). Predicted
-            # taper scales roughly linearly with cutting force, which scales with
-            # SFM and WOC. So a 15% SFM cut + 30% WOC cut ~= 40% taper reduction.
-            _sfm_reduction = 0.0
+            # Iterative back-off in physically-correct lever order:
+            #   1. Reduce WOC — biggest lever (radial force scales ~linearly with arc engagement)
+            #   2. Reduce IPT/feed — also linear with cutting force
+            #   3. Optional thermal nudge: 5% SFM trim if material is heat-sensitive
+            # Predicted taper ≈ deflection ∝ radial_force ∝ WOC × IPT
             _woc_reduction = 0.0
+            _ipt_reduction = 0.0
+            _sfm_reduction = 0.0
             _adj_taper = _predicted_taper
-            # First pass — drop SFM in 5% steps up to 20%
-            for _step in range(4):
+            _current_woc_pct = float(data.get("woc_pct", 0) or 0)
+            _woc_floor_pct = max(8.0, _current_woc_pct * 0.4)  # don't go below 40% of current or 8%, whichever is higher
+            _woc_target_pct = _current_woc_pct
+
+            # First pass — drop WOC in 10% relative steps
+            while _adj_taper > _max_taper_target and _woc_target_pct > _woc_floor_pct:
+                _woc_target_pct = max(_woc_floor_pct, _woc_target_pct * 0.9)
+                _woc_reduction = 1.0 - (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else 0
+                _adj_taper = _predicted_taper * (1.0 - _woc_reduction)
+
+            # Second pass — if still over, drop IPT/feed in 5% steps up to 25%
+            for _step in range(5):
                 if _adj_taper <= _max_taper_target:
                     break
-                _sfm_reduction += 0.05
-                _adj_taper = _predicted_taper * (1.0 - _sfm_reduction)
-            # Second pass — if still over target, drop WOC. Each 10% WOC cut ~= 10%
-            # cutting force reduction = 10% taper reduction. Floor at 10% WOC total.
-            _current_woc_pct = float(data.get("woc_pct", 0) or 0)
-            _woc_floor_pct = 10.0
-            _woc_target_pct = _current_woc_pct
-            while _adj_taper > _max_taper_target and _woc_target_pct > _woc_floor_pct:
-                _woc_target_pct = max(_woc_floor_pct, _woc_target_pct - 5.0)
-                _woc_reduction = 1.0 - (_woc_target_pct / _current_woc_pct) if _current_woc_pct > 0 else 0
-                _adj_taper = _predicted_taper * (1.0 - _sfm_reduction) * (1.0 - _woc_reduction * 0.7)
+                _ipt_reduction += 0.05
+                _adj_taper = _predicted_taper * (1.0 - _woc_reduction) * (1.0 - _ipt_reduction)
 
-            # Apply the SFM reduction to RPM/feed
+            # Third pass — small thermal nudge for heat-sensitive materials only,
+            # capped at 10% SFM reduction (thermal contribution is real but small)
+            if _adj_taper > _max_taper_target and material_group in ("Stainless", "Titanium", "Inconel"):
+                _sfm_reduction = min(0.10, (_adj_taper / _max_taper_target - 1.0) * 0.5)
+                _adj_taper = _adj_taper * (1.0 - _sfm_reduction * 0.3)  # SFM only ~30% as effective as WOC/IPT
+
+            # Apply IPT and SFM reductions to feed_ipm and RPM
+            if _ipt_reduction > 0:
+                feed_ipm = round(feed_ipm * (1.0 - _ipt_reduction), 2)
             if _sfm_reduction > 0:
                 rpm = round(rpm * (1.0 - _sfm_reduction))
                 sfm_actual = round((rpm * _wt_dia) / 3.82, 1)
@@ -6038,10 +6049,12 @@ def run(payload=None):
             _msg_parts = [
                 f"💡 Wall taper target {_max_taper_target*1000:.2f} mil"
             ]
-            if _sfm_reduction > 0:
-                _msg_parts.append(f"SFM reduced {_sfm_reduction*100:.0f}%")
             if _woc_reduction > 0:
-                _msg_parts.append(f"WOC capped at {_woc_target_pct:.0f}% (was {_current_woc_pct:.0f}%) — adjust manually")
+                _msg_parts.append(f"WOC reduce to ≤{_woc_target_pct:.0f}% (was {_current_woc_pct:.0f}%) — biggest lever for taper")
+            if _ipt_reduction > 0:
+                _msg_parts.append(f"feed/IPT reduced {_ipt_reduction*100:.0f}%")
+            if _sfm_reduction > 0:
+                _msg_parts.append(f"SFM trimmed {_sfm_reduction*100:.0f}% (thermal)")
             _msg_parts.append(f"Predicted taper: {_predicted_taper*1000:.2f} mil ±50%")
             _cc_notes.append(" — ".join(_msg_parts) + ". Verify on first part.")
             if _adj_taper > _max_taper_target * 1.2:
