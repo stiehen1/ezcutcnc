@@ -9192,6 +9192,37 @@ ${stabSection}
             </div>
           )}
 
+          {/* Tool Stickout — for surfacing/deep_pocket/chamfer_mill which don't have it inline.
+              The standard WOC/DOC block above already includes Tool Stickout for the common modes. */}
+          {operation === "milling" && (form.mode === "surfacing" || form.mode === "deep_pocket" || form.tool_type === "chamfer_mill") && (
+            <div className="mt-6 pt-4 border-t border-zinc-800 space-y-2">
+              <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
+              <Input
+                type="text" inputMode="decimal"
+                className="no-spinners"
+                placeholder="e.g. 1.500"
+                value={stickoutText}
+                onChange={(e) => { setStickoutText(e.target.value); setStickoutViolation(null); }}
+                onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
+                onBlur={() => {
+                  const n = parseDim(stickoutText);
+                  let val = metric ? n / 25.4 : n;
+                  if (Number.isFinite(val) && val > 0) {
+                    const _fw = (form as any).flute_wash ?? 0;
+                    const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                    if (_minSo > 0 && val < _minSo) {
+                      val = _minSo;
+                      const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
+                      setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                    } else { setStickoutViolation(null); }
+                    setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                  } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+                }}
+              />
+              {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
+            </div>
+          )}
+
           {/* Tool Entry */}
           {operation === "milling" && (
             <>
