@@ -9209,11 +9209,19 @@ ${stabSection}
                   let val = metric ? n / 25.4 : n;
                   if (Number.isFinite(val) && val > 0) {
                     const _fw = (form as any).flute_wash ?? 0;
-                    const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                    // Standard floor: LOC + flute_wash + 15% dia clearance (flutes clear of holder)
+                    const _floorStd = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                    // Necked-tool floor: LBS + 15% dia clearance (necked section must clear holder face)
+                    const _floorNeck = form.lbs > 0 && form.tool_dia > 0 ? form.lbs + 0.15 * form.tool_dia : 0;
+                    const _minSo = Math.max(_floorStd, _floorNeck);
                     if (_minSo > 0 && val < _minSo) {
                       val = _minSo;
-                      const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                      setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                      if (_floorNeck > _floorStd) {
+                        setStickoutViolation(`Adjusted to minimum — necked tool requires stickout > LBS (${form.lbs.toFixed(3)}") + 15% dia clearance so the neck clears the holder face.`);
+                      } else {
+                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
+                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                      }
                     } else { setStickoutViolation(null); }
                     setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
                   } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
