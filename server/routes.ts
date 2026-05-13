@@ -5232,6 +5232,12 @@ ${catalogList}`
       const coatingFilter = isAluminum
         ? `AND (coating ILIKE 'D-Max%' OR coating ILIKE 'A-Max%' OR coating IS NULL OR coating = '')`
         : `AND (coating ILIKE 'P-Max%' OR coating ILIKE 'T-Max%')`;
+      // Flute count rules for pocketing roughing:
+      //   Aluminum (ISO N): 2–3 flutes for chip clearance.
+      //   Ferrous: 4+ flutes. Traditional prefers 5-fl (better chip clearance at
+      //     wider WOC) but allows 6-fl when deeper pockets need the stiffer core.
+      //     The fluteOrderUpper = 'ASC' for traditional puts 4/5-fl first; 6-fl
+      //     only wins when nothing smaller fits the dia/reach combo.
       const fluteFilter = isAluminum
         ? `AND flutes <= 3`
         : `AND flutes >= 4`;

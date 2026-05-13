@@ -2938,20 +2938,49 @@ export default function Mentor() {
             const docIn = Math.min(bandDepth, tool.loc_in);
             const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
             const isHem = toolMode === "hem";
-            // L/D based stickout estimate if not provided
+            // Effective L/D for WOC sizing — use the deepest point this tool reaches,
+            // not the full tool stickout. A tool covering 0-1" band (top of pocket)
+            // experiences less effective overhang than a tool covering 3-4" band,
+            // because deflection scales with the depth the cutter is actually engaged at.
+            //   L/D effective = max(depth_band_to, reach×0.5) / dia, capped at stickout/dia
             const soEst = form.stickout > 0 ? form.stickout : tool.reach_in + tool.dia * 0.33;
-            const ldEst = tool.dia > 0 ? soEst / tool.dia : 3;
+            const staticLd = tool.dia > 0 ? soEst / tool.dia : 3;
+            const effectiveDepth = Math.max(tool.depth_band_to ?? 0, tool.reach_in * 0.5);
+            const ldEst = tool.dia > 0 ? Math.min(staticLd, effectiveDepth / tool.dia + 0.5) : 3;
             // As L/D increases, deflection dominates — strategy shifts to:
             //   - Fewer WOC (less radial force)
             //   - Reduced IPT (lighter chip load, less cutting force)
             //   - More flutes already handled by sequencer (larger core = stiffer)
             //
-            // WOC by L/D:
-            //   HEM:         ≤4→10%,  4–6→8%,  >6→6%
-            //   Traditional: ≤4→40%,  4–6→25%, >6→15%
-            const wocPct = isHem
-              ? (ldEst > 6 ? 6 : ldEst > 4 ? 8 : 10)
-              : (ldEst > 6 ? 15 : ldEst > 4 ? 25 : 40);
+            // WOC — graduated by depth-into-pocket (depth_band_to / dia) and
+            // bounded by per-flute chip-clearance limits. Not a snap-to-cap value.
+            //
+            // Base WOC (shallow, low effective L/D):
+            //   HEM:         12% (light, adaptive)
+            //   Traditional: 40% (heavy peripheral)
+            //
+            // Pull-back: WOC is reduced by depthRatio × kPull. depthRatio is the
+            // tool's deepest engagement in ×D (e.g. 4" deep with 1" tool = 4×D).
+            // kPull = 1.5% per ×D for HEM, 4.0% per ×D for Traditional.
+            //
+            // Example (Traditional, 1" tool):
+            //   1×D depth: 40 - 1×4 = 36% WOC
+            //   2.5×D:    40 - 2.5×4 = 30% WOC
+            //   4×D:      40 - 4×4 = 24% WOC
+            //
+            // Then clamp by per-flute chip-clearance:
+            //   2-4 fl: 50%, 5 fl: 35%, 6 fl: 25%, 7+ fl: 10%
+            const depthRatio = tool.dia > 0 ? (tool.depth_band_to ?? 0) / tool.dia : 0;
+            const baseWoc = isHem ? 12 : 40;
+            const kPull = isHem ? 1.5 : 4.0;
+            const minWoc = isHem ? 5 : 10;  // floor — below this is rubbing
+            const wocFromDepth = Math.max(minWoc, baseWoc - depthRatio * kPull);
+            const wocCapByFlutes =
+              tool.flutes >= 7 ? 10 :
+              tool.flutes === 6 ? 25 :
+              tool.flutes === 5 ? 35 :
+              50;
+            const wocPct = Math.min(wocFromDepth, wocCapByFlutes);
 
             // IPT feed multiplier — scale down with L/D to reduce cutting force
             //   L/D ≤ 4: full feed (1.00×)
@@ -9522,8 +9551,8 @@ ${stabSection}
                       ["Feed (IPM)", adjFeed != null ? adjFeed.toFixed(1) : "—", feedReduced ? `calc ${mil.feed_ipm.toFixed(1)} → ${Math.round(feedMult*100)}% for stability` : null],
                       ["IPT (in)", adjIpt != null ? adjIpt.toFixed(5) : mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—"],
                       ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
-                      ["WOC", mil.woc_in != null && tool.dia > 0 ? `${((mil.woc_in/tool.dia)*100).toFixed(0)}%` : "—"],
-                      ["DOC", mil.doc_in != null ? `${mil.doc_in.toFixed(3)}"` : "—"],
+                      ["WOC", mil.woc_in != null && tool.dia > 0 ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in/tool.dia)*100).toFixed(0)}%)` : "—"],
+                      ["DOC", mil.doc_in != null && tool.dia > 0 ? `${mil.doc_in.toFixed(3)}" (${(mil.doc_in/tool.dia).toFixed(2)}×D)` : mil.doc_in != null ? `${mil.doc_in.toFixed(3)}"` : "—"],
                       ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
                       ["MRR", mil.mrr_in3_min != null ? (mil.mrr_in3_min * feedMult).toFixed(2) : "—"],
                     ].map(([label, val, note]) => (
