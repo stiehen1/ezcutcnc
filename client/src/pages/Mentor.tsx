@@ -2289,6 +2289,16 @@ export default function Mentor() {
   const [stepReqSent, setStepReqSent] = React.useState(false);
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
+  // Auto-deselect 'sweep' on closed pockets without pre-drill (no open edge to swing in from).
+  // Auto-select 'helical' as the recommended fallback so the user isn't left with nothing.
+  React.useEffect(() => {
+    if (form.mode === "deep_pocket" && form.dp_closed_pocket && !form.dp_pre_drill) {
+      setEntryTypes(p => {
+        const cleaned = p.filter(k => k !== "sweep");
+        return cleaned.length > 0 ? cleaned : ["helical"];
+      });
+    }
+  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill]);
   React.useEffect(() => {
     if (form.mode === "slot") setEntryTypes([]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
@@ -9271,13 +9281,23 @@ ${stabSection}
                 Entry Type Preferences
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
-                {[
-                  { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot", slotOnly: false, hideInSlot: true,  tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
-                  { key: "ramp",         label: "Straight Ramp",    color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
-                  { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
-                  { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
-                  { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
-                ].filter(({ slotOnly, hideInSlot }) => form.mode === "slot" ? !hideInSlot : !slotOnly)
+                {(() => {
+                  // Deep pocket entry constraints:
+                  //   Closed pocket, no pre-drill → no sweep (no open edge), helical recommended.
+                  //   Closed pocket, with pre-drill → sweep is allowed (pre-drilled hole = entry).
+                  //   Open pocket → sweep is recommended.
+                  const isClosedNoPredrill = form.mode === "deep_pocket" && form.dp_closed_pocket && !form.dp_pre_drill;
+                  const isClosed = form.mode === "deep_pocket" && form.dp_closed_pocket;
+                  return [
+                    { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot" && !isClosedNoPredrill, slotOnly: false, hideInSlot: true,  hideHere: isClosedNoPredrill, tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
+                    { key: "ramp",         label: "Straight Ramp",    color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, hideHere: false, tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
+                    { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" || isClosedNoPredrill, slotOnly: false, hideInSlot: false, hideHere: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
+                    { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  hideHere: false, tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
+                    { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, hideHere: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
+                  ].filter(({ slotOnly, hideInSlot, hideHere }) =>
+                    (form.mode === "slot" ? !hideInSlot : !slotOnly) && !hideHere
+                  );
+                })()
                 .map(({ key, label, color, recommended, tooltip }) => {
                   const checked = entryTypes.includes(key);
                   return (
