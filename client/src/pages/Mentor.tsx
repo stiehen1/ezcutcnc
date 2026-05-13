@@ -9570,8 +9570,8 @@ ${stabSection}
                       ["Feed (IPM)", adjFeed != null ? adjFeed.toFixed(1) : "—", feedReduced ? `calc ${mil.feed_ipm.toFixed(1)} → ${Math.round(feedMult*100)}% for stability` : null],
                       ["IPT (in)", adjIpt != null ? adjIpt.toFixed(5) : mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—"],
                       ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
-                      ["WOC", mil.woc_in != null && tool.dia > 0 ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in/tool.dia)*100).toFixed(0)}%)` : "—"],
-                      ["DOC", mil.doc_in != null && tool.dia > 0 ? `${mil.doc_in.toFixed(3)}" (${(mil.doc_in/tool.dia).toFixed(2)}×D)` : mil.doc_in != null ? `${mil.doc_in.toFixed(3)}"` : "—"],
+                      ["WOC", mil.woc_in != null && tool.dia > 0 ? `${mil.woc_in.toFixed(3)} (${((mil.woc_in/tool.dia)*100).toFixed(0)}%)` : "—"],
+                      ["DOC", mil.doc_in != null && tool.dia > 0 ? `${mil.doc_in.toFixed(2)} (${(mil.doc_in/tool.dia).toFixed(1)}×D)` : mil.doc_in != null ? `${mil.doc_in.toFixed(2)}` : "—"],
                       ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
                       ["MRR", mil.mrr_in3_min != null ? (mil.mrr_in3_min * feedMult).toFixed(2) : "—"],
                     ].map(([label, val, note]) => (
