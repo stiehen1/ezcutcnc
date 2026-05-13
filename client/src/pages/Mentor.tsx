@@ -3792,6 +3792,25 @@ ${stabSection}
       lines.push("");
     }
 
+    // ── POCKET WORKFLOW (Pocketing Strategy mode only) ────────────────────────
+    if (isPocketing) {
+      lines.push("POCKET WORKFLOW");
+      lines.push(DIV);
+      lines.push(L("Cutting Style",       form.dp_cutting_style === "hem" ? "HEM / Adaptive" : "Traditional"));
+      if (form.dp_target_depth > 0)       lines.push(L("Total Depth",     `${form.dp_target_depth.toFixed(3)}"`));
+      if (form.dp_corner_radius > 0)      lines.push(L("Wall Corner R",   `${form.dp_corner_radius.toFixed(4)}"`));
+      if (form.dp_floor_radius > 0)       lines.push(L("Floor Corner R",  `${form.dp_floor_radius.toFixed(4)}"`));
+      lines.push(L("Thin Wall",           form.dp_thin_wall ? "Yes (bilateral stock strategy)" : "No"));
+      lines.push(L("Pocket Type",         form.dp_closed_pocket ? "Closed (pre-drill entry)" : "Open (sweep-in entry)"));
+      if (form.dp_closed_pocket && form.dp_pocket_length > 0 && form.dp_pocket_width > 0) {
+        lines.push(L("Pocket Size",       `${form.dp_pocket_length.toFixed(3)}" × ${form.dp_pocket_width.toFixed(3)}"`));
+      }
+      if (form.dp_closed_pocket && form.dp_pre_drill_dia > 0) {
+        lines.push(L("Pre-Drill",         `Ø${form.dp_pre_drill_dia.toFixed(4)}" × ${form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth.toFixed(3) + '"' : "auto"} deep`));
+      }
+      lines.push("");
+    }
+
     // ── MATERIAL ──────────────────────────────
     lines.push("MATERIAL");
     lines.push(DIV);
