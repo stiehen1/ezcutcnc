@@ -5412,14 +5412,16 @@ ${catalogList}`
         // Extended pool — used when no in-cap candidate reaches the remaining depth.
         // For HEM, maxBulkDia caps at 0.625" to keep radial forces manageable at depth.
         // But on a deep pocket (e.g. 4"), there may be no 0.625" tool with sufficient reach,
-        // leaving a depth gap. When that happens, allow larger diameters (up to the physical
-        // pocket-fit ceiling) for the final-reach band. At that depth the bulk has already
-        // cleared the lateral material, so the larger tool only needs to reach — not traverse.
+        // leaving a depth gap. When that happens, allow slightly larger diameters for the
+        // final-reach band — but conservatively. Going too big (1"+ on a 4" deep HEM pocket)
+        // creates a 4×D+ chatter risk that defeats the purpose.
+        // Rule: extended cap is min(1.5×maxBulkDia, pocket-fit ceiling, 1.0").
         const extendedCap = Math.min(
+          maxBulkDia * 1.5,  // step up by at most 50% from the HEM cap
           closed_pocket && pocket_length > 0 && pocket_width > 0
-            ? Math.min(pocket_length, pocket_width) * 0.65  // physical fit ceiling (looser than HEM lateral cap)
-            : 2.0,
-          2.0
+            ? Math.min(pocket_length, pocket_width) * 0.65
+            : 1.0,
+          1.0  // absolute ceiling — past 1" tools, the L/D for deep work is unmanageable
         );
         const extendedCandidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= extendedCap);
 
@@ -5459,15 +5461,20 @@ ${catalogList}`
           }
 
           if (!picked) {
-            // No in-cap candidate met criteria. Try the extended pool — a larger
-            // diameter tool to reach the remaining depth. This catches the HEM
-            // case where 0.625" cap can't reach a 4" deep pocket but a 3/4" or
-            // 1" tool with sufficient reach is available.
-            for (const row of extendedCandidates) {
+            // No in-cap candidate met criteria. Try the extended pool — a slightly
+            // larger diameter tool to reach the remaining depth. Iterate SMALLEST
+            // first so we pick the most rigid (best L/D) tool that gets reach,
+            // not the biggest one available. Bigger isn't better at depth — smaller
+            // dia with adequate LBS gives lower deflection.
+            const extendedAsc = [...extendedCandidates].sort((a, b) =>
+              parseFloat(a.cutting_diameter_in) - parseFloat(b.cutting_diameter_in)
+            );
+            for (const row of extendedAsc) {
               const dia = parseFloat(row.cutting_diameter_in);
               if (dia <= maxBulkDia) continue;  // already tried in the main loop
               const maxReach = parseFloat(row.max_reach || "0");
-              if (maxReach <= depthCovered) continue;
+              // Must reach the target depth (this is the final-band tool by design)
+              if (maxReach < target_depth) continue;
               const bandGain = maxReach - depthCovered;
               if (bandGain >= dia * 0.4) {  // looser threshold for extended-cap final pass
                 picked = { tool: null as any, reach: maxReach, dia, useRn: true };
