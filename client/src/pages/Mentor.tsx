@@ -8243,7 +8243,7 @@ ${stabSection}
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Cut Engagement</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">{form.mode === "deep_pocket" ? "Pocketing Workflow" : "Cut Engagement"}</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
           </>)}
