@@ -4529,7 +4529,7 @@ ${stabSection}
                 <option value="slot">Slotting</option>
                 <option value="circ_interp">Circular Interpolation (e.g. Bore Enlargement)</option>
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
-                <option value="deep_pocket">Pocketing Strategy (Tool Kit Recommendation)</option>
+                <option value="deep_pocket">Pocketing Strategy</option>
               </select>
               </div>
             )}
