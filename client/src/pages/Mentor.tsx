@@ -2289,6 +2289,16 @@ export default function Mentor() {
   const [stepReqSent, setStepReqSent] = React.useState(false);
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
+  // Auto-deselect 'sweep' on closed pockets without pre-drill (no open edge to swing in from).
+  // Auto-select 'helical' as the recommended fallback so the user isn't left with nothing.
+  React.useEffect(() => {
+    if (form.mode === "deep_pocket" && form.dp_closed_pocket && !form.dp_pre_drill) {
+      setEntryTypes(p => {
+        const cleaned = p.filter(k => k !== "sweep");
+        return cleaned.length > 0 ? cleaned : ["helical"];
+      });
+    }
+  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill]);
   React.useEffect(() => {
     if (form.mode === "slot") setEntryTypes([]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
@@ -3064,7 +3074,7 @@ export default function Mentor() {
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const MODE_LABELS: Record<string, string> = {
       hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
-      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation", deep_pocket: "Deep Pocket / Thin Wall",
+      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation", deep_pocket: "Pocketing Strategy",
       surfacing: "3D Surface Contouring",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
@@ -4519,7 +4529,7 @@ ${stabSection}
                 <option value="slot">Slotting</option>
                 <option value="circ_interp">Circular Interpolation (e.g. Bore Enlargement)</option>
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
-                <option value="deep_pocket">Deep Pocket / Thin Wall (Progressive Reach)</option>
+                <option value="deep_pocket">Pocketing Strategy</option>
               </select>
               </div>
             )}
@@ -8243,7 +8253,7 @@ ${stabSection}
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Cut Engagement</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">{form.mode === "deep_pocket" ? "Pocketing Workflow" : "Cut Engagement"}</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
           </>)}
@@ -8790,53 +8800,7 @@ ${stabSection}
           {form.mode === "deep_pocket" && (
             <div className="space-y-4 mt-2">
 
-              {/* ── Special Tool toggle ── */}
-              <div className="rounded-lg border border-orange-600/40 bg-orange-900/10 px-3 py-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-semibold text-orange-400">I have a Core Cutter special tool</span>
-                    <span className="ml-2 text-[10px] text-zinc-500">— upload your print to get running parameters for this specific tool</span>
-                  </div>
-                  <button type="button"
-                    onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "", woc_pct: 0, doc_xd: 0 })); } }}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${dpSpecialTool ? "bg-orange-500" : "bg-zinc-600"}`}>
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${dpSpecialTool ? "translate-x-4" : "translate-x-0.5"}`} />
-                  </button>
-                </div>
-                {dpSpecialTool && (
-                  <div className={`rounded border p-2.5 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-zinc-600"}`}>
-                    {pdfExtracted ? (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
-                        <button type="button" onClick={clearPdf} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center gap-1 cursor-pointer">
-                        <span className="text-[11px] text-zinc-400">Upload your Core Cutter special tool print (PDF or photo)</span>
-                        <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
-                          {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
-                        </span>
-                        <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading}
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
-                        <span className="text-[10px] text-zinc-500">Dimensions auto-fill — review before running</span>
-                      </label>
-                    )}
-                    {pdfExtracted && (
-                      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-zinc-400">
-                        <div>Dia: <span className="text-white font-semibold">{form.tool_dia > 0 ? form.tool_dia.toFixed(4) + '"' : "—"}</span></div>
-                        <div>Flutes: <span className="text-white font-semibold">{form.flutes > 0 ? form.flutes : "—"}</span></div>
-                        <div>LOC: <span className="text-white font-semibold">{form.loc > 0 ? form.loc.toFixed(4) + '"' : "—"}</span></div>
-                        <div>Reach: <span className="text-white font-semibold">{form.lbs > 0 ? form.lbs.toFixed(4) + '"' : "same as LOC"}</span></div>
-                        <div>Corner: <span className="text-white font-semibold">{form.corner_condition === "square" ? "Square" : form.corner_condition === "ball" ? "Ball" : `CR ${form.corner_radius.toFixed(4)}"`}</span></div>
-                        <div>Coating: <span className="text-white font-semibold">{form.coating || "—"}</span></div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {dpSpecialTool && pdfExtracted && (
-                  <p className="text-[10px] text-orange-300">Running in special tool mode — sequencer skipped. Output shows speeds &amp; feeds for this tool only.</p>
-                )}
-              </div>
+              {/* Tooling block intentionally moved to the bottom of the section — see below the Open/Closed pocket toggles. */}
 
               {/* Special tool mode — DOC / WOC inputs — identical UX to standard engagement section */}
               {dpSpecialTool && pdfExtracted && (
@@ -9189,12 +9153,85 @@ ${stabSection}
                 </div>
               )}
 
+              {/* ── Tool Strategy: two-button selector (Standard auto-pick vs. Special user-upload) ── */}
+              <div className="rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-3 space-y-3 mt-4">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-300">Tool Strategy</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button"
+                    onClick={() => { if (dpSpecialTool) { setDpSpecialTool(false); setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "", woc_pct: 0, doc_xd: 0 })); } }}
+                    className="rounded-lg border px-3 py-2.5 text-left transition-all"
+                    style={!dpSpecialTool
+                      ? { borderColor: "#10b981", background: "rgba(16,185,129,0.12)", color: "#34d399" }
+                      : { borderColor: "rgba(82,82,91,0.5)", background: "transparent", color: "#a1a1aa" }}
+                  >
+                    <div className="text-xs font-bold">{!dpSpecialTool ? "✓ " : ""}Using Standard Tool</div>
+                    <div className="text-[10px] mt-0.5 opacity-80">Auto-generated by sequencer based on your pocket geometry above.</div>
+                  </button>
+                  <button type="button"
+                    onClick={() => { if (!dpSpecialTool) setDpSpecialTool(true); }}
+                    className="rounded-lg border px-3 py-2.5 text-left transition-all"
+                    style={dpSpecialTool
+                      ? { borderColor: "#f97316", background: "rgba(249,115,22,0.12)", color: "#fb923c" }
+                      : { borderColor: "rgba(82,82,91,0.5)", background: "transparent", color: "#a1a1aa" }}
+                  >
+                    <div className="text-xs font-bold">{dpSpecialTool ? "⚙ " : ""}Using Special Tool</div>
+                    <div className="text-[10px] mt-0.5 opacity-80">Upload your Core Cutter print to use a specific tool you have in hand.</div>
+                  </button>
+                </div>
+                {dpSpecialTool && (
+                  <div className={`rounded border p-2.5 ${pdfExtracted ? "border-amber-500 bg-amber-950/20" : "border-dashed border-zinc-600"}`}>
+                    {pdfExtracted ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-amber-400 font-medium">⚠ Print uploaded{pdfToolNumber ? ` (${pdfToolNumber})` : ""}{pdfConvertedFromMm ? " — metric, converted to inches" : ""} — verify dimensions then click Calculate</span>
+                        <button type="button" onClick={clearPdf} className="text-[10px] text-zinc-400 hover:text-white underline ml-2">Clear</button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center gap-1 cursor-pointer">
+                        <span className="text-[11px] text-zinc-400">Upload your Core Cutter special tool print (PDF or photo)</span>
+                        <span className="rounded border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors px-3 py-1.5 text-xs font-semibold inline-block">
+                          {pdfUploading ? "Reading print…" : "⬆ Upload CC Print"}
+                        </span>
+                        <input type="file" accept=".pdf,application/pdf,image/*" capture="environment" className="hidden" disabled={pdfUploading}
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPrintPdf(f); e.target.value = ""; }} />
+                        <span className="text-[10px] text-zinc-500">Dimensions auto-fill — review before running</span>
+                      </label>
+                    )}
+                    {pdfExtracted && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-zinc-400">
+                        <div>Dia: <span className="text-white font-semibold">{form.tool_dia > 0 ? form.tool_dia.toFixed(4) + '"' : "—"}</span></div>
+                        <div>Flutes: <span className="text-white font-semibold">{form.flutes > 0 ? form.flutes : "—"}</span></div>
+                        <div>LOC: <span className="text-white font-semibold">{form.loc > 0 ? form.loc.toFixed(4) + '"' : "—"}</span></div>
+                        <div>Reach: <span className="text-white font-semibold">{form.lbs > 0 ? form.lbs.toFixed(4) + '"' : "same as LOC"}</span></div>
+                        <div>Corner: <span className="text-white font-semibold">{form.corner_condition === "square" ? "Square" : form.corner_condition === "ball" ? "Ball" : `CR ${form.corner_radius.toFixed(4)}"`}</span></div>
+                        <div>Coating: <span className="text-white font-semibold">{form.coating || "—"}</span></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {dpSpecialTool && pdfExtracted && (
+                  <p className="text-[10px] text-orange-300">Running in special tool mode — sequencer skipped. Output shows speeds &amp; feeds for this tool only.</p>
+                )}
+                {dpSpecialTool && (
+                  <p className="text-[10px] text-zinc-400 italic leading-relaxed">
+                    Multi-tool pocket? This mode runs one tool at a time. For roughing + finishing + corner cleanup workflows,
+                    run the calculator once per tool — or use <span className="text-emerald-400">Standard Tool</span> above
+                    to have the sequencer recommend a matched kit automatically.
+                  </p>
+                )}
+              </div>
+
             </div>
           )}
 
-          {/* Tool Stickout — for surfacing/deep_pocket/chamfer_mill which don't have it inline.
-              The standard WOC/DOC block above already includes Tool Stickout for the common modes. */}
-          {operation === "milling" && (form.mode === "surfacing" || form.mode === "deep_pocket" || form.tool_type === "chamfer_mill") && (
+          {/* Tool Stickout — for surfacing/chamfer_mill always, and deep_pocket only when
+              the user is overriding the sequencer with a specific tool. In sequencer mode
+              the engine derives reach per-tool from target_depth, so a single stickout
+              input has no meaning across multiple recommended tools. */}
+          {operation === "milling" && (
+            form.mode === "surfacing"
+            || form.tool_type === "chamfer_mill"
+            || (form.mode === "deep_pocket" && dpSpecialTool && pdfExtracted)
+          ) && (
             <div className="mt-6 pt-4 border-t border-zinc-800 space-y-2">
               <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
               <Input
@@ -9244,13 +9281,23 @@ ${stabSection}
                 Entry Type Preferences
               </FieldLabel>
               <div className="flex flex-wrap gap-3">
-                {[
-                  { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot", slotOnly: false, hideInSlot: true,  tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
-                  { key: "ramp",         label: "Straight Ramp",    color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
-                  { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill", slotOnly: false, hideInSlot: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
-                  { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
-                  { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
-                ].filter(({ slotOnly, hideInSlot }) => form.mode === "slot" ? !hideInSlot : !slotOnly)
+                {(() => {
+                  // Deep pocket entry constraints:
+                  //   Closed pocket, no pre-drill → no sweep (no open edge), helical recommended.
+                  //   Closed pocket, with pre-drill → sweep is allowed (pre-drilled hole = entry).
+                  //   Open pocket → sweep is recommended.
+                  const isClosedNoPredrill = form.mode === "deep_pocket" && form.dp_closed_pocket && !form.dp_pre_drill;
+                  const isClosed = form.mode === "deep_pocket" && form.dp_closed_pocket;
+                  return [
+                    { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot" && !isClosedNoPredrill, slotOnly: false, hideInSlot: true,  hideHere: isClosedNoPredrill, tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
+                    { key: "ramp",         label: "Straight Ramp",    color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, hideHere: false, tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
+                    { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" || isClosedNoPredrill, slotOnly: false, hideInSlot: false, hideHere: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
+                    { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  hideHere: false, tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
+                    { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, hideHere: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
+                  ].filter(({ slotOnly, hideInSlot, hideHere }) =>
+                    (form.mode === "slot" ? !hideInSlot : !slotOnly) && !hideHere
+                  );
+                })()
                 .map(({ key, label, color, recommended, tooltip }) => {
                   const checked = entryTypes.includes(key);
                   return (
