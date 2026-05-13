@@ -3706,22 +3706,62 @@ ${stabSection}
     lines.push("════════════════════════════════════════");
     lines.push("");
 
-    // ── TOOL ─────────────────────────────────
-    lines.push("TOOL");
-    lines.push(DIV);
-    const _edpNum = form.edp || pdfToolNumber || null;
-    if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
-    lines.push(L("Brand",        "Core Cutter"));
-    lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
-    if (form.tool_series) lines.push(L("Series",       form.tool_series));
-    lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
-    lines.push(L("Flutes",       String(form.flutes || "—")));
-    if (form.loc > 0)    lines.push(L("LOC",           `${form.loc.toFixed(4)}"`));
-    if (form.lbs > 0)    lines.push(L("LBS",           `${form.lbs.toFixed(4)}"`));
-    lines.push(L("Corner",       cornerLabel));
-    lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
-    if (form.coating)    lines.push(L("Coating",       form.coating));
-    lines.push("");
+    // ── TOOL(S) ──────────────────────────────
+    // Pocketing Strategy mode returns a tool kit (bulk roughers + corner finisher).
+    // List each tool individually with its depth band, role, and dimensions.
+    // For all other modes, emit the single form-driven tool block as before.
+    const isPocketing = form.mode === "deep_pocket" && dpResult && !(dpSpecialTool && pdfExtracted);
+    const allKitTools = isPocketing
+      ? [...(dpResult?.bulk_tools ?? []), ...(dpResult?.corner_tool ? [dpResult.corner_tool] : [])]
+      : [];
+
+    if (isPocketing && allKitTools.length > 0) {
+      lines.push(`TOOL KIT — ${allKitTools.length} tool${allKitTools.length === 1 ? "" : "s"}`);
+      lines.push(DIV);
+      allKitTools.forEach((t: any, i: number) => {
+        const idx = i + 1;
+        const isCorner = t.role === "corner_finish";
+        const roleLabel = isCorner ? "Corner / Floor Finisher" : "Bulk Rougher";
+        const cornerStr = t.corner_condition === "ball"
+          ? "Ball Nose"
+          : t.corner_condition === "square"
+          ? "Square"
+          : (typeof t.corner_condition === "string" && /^[0-9.]+$/.test(t.corner_condition)
+              ? `CR ${parseFloat(t.corner_condition).toFixed(4)}"`
+              : "—");
+        lines.push(`#${idx}  ${roleLabel}`);
+        if (t.edp) lines.push(L("  EDP",         String(t.edp)));
+        if (t.description) lines.push(L("  Description", String(t.description)));
+        lines.push(L("  Diameter",    `${Number(t.dia).toFixed(4)}"`));
+        lines.push(L("  Flutes",      String(t.flutes ?? "—")));
+        if (t.loc_in > 0) lines.push(L("  LOC",   `${Number(t.loc_in).toFixed(4)}"`));
+        if (t.lbs_in > 0) lines.push(L("  LBS",   `${Number(t.lbs_in).toFixed(4)}"`));
+        lines.push(L("  Corner",      cornerStr));
+        if (t.series) lines.push(L("  Series",   String(t.series)));
+        if (t.depth_band_from != null && t.depth_band_to != null) {
+          lines.push(L("  Depth Band", `${Number(t.depth_band_from).toFixed(3)}" → ${Number(t.depth_band_to).toFixed(3)}"`));
+        }
+        if (t.entry?.type) lines.push(L("  Entry",      String(t.entry.type).replace(/_/g, " ")));
+        if (i < allKitTools.length - 1) lines.push("");
+      });
+      lines.push("");
+    } else {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
+      if (form.tool_series) lines.push(L("Series",       form.tool_series));
+      lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+      lines.push(L("Flutes",       String(form.flutes || "—")));
+      if (form.loc > 0)    lines.push(L("LOC",           `${form.loc.toFixed(4)}"`));
+      if (form.lbs > 0)    lines.push(L("LBS",           `${form.lbs.toFixed(4)}"`));
+      lines.push(L("Corner",       cornerLabel));
+      lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
+      if (form.coating)    lines.push(L("Coating",       form.coating));
+      lines.push("");
+    }
 
     // ── MATERIAL ──────────────────────────────
     lines.push("MATERIAL");
