@@ -3808,6 +3808,12 @@ ${stabSection}
       if (form.dp_closed_pocket && form.dp_pre_drill_dia > 0) {
         lines.push(L("Pre-Drill",         `Ø${form.dp_pre_drill_dia.toFixed(4)}" × ${form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth.toFixed(3) + '"' : "auto"} deep`));
       }
+      // Corner oversize warning — sequencer couldn't find an in-fit finisher
+      if (dpResult?.corner_oversize && dpResult?.corner_oversize_note) {
+        lines.push("");
+        lines.push("⚠ FINISHER CANNOT PRODUCE WALL CORNERS TO PRINT:");
+        lines.push(`  ${dpResult.corner_oversize_note}`);
+      }
       lines.push("");
     }
 

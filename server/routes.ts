@@ -5218,16 +5218,22 @@ ${catalogList}`
         : Infinity;
       // HEM: hard cap at 0.625" — keeps radial forces manageable at depth.
       // Traditional: no hard cap beyond pocket ceiling (wider WOC tolerates larger dia).
+      //
+      // Roughers can EXCEED the wall-to-wall fit (corner_radius * 2) — they leave
+      // stock at corners for the corner finisher to clean up. BUT they shouldn't
+      // go too far above it: a 1.0" rougher in a 0.300" w-to-w pocket leaves too
+      // much corner stock for the finisher to remove. Reasonable rule: rougher
+      // dia ≤ 2× wall-to-wall dia (which is 4× corner_radius). This keeps the
+      // corner-stock-removal task tractable for the finisher.
+      //
+      // The corner finisher MUST be ≤ wall-to-wall fit to produce the radius —
+      // enforced in the corner picker via maxCornerDia, not here.
       const hemDiaCap = cutting_style === "hem" ? 0.625 : Infinity;
-      // Wall-corner physical fit ceiling: bulk tool must fit the smallest pocket
-      // feature, which is bounded by the wall corner radius × 2 (wall-to-wall dia).
-      // Without this, the sequencer can recommend a 1" tool for a 0.556" w-to-w pocket.
-      // 0.95 factor leaves a little clearance so the tool can traverse, not just fit.
-      const wallCornerFitDia = corner_radius > 0 ? corner_radius * 2 * 0.95 : Infinity;
+      const roughCornerCap = corner_radius > 0 ? corner_radius * 4.0 : Infinity;
       const maxBulkDia = Math.min(
         pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0,
         hemDiaCap,
-        wallCornerFitDia
+        roughCornerCap
       );
 
       // ── Material-appropriate coating + flute filters ───────────────────────
@@ -5427,9 +5433,9 @@ ${catalogList}`
         // leaving a depth gap. When that happens, allow slightly larger diameters for the
         // final-reach band — but conservatively. Going too big (1"+ on a 4" deep HEM pocket)
         // creates a 4×D+ chatter risk that defeats the purpose.
-        // Rule: extended cap is min(1.5×maxBulkDia, pocket-fit ceiling, 1.0").
+        //
         const extendedCap = Math.min(
-          maxBulkDia * 1.5,  // step up by at most 50% from the HEM cap
+          maxBulkDia * 1.5,  // step up by at most 50% from the HEM force-management cap
           closed_pocket && pocket_length > 0 && pocket_width > 0
             ? Math.min(pocket_length, pocket_width) * 0.65
             : 1.0,
