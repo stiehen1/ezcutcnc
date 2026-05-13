@@ -9734,7 +9734,7 @@ ${stabSection}
                               Finishing Tool {finishIdx + 1} of {totalTools} — Custom Special Required
                             </span>
                           </div>
-                          <span className="text-[10px] font-semibold text-amber-300">⚠ Cannot Finish to Print</span>
+                          <span className="text-[10px] font-semibold text-amber-300">Special Quote Recommended</span>
                         </div>
                         <div className="px-4 py-3 space-y-2.5">
                           <p className="text-xs text-zinc-300 leading-relaxed">
@@ -9771,7 +9771,7 @@ ${stabSection}
                           >
                             Request Custom Special Quote →
                           </a>
-                          <p className="text-[10px] text-zinc-500 text-center">Easy build — typical 1–2 week lead time.</p>
+                          <p className="text-[10px] text-zinc-500 text-center">Easy build — swift lead times on specials.</p>
                         </div>
                       </div>
                     </div>
