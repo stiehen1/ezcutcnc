@@ -5409,6 +5409,20 @@ ${catalogList}`
         const candidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= maxBulkDia);
         if (!candidates.length) return [];
 
+        // Extended pool — used when no in-cap candidate reaches the remaining depth.
+        // For HEM, maxBulkDia caps at 0.625" to keep radial forces manageable at depth.
+        // But on a deep pocket (e.g. 4"), there may be no 0.625" tool with sufficient reach,
+        // leaving a depth gap. When that happens, allow larger diameters (up to the physical
+        // pocket-fit ceiling) for the final-reach band. At that depth the bulk has already
+        // cleared the lateral material, so the larger tool only needs to reach — not traverse.
+        const extendedCap = Math.min(
+          closed_pocket && pocket_length > 0 && pocket_width > 0
+            ? Math.min(pocket_length, pocket_width) * 0.65  // physical fit ceiling (looser than HEM lateral cap)
+            : 2.0,
+          2.0
+        );
+        const extendedCandidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= extendedCap);
+
         // Progressive band selection: greedily pick largest-dia tool for each depth band
         const sequence: { tool: ToolRow; bandFrom: number; bandTo: number }[] = [];
         let depthCovered = 0;
@@ -5440,6 +5454,24 @@ ${catalogList}`
                 // Prefer standard LOC; only use RN reach if no standard LOC extends coverage
                 const useRn = maxLoc <= depthCovered;
                 picked = { tool: null as any, reach: effectiveReach, dia, useRn }; break;
+              }
+            }
+          }
+
+          if (!picked) {
+            // No in-cap candidate met criteria. Try the extended pool — a larger
+            // diameter tool to reach the remaining depth. This catches the HEM
+            // case where 0.625" cap can't reach a 4" deep pocket but a 3/4" or
+            // 1" tool with sufficient reach is available.
+            for (const row of extendedCandidates) {
+              const dia = parseFloat(row.cutting_diameter_in);
+              if (dia <= maxBulkDia) continue;  // already tried in the main loop
+              const maxReach = parseFloat(row.max_reach || "0");
+              if (maxReach <= depthCovered) continue;
+              const bandGain = maxReach - depthCovered;
+              if (bandGain >= dia * 0.4) {  // looser threshold for extended-cap final pass
+                picked = { tool: null as any, reach: maxReach, dia, useRn: true };
+                break;
               }
             }
           }
