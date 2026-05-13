@@ -9734,7 +9734,6 @@ ${stabSection}
                               Finishing Tool {finishIdx + 1} of {totalTools} — Custom Special Required
                             </span>
                           </div>
-                          <span className="text-[10px] font-semibold text-amber-300">Special Quote Recommended</span>
                         </div>
                         <div className="px-4 py-3 space-y-2.5">
                           <p className="text-xs text-zinc-300 leading-relaxed">
@@ -9900,46 +9899,6 @@ ${stabSection}
                         ))}
                       </div>
                     )}
-
-                    {/* ── Special Order Options ── feed mill, plunge rougher, through-coolant */}
-                    {dpResult.feedmill_eligible && (
-                      <div className="rounded-xl border border-violet-700/40 bg-violet-900/10 p-3 space-y-3 mt-2">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Special Order Options — Core Cutter</p>
-
-                        {/* Feed Mill */}
-                        <div className="rounded-lg border border-violet-600/30 bg-violet-900/10 px-3 py-2 space-y-1">
-                          <p className="text-[10px] font-semibold text-violet-300">High Feed Mill — Fastest Axial Bulk Removal</p>
-                          <p className="text-[10px] text-zinc-300">Cuts in the <span className="font-semibold text-white">Z direction only</span> — small axial steps at very high feed rates, all force directed into the spindle. No radial wall pressure, no deflection, no chatter. Most valuable when <span className="font-semibold text-white">reach is long, material is tough, or side-cutting forces are hurting your setup</span> — stainless, titanium, alloy steel, pre-hard tool steel, and HRSA are ideal candidates. Also a strong choice on thin walls where radial force would push the wall. Rasters the pocket floor to near-depth, then the endmill sequence finishes walls and corners.</p>
-                          {dpResult.feedmill_estimate && (
-                            <div className="mt-1.5 space-y-1.5">
-                              {[dpResult.feedmill_estimate.large, dpResult.feedmill_estimate.small].filter(Boolean).map((e: any) => (
-                                <div key={e.dia} className="rounded border border-zinc-700 bg-zinc-800/50 px-2 py-1.5">
-                                  <p className="text-[10px] font-semibold text-white">Ø{e.dia}" <span className="text-zinc-400 font-normal">{e.dia <= 0.375 ? "— lower Z force, fits tighter pockets" : e.dia >= 0.625 ? "— max MRR, wider pockets" : "— balanced"}</span></p>
-                                  <p className="text-[10px] text-zinc-400">DOC/pass: <span className="text-white">{e.doc_in.toFixed(4)}"</span> · Z passes: <span className="text-white">{e.z_passes}</span> · Feed: <span className="text-white">{e.feed_ipm} IPM</span> · RPM: <span className="text-white">{e.rpm.toLocaleString()}</span></p>
-                                  <p className="text-[10px] text-emerald-400 font-semibold">Est. cycle time: {e.est_str}</p>
-                                </div>
-                              ))}
-                              <p className="text-[10px] text-zinc-500">Estimates only — add endmill finish passes separately.</p>
-                              <p className="text-[10px] text-violet-300">Once you have your Core Cutter quote and print, use the <button type="button" onClick={() => { setOperation("feedmill"); window.scrollTo(0,0); }} className="font-semibold text-white underline decoration-dotted hover:text-violet-200 transition-colors">Feed Mill section</button> to generate exact running parameters for your specific tool.</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Plunge Rougher */}
-                        <div className="rounded-lg border border-violet-600/30 bg-violet-900/10 px-3 py-2 space-y-1">
-                          <p className="text-[10px] font-semibold text-violet-300">Z-Axis Plunge Roughing Tool</p>
-                          <p className="text-[10px] text-zinc-300">Designed for straight Z-axis drilling-style cuts across the pocket floor — step over ~75% of tool diameter each plunge. All force is axial with zero radial wall pressure. Ideal where endmill reach and deflection are the limiting factor. Contact Core Cutter with pocket dimensions and material for a quote.</p>
-                        </div>
-
-                        {/* Through-Coolant */}
-                        {dpResult.closed_pocket && (
-                          <div className="rounded-lg border border-sky-600/30 bg-sky-900/10 px-3 py-2 space-y-1">
-                            <p className="text-[10px] font-semibold text-sky-300">Through-Coolant Tooling — Strongly Recommended</p>
-                            <p className="text-[10px] text-zinc-300">In a closed pocket chips have nowhere to go — they pack at the bottom, re-cut, generate heat, and kill tools fast. Through-spindle coolant blasts chips up and out on every pass. Critical at depth. All three tool types above (feed mill, plunge rougher, extended-reach endmill) can be manufactured with through-coolant as a Core Cutter special.</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </>
                 );
               })()}
@@ -9948,7 +9907,7 @@ ${stabSection}
               {dpResult && (() => {
                 const allTools: any[] = [
                   ...(dpResult.bulk_tools ?? []),
-                  ...(dpResult.corner_tool ? [dpResult.corner_tool] : []),
+                  ...(dpResult.corner_tool && !dpResult.corner_oversize ? [dpResult.corner_tool] : []),
                 ];
                 if (!allTools.length) return null;
 
@@ -9959,6 +9918,12 @@ ${stabSection}
                   seen.add(t.edp);
                   return true;
                 });
+
+                const showCustomSpecial = dpResult.corner_oversize && dpResult.corner_tool;
+                const customSpecialIdx = unique.length;
+                const wallR = dpResult.inputs?.corner_radius;
+                const floorR = dpResult.inputs?.floor_radius;
+                const depth = dpResult.inputs?.target_depth;
 
                 return (
                   <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 mt-2">
@@ -9985,6 +9950,21 @@ ${stabSection}
                           </div>
                         );
                       })}
+                      {showCustomSpecial && (
+                        <div className="flex items-start gap-3 border-t border-indigo-500/20 pt-2">
+                          <span className="text-[10px] font-bold text-amber-300 w-4 shrink-0">#{customSpecialIdx + 1}</span>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold text-amber-300">Corner Finishing Tool — Custom Special Quote</p>
+                            <p className="text-xs font-bold text-white">Core Cutter Special (no standard catalog match)</p>
+                            <p className="text-[10px] text-zinc-400 leading-relaxed">
+                              Reduced-neck CR endmill
+                              {wallR != null ? `  ·  Wall-to-Wall R ${Number(wallR).toFixed(4)}"` : ""}
+                              {floorR != null && floorR > 0 ? `  ·  Floor-to-Wall R ${Number(floorR).toFixed(4)}"` : ""}
+                              {depth != null ? `  ·  Reach ${Number(depth).toFixed(3)}"` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
