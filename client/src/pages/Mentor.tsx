@@ -8790,12 +8790,12 @@ ${stabSection}
           {form.mode === "deep_pocket" && (
             <div className="space-y-4 mt-2">
 
-              {/* ── Special Tool toggle ── */}
+              {/* ── Override: Use specific tool (bypass sequencer) ── */}
               <div className="rounded-lg border border-orange-600/40 bg-orange-900/10 px-3 py-2.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-semibold text-orange-400">I have a Core Cutter special tool</span>
-                    <span className="ml-2 text-[10px] text-zinc-500">— upload your print to get running parameters for this specific tool</span>
+                    <span className="text-xs font-semibold text-orange-400">Use specific tool (override sequencer)</span>
+                    <span className="ml-2 text-[10px] text-zinc-500">— skip the sequencer recommendation and run a specific Core Cutter tool you've already chosen. Upload its print to extract dimensions.</span>
                   </div>
                   <button type="button"
                     onClick={() => { setDpSpecialTool(p => !p); if (dpSpecialTool) { setPdfExtracted(false); setPdfToolNumber(null); setPdfConvertedFromMm(false); setForm(p => ({ ...p, tool_dia: 0, flutes: 4, loc: 0, lbs: 0, corner_condition: "square", corner_radius: 0, coating: "", woc_pct: 0, doc_xd: 0 })); } }}
@@ -9192,9 +9192,15 @@ ${stabSection}
             </div>
           )}
 
-          {/* Tool Stickout — for surfacing/deep_pocket/chamfer_mill which don't have it inline.
-              The standard WOC/DOC block above already includes Tool Stickout for the common modes. */}
-          {operation === "milling" && (form.mode === "surfacing" || form.mode === "deep_pocket" || form.tool_type === "chamfer_mill") && (
+          {/* Tool Stickout — for surfacing/chamfer_mill always, and deep_pocket only when
+              the user is overriding the sequencer with a specific tool. In sequencer mode
+              the engine derives reach per-tool from target_depth, so a single stickout
+              input has no meaning across multiple recommended tools. */}
+          {operation === "milling" && (
+            form.mode === "surfacing"
+            || form.tool_type === "chamfer_mill"
+            || (form.mode === "deep_pocket" && dpSpecialTool && pdfExtracted)
+          ) && (
             <div className="mt-6 pt-4 border-t border-zinc-800 space-y-2">
               <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
               <Input
