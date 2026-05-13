@@ -5219,9 +5219,15 @@ ${catalogList}`
       // HEM: hard cap at 0.625" — keeps radial forces manageable at depth.
       // Traditional: no hard cap beyond pocket ceiling (wider WOC tolerates larger dia).
       const hemDiaCap = cutting_style === "hem" ? 0.625 : Infinity;
+      // Wall-corner physical fit ceiling: bulk tool must fit the smallest pocket
+      // feature, which is bounded by the wall corner radius × 2 (wall-to-wall dia).
+      // Without this, the sequencer can recommend a 1" tool for a 0.556" w-to-w pocket.
+      // 0.95 factor leaves a little clearance so the tool can traverse, not just fit.
+      const wallCornerFitDia = corner_radius > 0 ? corner_radius * 2 * 0.95 : Infinity;
       const maxBulkDia = Math.min(
         pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0,
-        hemDiaCap
+        hemDiaCap,
+        wallCornerFitDia
       );
 
       // ── Material-appropriate coating + flute filters ───────────────────────
