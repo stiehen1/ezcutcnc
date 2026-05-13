@@ -5261,6 +5261,11 @@ ${catalogList}`
       }> = coverageRows.rows;
 
       // ── 2b. Corner-specific coverage — only ball/CR tools that reach depth ──
+      // Filter for tools whose corner radius is suitable for the floor radius requirement:
+      //   - If floor_radius is set: tool CR must be ≤ floor_radius (smaller is fine, larger
+      //     would leave an oversized floor radius — wrong geometry).
+      //   - If floor_radius is NOT set: any CR ≤ wall corner_radius qualifies.
+      // Ball nose tools satisfy any floor radius via axial engagement so they pass through.
       const cornerCoverageRows = await pool.query(`
         SELECT cutting_diameter_in, MAX(COALESCE(lbs_in, loc_in)) AS max_reach
         FROM skus
@@ -5271,7 +5276,7 @@ ${catalogList}`
             corner_condition = 'ball'
             OR (corner_condition ~ '^[0-9.]+$'
                 AND (corner_condition::numeric <= $1::numeric)
-                AND ($2::numeric = 0 OR corner_condition::numeric >= $2::numeric))
+                AND ($2::numeric = 0 OR corner_condition::numeric <= $2::numeric))
           )
           ${coatingFilter}
         GROUP BY cutting_diameter_in
@@ -5524,7 +5529,10 @@ ${catalogList}`
             LIMIT 1
           `, [dia, target_depth]);
         } else {
-          // Prefer corner radius tool; fall back to ball nose if no CR tool stocked at this dia
+          // Prefer corner radius tool; fall back to ball nose if no CR tool stocked at this dia.
+          // Floor radius matching: when user specifies floor_radius, pick the CR tool whose
+          // radius is CLOSEST to that target (exact match wins). Picking the largest CR that
+          // satisfies the filter produces oversized floor radii — wrong geometry on the part.
           toolRows = await pool.query(`
             SELECT edp, description1, description2, cutting_diameter_in, flutes,
                    loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
@@ -5537,14 +5545,20 @@ ${catalogList}`
               AND (
                 corner_condition = 'ball'
                 OR (corner_condition ~ '^[0-9.]+$'
-                    AND (corner_condition::numeric <= $3::numeric)
-                    AND ($4::numeric = 0 OR corner_condition::numeric >= $4::numeric))
+                    AND (corner_condition::numeric <= $3::numeric))
               )
               AND COALESCE(lbs_in, loc_in) >= $2
               ${coatingFilter}
             ORDER BY
-              -- Prefer CR over ball; among CR tools prefer largest radius that still fits floor (closest match)
+              -- Prefer CR over ball
               CASE WHEN corner_condition = 'ball' THEN 1 ELSE 0 END ASC,
+              -- When floor_radius set: pick CR closest to target (abs distance ASC).
+              -- When not set: prefer largest CR (legacy behavior — DESC).
+              CASE
+                WHEN $4::numeric > 0 AND corner_condition ~ '^[0-9.]+$'
+                  THEN ABS(corner_condition::numeric - $4::numeric)
+                ELSE NULL
+              END ASC NULLS LAST,
               CASE WHEN corner_condition ~ '^[0-9.]+$' THEN corner_condition::numeric ELSE 999 END DESC,
               COALESCE(lbs_in, loc_in) ASC
             LIMIT 1
