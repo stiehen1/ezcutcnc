@@ -5412,14 +5412,16 @@ ${catalogList}`
         // Extended pool — used when no in-cap candidate reaches the remaining depth.
         // For HEM, maxBulkDia caps at 0.625" to keep radial forces manageable at depth.
         // But on a deep pocket (e.g. 4"), there may be no 0.625" tool with sufficient reach,
-        // leaving a depth gap. When that happens, allow larger diameters (up to the physical
-        // pocket-fit ceiling) for the final-reach band. At that depth the bulk has already
-        // cleared the lateral material, so the larger tool only needs to reach — not traverse.
+        // leaving a depth gap. When that happens, allow slightly larger diameters for the
+        // final-reach band — but conservatively. Going too big (1"+ on a 4" deep HEM pocket)
+        // creates a 4×D+ chatter risk that defeats the purpose.
+        // Rule: extended cap is min(1.5×maxBulkDia, pocket-fit ceiling, 1.0").
         const extendedCap = Math.min(
+          maxBulkDia * 1.5,  // step up by at most 50% from the HEM cap
           closed_pocket && pocket_length > 0 && pocket_width > 0
-            ? Math.min(pocket_length, pocket_width) * 0.65  // physical fit ceiling (looser than HEM lateral cap)
-            : 2.0,
-          2.0
+            ? Math.min(pocket_length, pocket_width) * 0.65
+            : 1.0,
+          1.0  // absolute ceiling — past 1" tools, the L/D for deep work is unmanageable
         );
         const extendedCandidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= extendedCap);
 
@@ -5459,17 +5461,62 @@ ${catalogList}`
           }
 
           if (!picked) {
-            // No in-cap candidate met criteria. Try the extended pool — a larger
-            // diameter tool to reach the remaining depth. This catches the HEM
-            // case where 0.625" cap can't reach a 4" deep pocket but a 3/4" or
-            // 1" tool with sufficient reach is available.
-            for (const row of extendedCandidates) {
+            // No in-cap candidate met criteria. Try the extended pool — a slightly
+            // larger diameter tool to reach the remaining depth. Iterate SMALLEST
+            // first so we pick the most rigid (best L/D) tool that gets reach,
+            // not the biggest one available.
+            //
+            // Intermediate-ladder logic: when the remaining gap is large
+            // (≥ 1×D of the extended-pool dia), look for a SHORTER RN at the
+            // same dia first — it's stiffer and covers part of the gap. The
+            // long RN can then take only the bottom portion as a 2nd tool
+            // (or be the corner finisher, same dia).
+            //
+            // Example: 4" pocket, 0.625" bulk only reaches 2.5". Extended
+            // pool has 0.75" tools with 3.0" LBS and 4.0" LBS available.
+            // Sequencer picks the 3.0" LBS for the 2.5→3.0" band, then the
+            // 4.0" LBS for the 3.0→4.0" band (or as corner finisher).
+            const extendedAsc = [...extendedCandidates].sort((a, b) =>
+              parseFloat(a.cutting_diameter_in) - parseFloat(b.cutting_diameter_in)
+            );
+            for (const row of extendedAsc) {
               const dia = parseFloat(row.cutting_diameter_in);
               if (dia <= maxBulkDia) continue;  // already tried in the main loop
               const maxReach = parseFloat(row.max_reach || "0");
-              if (maxReach <= depthCovered) continue;
+              if (maxReach < target_depth) continue;
+              const remaining = target_depth - depthCovered;
+
+              // Check for intermediate ladder opportunity: is there a SHORTER
+              // RN at this dia that covers >= 50% of the remaining depth?
+              // If yes, pick it now and let the next loop iteration grab the
+              // longer RN for the final band.
+              if (remaining >= dia * 1.0 && !isLastSlot) {
+                // Look for an RN with reach in (depthCovered, target_depth)
+                // — strictly shorter than the longest RN at this dia.
+                const intermediate = await pool.query(`
+                  SELECT MIN(COALESCE(lbs_in, loc_in)) AS reach
+                  FROM skus
+                  WHERE tool_type = 'endmill'
+                    AND cutting_diameter_in = $1
+                    AND lbs_in IS NOT NULL
+                    AND COALESCE(lbs_in, loc_in) > $2
+                    AND COALESCE(lbs_in, loc_in) < $3
+                    AND corner_condition NOT IN ('square','ball')
+                    AND corner_condition ~ '^[0-9.]+'
+                    ${coatingFilter}
+                `, [dia, depthCovered + dia * 0.3, target_depth]);
+                const intermediateReach = parseFloat(intermediate.rows[0]?.reach ?? "0");
+                if (intermediateReach > depthCovered && intermediateReach < target_depth) {
+                  // Use the intermediate as this slot — final RN will fall to
+                  // either the last slot or the corner finisher (same dia, longer)
+                  picked = { tool: null as any, reach: intermediateReach, dia, useRn: true };
+                  break;
+                }
+              }
+
+              // No intermediate exists or gap too small — use the long RN
               const bandGain = maxReach - depthCovered;
-              if (bandGain >= dia * 0.4) {  // looser threshold for extended-cap final pass
+              if (bandGain >= dia * 0.4) {
                 picked = { tool: null as any, reach: maxReach, dia, useRn: true };
                 break;
               }
