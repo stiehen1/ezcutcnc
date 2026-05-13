@@ -2949,9 +2949,20 @@ export default function Mentor() {
             // WOC by L/D:
             //   HEM:         ≤4→10%,  4–6→8%,  >6→6%
             //   Traditional: ≤4→40%,  4–6→25%, >6→15%
-            const wocPct = isHem
+            // Then cap by flute count to respect chip clearance (FLUTE_WOC_LIMITS):
+            //   2–4 fl: 50% max — well above any L/D-derived value
+            //   5 fl:   35% max
+            //   6 fl:   25% max  ← prevents 6-fl @ 40% chip-pack risk
+            //   7+ fl:  10% max
+            const wocByLd = isHem
               ? (ldEst > 6 ? 6 : ldEst > 4 ? 8 : 10)
               : (ldEst > 6 ? 15 : ldEst > 4 ? 25 : 40);
+            const wocCapByFlutes =
+              tool.flutes >= 7 ? 10 :
+              tool.flutes === 6 ? 25 :
+              tool.flutes === 5 ? 35 :
+              50;  // 2-4 fl
+            const wocPct = Math.min(wocByLd, wocCapByFlutes);
 
             // IPT feed multiplier — scale down with L/D to reduce cutting force
             //   L/D ≤ 4: full feed (1.00×)
