@@ -9201,6 +9201,13 @@ ${stabSection}
                 {dpSpecialTool && pdfExtracted && (
                   <p className="text-[10px] text-orange-300">Running in special tool mode — sequencer skipped. Output shows speeds &amp; feeds for this tool only.</p>
                 )}
+                {dpSpecialTool && (
+                  <p className="text-[10px] text-zinc-400 italic leading-relaxed">
+                    Multi-tool pocket? This mode runs one tool at a time. For roughing + finishing + corner cleanup workflows,
+                    run the calculator once per tool — or use <span className="text-emerald-400">Standard Tool</span> above
+                    to have the sequencer recommend a matched kit automatically.
+                  </p>
+                )}
               </div>
 
             </div>
