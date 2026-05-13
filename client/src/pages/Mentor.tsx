@@ -3074,7 +3074,7 @@ export default function Mentor() {
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const MODE_LABELS: Record<string, string> = {
       hem: "Roughing — HEM", traditional: "Roughing — Traditional", finish: "Finishing",
-      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation", deep_pocket: "Deep Pocket / Thin Wall",
+      face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation", deep_pocket: "Pocketing Strategy",
       surfacing: "3D Surface Contouring",
     };
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
@@ -4529,7 +4529,7 @@ ${stabSection}
                 <option value="slot">Slotting</option>
                 <option value="circ_interp">Circular Interpolation (e.g. Bore Enlargement)</option>
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
-                <option value="deep_pocket">Deep Pocket / Thin Wall (Progressive Reach)</option>
+                <option value="deep_pocket">Pocketing Strategy (Tool Kit Recommendation)</option>
               </select>
               </div>
             )}
