@@ -9701,9 +9701,86 @@ ${stabSection}
               {dpResult?.corner_tool && (() => {
                 const totalTools = (dpResult.bulk_tools?.length ?? 0) + 1;
                 const finishIdx = totalTools - 1;
+
+                if (dpResult.corner_oversize) {
+                  const depth = dpResult.inputs?.target_depth;
+                  const wallR = dpResult.inputs?.corner_radius;
+                  const floorR = dpResult.inputs?.floor_radius;
+                  const mat = form.material || "—";
+                  const subject = "Custom Pocket Finisher Quote Request";
+                  const bodyLines = [
+                    "Hello,",
+                    "",
+                    "Please quote a custom finishing endmill for the following pocket geometry:",
+                    "",
+                    depth != null ? `Pocket Depth: ${Number(depth).toFixed(3)}"` : null,
+                    wallR != null ? `Wall-to-Wall Corner Radius: ${Number(wallR).toFixed(4)}"` : null,
+                    floorR != null && floorR > 0 ? `Floor-to-Wall Radius: ${Number(floorR).toFixed(4)}"` : null,
+                    `Material: ${mat}`,
+                    "",
+                    "Standard catalog finishers are oversized for this corner radius.",
+                    "",
+                    "Thank you",
+                  ].filter(Boolean) as string[];
+                  const mailto = `mailto:sales@corecutterusa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+
+                  return (
+                    <div className="space-y-2 mt-2">
+                      <div className="rounded-xl border border-amber-500/40 bg-zinc-900 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-amber-500/30"
+                          style={{ backgroundColor: "rgba(245,158,11,0.10)" }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                              Finishing Tool {finishIdx + 1} of {totalTools} — Custom Special Required
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-amber-300">⚠ Cannot Finish to Print</span>
+                        </div>
+                        <div className="px-4 py-3 space-y-2.5">
+                          <p className="text-xs text-zinc-300 leading-relaxed">
+                            {dpResult.corner_oversize_note || "No standard finisher fits this wall corner radius at the required reach."}
+                          </p>
+                          <div className="rounded-lg border border-zinc-700 bg-zinc-950/60 p-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Special Required For:</p>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                              {depth != null && (
+                                <>
+                                  <span className="text-zinc-500">Pocket Depth</span>
+                                  <span className="text-white font-mono text-right">{Number(depth).toFixed(3)}"</span>
+                                </>
+                              )}
+                              {wallR != null && (
+                                <>
+                                  <span className="text-zinc-500">Wall-to-Wall R</span>
+                                  <span className="text-white font-mono text-right">{Number(wallR).toFixed(4)}"</span>
+                                </>
+                              )}
+                              {floorR != null && floorR > 0 && (
+                                <>
+                                  <span className="text-zinc-500">Floor-to-Wall R</span>
+                                  <span className="text-white font-mono text-right">{Number(floorR).toFixed(4)}"</span>
+                                </>
+                              )}
+                              <span className="text-zinc-500">Material</span>
+                              <span className="text-white font-mono text-right">{mat}</span>
+                            </div>
+                          </div>
+                          <a
+                            href={mailto}
+                            className="block w-full text-center rounded-lg bg-amber-500 hover:bg-amber-400 text-black py-2 text-xs font-semibold transition-colors"
+                          >
+                            Request Custom Special Quote →
+                          </a>
+                          <p className="text-[10px] text-zinc-500 text-center">Easy build — typical 1–2 week lead time.</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="space-y-2 mt-2">
-                    {renderToolCard(dpResult.corner_tool, finishIdx, totalTools, dpResult.corner_oversize ? "closest_reach" : "corner_finish")}
+                    {renderToolCard(dpResult.corner_tool, finishIdx, totalTools, "corner_finish")}
                   </div>
                 );
               })()}
@@ -9740,14 +9817,6 @@ ${stabSection}
                         <span className="block mt-1 text-amber-400">⚠ ⌀{userDia.toFixed(4)}" is smaller than the largest bulk tool (⌀{dpResult.constraints.bulk_dia}") — helical entry will be used for that tool.</span>
                       )}
                     </>,
-                  });
-                }
-
-                if (dpResult.corner_oversize && dpResult.corner_oversize_note) {
-                  notes.push({
-                    color: "amber",
-                    title: "Cannot Finish Corners to Print",
-                    body: dpResult.corner_oversize_note,
                   });
                 }
 
