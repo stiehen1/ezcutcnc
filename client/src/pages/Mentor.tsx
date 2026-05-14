@@ -9198,17 +9198,27 @@ ${stabSection}
                       </div>
                     </div>
 
-                    {/* Pre-drill — required for closed pocket */}
+                    {/* Pre-drill — recommended for closed pocket; helical/ramp also valid */}
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 text-xs font-medium" style={{ color: "#38bdf8", opacity: 0.6 }}>
-                          <div className="w-8 h-4 rounded-full border flex items-center px-0.5"
-                            style={{ borderColor: "#38bdf8", backgroundColor: "rgba(56,189,248,0.2)" }}>
-                            <div className="w-3 h-3 rounded-full ml-auto" style={{ backgroundColor: "#38bdf8" }} />
+                        <button type="button"
+                          onClick={() => setForm(p => ({ ...p, dp_pre_drill: !p.dp_pre_drill, dp_pre_drill_dia: !p.dp_pre_drill ? p.dp_pre_drill_dia : 0, dp_pre_drill_depth: !p.dp_pre_drill ? p.dp_pre_drill_depth : 0 }))}
+                          className="flex items-center gap-2 text-xs font-medium transition-colors"
+                          style={{ color: form.dp_pre_drill ? "#38bdf8" : "#71717a" }}>
+                          <div className="w-8 h-4 rounded-full border flex items-center transition-all px-0.5"
+                            style={{ borderColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", backgroundColor: form.dp_pre_drill ? "rgba(56,189,248,0.2)" : "transparent" }}>
+                            <div className="w-3 h-3 rounded-full transition-all"
+                              style={{ backgroundColor: form.dp_pre_drill ? "#38bdf8" : "#52525b", marginLeft: form.dp_pre_drill ? "auto" : "0" }} />
                           </div>
-                          Pre-Drilled Entry Hole <span className="text-[10px] text-zinc-500 ml-1">(required for closed pocket)</span>
-                        </div>
+                          Pre-Drilled Entry Hole <span className="text-[10px] text-emerald-400 ml-1">(recommended — fastest, lowest tool stress)</span>
+                        </button>
                       </div>
+                      {!form.dp_pre_drill && (
+                        <div className="pl-2 text-[10px] text-zinc-400 leading-relaxed">
+                          No pre-drill — endmill will <span className="text-zinc-200 font-semibold">helical ramp</span> or straight-plunge to depth. Works fine but slower, harder on the tool, and chip evacuation is more critical at the bottom of the entry.
+                        </div>
+                      )}
+                      {form.dp_pre_drill && (
                       <div className="pl-2 space-y-1">
                         <div className="flex gap-2">
                           <div className="flex-1">
@@ -9235,6 +9245,7 @@ ${stabSection}
                           </div>
                         </div>
                       </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -9547,6 +9558,59 @@ ${stabSection}
                   Depth band: <span className="text-zinc-300">{tool.depth_band_from.toFixed(3)}" – {tool.depth_band_to.toFixed(3)}"</span>
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
+                {tool.entry?.type === "helical" && mil?.feed_ipm != null && mil?.rpm != null && (() => {
+                  // L/D-based conservatism: longer/skinnier tools need shallower ramp + slower feed
+                  // Use stickout L/D from physics if available; otherwise approximate from reach
+                  const tld = ldRatio ?? (tool.reach_in && tool.dia ? tool.reach_in / tool.dia : 3);
+                  // Feed multiplier: 0.50 baseline at L/D ≤ 3, dropping to 0.30 at L/D ≥ 6
+                  const feedMult = tld <= 3 ? 0.50
+                    : tld >= 6 ? 0.30
+                    : 0.50 - ((tld - 3) / 3) * 0.20;
+                  // Ramp angle: shallow long tools to spread the Z load over more revolutions
+                  // Base angle from server (2° HEM, 3° trad); cap by L/D
+                  const baseAngle = tool.entry.angle_deg || 3;
+                  const angle = tld <= 3 ? baseAngle
+                    : tld >= 6 ? Math.min(baseAngle, 1.5)
+                    : Math.min(baseAngle, baseAngle - ((tld - 3) / 3) * (baseAngle - 1.5));
+                  const helixDia = tool.entry.helix_dia || tool.dia * 0.93;
+                  const helixCircumf = Math.PI * helixDia;
+                  const entryFeed = mil.feed_ipm * feedMult;
+                  // Z per revolution = circumference × tan(angle)
+                  const zPerRev = helixCircumf * Math.tan(angle * Math.PI / 180);
+                  // Ramp depth = depth band height for this tool (or full depth for tool 1 fallback)
+                  const bandHeight = (tool.depth_band_to ?? form.dp_target_depth) - (tool.depth_band_from ?? 0);
+                  const rampDepth = bandHeight > 0 ? bandHeight : (form.dp_target_depth || 1.0);
+                  // Z per minute = zPerRev × rpm
+                  const zPerMin = zPerRev * mil.rpm;
+                  const timeToDepth = zPerMin > 0 ? rampDepth / zPerMin : 0;
+                  const isLong = tld > 4;
+                  return (
+                    <div className="mt-1 pl-3 border-l border-sky-700/40 space-y-0.5">
+                      <p className="text-[10px] text-sky-400">
+                        Helical ramp parameters
+                        {isLong && <span className="text-amber-400 ml-1">· conservative for L/D {tld.toFixed(1)}×</span>}
+                      </p>
+                      <p className="text-[10px] text-zinc-400">
+                        Entry feed: <span className="text-zinc-200 font-mono">{entryFeed.toFixed(1)} IPM</span>
+                        <span className="text-zinc-500"> ({Math.round(feedMult*100)}% of main feed{isLong ? " — reduced for long reach" : ""})</span>
+                      </p>
+                      <p className="text-[10px] text-zinc-400">
+                        Ramp angle: <span className="text-zinc-200 font-mono">{angle.toFixed(1)}°</span>
+                        <span className="text-zinc-500"> · Z per rev: <span className="text-zinc-300 font-mono">{zPerRev.toFixed(4)}"</span> · Z feed: <span className="text-zinc-300 font-mono">{zPerMin.toFixed(2)} IPM</span></span>
+                      </p>
+                      {timeToDepth > 0 && (
+                        <p className="text-[10px] text-zinc-500">
+                          Ramp depth: ~{rampDepth.toFixed(3)}" · time: ~{timeToDepth < 1 ? `${(timeToDepth * 60).toFixed(0)} sec` : `${timeToDepth.toFixed(1)} min`}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-amber-400/80 leading-snug pt-0.5">
+                        {isLong
+                          ? "Long reach — watch for chatter on first revolution. Coolant flood or TSC mandatory; deflection adds to Z load."
+                          : "Flood or TSC coolant required — chip evacuation at bottom of ramp is the failure mode."}
+                      </p>
+                    </div>
+                  );
+                })()}
                 {tool.is_rn && ldRatio != null && ldRatio > 4 && (
                   <p className="text-[10px] text-amber-400 mt-0.5">
                     Long-reach tool — reduce WOC and run conservatively. Deflection scales with L³.
