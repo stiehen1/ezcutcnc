@@ -888,6 +888,42 @@ export async function registerRoutes(
         WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Starrag%' AND model ILIKE $1)
       `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq]);
     }
+
+    // ── Modig catalog ────────────────────────────────────────────────────────
+    // Aerospace-focused: inverted 5-axis (IM), mill-turn (MTX), horizontal HMC (MHM),
+    // gantry (FlexiMill / RigiMill / Horizon / MILL-EX), high-velocity (HHV), VMC (VMP).
+    // Taper enum has HSK63 / HSK100 only — HSK-A63 → HSK63, HSK-A80 + HSK-A100 → HSK100.
+    // machine_type: 4-axis HMC (MHM) → hmc, MTX → mill_turn, all others → 5axis.
+    // [model, machine_type, taper, max_rpm, spindle_hp, peak_torque_ftlb, base_torque_rpm, way_type, drive_type, notes]
+    const modigMachines: [string, string, string, number, number, number, number, string, string, string][] = [
+      ["IM-8",            "5axis",     "HSK63",  30000, 201, 406, 4500, "linear", "direct", "Flagship inverted aerospace machine"],
+      ["IM-8 Heavy Duty", "5axis",     "HSK100", 18000, 201, 406, 3500, "linear", "direct", "Heavy-duty inverted aerospace"],
+      ["IM-6",            "5axis",     "HSK63",  30000, 204, 330, 5000, "linear", "direct", "Compact inverted aerospace"],
+      ["IM-6 HD",         "5axis",     "HSK100", 18000, 204, 330, 3500, "linear", "direct", "Titanium-focused inverted"],
+      ["IM-10",           "5axis",     "HSK63",  30000, 204, 330, 5000, "linear", "direct", "Large-format inverted aerospace"],
+      ["MTX",             "mill_turn", "HSK63",  30000, 201, 300, 5000, "linear", "direct", "Mill-turn hybrid"],
+      ["MTX HD",          "mill_turn", "HSK100", 18000, 201, 400, 3500, "linear", "direct", "High-torque mill-turn"],
+      ["MHM-800",         "hmc",       "HSK63",  20000, 150, 180, 4500, "linear", "direct", "Aerospace HMC"],
+      ["MHM-1250",        "hmc",       "HSK100", 15000, 200, 350, 3500, "linear", "direct", "Heavy-duty HMC"],
+      ["FlexiMill",       "5axis",     "HSK63",  30000, 168, 200, 5000, "linear", "direct", "Wing spars / composites gantry"],
+      ["FlexiMill HD",    "5axis",     "HSK100", 18000, 180, 350, 3500, "linear", "direct", "Structural titanium gantry"],
+      ["HHV2",            "5axis",     "HSK63",  30000, 109, 120, 7000, "linear", "direct", "Horizontal high velocity"],
+      ["HHV3",            "5axis",     "HSK63",  30000, 150, 150, 6500, "linear", "direct", "Larger HHV aluminum/composite"],
+      ["RigiMill",        "5axis",     "HSK100", 15000, 200, 450, 3000, "box",    "direct", "Maximum rigidity Ti/steel"],
+      ["MILL-EX",         "5axis",     "HSK63",  24000, 100, 120, 6000, "linear", "direct", "Extrusion machining center"],
+      ["VMP-800",         "5axis",     "HSK63",  24000, 100, 120, 6000, "linear", "direct", "Compact aerospace VMC"],
+      ["VMP-1200",        "5axis",     "HSK63",  24000, 120, 150, 5500, "linear", "direct", "Larger aerospace VMC"],
+      ["Horizon",         "5axis",     "HSK63",  24000, 150, 180, 5000, "linear", "direct", "Aerospace production HMC"],
+      ["Horizon HD",      "5axis",     "HSK100", 15000, 180, 350, 3500, "linear", "direct", "Heavy structural titanium"],
+    ];
+    for (const m of modigMachines) {
+      const [model, mtype, taper, maxRpm, hp, peakTq, baseRpm, wayType, driveType, notes] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence)
+        SELECT 'Modig', $1, $2, $3, $4, $5, true, '{flood,tsc}', $6, $7, $8, $8, $9, $2, 'medium'
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Modig%' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, mtype, wayType, peakTq, baseRpm]);
+    }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
