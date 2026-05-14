@@ -2499,6 +2499,8 @@ export default function Mentor() {
 
   const [formDirty, setFormDirty] = React.useState(false);
   const [runWarnings, setRunWarnings] = React.useState<string[]>([]);
+  // Snapshot of form at the moment of the last successful run; dirty = current form !== snapshot
+  const lastRunFormRef = React.useRef<string>("");
 
   // Auto-populate keyseat cut pass depth when both diameters are known
   React.useEffect(() => {
@@ -2510,9 +2512,14 @@ export default function Mentor() {
   }, [operation, form.tool_dia, form.keyseat_arbor_dia]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  // Mark dirty whenever form changes after a successful run
+  // Mark dirty whenever form actually differs from the snapshot taken at last successful run.
+  // (Comparing against a snapshot avoids the bug where post-run side effects that touch `form`
+  // re-fire this effect and re-set dirty=true even though nothing user-meaningful changed.)
   React.useEffect(() => {
-    if (mentor.data) setFormDirty(true);
+    if (mentor.data) {
+      const current = JSON.stringify(form);
+      setFormDirty(current !== lastRunFormRef.current);
+    }
     setRunWarnings([]);
   }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2736,6 +2743,7 @@ export default function Mentor() {
     setSelectedSpindle("main");
     setManualSubRpm(0);
     setMachineQuery("");
+    lastRunFormRef.current = "";
     setFormDirty(false);
     setShowRoi(false);
     setRoiResult(null);
@@ -3037,6 +3045,7 @@ export default function Mentor() {
         machine_id: activeMachineId ?? undefined,
         debug: false,
       });
+      lastRunFormRef.current = JSON.stringify(form);
       setFormDirty(false);
       trackCalculation(form.material, form.mode, form.tool_dia);
       setOptimalRec(null);
