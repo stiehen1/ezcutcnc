@@ -913,7 +913,7 @@ export async function registerRoutes(
       ["MILL-EX",         "5axis",     "HSK63",  24000, 100, 120, 6000, "linear", "direct", "Extrusion machining center"],
       ["VMP-800",         "5axis",     "HSK63",  24000, 100, 120, 6000, "linear", "direct", "Compact aerospace VMC"],
       ["VMP-1200",        "5axis",     "HSK63",  24000, 120, 150, 5500, "linear", "direct", "Larger aerospace VMC"],
-      ["Horizon",         "5axis",     "HSK63",  24000, 150, 180, 5000, "linear", "direct", "Aerospace production HMC"],
+      ["Horizon",         "5axis",     "HSK63",  24000, 150, 180, 5000, "linear", "direct", "Horizontal Aerospace Mill"],
       ["Horizon HD",      "5axis",     "HSK100", 15000, 180, 350, 3500, "linear", "direct", "Heavy structural titanium"],
     ];
     for (const m of modigMachines) {
@@ -5619,7 +5619,11 @@ ${catalogList}`
               entry = { type: "helical", helix_dia: +(toolDia * 0.93).toFixed(4), angle_deg: cutting_style === "hem" ? 2 : 3 };
             }
           } else {
-            entry = { type: "plunge_to_prior_depth" };
+            // Tools 2+ rapid down through the cavity the prior tool cleared,
+            // then must enter virgin stock at the bottom of their band — helical ramp.
+            // (Open pockets: subsequent tools can still sweep around if there's a side wall opening,
+            // but conservatively we ramp into virgin band material the same way.)
+            entry = { type: "helical", helix_dia: +(toolDia * 0.93).toFixed(4), angle_deg: cutting_style === "hem" ? 2 : 3 };
           }
 
           return {
