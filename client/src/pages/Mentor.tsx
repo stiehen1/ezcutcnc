@@ -1198,6 +1198,7 @@ export default function Mentor() {
       mill_turn: "Mill-Turn", "5axis": "5-Axis", vmc: "VMC", hmc: "HMC", hbm: "HBM (Horizontal Boring Mill)", lathe: "Lathe",
       "5-axis vmc": "5-Axis VMC", "5-axis hmc": "5-Axis HMC",
       swiss: "Swiss", double_column: "Double Column", "double column": "Double Column",
+      gantry: "Gantry", "gantry mill": "Gantry",
     };
     return m[t.trim().toLowerCase()] ?? t;
   };
@@ -1279,7 +1280,7 @@ export default function Mentor() {
           .replace(/^A2-(\d+)$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT65")
           .replace(/^A2-\d+\/A2-\d+$/i, () => (typeof m.live_tool_connection === "string" && m.live_tool_connection.trim()) || "BMT65")
       : null;
-    const validTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","VDI30","VDI40","VDI50","BMT45","BMT55","BMT65","CAPTO C6","CAPTO C8"];
+    const validTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK80","HSK100","HSK125","VDI30","VDI40","VDI50","BMT45","BMT55","BMT65","CAPTO C6","CAPTO C8"];
     const rawTaper = (_taperNorm && validTapers.includes(_taperNorm)) ? _taperNorm : _taperRaw;
     const rawDrive = typeof m.drive_type === "string" ? m.drive_type.trim().toLowerCase() : null;
     const rawMachTypeStr = typeof m.machine_type === "string" ? m.machine_type.trim().toLowerCase() : null;
@@ -1290,7 +1291,7 @@ export default function Mentor() {
       .replace(/^5-axis_hmc$/, "5axis")
       .replace(/^5-axis$/, "5axis") ?? null;
     const validDrives = ["direct", "belt", "gear"];
-    const validMachTypes = ["vmc", "hmc", "hbm", "5axis", "mill_turn", "lathe", "swiss", "double_column"];
+    const validMachTypes = ["vmc", "hmc", "hbm", "5axis", "mill_turn", "lathe", "swiss", "double_column", "gantry"];
     const drive = (rawDrive && validDrives.includes(rawDrive) ? rawDrive : null) ?? "direct";
     const machType = (rawMachType && validMachTypes.includes(rawMachType) ? rawMachType : "vmc");
     const dualContact = rawTaper?.startsWith("HSK") || rawTaper?.startsWith("CAPTO") || !!m.dual_contact;
@@ -1344,6 +1345,17 @@ export default function Mentor() {
     const rawLtDrive     = typeof m.live_tool_drive_type === "string" ? m.live_tool_drive_type.trim().toLowerCase() : null;
     const effectiveDrive = (isLiveToolType && rawLtDrive && ["direct","belt","gear"].includes(rawLtDrive) ? rawLtDrive : drive) as typeof drive;
     const millDualContact = effectiveTaper?.startsWith("HSK") || effectiveTaper?.startsWith("CAPTO");
+    // Realistic workholding/toolholder defaults for heavy-mill classes (gantry, HBM, double-column).
+    // Shop reality: parts are strapped to a T-slot table with toe clamps / fixtures, not vises.
+    // CAT50/BT50 heavy steel work → Weldon side-lock (positive drive on big cutters).
+    // HSK aerospace → hydraulic (broad capability for high-RPM aluminum/Ti).
+    const heavyMillType = machType === "gantry" || machType === "hbm" || machType === "double_column";
+    const _heavyWH = heavyMillType ? ("rigid_fixture" as const) : null;
+    const _heavyTH = heavyMillType
+      ? (effectiveTaper?.startsWith("HSK") || effectiveTaper?.startsWith("CAPTO")
+          ? ("hydraulic" as const)
+          : ("weldon" as const))
+      : null;
     setForm(p => ({
       ...p,
       max_rpm: effectiveRpm || p.max_rpm,
@@ -1352,6 +1364,8 @@ export default function Mentor() {
       spindle_drive: effectiveDrive as any,
       dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
+      workholding: _heavyWH ?? p.workholding,
+      toolholder:  _heavyTH ?? p.toolholder,
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
       sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
@@ -1928,8 +1942,8 @@ export default function Mentor() {
     chamfer_tip_dia: 0,
     chamfer_depth: 0,
 
-    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK100" | "HSK125" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8" | "KM80",
-    machine_type: "vmc" as "vmc" | "hmc" | "hbm" | "5axis" | "mill_turn" | "lathe" | "swiss" | "double_column",
+    spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK80" | "HSK100" | "HSK125" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8" | "KM80",
+    machine_type: "vmc" as "vmc" | "hmc" | "hbm" | "5axis" | "mill_turn" | "lathe" | "swiss" | "double_column" | "gantry",
     mill_spindle_rpm: 0,        // B-axis mill spindle RPM (mill_turn only)
     mill_spindle_hp: 0,         // B-axis mill spindle HP (mill_turn only)
     sub_spindle_rpm: 0,         // C-axis sub spindle RPM (mill_turn only)
@@ -6568,12 +6582,15 @@ ${stabSection}
               <FieldLabel hint="Machine configuration affects rigidity and chatter tendency. HMC and 5-axis spindles are often stiffer than VMC. Mill/Turn and Lathe live tooling have lower RPM and HP limits.">Machine Type</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {([
-                  { key: "vmc",       label: "VMC",        hint: "Vertical Machining Center — spindle is vertical. Most common shop machine. Good all-around rigidity for prismatic parts." },
-                  { key: "hmc",       label: "HMC",        hint: "Horizontal Machining Center — spindle is horizontal. Chips fall away from the cut, better for deep pockets and high-volume production. Typically stiffer than VMC." },
-                  { key: "5axis",     label: "5-Axis",     hint: "5-Axis simultaneous machining — spindle can tilt and rotate. Enables complex contoured surfaces in one setup, but shorter effective stickout required for stability." },
-                  { key: "mill_turn", label: "Mill/Turn",  hint: "Mill/Turn machine (e.g. Mazak Integrex, DMG NTX) — dedicated multi-tasking center with full milling spindle and turning capability. Live tool RPM and HP are typically lower than a VMC." },
-                  { key: "lathe",     label: "Lathe (LT)", hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
-                  { key: "swiss",     label: "Swiss",      hint: "Swiss-style sliding-headstock lathe (Tornos, Citizen, Star, Tsugami). Live tool stations have very limited HP (typically 1–3 HP) and RPM ceilings around 8,000–10,000. Small tool diameters, short stickout, light cuts." },
+                  { key: "vmc",           label: "VMC",            hint: "Vertical Machining Center — spindle is vertical. Most common shop machine. Good all-around rigidity for prismatic parts." },
+                  { key: "hmc",           label: "HMC",            hint: "Horizontal Machining Center — spindle is horizontal. Chips fall away from the cut, better for deep pockets and high-volume production. Typically stiffer than VMC." },
+                  { key: "5axis",         label: "5-Axis",         hint: "5-Axis simultaneous machining — spindle can tilt and rotate. Enables complex contoured surfaces in one setup, but shorter effective stickout required for stability." },
+                  { key: "gantry",        label: "Gantry",         hint: "Aerospace gantry / moving-bridge mill (Forest-Liné, Zimmermann, Ingersoll, SNK NeoV, Modig RigiMill). Large work envelope, lower RPM ceiling than VMC, very high rigidity. Picks rigid-fixture workholding and Weldon/hydraulic toolholders by default." },
+                  { key: "double_column", label: "Double Column",  hint: "Fixed-bridge double-column / large bridge mill — large castings, deep boring, mold work. Box ways and gear-driven spindle typical. Big T-slot tables; rigid-fixture workholding." },
+                  { key: "hbm",           label: "HBM",            hint: "Horizontal Boring Mill — table type (Giddings & Lewis, SNK NB-series, Toshiba). Geared CAT50 spindle with extreme torque, low RPM. Best for big steel weldments, large face mills, deep boring." },
+                  { key: "mill_turn",     label: "Mill/Turn",      hint: "Mill/Turn machine (e.g. Mazak Integrex, DMG NTX) — dedicated multi-tasking center with full milling spindle and turning capability. Live tool RPM and HP are typically lower than a VMC." },
+                  { key: "lathe",         label: "Lathe (LT)",     hint: "Lathe with live tooling — driven tool stations in the turret. RPM typically limited to 3,000–6,000. HP per station is limited. Use for milling, drilling, and cross-hole ops on turned parts." },
+                  { key: "swiss",         label: "Swiss",          hint: "Swiss-style sliding-headstock lathe (Tornos, Citizen, Star, Tsugami). Live tool stations have very limited HP (typically 1–3 HP) and RPM ceilings around 8,000–10,000. Small tool diameters, short stickout, light cuts." },
                 ] as const).map(({ key, label, hint }) => (
                   <Tooltip key={key}>
                     <TooltipTrigger asChild>
@@ -6584,22 +6601,36 @@ ${stabSection}
                           const isSwiss    = key === "swiss";
                           const isMillTurn = key === "mill_turn";
                           const isLatheLike = isLathe || isSwiss || isMillTurn;
+                          const isHeavyMill = key === "gantry" || key === "hbm" || key === "double_column";
                           // workholding default
-                          const defaultWH = isLatheLike ? "collet_chuck" as const : key === "hmc" ? "rigid_fixture" as const : "vise" as const;
-                          // toolholder — reset if switching away from a lathe-incompatible holder
+                          const defaultWH = isLatheLike ? "collet_chuck" as const
+                                          : isHeavyMill ? "rigid_fixture" as const
+                                          : key === "hmc" ? "rigid_fixture" as const
+                                          : "vise" as const;
+                          // toolholder — reset if switching away from a lathe-incompatible holder, or
+                          // pick a realistic heavy-mill holder when entering gantry/hbm/double_column
                           const latheSafe = ["er_collet","hp_collet","weldon","hydraulic","shrink_fit","capto","right_angle_head"] as const;
-                          const thReset = isLatheLike && !(latheSafe as readonly string[]).includes(p.toolholder) ? "er_collet" as const : p.toolholder;
+                          const heavyMillHolder = (key === "gantry" || key === "hbm" || key === "double_column")
+                            ? ((p.spindle_taper?.startsWith("HSK") || p.spindle_taper?.startsWith("CAPTO"))
+                                ? "hydraulic" as const
+                                : "weldon" as const)
+                            : null;
+                          const thReset = heavyMillHolder
+                            ?? (isLatheLike && !(latheSafe as readonly string[]).includes(p.toolholder) ? "er_collet" as const : p.toolholder);
                           // spindle taper default per machine type
                           const defaultTaper = (
                             isLathe    ? "VDI40"      :
                             isSwiss    ? "VDI40"      :
                             isMillTurn ? "CAPTO C6"  :
                             key === "5axis" ? "HSK63" :
+                            key === "gantry" ? "HSK100" :
+                            key === "hbm" ? "CAT50" :
+                            key === "double_column" ? "CAT50" :
                             "CAT40"
                           ) as typeof p.spindle_taper;
                           // if current taper isn't valid for new machine type, reset to default
                           const latheTapers  = ["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const;
-                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const;
+                          const millingTapers = ["CAT30","CAT40","CAT50","BT30","BT40","BT50","HSK32","HSK50","HSK63","HSK80","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const;
                           const taperReset =
                             isLatheLike && !(latheTapers as readonly string[]).includes(p.spindle_taper)  ? defaultTaper :
                             !isLatheLike && !(millingTapers as readonly string[]).includes(p.spindle_taper) ? defaultTaper :
@@ -6643,9 +6674,11 @@ ${stabSection}
                   : form.machine_type === "lathe"
                   ? (["VDI30","VDI40","VDI50","BMT45","BMT55","BMT65"] as const)
                   : form.machine_type === "hmc"
-                  ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK100","HSK125"] as const)
+                  ? (["CAT40","CAT50","BT40","BT50","HSK63","HSK80","HSK100","HSK125"] as const)
                   : (form.machine_type === "5axis" || form.machine_type === "mill_turn")
-                  ? (["CAT40","BT40","HSK32","HSK50","HSK63","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const)
+                  ? (["CAT40","BT40","HSK32","HSK50","HSK63","HSK80","HSK100","HSK125","CAPTO C6","CAPTO C8"] as const)
+                  : (form.machine_type === "gantry" || form.machine_type === "hbm" || form.machine_type === "double_column")
+                  ? (["CAT50","BT50","HSK63","HSK80","HSK100","HSK125","CAPTO C8"] as const)  /* heavy mills: large tapers only */
                   : /* vmc */ (["CAT30","CAT40","CAT50","BT30","BT40","HSK32","HSK50","HSK63","HSK100","HSK125"] as const)
                 ).map((t) => {
                   const taperLabel: Record<string, string> = { CAT30: "CV30", CAT40: "CV40", CAT50: "CV50" };
@@ -7222,6 +7255,17 @@ ${stabSection}
                       { key: "5th_axis_vise", label: "5th-Axis Vise"         },
                       { key: "vise",          label: "Vise"                  },
                       { key: "soft_jaws",     label: "Soft Jaws"             },
+                    ] as const)
+                  : (form.machine_type === "gantry" || form.machine_type === "hbm" || form.machine_type === "double_column")
+                  ? ([
+                      /* Heavy mills (aerospace gantry, boring mill, big bridge mill):
+                         parts are bolted/strapped to large T-slot tables or sub-plates.
+                         Vises and trunnions are essentially unused at this scale. */
+                      { key: "rigid_fixture", label: "Rigid Fixture"     },
+                      { key: "toe_clamps",    label: "Toe Clamps / Straps" },
+                      { key: "dovetail",      label: "Dovetail"          },
+                      { key: "zero_point",    label: "Zero-Point / Sub-Plate" },
+                      { key: "soft_jaws",     label: "Soft Jaws"         },
                     ] as const)
                   : /* vmc default */ ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
