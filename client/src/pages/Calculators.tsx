@@ -647,10 +647,41 @@ function TapDrill() {
   }
 
   return (
-    <CalcCard title="Tap Drill Size" category="Hole Making" titleHint="The drill size to use before tapping a thread. Pick your thread engagement %; 75% is the shop standard." onClear={() => { setMajor(""); setTpi(""); setEngPct("75"); setMajorMm(""); setPitchMm(""); }}>
-      <Row label="% Thread Engagement">
-        <NumIn value={engPct} onChange={setEngPct} unit="%" placeholder="75" />
+    <CalcCard title="Tap Drill Size" category="Hole Making" titleHint="Drill size to use before tapping. Lower % thread = less tap torque, longer tap life — sweet spot is 65–70% for most CNC work." onClear={() => { setMajor(""); setTpi(""); setEngPct("65"); setMajorMm(""); setPitchMm(""); }}>
+      <Row
+        label="% Thread Engagement"
+        hint="65–70% is the production sweet spot — past 75% strength barely climbs but tap torque jumps 25–50%+. Aluminum 65–75%, mild steel 60–70%, stainless 55–65%, hardened 55–65%, Ti/Inconel 50–60%. Drop to 50–60% for small taps (#0–80, M2, M3) — they fail from torque fast."
+      >
+        <div className="flex gap-1 flex-1">
+          {[
+            { v: "55", lbl: "55%", title: "Stainless / Ti / Inconel / small taps" },
+            { v: "65", lbl: "65%", title: "Production sweet spot — most CNC tapping" },
+            { v: "75", lbl: "75%", title: "Aluminum / hand tapping / max strength" },
+          ].map((p) => (
+            <button key={p.v} type="button"
+              onClick={() => setEngPct(p.v)}
+              title={p.title}
+              className="rounded px-2 py-1 text-[11px] border transition-all"
+              style={{
+                background: engPct === p.v ? "#0ea5e9" : "transparent",
+                borderColor: "#0ea5e9",
+                color: engPct === p.v ? "#fff" : "#0ea5e9",
+              }}
+            >{p.lbl}</button>
+          ))}
+          <NumIn value={engPct} onChange={setEngPct} unit="%" placeholder="65" />
+        </div>
       </Row>
+      {pct > 0 && (
+        <p className="text-[10px] -mt-1 leading-relaxed"
+          style={{ color: pct >= 80 ? "#fbbf24" : pct < 50 ? "#fbbf24" : "#9ca3af" }}>
+          {pct >= 85 && "Above 85% — usually not recommended. Strength gain is tiny, tap breakage risk is high."}
+          {pct >= 75 && pct < 85 && "High engagement — fine for aluminum or hand tapping. Stainless / Ti / hardened: drop to 55–65%."}
+          {pct >= 60 && pct < 75 && "Good production range. 65–70% is the typical sweet spot."}
+          {pct >= 50 && pct < 60 && "Reduced engagement — right call for tough materials, small taps, or deep / form tapping."}
+          {pct < 50 && "Below 50% — thread strength drops off quickly. Verify pullout meets spec."}
+        </p>
+      )}
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">UN Threads (inch)</p>
         <Row label="Major Dia"><NumIn value={major} onChange={setMajor} unit="in" placeholder="0.5000" /></Row>
