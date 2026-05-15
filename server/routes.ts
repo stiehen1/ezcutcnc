@@ -5257,15 +5257,18 @@ ${catalogList}`
       //
       // Roughers can EXCEED the wall-to-wall fit (corner_radius * 2) — they leave
       // stock at corners for the corner finisher to clean up. BUT they shouldn't
-      // go too far above it: a 1.0" rougher in a 0.300" w-to-w pocket leaves too
-      // much corner stock for the finisher to remove. Reasonable rule: rougher
-      // dia ≤ 2× wall-to-wall dia (which is 4× corner_radius). This keeps the
-      // corner-stock-removal task tractable for the finisher.
+      // go too far above it: the larger the rougher, the more material the finisher
+      // has to remove in every corner — full-radial spike loads, slow cycle.
+      //
+      // Shop-validated rule: rougher dia ≤ 3× corner_radius (i.e. 1.5× wall-to-wall
+      // dia). For R0.236" wall corners this caps roughers at ~0.708" → 0.750" stock
+      // size, which lines up with what shop operators actually choose. Was 4×
+      // historically; that left too much corner stock at typical aerospace radii.
       //
       // The corner finisher MUST be ≤ wall-to-wall fit to produce the radius —
       // enforced in the corner picker via maxCornerDia, not here.
       const hemDiaCap = cutting_style === "hem" ? 0.625 : Infinity;
-      const roughCornerCap = corner_radius > 0 ? corner_radius * 4.0 : Infinity;
+      const roughCornerCap = corner_radius > 0 ? corner_radius * 3.0 : Infinity;
       const maxBulkDia = Math.min(
         pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0,
         hemDiaCap,
