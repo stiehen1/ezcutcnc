@@ -992,8 +992,30 @@ function HardnessTensile() {
   const hrb = hb ? invertInterp(HRB_HB, hb) : null;
   const hv  = hb ? hb * 1.05 : null;
 
+  // Valid HB ranges for the UTS correlations:
+  //  Steel — ASTM E140 covers ~120–650 HB.
+  //  Aluminum — Brinell correlation valid for wrought Al alloys ~30–150 HB
+  //    (anneal to ~7075-T6); above that the formula extrapolates into steel-like values.
+  //  Cast iron — gray/ductile iron, ~150–280 HB.
+  const MAT_HB_RANGE: Record<typeof mat, [number, number]> = {
+    steel:     [120, 650],
+    aluminum:  [30,  150],
+    cast_iron: [150, 280],
+  };
+  const matValid = (m: typeof mat) =>
+    hb !== null && hb >= MAT_HB_RANGE[m][0] && hb <= MAT_HB_RANGE[m][1];
+
+  // If the user enters a value that makes the current material invalid,
+  // auto-snap to the first valid one (steel covers the widest range).
+  React.useEffect(() => {
+    if (hb === null) return;
+    if (matValid(mat)) return;
+    const fallback = (["steel","cast_iron","aluminum"] as const).find(matValid);
+    if (fallback && fallback !== mat) setMat(fallback);
+  }, [hb]); // eslint-disable-line react-hooks/exhaustive-deps
+
   let uts_ksi: number | null = null;
-  if (hb) {
+  if (hb && matValid(mat)) {
     if (mat === "steel")      uts_ksi = 0.492 * hb;
     if (mat === "aluminum")   uts_ksi = 0.19  * hb + 5;
     if (mat === "cast_iron")  uts_ksi = 0.23  * hb - 12.5;
@@ -1001,10 +1023,10 @@ function HardnessTensile() {
   const uts_mpa = uts_ksi ? uts_ksi * 6.895 : null;
 
   const scales = ["HRC","HRB","HB","HV"] as const;
-  const mats: { key: typeof mat; label: string }[] = [
-    { key: "steel",     label: "Steel" },
-    { key: "aluminum",  label: "Aluminum" },
-    { key: "cast_iron", label: "Cast Iron" },
+  const mats: { key: typeof mat; label: string; outOfRangeHint: string }[] = [
+    { key: "steel",     label: "Steel",     outOfRangeHint: "Steel correlation covers ~120–650 HB." },
+    { key: "aluminum",  label: "Aluminum",  outOfRangeHint: "Aluminum UTS correlation only valid ~30–150 HB (annealed → 7075-T6). Above that you're in steel territory." },
+    { key: "cast_iron", label: "Cast Iron", outOfRangeHint: "Cast iron UTS correlation only valid ~150–280 HB (gray/ductile iron)." },
   ];
 
   return (
@@ -1034,18 +1056,33 @@ function HardnessTensile() {
         <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
           <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Tensile Strength (UTS)</p>
           <div className="flex gap-1">
-            {mats.map(({ key, label }) => (
-              <button key={key} type="button" onClick={() => setMat(key)}
-                className="flex-1 rounded py-1 text-[10px] font-semibold border transition-all"
-                style={{ background: mat === key ? "#a78bfa" : "transparent", borderColor: "#a78bfa", color: mat === key ? "#fff" : "#a78bfa" }}>
-                {label}
-              </button>
-            ))}
+            {mats.map(({ key, label, outOfRangeHint }) => {
+              const valid = matValid(key);
+              return (
+                <button key={key} type="button"
+                  onClick={() => { if (valid) setMat(key); }}
+                  disabled={!valid}
+                  title={!valid ? outOfRangeHint : undefined}
+                  className="flex-1 rounded py-1 text-[10px] font-semibold border transition-all disabled:cursor-not-allowed"
+                  style={{
+                    background: mat === key && valid ? "#a78bfa" : "transparent",
+                    borderColor: valid ? "#a78bfa" : "#3f3f5a",
+                    color: !valid ? "#52525b" : mat === key ? "#fff" : "#a78bfa",
+                    opacity: valid ? 1 : 0.55,
+                  }}>
+                  {label}
+                </button>
+              );
+            })}
           </div>
-          {uts_ksi && uts_ksi > 0 && <>
+          {uts_ksi && uts_ksi > 0 ? <>
             <Result label="UTS" value={`${uts_ksi.toFixed(0)} ksi  /  ${uts_mpa!.toFixed(0)} MPa`} highlight />
             <p className="text-[10px] text-gray-600 px-1">Approximate — use certified material data for design.</p>
-          </>}
+          </> : (
+            <p className="text-[11px] text-amber-400">
+              {mats.find((m) => m.key === mat)?.outOfRangeHint ?? "Out of range for this material."}
+            </p>
+          )}
         </div>
       </>}
       {v > 0 && !hb && (
@@ -1402,6 +1439,250 @@ function MaterialHardnessLookup() {
           ))}
         </div>
       )}
+    </CalcCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Stock Condition — how the form a material arrives in changes cutting
+// ─────────────────────────────────────────────────────────────────
+type StockCondition = {
+  key: string;
+  label: string;
+  oneLiner: string;          // tldr under the picker
+  whatItIs: string;          // plain-language definition
+  surface: string;           // what you see on the OD/skin
+  hardness: string;          // skin vs core
+  toolImpact: string;        // wear mode + tool choice
+  feedAdjust: string;        // quantitative starting point
+  watchOuts: string[];       // bulleted gotchas
+};
+
+const STOCK_CONDITIONS: StockCondition[] = [
+  {
+    key: "billet_cf",
+    label: "Cold-Finished Billet",
+    oneLiner: "Clean, sized, predictable. Your everyday baseline.",
+    whatItIs: "Bar stock that's been cold-drawn or turned/ground to size after hot rolling. Light cold work hardens the OD, but the skin is clean — no scale, no decarb.",
+    surface: "Bright, dimensionally tight (±0.001–0.005\" typical). No scale.",
+    hardness: "Skin slightly harder than core from cold work — usually +2–5 HRB. Negligible for tool wear.",
+    toolImpact: "Use as the reference condition for any feeds & speeds chart. Coated carbide of any kind is fine; abrasion is minimal.",
+    feedAdjust: "100% — this is the baseline. Published SFM / IPT charts assume cold-finished stock.",
+    watchOuts: [
+      "Cold work can leave residual stress — thin parts may move when stock is removed from one side.",
+      "If the print calls out 'stress-relieved' it's because of this.",
+    ],
+  },
+  {
+    key: "billet_hr",
+    label: "Hot-Rolled Bar (with Mill Scale)",
+    oneLiner: "Abrasive black skin. First cut eats your edge if you let it.",
+    whatItIs: "Bar that came off the rolling mill and was air-cooled. The black/blue oxide coating on the OD is mill scale — iron oxide, very hard, very abrasive.",
+    surface: "Dark grey to black scale, ~0.001–0.005\" thick. Dimensions loose (±0.010–0.030\" common).",
+    hardness: "Core is soft (annealed by slow cooling). Scale itself is ~Rockwell C 60+ — harder than the carbide you're cutting with.",
+    toolImpact: "First pass through scale destroys uncoated tools and dulls coated ones fast. Take the scale off in one heavy pass with a dedicated roughing tool — don't finish through it.",
+    feedAdjust: "Scale-breaking pass: 50–60% of normal SFM, full DOC to get under the skin. Subsequent passes: 100% baseline.",
+    watchOuts: [
+      "Run sacrificial inserts or an old endmill for the scale pass.",
+      "Don't climb mill the scale — conventional milling pushes scale into the chip, not the edge.",
+      "Coolant flood to wash abrasive scale grit away from the cut.",
+    ],
+  },
+  {
+    key: "forged",
+    label: "Forged",
+    oneLiner: "Hard skin, draft angles, parting-line flash. Plan the first cut carefully.",
+    whatItIs: "Material formed by pressing or hammering in a die at high temp. Closed-die forgings come near-net-shape with draft, flash, and a work-hardened/oxidized skin.",
+    surface: "Scaly + irregular. Draft angles (3–7°), parting-line flash, dimensional variation ±0.030\" or more.",
+    hardness: "Skin 5–15 HRC harder than core from work hardening + scale. Core grain is refined and stronger than billet.",
+    toolImpact: "Treat the skin like an interrupted, abrasive cut. AlTiN or AlCrN coating, tougher edge prep (honed, not sharp). Variable-pitch endmills help with chatter on irregular surfaces.",
+    feedAdjust: "Skin pass: 60–70% SFM, reduced IPT 70–80%. Once into clean material: 100% baseline (forged core can actually run slightly hotter than billet — it's denser).",
+    watchOuts: [
+      "Probe before cutting — forging tolerances mean stock-on-face can vary wildly.",
+      "Parting-line flash can hide above nominal surface — first Z move should be cautious.",
+      "Forged stainless and Inconel work-harden aggressively; don't dwell.",
+    ],
+  },
+  {
+    key: "cast_sand",
+    label: "Sand Cast",
+    oneLiner: "Gritty skin, possible porosity, inclusions hiding inside.",
+    whatItIs: "Poured into a sand mold. Picks up sand grains, oxide, and surface inclusions. Internal porosity and hard spots are common.",
+    surface: "Rough, sand-textured, often with parting-line fins. Dimensional tolerance ±0.060\" not unusual.",
+    hardness: "Skin includes sand particles (quartz — harder than carbide). Core has variable hardness from cooling rate differences.",
+    toolImpact: "Worst-case abrasion on the first cut. Dedicate a rougher to skin removal. Tough, honed-edge coated carbide. Expect to find hard spots (chilled iron) and porosity (cavities = interrupted cut).",
+    feedAdjust: "Skin pass: 50–60% SFM. Inside the part: 80–90% baseline (porosity = small intermittent shocks).",
+    watchOuts: [
+      "Sand inclusions can be flush with surface — invisible until your edge fails.",
+      "Stop and inspect tool after skin removal before committing to finish passes.",
+      "Wet machining helps wash grit; air blast on aluminum castings.",
+    ],
+  },
+  {
+    key: "cast_invest",
+    label: "Investment Cast",
+    oneLiner: "Near-net, clean surface. Easier than sand but watch the thin walls.",
+    whatItIs: "Lost-wax casting. Ceramic shell gives a smooth surface and tight tolerances. Common for Inconel, stainless, and tool steels.",
+    surface: "Smooth (Ra 125 µin typical), near-net shape (±0.005–0.015\"). Minimal scale.",
+    hardness: "Skin and core similar — no significant work hardening from the process.",
+    toolImpact: "Cuts close to billet behavior of the same alloy. Main concern is part rigidity — walls are often thin and complex shapes deflect.",
+    feedAdjust: "85–95% of billet SFM/IPT for the same alloy. Reduce DOC/WOC on thin or unsupported features.",
+    watchOuts: [
+      "Internal porosity still possible — slow first plunge into pocketed areas.",
+      "Inconel investment castings (turbine blades, etc.) work-harden the same as wrought — sharp tools, no dwelling.",
+      "Often these parts are stress-relieved but not solution-treated; check the print.",
+    ],
+  },
+  {
+    key: "case_hard",
+    label: "Case-Hardened / Carburized",
+    oneLiner: "Hard skin (60+ HRC), soft core. Cut the case in one pass or not at all.",
+    whatItIs: "Steel diffused with carbon (carburized) or nitrogen (nitrided) at the surface to depths of 0.005–0.060\". Used on gears, shafts, wear surfaces.",
+    surface: "Looks like billet but feels different under a file. Print will call out 'case depth X to Y'.",
+    hardness: "Case 58–64 HRC. Core typically 28–35 HRC. Transition is gradual.",
+    toolImpact: "Cutting into the case = like machining tool steel. Plan to be either fully above the case (skim it off in one shot) or fully below it. Don't make a pass that runs along the case-core boundary — chatter and edge chipping.",
+    feedAdjust: "Through the case: 40–50% SFM, 60% IPT, reduced DOC. Through the core: 90–100% baseline for the base alloy.",
+    watchOuts: [
+      "Case depth on the print is minimum — actual may be 1.5× spec.",
+      "Grinding is often the right answer for finish passes through hardened case.",
+      "Edge prep matters — sharp tools chip; honed/chamfered edges last.",
+      "Coolant flood; case-hardened parts will harden further from heat if you let temperature build.",
+    ],
+  },
+  {
+    key: "nitrided",
+    label: "Nitrided",
+    oneLiner: "Thin, glass-hard skin (~70 HRC, ~0.010\" deep). Almost always ground, not milled.",
+    whatItIs: "Surface saturated with nitrogen at 950–1050°F. Creates a very hard, thin compound layer plus a deeper diffusion zone. Common on H13, P20, 4140N.",
+    surface: "Often slightly dull grey. Print will say 'nitrided 0.008–0.012 deep' or similar.",
+    hardness: "Compound layer ~70 HRC. Diffusion zone tapers down over 0.010–0.020\". Core is whatever the base steel was nitrided at.",
+    toolImpact: "Conventional carbide tools struggle. CBN or fine-grain coated carbide with very light DOC if you must mill it. Most shops EDM or grind through nitrided surfaces.",
+    feedAdjust: "Through nitride: 20–30% SFM, very light DOC (<0.005\"). Strongly consider grinding instead.",
+    watchOuts: [
+      "Don't try to bury a regular endmill in nitrided skin — you'll break it.",
+      "If you must mill features that break the nitride, do them BEFORE nitriding when possible.",
+      "EDM is unaffected by nitride hardness — often the path of least resistance.",
+    ],
+  },
+  {
+    key: "annealed",
+    label: "Annealed / Spheroidized",
+    oneLiner: "As soft as the alloy gets. Gummy in stainless and high-carbon; great in tool steels.",
+    whatItIs: "Heat-treated to its softest state. For carbon and tool steels this means spheroidized carbides — easy to machine. For austenitic stainless, annealed = solution annealed = work-hardens fast.",
+    surface: "Depends on supply form (billet, plate, etc.) — annealing doesn't change surface texture.",
+    hardness: "Carbon/alloy steels: 150–220 HB (very soft). Tool steels: 200–240 HB. Stainless: still 80–90 HRB and gummy.",
+    toolImpact: "Tool steels in annealed state cut like mild steel — this is when you do all the heavy roughing. Stainless and Inconel in 'annealed' state are still tough; don't be fooled by the word.",
+    feedAdjust: "Tool steels annealed: 110–120% baseline (run them harder). Stainless annealed: 90% baseline — work-hardens behind the edge if you dwell.",
+    watchOuts: [
+      "ALL heavy roughing on D2/A2/H13 should happen in annealed state. Once hardened, options narrow to grind/EDM/CBN.",
+      "Annealed stainless still requires sharp tools and continuous chip — minimum chip thickness matters.",
+      "Spheroidized 52100, 1095, etc., machines beautifully — make the most of it.",
+    ],
+  },
+  {
+    key: "ph_aged",
+    label: "PH Aged (17-4 H900, H1025, H1150…)",
+    oneLiner: "Precipitation-hardened stainless. Hardness depends entirely on which 'H' temper.",
+    whatItIs: "Stainless alloys (17-4, 15-5, 13-8 PH) hardened by aging at 900–1150°F after solution treatment. The H-number is the aging temperature in °F.",
+    surface: "Same as starting form (bar, forging, casting). Aging doesn't change surface texture.",
+    hardness: "H900: 40–47 HRC (hardest, most brittle). H1025: 35–40 HRC. H1075: 32–37. H1150: 28–35. H1150D / H1150M: 24–32 (toughest).",
+    toolImpact: "Treat like alloy steel of the equivalent hardness. H900 is essentially tool-steel territory — slow SFM, light DOC, AlTiN coating. H1150 cuts much closer to 4140 Q&T.",
+    feedAdjust: "H900: 50% baseline. H1025: 65%. H1075: 75%. H1150: 85%. (Baseline = SFM you'd use for 304 stainless.)",
+    watchOuts: [
+      "Print will specify the H-number — never assume.",
+      "These alloys still work-harden if you rub. Min chip thickness rules apply even at H900.",
+      "Use the Hardness ↔ Tensile or Material Condition lookups for exact HRC ranges by temper.",
+    ],
+  },
+  {
+    key: "weldment",
+    label: "Weldment / HAZ",
+    oneLiner: "Heat-affected zone is harder and more brittle than parent metal. Surprises waiting.",
+    whatItIs: "Fabrication welded from multiple pieces. The weld bead and the surrounding heat-affected zone (HAZ) have a different microstructure than the parent — usually harder, sometimes much harder.",
+    surface: "Weld bead is rough and oxidized. HAZ extends 0.1–0.5\" from the weld toe and looks normal but isn't.",
+    hardness: "Weld metal: depends on filler, often 30–40 HRC for steel weldments. HAZ: spikes can hit 45+ HRC in alloy steels that quench themselves from welding heat.",
+    toolImpact: "Cutting through a weld = interrupted, hardness-varying cut. Honed-edge tough carbide, reduced feed across the weld, expect chipping if you push.",
+    feedAdjust: "Across weld bead: 50–60% SFM, 70% IPT. In HAZ: 75–85%. Once well clear: 100%.",
+    watchOuts: [
+      "Print may not show the HAZ — assume 0.25\" around any visible weld.",
+      "Stress-relieved weldments are much friendlier. Check whether the part was PWHT (post-weld heat-treated).",
+      "Distortion: welded parts move when you remove material from one side. Rough first, let it relax, finish second.",
+    ],
+  },
+];
+
+function StockConditionGuide() {
+  const [active, setActive] = React.useState<string>(STOCK_CONDITIONS[0].key);
+  const sel = STOCK_CONDITIONS.find(c => c.key === active) ?? STOCK_CONDITIONS[0];
+
+  return (
+    <CalcCard
+      title="Stock Condition & Cutting Impact"
+      category="Materials"
+      titleHint="The form your material arrives in — billet, forging, casting, case-hardened, welded — changes tool choice and feeds/speeds a lot more than most charts admit. Pick a condition to see what to expect."
+      onClear={() => setActive(STOCK_CONDITIONS[0].key)}
+    >
+      <p className="text-[10px] text-gray-500 -mt-1">
+        How the form your stock arrives in affects tool wear, surface finish, and feeds/speeds. Pick a condition.
+      </p>
+
+      <div className="flex flex-wrap gap-1">
+        {STOCK_CONDITIONS.map(c => (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => setActive(c.key)}
+            className="rounded px-2 py-1 text-[10px] font-semibold border transition-all"
+            style={{
+              background: active === c.key ? "#a78bfa" : "transparent",
+              borderColor: "#a78bfa",
+              color: active === c.key ? "#fff" : "#a78bfa",
+            }}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="border-t border-[#2d2d4a] pt-2 space-y-2">
+        <div className="rounded bg-violet-950/40 border border-violet-900/60 px-3 py-2">
+          <p className="text-[11px] text-violet-200 italic leading-snug">{sel.oneLiner}</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div>
+            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">What it is</p>
+            <p className="text-[11px] text-gray-200 leading-relaxed">{sel.whatItIs}</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Surface</p>
+            <p className="text-[11px] text-gray-200 leading-relaxed">{sel.surface}</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Hardness</p>
+            <p className="text-[11px] text-gray-200 leading-relaxed">{sel.hardness}</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Tool impact</p>
+            <p className="text-[11px] text-gray-200 leading-relaxed">{sel.toolImpact}</p>
+          </div>
+
+          <div className="rounded bg-amber-950/40 border border-amber-900/60 px-3 py-1.5">
+            <p className="text-[10px] text-amber-400/80 font-semibold uppercase tracking-wide">Feed / speed adjustment</p>
+            <p className="text-[11px] text-amber-200 leading-relaxed">{sel.feedAdjust}</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Watch-outs</p>
+            <ul className="text-[11px] text-gray-200 leading-relaxed list-disc list-inside space-y-0.5">
+              {sel.watchOuts.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </div>
+        </div>
+      </div>
     </CalcCard>
   );
 }
@@ -2670,7 +2951,7 @@ const SECTIONS: { heading: string; color: string; ids: string[] }[] = [
   { heading: "Arcs & Contours", color: "#f97316", ids: ["arc-feed","helix-entry","bore-enlarge","no-middle-post","bolt-circle","chord-sag","corner-clear","chamfer-mill","entry-spike"] },
   { heading: "Hole Making",     color: "#0ea5e9", ids: ["tap-drill","drill-point","drill-torque"] },
   { heading: "Power & MRR",     color: "#f43f5e", ids: ["mrr"] },
-  { heading: "Materials",       color: "#a78bfa", ids: ["hardness","mat-cond"] },
+  { heading: "Materials",       color: "#a78bfa", ids: ["hardness","mat-cond","stock-cond"] },
   { heading: "Conversions",     color: "#f59e0b", ids: ["unit-conv"] },
 ];
 
@@ -2699,6 +2980,7 @@ const CALC_MAP: Record<string, React.ReactNode> = {
   "mrr":         <MRR />,
   "hardness":    <HardnessTensile />,
   "mat-cond":    <MaterialHardnessLookup />,
+  "stock-cond":  <StockConditionGuide />,
   "unit-conv":   <UnitConverter />,
 };
 
@@ -2732,6 +3014,7 @@ export default function Calculators() {
     "mrr":         "metal removal rate mrr hp horsepower power",
     "hardness":    "hardness tensile strength hrc hrb hb vickers brinell rockwell uts ksi mpa steel aluminum",
     "mat-cond":    "material condition hardness h900 h925 h1025 4140 7075 h13 a2 d2 inconel titanium temper annealed",
+    "stock-cond":  "stock condition billet forged cast investment sand case hardened carburized nitrided weldment haz mill scale hot rolled cold finished annealed spheroidized ph aged 17-4 h900 h1150 surface skin abrasive tool wear feeds speeds",
     "unit-conv":   "unit converter metric imperial mm inch sfm m/min ipm mm/min temperature celsius fahrenheit",
   };
 

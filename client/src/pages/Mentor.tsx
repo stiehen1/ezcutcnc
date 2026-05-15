@@ -464,6 +464,96 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
 };
 MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
 
+// ─────────────────────────────────────────────────────────────────
+// Stock condition — affects first-pass cutting parameters only.
+// Steady-state SFM/IPT is unchanged once the tool is past the skin.
+// Multipliers apply to the first pass that breaks the scale/skin.
+// ─────────────────────────────────────────────────────────────────
+type StockConditionKey = "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment";
+
+const STOCK_CONDITION_INFO: Record<StockConditionKey, {
+  label: string;
+  short: string;
+  sfmMult: number;   // first-pass SFM multiplier (1.0 = no change)
+  iptMult: number;   // first-pass IPT multiplier
+  note: string;      // shown on output when selected
+  tooltip: string;   // hover description on the input button
+}> = {
+  billet_cf: {
+    label: "Billet",
+    short: "CF Billet",
+    sfmMult: 1.0,
+    iptMult: 1.0,
+    note: "",
+    tooltip: "Cold-finished billet / bar stock. Clean, sized, predictable — the baseline for all published feeds & speeds. No first-pass derate.",
+  },
+  hot_rolled: {
+    label: "Hot Rolled",
+    short: "Hot-Rolled",
+    sfmMult: 0.55,
+    iptMult: 0.85,
+    note: "Hot-rolled stock has abrasive mill scale (~Rockwell C 60+). Take ONE heavy scale-breaking pass at the reduced SFM/IPT, full DOC, then return to steady-state numbers.",
+    tooltip: "Hot-rolled bar with mill scale — black/blue oxide skin is harder than carbide. Scale-breaking pass: ~55% SFM, 85% IPT to get under the skin, then run normal numbers.",
+  },
+  forged: {
+    label: "Forged",
+    short: "Forged",
+    sfmMult: 0.65,
+    iptMult: 0.80,
+    note: "Forged skin is work-hardened and oxidized. First pass: reduced SFM/IPT, expect interrupted cut (parting lines, flash, draft). Probe before committing — forging tolerances ±0.030\" or more.",
+    tooltip: "Closed-die forging with hard, oxidized skin and draft/flash. First pass: ~65% SFM, 80% IPT. Use honed-edge tools — sharp edges chip on the irregular surface.",
+  },
+  cast_sand: {
+    label: "Sand Cast",
+    short: "Sand Cast",
+    sfmMult: 0.55,
+    iptMult: 0.75,
+    note: "Sand-cast skin has embedded quartz grains (harder than carbide). Dedicate a rougher to skin removal, inspect for hard spots and porosity before finish passes.",
+    tooltip: "Sand-cast surface with abrasive grit and possible inclusions. Worst-case first-pass abrasion: ~55% SFM, 75% IPT. Expect porosity = interrupted cuts inside the part too.",
+  },
+  cast_invest: {
+    label: "Inv. Cast",
+    short: "Investment Cast",
+    sfmMult: 0.90,
+    iptMult: 0.95,
+    note: "Investment castings are near-net with minimal scale. Light first-pass derate. Watch part rigidity — thin walls and complex shapes deflect more than solid billet.",
+    tooltip: "Investment (lost-wax) casting. Smooth surface, near-net shape. Light derate: ~90% SFM, 95% IPT. Internal porosity still possible — slow first plunge into pocketed areas.",
+  },
+  case_hard: {
+    label: "Case Hard",
+    short: "Case-Hardened",
+    sfmMult: 0.40,
+    iptMult: 0.60,
+    note: "Case-hardened skin is 58–64 HRC. Plan to skim the case in ONE pass at heavily-reduced parameters, OR stay fully below it. NEVER run a pass along the case-core boundary — chatter and edge chipping.",
+    tooltip: "Carburized / case-hardened steel with 58–64 HRC skin over softer core. Through the case: ~40% SFM, 60% IPT, light DOC. Consider grinding for finish passes through hardened case.",
+  },
+  weldment: {
+    label: "Weldment",
+    short: "Weldment / HAZ",
+    sfmMult: 0.55,
+    iptMult: 0.70,
+    note: "Welded joints and HAZ (heat-affected zone) are harder than parent metal — alloy steels can self-quench to 45+ HRC during welding. Reduce feeds across welds; assume HAZ extends 0.25\" from any visible bead.",
+    tooltip: "Fabricated weldment. Weld bead and 0.1–0.5\" HAZ have higher, variable hardness. Across welds: ~55% SFM, 70% IPT. Confirm whether part was post-weld heat-treated.",
+  },
+};
+
+const STOCK_CONDITION_ORDER: StockConditionKey[] = [
+  "billet_cf", "hot_rolled", "forged", "cast_sand", "cast_invest", "case_hard", "weldment",
+];
+
+// Applicability per ISO group — dimmed when not in the set.
+// Empty / missing ISO => show everything (no narrowing yet).
+const STOCK_APPLICABILITY: Record<string, ReadonlySet<StockConditionKey>> = {
+  N1: new Set(["billet_cf", "cast_sand", "weldment"]),                                           // Aluminum / Cu / brass — billet + sand cast (356/380). Forging rare; welded fixtures common.
+  N2: new Set(["billet_cf", "cast_sand", "weldment"]),                                           // Abrasive non-ferrous (silicon bronze, Mn bronze, beryllium copper).
+  P:  new Set(["billet_cf", "hot_rolled", "forged", "case_hard", "weldment"]),                   // Steel — everything except castings is common.
+  M:  new Set(["billet_cf", "hot_rolled", "forged", "cast_invest", "weldment"]),                 // Stainless — investment casting common, sand casting rare.
+  K:  new Set(["cast_sand", "cast_invest", "weldment"]),                                         // Cast iron — always cast; weld repairs are routine.
+  S:  new Set(["billet_cf", "forged", "cast_invest", "weldment"]),                               // Superalloys — investment castings (turbine blades) very common.
+  H:  new Set(["billet_cf", "forged", "case_hard", "weldment"]),                                 // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common.
+  O:  new Set(["billet_cf"]),                                                                    // Plastics / composites — extruded / molded stock only; no welding.
+};
+
 export default function Mentor() {
   const { toast } = useToast();
   const mentor = useMentor();
@@ -1879,6 +1969,7 @@ export default function Mentor() {
 
     hardness_value: ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.value ?? 0,
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
+    stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment",
 
     // Drilling-specific
     drill_point_angle: 0 as 0 | 118 | 130 | 135 | 140 | 145,
@@ -3166,11 +3257,19 @@ export default function Mentor() {
     const kpiBox = (label: string, value: string | null | undefined) =>
       !isBlank(value) ? `<div class="kpi"><div class="kpi-val">${value}</div><div class="kpi-lbl">${label}</div></div>` : "";
 
+    const _scInfo = STOCK_CONDITION_INFO[form.stock_condition];
+    const _scActive = !!_scInfo && _scInfo.sfmMult < 1.0;
+    const _firstSfm = _scActive && mil?.sfm != null ? mil.sfm * _scInfo.sfmMult : null;
+    const _firstRpm = _firstSfm != null && form.tool_dia > 0 ? (_firstSfm * 12) / (Math.PI * form.tool_dia) : null;
+    const _firstIpm = _scActive && mil?.feed_ipm != null && mil?.rpm && _firstRpm != null
+      ? mil.feed_ipm * _scInfo.iptMult * (_firstRpm / mil.rpm)
+      : null;
+
     const milSection = mil ? `
       <div class="kpi-grid">
-        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() : null)}
-        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) : null)}
-        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) : null)}
+        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first pass</span>` : "") : null)}
+        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first pass</span>` : "") : null)}
+        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first pass</span>` : "") : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox("Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
         ${mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
@@ -3558,6 +3657,7 @@ export default function Mentor() {
 <table>
   ${form.edp ? row("EDP #", `<span class="edp">${form.edp}</span>${skuDescription ? ` &nbsp;—&nbsp; <span style="color:#444;font-weight:400;">${skuDescription}</span>` : ""}`) : ""}
   ${row("Material", matLabel + (form.hardness_value ? ` — ${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : ""))}
+  ${form.stock_condition && form.stock_condition !== "billet_cf" ? row("Stock Condition", STOCK_CONDITION_INFO[form.stock_condition].short + ` (first pass: SFM ×${STOCK_CONDITION_INFO[form.stock_condition].sfmMult.toFixed(2)}, IPT ×${STOCK_CONDITION_INFO[form.stock_condition].iptMult.toFixed(2)})`) : ""}
   ${row("Operation", opLabel)}
   ${row("Tool Diameter", `${form.tool_dia?.toFixed(4)}" (${(form.tool_dia * 25.4).toFixed(2)} mm)`)}
   ${row("Flute Count", `${form.flutes}-flute`)}
@@ -3930,6 +4030,23 @@ ${stabSection}
     lines.push(DIV);
     lines.push(L("Material",     matLabel));
     if (form.hardness_value > 0) lines.push(L("Hardness", `${form.hardness_value} ${form.hardness_scale.toUpperCase()}`));
+    if (form.stock_condition && form.stock_condition !== "billet_cf") {
+      const sc = STOCK_CONDITION_INFO[form.stock_condition];
+      lines.push(L("Stock Condition", `${sc.short}`));
+      lines.push(L("First-Pass Adj.",  `SFM × ${sc.sfmMult.toFixed(2)}, IPT × ${sc.iptMult.toFixed(2)}`));
+      if (sc.note) {
+        // Wrap note across multiple lines so it reads cleanly in a text export
+        const words = sc.note.split(/\s+/);
+        let line = "";
+        const wrapped: string[] = [];
+        for (const w of words) {
+          if ((line + " " + w).trim().length > 64) { wrapped.push(line.trim()); line = w; }
+          else line = line ? `${line} ${w}` : w;
+        }
+        if (line) wrapped.push(line.trim());
+        wrapped.forEach((w, i) => lines.push(`  ${i === 0 ? "Note: " : "      "}${w}`));
+      }
+    }
     lines.push("");
 
     // ── MACHINE & SETUP ───────────────────────
@@ -4182,6 +4299,15 @@ ${stabSection}
       lines.push(L("Spindle Speed",  `${Math.round(cust.rpm).toLocaleString()} RPM`));
       lines.push(L("SFM",            String(Math.round(cust.sfm ?? 0))));
       lines.push(L("Feed Rate",      `${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
+      {
+        const sc = STOCK_CONDITION_INFO[form.stock_condition];
+        if (sc && sc.sfmMult < 1.0 && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0) {
+          const fpSfm = cust.sfm * sc.sfmMult;
+          const fpRpm = (fpSfm * 12) / (Math.PI * form.tool_dia);
+          const fpIpm = cust.feed_ipm * sc.iptMult * (fpRpm / cust.rpm);
+          lines.push(L("  First Pass",  `${Math.round(fpRpm).toLocaleString()} RPM · ${Math.round(fpSfm)} SFM · ${fpIpm.toFixed(2)} IPM  (${sc.short})`));
+        }
+      }
       if (cust.fpt != null)     lines.push(L("Chipload (FPT)", `${cust.fpt.toFixed(5)}"`));
       if (cust.adj_fpt != null && cust.fpt != null && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005) {
         lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
@@ -4903,6 +5029,43 @@ ${stabSection}
                 ))}
               </select>
             </div>
+
+            <TooltipProvider delayDuration={200}>
+              <div className="mt-2 flex items-center gap-1 flex-nowrap overflow-x-auto">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 shrink-0 mr-1">Stock</span>
+                {STOCK_CONDITION_ORDER.map((k) => {
+                  const info = STOCK_CONDITION_INFO[k];
+                  const active = form.stock_condition === k;
+                  const applicable = !isoCategory || (STOCK_APPLICABILITY[isoCategory]?.has(k) ?? true);
+                  return (
+                    <Tooltip key={k}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setForm((p) => ({ ...p, stock_condition: k }))}
+                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold border transition-all whitespace-nowrap shrink-0"
+                          style={{
+                            background: active ? "#f97316" : "transparent",
+                            borderColor: active ? "#f97316" : "#52525b",
+                            color: active ? "#fff" : "#a1a1aa",
+                            opacity: applicable || active ? 1 : 0.35,
+                          }}
+                        >
+                          {info.label}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-72 text-xs">
+                        <p className="font-semibold mb-1">{info.short}</p>
+                        <p>{info.tooltip}</p>
+                        {!applicable && isoCategory && (
+                          <p className="mt-1 text-amber-300/90 text-[10px]">Uncommon for {isoCategory} materials — still selectable.</p>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
 
             {/* Hardness — ferrous only (P, M, K, H, S) */}
             {["P","M","K","H","S"].includes(isoCategory) && (() => {
@@ -11731,22 +11894,66 @@ ${stabSection}
                 <Kpi label={UL("Ø (in)", "Ø (mm)")} hint="Cutting diameter of the tool as confirmed by the engine." value={UC(customer.diameter, 25.4, metric ? 2 : 3)} />
                 <Kpi label="Flutes" hint="Number of cutting flutes. More flutes increase feed rate but reduce chip clearance — critical in gummy materials like aluminum and stainless." value={fmtInt(customer.flutes)} />
 
-                <Kpi label="RPM" hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting." value={fmtInt(customer.rpm)} />
-                <Kpi label={UL("SFM", "m/min")} hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing." value={UC(customer.sfm, 0.3048, metric ? 1 : 0)} />
-                <Kpi
-                  label={form.mode === "circ_interp" ? UL("Feed (IPM) — tool centerline", "Feed (mm/min) — tool centerline") : UL("Feed (IPM)", "Feed (mm/min)")}
-                  hint={form.mode === "circ_interp" ? "ENTER THIS NUMBER IN YOUR CAM. This is the tool centerline feed — already corrected for bore geometry. The cutting edge at the wall travels faster; see Peripheral Feed for the actual chip load the tool sees." : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
-                  value={
+                {(() => {
+                  const sc = STOCK_CONDITION_INFO[form.stock_condition];
+                  const showFirstPass = sc && sc.sfmMult < 1.0 && customer.sfm != null && customer.feed_ipm != null;
+                  const firstSfm = showFirstPass ? customer.sfm * sc.sfmMult : null;
+                  const firstRpm = showFirstPass && customer.diameter ? (firstSfm! * 12) / (Math.PI * customer.diameter) : null;
+                  const firstIpm = showFirstPass && customer.rpm
+                    ? customer.feed_ipm * sc.iptMult * (firstRpm! / customer.rpm)
+                    : null;
+                  return (
                     <>
-                      {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
-                      {customer.status ? (
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">
-                          {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
-                        </span>
-                      ) : null}
+                      <Kpi
+                        label="RPM"
+                        hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting."
+                        value={
+                          <>
+                            {fmtInt(customer.rpm)}
+                            {firstRpm != null && (
+                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                {fmtInt(firstRpm)} first pass
+                              </span>
+                            )}
+                          </>
+                        }
+                      />
+                      <Kpi
+                        label={UL("SFM", "m/min")}
+                        hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing."
+                        value={
+                          <>
+                            {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
+                            {firstSfm != null && (
+                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
+                              </span>
+                            )}
+                          </>
+                        }
+                      />
+                      <Kpi
+                        label={form.mode === "circ_interp" ? UL("Feed (IPM) — tool centerline", "Feed (mm/min) — tool centerline") : UL("Feed (IPM)", "Feed (mm/min)")}
+                        hint={form.mode === "circ_interp" ? "ENTER THIS NUMBER IN YOUR CAM. This is the tool centerline feed — already corrected for bore geometry. The cutting edge at the wall travels faster; see Peripheral Feed for the actual chip load the tool sees." : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
+                        value={
+                          <>
+                            {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
+                            {customer.status ? (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
+                              </span>
+                            ) : null}
+                            {firstIpm != null && (
+                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                {UC(firstIpm, 25.4, metric ? 1 : 2)} first pass
+                              </span>
+                            )}
+                          </>
+                        }
+                      />
                     </>
-                  }
-                />
+                  );
+                })()}
 
                 {customer.peripheral_feed_ipm != null && (
                   <Kpi
@@ -12080,6 +12287,21 @@ ${stabSection}
                   );
                 })()}
               </div>
+
+              {/* Stock Condition advisory — first-pass guidance for forged / cast / case-hardened / etc. */}
+              {(() => {
+                const sc = STOCK_CONDITION_INFO[form.stock_condition];
+                if (!sc || sc.sfmMult >= 1.0 || !sc.note) return null;
+                return (
+                  <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                    <div className="font-semibold text-amber-300 mb-0.5">⚠ {sc.short} — first-pass adjustment</div>
+                    <div className="text-amber-200/90 leading-relaxed">{sc.note}</div>
+                    <div className="text-[10px] text-amber-300/70 mt-1">
+                      First pass: SFM × {sc.sfmMult.toFixed(2)} · IPT × {sc.iptMult.toFixed(2)}. Steady-state values above apply once past the skin.
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Engineering */}
               {engineering ? (
