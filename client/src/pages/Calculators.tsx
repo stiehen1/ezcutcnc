@@ -79,14 +79,36 @@ const CAT_COLOR: Record<string, string> = {
 };
 
 function CalcCard({
-  title, category, children, onClear, gcode,
-}: { title: string; category: string; children: React.ReactNode; onClear?: () => void; gcode?: boolean }) {
+  title, category, children, onClear, gcode, titleHint,
+}: { title: string; category: string; children: React.ReactNode; onClear?: () => void; gcode?: boolean; titleHint?: string }) {
   const color = CAT_COLOR[category] ?? "#6366f1";
+  const [showHint, setShowHint] = React.useState(false);
   return (
     <div style={{ borderLeft: `3px solid ${color}`, background: "#16213e" }}
       className="rounded-lg p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-white flex-1">{title}</span>
+        <span className="text-sm font-semibold text-white flex items-center gap-1.5">
+          {title}
+          {titleHint && (
+            <span className="relative inline-flex">
+              <button
+                type="button"
+                onMouseEnter={() => setShowHint(true)}
+                onMouseLeave={() => setShowHint(false)}
+                onFocus={() => setShowHint(true)}
+                onBlur={() => setShowHint(false)}
+                className="w-4 h-4 rounded-full bg-gray-700 text-gray-300 text-[9px] font-bold leading-none flex items-center justify-center hover:bg-gray-600 shrink-0"
+                aria-label="What this calculator does"
+              >?</button>
+              {showHint && (
+                <div className="absolute left-6 top-0 z-50 w-60 rounded bg-gray-800 border border-gray-600 px-2.5 py-2 text-[10px] text-gray-200 shadow-lg leading-relaxed whitespace-normal font-normal">
+                  {titleHint}
+                </div>
+              )}
+            </span>
+          )}
+        </span>
+        <span className="flex-1" />
         {gcode && (
           <span className="text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded border border-green-700 text-green-400 bg-green-950/40 shrink-0">G-CODE</span>
         )}
@@ -249,7 +271,7 @@ function RpmSfm() {
   usePrintRegister("RPM ↔ SFM", "Speed & Feed", printRows.length > 1 ? printRows : null);
 
   return (
-    <CalcCard title="RPM ↔ SFM" category="Speed & Feed" onClear={() => { setDia(""); setSfm(""); setRpm(""); }}>
+    <CalcCard title="RPM ↔ SFM" category="Speed & Feed" titleHint="Spindle speed and surface footage. Enter one, the other fills in." onClear={() => { setDia(""); setSfm(""); setRpm(""); }}>
       <Row label="Cutting Diameter" hint="Cutting diameter of the tool — not the shank diameter.">
         <NumIn value={dia} onChange={setDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
       </Row>
@@ -302,6 +324,11 @@ function IpmCalc() {
   const ipmFieldValue = ipm !== "" ? ipm : (calcIpmDisplay !== null ? calcIpmDisplay.toFixed(metric ? 2 : 1) : "");
   const fptFieldValue = fpt !== "" ? fpt : (calcFptDisplay !== null ? calcFptDisplay.toFixed(metric ? 3 : 4) : "");
 
+  // Cross-fill SFM ↔ RPM: typing in one auto-fills the other.
+  const sfmDisplayUnit = metric ? sfmFromRpm * 0.3048 : sfmFromRpm;
+  const rpmFieldValue = rpm !== "" ? rpm : (rpmFromSfm > 0 ? String(Math.round(rpmFromSfm)) : "");
+  const sfmFieldValue = sfm !== "" ? sfm : (sfmDisplayUnit > 0 ? (metric ? sfmDisplayUnit.toFixed(1) : String(Math.round(sfmDisplayUnit))) : "");
+
   const printRows: PrintRow[] = [];
   if (sfm) printRows.push({ label: `Surface Speed (${sU})`, value: sfm });
   if (dia) printRows.push({ label: `Cutting Diameter (${dU})`, value: dia });
@@ -312,23 +339,20 @@ function IpmCalc() {
   usePrintRegister("Feed Rate ↔ FPT", "Speed & Feed", printRows.length > 2 ? printRows : null);
 
   return (
-    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" onClear={() => { setSfm(""); setDia(""); setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
+    <CalcCard title="Feed Rate ↔ FPT" category="Speed & Feed" titleHint="Convert between feed per tooth and table feed. Two-way: enter either side, the other fills in." onClear={() => { setSfm(""); setDia(""); setRpm(""); setFlutes(""); setFpt(""); setIpm(""); }}>
       <Row label="Cutting Diameter" hint="Required when entering SFM.">
         <NumIn value={dia} onChange={v => { setDia(v); }} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
       </Row>
       <Row label="Flutes" hint="Number of cutting edges on the tool."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
-      <Row label={`Surface Speed (${sU})`} hint="Enter SFM + diameter to auto-fill RPM below.">
-        <NumIn value={sfm} onChange={v => { setSfm(v); }} unit={sU} placeholder={metric ? "60" : "200"} />
+      <Row label={`Surface Speed (${sU})`} hint="Enter SFM + diameter to auto-fill RPM below, or enter RPM below and SFM auto-fills here.">
+        <NumIn value={sfmFieldValue} onChange={v => { setSfm(v); setRpm(""); }} unit={sU} placeholder={metric ? "60" : "200"} />
       </Row>
-      <Row label="Spindle Speed" hint="Enter RPM directly, or it auto-fills from SFM + diameter above.">
-        <NumIn value={rpm || (rpmFromSfm > 0 ? String(Math.round(rpmFromSfm)) : "")}
-          onChange={v => { setRpm(v); }}
-          unit="RPM" placeholder="3500" />
+      <Row label="Spindle Speed" hint="Enter RPM directly (SFM auto-fills above), or enter SFM + diameter above to auto-fill RPM here.">
+        <NumIn value={rpmFieldValue} onChange={v => { setRpm(v); setSfm(""); }} unit="RPM" placeholder="3500" />
       </Row>
-      {n(rpm) > 0 && sfmFromRpm > 0 && !sfm && (
+      {n(rpm) > 0 && dia_in <= 0 && (
         <p className="text-[10px] text-gray-500 -mt-1 mb-1 pl-1">
-          {sU}: {metric ? (sfmFromRpm * 0.3048).toFixed(1) : Math.round(sfmFromRpm).toLocaleString()} {sU}
-          {dia_in > 0 ? "" : " (enter diameter to calculate SFM)"}
+          Enter diameter to calculate SFM.
         </p>
       )}
       <div className="border-t border-[#2d2d4a] pt-2">
@@ -405,12 +429,12 @@ function ChipThinning() {
     ...(rpm ? [{ label: "Spindle Speed (RPM)", value: rpm }] : []),
     ...(flutes ? [{ label: "Flutes", value: flutes }] : []),
     { label: `Actual Chip Thickness (${dU})`, value: (result.hex * IN).toFixed(metric ? 4 : 5) },
-    ...(ae < D / 2 ? [{ label: `Adj FPT to Maintain Proper Chip Thickness (${dU})`, value: (result.corrFpt * IN).toFixed(metric ? 4 : 5), highlight: true }] : []),
+    ...(ae < D / 2 ? [{ label: `Adjusted to Recover Chip Thickness (${dU})`, value: (result.corrFpt * IN).toFixed(metric ? 4 : 5), highlight: true }] : []),
     ...(result.adjIpm !== null ? [{ label: `Adj Feed Rate (${fU})`, value: (metric ? result.adjIpm * 25.4 : result.adjIpm).toFixed(metric ? 2 : 1), highlight: true }] : []),
   ] : null);
 
   return (
-    <CalcCard title="Chip Thinning" category="Speed & Feed" onClear={() => { setDia(""); setWoc(""); setFpt(""); setIpm(""); setRpm(""); setFlutes(""); }}>
+    <CalcCard title="Chip Thinning" category="Speed & Feed" titleHint="Running light WOC? Your real chip is thinner than programmed. This shows the feed bump needed to keep it cutting." onClear={() => { setDia(""); setWoc(""); setFpt(""); setIpm(""); setRpm(""); setFlutes(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         At WOC &lt; 50% diameter, programmed FPT over-estimates chip thickness.
       </p>
@@ -423,7 +447,7 @@ function ChipThinning() {
       {result && <>
         <Result label="Engagement" value={`${(ae / D * 100).toFixed(1)}% dia`} />
         {result.progIpm !== null && (
-          <Result label="Programmed Feed Rate"
+          <Result label="Programmed"
             value={`${fz * IN > 0 ? (fz * IN).toFixed(metric ? 4 : 5) : ""} ${dU}  (${(metric ? result.progIpm * 25.4 : result.progIpm).toFixed(metric ? 2 : 1)} ${fU})`} />
         )}
         <Result label="Actual Chip Thickness"
@@ -437,7 +461,7 @@ function ChipThinning() {
             : null;
           return (
             <Result
-              label="Adj FPT to Maintain Proper Chip Thickness"
+              label="Adjusted to Recover Chip Thickness"
               value={adjIpmDisplay !== null
                 ? `${corrFptDisplay} ${dU}  (${adjIpmDisplay} ${fU})`
                 : `${corrFptDisplay} ${dU}`}
@@ -484,7 +508,7 @@ function CuspHeight() {
   ] : null);
 
   return (
-    <CalcCard title="Cusp Height — Ball End" category="Surface Finish" onClear={() => { setDia(""); setStepover(""); }}>
+    <CalcCard title="Cusp Height — Ball End" category="Surface Finish" titleHint="How tall the scallops will be between ball-mill passes. Smaller stepover = smoother finish, more passes." onClear={() => { setDia(""); setStepover(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Scallop height left between passes when 3D surfacing with a ball end mill.
       </p>
@@ -531,7 +555,7 @@ function EffectiveDia() {
   ] : null);
 
   return (
-    <CalcCard title="Effective Dia — Ball End" category="Surface Finish" onClear={() => { setDia(""); setAp(""); }}>
+    <CalcCard title="Effective Dia — Ball End" category="Surface Finish" titleHint="At light DOC, only the tip of a ball mill cuts. Use this effective dia for true SFM — not the nominal one." onClear={() => { setDia(""); setAp(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         At shallow DOC, a ball end mill's effective diameter is less than its nominal size —
         use Deff for accurate SFM.
@@ -565,7 +589,7 @@ function FeedArcCorrection() {
   }
 
   return (
-    <CalcCard title="Feed Correction — Arc" category="Arcs & Contours" onClear={() => { setFeed(""); setArcR(""); setToolDia(""); }}>
+    <CalcCard title="Feed Correction — Arc" category="Arcs & Contours" titleHint="Tool center and tool edge move at different speeds around an arc. Adjust feed so the cutting edge sees the right IPM." onClear={() => { setFeed(""); setArcR(""); setToolDia(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         CAM programs the tool centerline. Adjust programmed feed to maintain
         consistent chip load around inside (concave) and outside (convex) arcs.
@@ -623,7 +647,7 @@ function TapDrill() {
   }
 
   return (
-    <CalcCard title="Tap Drill Size" category="Hole Making" onClear={() => { setMajor(""); setTpi(""); setEngPct("75"); setMajorMm(""); setPitchMm(""); }}>
+    <CalcCard title="Tap Drill Size" category="Hole Making" titleHint="The drill size to use before tapping a thread. Pick your thread engagement %; 75% is the shop standard." onClear={() => { setMajor(""); setTpi(""); setEngPct("75"); setMajorMm(""); setPitchMm(""); }}>
       <Row label="% Thread Engagement">
         <NumIn value={engPct} onChange={setEngPct} unit="%" placeholder="75" />
       </Row>
@@ -669,7 +693,7 @@ function DrillPointDepth() {
   const depth_display = depth_in !== null ? (metric ? depth_in * 25.4 : depth_in) : null;
 
   return (
-    <CalcCard title="Drill Point Length" category="Hole Making" onClear={() => { setDia(""); setAngle("118"); }}>
+    <CalcCard title="Drill Point Length" category="Hole Making" titleHint="How far past the full-dia of the hole the drill tip extends. Use it for breakthrough clearance and Z-depth math." onClear={() => { setDia(""); setAngle("118"); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Extra depth to add for the drill tip when drilling to a full-diameter depth.
       </p>
@@ -737,6 +761,7 @@ function DrillingTorque() {
 
   return (
     <CalcCard title="Drilling Torque" category="Hole Making"
+      titleHint="Convert between spindle HP / kW, RPM, and torque. Check whether your spindle has the twist for that big drill."
       onClear={() => { setHp(""); setRpm(""); setTorque(""); setTorqueN(""); setKw(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         T = 63,025 × HP / RPM (in-lbs) &nbsp;|&nbsp; T = 9,549 × kW / RPM (N-m)
@@ -818,7 +843,7 @@ function MRR() {
   ] : null);
 
   return (
-    <CalcCard title="MRR & HP Estimate" category="Power & MRR" onClear={() => { setWoc(""); setDoc(""); setIpm(""); }}>
+    <CalcCard title="MRR & HP Estimate" category="Power & MRR" titleHint="How much metal you're removing per minute and the spindle power it takes. Sanity-check before pushing harder." onClear={() => { setWoc(""); setDoc(""); setIpm(""); }}>
       <Row label="WOC (radial)" hint="Radial width of cut — how far the tool engages the workpiece side-to-side."><NumIn value={woc} onChange={setWoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
       <Row label="DOC (axial)" hint="Axial depth of cut — how deep the tool plunges into the material."><NumIn value={doc} onChange={setDoc} unit={dU} placeholder={metric ? "3.175" : "0.125"} /></Row>
       <Row label="Feed Rate" hint="Table feed — how fast the tool moves through the material."><NumIn value={ipm} onChange={setIpm} unit={fU} placeholder={metric ? "500" : "20.0"} /></Row>
@@ -867,7 +892,7 @@ function SurfaceFinishFlat() {
   ] : null);
 
   return (
-    <CalcCard title="Surface Finish (Step-Over)" category="Surface Finish" onClear={() => { setDia(""); setStepover(""); }}>
+    <CalcCard title="Surface Finish (Step-Over)" category="Surface Finish" titleHint="Predict the Ra a flat-end mill leaves based on stepover and corner radius. Dial in finish without trial and error." onClear={() => { setDia(""); setStepover(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Theoretical Ra from radial step-over cusps on a flat end mill floor pass.
       </p>
@@ -952,7 +977,7 @@ function HardnessTensile() {
   ];
 
   return (
-    <CalcCard title="Hardness ↔ Tensile Strength" category="Materials" onClear={() => { setVal(""); }}>
+    <CalcCard title="Hardness ↔ Tensile Strength" category="Materials" titleHint="Cross-reference HRC, HB, HV, and tensile strength. Handy when the print spec and your tester don't match units." onClear={() => { setVal(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Converts between hardness scales and estimates UTS. Steel values per ASTM E140.
       </p>
@@ -1032,7 +1057,7 @@ function UnitConverter() {
   };
 
   return (
-    <CalcCard title="Unit Converter" category="Conversions" onClear={() => setVals({})}>
+    <CalcCard title="Unit Converter" category="Conversions" titleHint="One-stop conversions for length, area, speed, feed, pressure, torque, and more." onClear={() => setVals({})}>
       <p className="text-[10px] text-gray-500 -mt-1">Type in either field — converts both ways live.</p>
       <div className="space-y-2">
         {GROUPS.map((g, i) => (
@@ -1119,7 +1144,7 @@ function BallNoseVelocity() {
   ] : null);
 
   return (
-    <CalcCard title="Ball Nose Velocity Adjustment" category="Surface Finish" onClear={() => { setDia(""); setAp(""); setSfm(""); setTilt("15"); }}>
+    <CalcCard title="Ball Nose Velocity Adjustment" category="Surface Finish" titleHint="Find the spindle speed needed to keep true SFM at the actual contact point on a ball mill — tilt and DOC included." onClear={() => { setDia(""); setAp(""); setSfm(""); setTilt("15"); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         A ball nose tip has near-zero cutting velocity at shallow DOC.
         Tilting the spindle moves the contact point away from the dead zone —
@@ -1292,7 +1317,7 @@ function MaterialHardnessLookup() {
       );
 
   return (
-    <CalcCard title="Material Condition → Hardness" category="Materials" onClear={() => setQuery("")}>
+    <CalcCard title="Material Condition → Hardness" category="Materials" titleHint="Look up typical hardness for common materials and heat-treat conditions. Quick reference when the print just says 'annealed'." onClear={() => setQuery("")}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Type a material or condition (e.g. "H900", "4140", "7075", "H13") to look up typical hardness and UTS.
       </p>
@@ -1408,6 +1433,7 @@ function EngagementAngle() {
 
   return (
     <CalcCard title="Engagement Angle" category="Speed & Feed"
+      titleHint="The arc of contact between tool and part. Drives heat per tooth, chip load, and how hard your spindle works."
       onClear={() => { setDia(""); setWoc(""); setFlutes(""); setFpt(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Arc of contact between tool and workpiece. Drives heat per tooth, chip load, and cutting forces.
@@ -1416,20 +1442,18 @@ function EngagementAngle() {
       <WocInput dia={D} value={woc} metric={metric} onChange={(_, parsed) => setWoc(String(parsed))} />
       <Row label="Flutes" hint="Number of cutting edges. Used to calculate simultaneous teeth in cut."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <Row label="Feed / Tooth" hint="Optional — enter to calculate mean chip thickness across the engagement arc."><NumIn value={fpt} onChange={setFpt} unit={dU} placeholder={metric ? "0.127" : "0.005"} /></Row>
-      {result && <>
-        <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
-          <Result label="Engagement Angle" value={`${result.theta_deg.toFixed(1)}°`} highlight />
-          <Result label="% Revolution in Cut" value={`${result.pct_in_cut.toFixed(1)}%`} />
-          {n(flutes) > 0 && <Result label="Teeth Simultaneously Cutting" value={result.teeth_in_cut.toFixed(2)} />}
-          <Result label={`Contact Arc Length (${dU})`} value={arcDisp!.toFixed(metric ? 3 : 5)} />
-          {chipDisp !== null && <Result label={`Mean Chip Thickness (${dU})`} value={chipDisp.toFixed(metric ? 4 : 5)} highlight />}
-        </div>
-        {heatNote && (
-          <p className={`text-[10px] px-1 ${result.pct_in_cut > 50 ? "text-red-400" : result.pct_in_cut > 25 ? "text-amber-400" : "text-sky-400"}`}>
-            {heatNote}
-          </p>
-        )}
-      </>}
+      <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
+        <Result label="Engagement Angle" value={result ? `${result.theta_deg.toFixed(1)}°` : "—"} highlight />
+        <Result label="% Revolution in Cut" value={result ? `${result.pct_in_cut.toFixed(1)}%` : "—"} />
+        <Result label="Teeth Simultaneously Cutting" value={result && n(flutes) > 0 ? result.teeth_in_cut.toFixed(2) : "—"} />
+        <Result label={`Contact Arc Length (${dU})`} value={result ? arcDisp!.toFixed(metric ? 3 : 5) : "—"} />
+        <Result label={`Mean Chip Thickness (${dU})`} value={chipDisp !== null ? chipDisp.toFixed(metric ? 4 : 5) : "—"} highlight />
+      </div>
+      {result && heatNote && (
+        <p className={`text-[10px] px-1 ${result.pct_in_cut > 50 ? "text-red-400" : result.pct_in_cut > 25 ? "text-amber-400" : "text-sky-400"}`}>
+          {heatNote}
+        </p>
+      )}
     </CalcCard>
   );
 }
@@ -1437,74 +1461,159 @@ function EngagementAngle() {
 // ─────────────────────────────────────────────────────────────────
 // Minimum Chip Thickness
 // ─────────────────────────────────────────────────────────────────
+type MctMaterial = "aluminum" | "steel" | "stainless" | "inconel" | "hardened";
+
+// Edge prep (inches) by material family — Core Cutter internal tooling specs.
+// Aluminum/non-ferrous tools run a lighter hone than steel/superalloy tools.
+// Micro tools (<0.125") get scaled down regardless of family.
+const MCT_EDGE_RADIUS_IN: Record<MctMaterial, number> = {
+  aluminum: 0.00025,
+  steel:    0.0006,
+  stainless:0.0006,
+  inconel:  0.0006,
+  hardened: 0.0006,
+};
+
+// Min chip ratio (fraction of edge radius). Higher = more rubbing risk = needs thicker chip.
+const MCT_MIN_CHIP_RATIO: Record<MctMaterial, number> = {
+  aluminum: 0.20,
+  steel:    0.25,
+  stainless:0.25,
+  inconel:  0.30,
+  hardened: 0.30,
+};
+
+const MCT_LABEL: Record<MctMaterial, string> = {
+  aluminum:  "Aluminum",
+  steel:     "Steel",
+  stainless: "Stainless",
+  inconel:   "Inconel / Superalloy",
+  hardened:  "Hardened / Tool Steel",
+};
+
 function MinChipThickness() {
   const metric = useMetric();
   const dU = metric ? "mm" : "in";
+  const fU = metric ? "mm/min" : "IPM";
 
-  const [toolDia, setToolDia]   = React.useState("");
-  const [woc,     setWoc]       = React.useState("");
-  const [fpt,     setFpt]       = React.useState("");
+  const [material, setMaterial] = React.useState<MctMaterial>("steel");
+  const [toolDia,  setToolDia]  = React.useState("");
+  const [woc,      setWoc]      = React.useState("");
+  const [rpm,      setRpm]      = React.useState("");
+  const [flutes,   setFlutes]   = React.useState("");
+  const [fpt,      setFpt]      = React.useState("");
 
-  // Fixed edge radius: 0.0003" (typical honed carbide edge prep, midpoint of 0.0002–0.0004" range)
-  const er_in  = 0.0003;
   const td     = metric ? n(toolDia) / 25.4 : n(toolDia);
-  const woc_in = n(woc); // stored in inches by WocInput
+  const woc_in = n(woc);
   const fpt_in = metric ? n(fpt) / 25.4 : n(fpt);
+  const rpmN   = n(rpm);
+  const z      = Math.max(0, Math.round(n(flutes)));
+
+  // Scale edge prep down for micro tools (<0.125"). Below 0.0625" use 50%, 0.0625–0.125" linearly ramps to full.
+  const er_base = MCT_EDGE_RADIUS_IN[material];
+  const er_in = td > 0 && td < 0.125
+    ? er_base * Math.max(0.5, td / 0.125)
+    : er_base;
 
   const wocFrac = td > 0 && woc_in > 0 ? woc_in / td : 0;
-  const chipThinFactor = wocFrac > 0 ? Math.sqrt(wocFrac / (2 - wocFrac)) : null;
+  const chipThinFactor = wocFrac > 0 && wocFrac < 2 ? Math.sqrt(wocFrac / (2 - wocFrac)) : null;
 
-  // Min chip thickness = 20–30% of edge radius (use 25% as midpoint)
-  const minChip_in   = 0.25 * er_in;
+  const minChipRatio = MCT_MIN_CHIP_RATIO[material];
+  const minChip_in   = minChipRatio * er_in;
   const minFpt_in    = chipThinFactor !== null && chipThinFactor > 0
     ? minChip_in / chipThinFactor : null;
+  const minIpm       = minFpt_in !== null && rpmN > 0 && z > 0 ? minFpt_in * rpmN * z : null;
+  const currentIpm   = fpt_in > 0 && rpmN > 0 && z > 0 ? fpt_in * rpmN * z : null;
 
-  const disp = (v: number) => {
-    return metric ? (v * 25400).toFixed(2) + " μm" : (v * 1e6).toFixed(1) + " μin";
-  };
+  // When current FPT is below min, suggest the two ways out:
+  //   - raise feed to minIpm
+  //   - drop RPM so the current FPT *becomes* the min chip (rpm_new = currentIpm / (minFpt × z))
+  const suggestedRpmDrop = fpt_in > 0 && minFpt_in !== null && fpt_in < minFpt_in && rpmN > 0
+    ? Math.round((fpt_in / minFpt_in) * rpmN)
+    : null;
+
+  const disp = (v: number) => metric ? (v * 25400).toFixed(2) + " μm" : (v * 1e6).toFixed(1) + " μin";
   const dispIn = (v: number | null) => {
     if (v === null) return null;
     return metric ? (v * 25.4).toFixed(4) + " mm" : v.toFixed(5) + '"';
+  };
+  const dispIpm = (v: number | null) => {
+    if (v === null) return null;
+    return (metric ? v * 25.4 : v).toFixed(metric ? 1 : 1) + " " + fU;
   };
 
   const hasInputs = td > 0 && woc_in > 0;
   const rubbing = fpt_in > 0 && minFpt_in !== null ? fpt_in < minFpt_in : null;
 
   usePrintRegister("Min Chip Thickness", "Speed & Feed", hasInputs ? [
+    { label: "Material", value: MCT_LABEL[material] },
     { label: `Cutting Diameter (${dU})`, value: toolDia },
     { label: "Radial WOC", value: woc },
+    ...(rpm ? [{ label: "Spindle Speed (RPM)", value: rpm }] : []),
+    ...(flutes ? [{ label: "Flutes", value: flutes }] : []),
     { label: "Min Chip Thickness", value: disp(minChip_in) },
-    ...(minFpt_in !== null ? [{ label: "Min FPT to avoid rubbing", value: dispIn(minFpt_in) ?? "" }] : []),
+    ...(minFpt_in !== null ? [{ label: "Min FPT to cut (not rub)", value: dispIn(minFpt_in) ?? "" }] : []),
+    ...(minIpm !== null ? [{ label: `Min Feed Rate`, value: dispIpm(minIpm) ?? "" }] : []),
     ...(fpt_in > 0 && rubbing !== null ? [{ label: "Current FPT status", value: rubbing ? "⚠ Below min — tool is rubbing" : "✓ Above min — cutting" }] : []),
   ] : null);
 
   return (
     <CalcCard title="Min Chip Thickness" category="Speed & Feed"
-      onClear={() => { setToolDia(""); setWoc(""); setFpt(""); }}>
+      titleHint="Too thin a chip and the tool rubs instead of cuts — burning the edge. Find the minimum feed that keeps it cutting."
+      onClear={() => { setToolDia(""); setWoc(""); setFpt(""); setRpm(""); setFlutes(""); setMaterial("steel"); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
-        Chip must be ≥20–30% of the cutting edge radius or the tool rubs instead of cuts — accelerating wear.
-        Based on a standard honed edge prep of 0.0003".
+        If your chip is too thin, the tool rubs instead of cuts — work-hardens the part, glazes the edge, and burns up the tool. This calc tells you the minimum feed needed to keep the tool actually cutting.
       </p>
-      <Row label={`Cutting Diameter (${dU})`} hint="Cutting diameter of the endmill.">
+      <Row label="Material" hint="Drives the min-chip threshold. Aluminum cuts cleanly at thinner chips; superalloys need more chip to break out of rubbing.">
+        <div className="flex gap-1 flex-wrap">
+          {(Object.keys(MCT_LABEL) as MctMaterial[]).map(k => (
+            <button key={k} type="button" onClick={() => setMaterial(k)}
+              className="px-2 py-1 rounded text-[11px] font-semibold border transition-colors"
+              style={{ borderColor: material===k?"#f97316":"#3f3f5a", backgroundColor: material===k?"#f97316":"transparent", color: material===k?"#fff":"#9ca3af" }}>
+              {MCT_LABEL[k]}
+            </button>
+          ))}
+        </div>
+      </Row>
+      <Row label={`Cutting Diameter (${dU})`} hint="Cutting diameter of the endmill. Micro tools (<0.125&quot;) get a tighter threshold automatically.">
         <NumIn value={toolDia} onChange={setToolDia} unit={dU} placeholder={metric ? "12.700" : "0.5000"} />
       </Row>
       <WocInput dia={td} value={woc} metric={metric} hint="Width of cut — used to calculate chip thinning factor." onChange={(_, parsed) => setWoc(String(parsed))} />
+      <Row label="Spindle Speed" hint="Optional — enter with flutes to see min feed rate in IPM."><NumIn value={rpm} onChange={setRpm} unit="RPM" placeholder="3500" /></Row>
+      <Row label="Flutes" hint="Optional — enter with RPM to see min feed rate in IPM."><NumIn value={flutes} onChange={setFlutes} placeholder="4" /></Row>
       <Row label={`Current FPT (${dU})`} hint="Optional — enter your programmed feed per tooth to check if you're above the minimum.">
         <NumIn value={fpt} onChange={setFpt} unit={dU} placeholder="optional" />
       </Row>
       {hasInputs && (
         <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
-          <Result label={`Min Chip Thickness`} value={disp(minChip_in)} highlight />
+          <Result label="Min Chip Thickness" value={disp(minChip_in)} highlight />
           {chipThinFactor !== null && <Result label="Chip Thinning Factor" value={chipThinFactor.toFixed(3)} />}
-          {minFpt_in !== null && <Result label={`Min FPT to cut (not rub)`} value={dispIn(minFpt_in) ?? ""} highlight />}
-          {fpt_in > 0 && rubbing !== null && (
-            <p className={`text-[10px] px-1 font-semibold ${rubbing ? "text-red-400" : "text-emerald-400"}`}>
-              {rubbing
-                ? `⚠ Current FPT is below minimum — tool is rubbing, not cutting. Increase feed.`
-                : `✓ Current FPT exceeds minimum — tool is cutting properly.`}
-            </p>
+          {minFpt_in !== null && <Result label="Min FPT to cut (not rub)" value={dispIn(minFpt_in) ?? ""} highlight />}
+          {minIpm !== null && (
+            <Result label="Min Feed Rate"
+              value={currentIpm !== null
+                ? `${dispIpm(minIpm) ?? ""}  (currently ${dispIpm(currentIpm) ?? ""})`
+                : (dispIpm(minIpm) ?? "")}
+              highlight />
           )}
-          <p className="text-[10px] text-gray-500 px-1">Rule of thumb: min chip = 25% × edge radius. Range: 20–30% depending on material.</p>
+          {fpt_in > 0 && rubbing !== null && (
+            <div className="px-1 space-y-1 pt-1">
+              <p className={`text-[11px] font-semibold ${rubbing ? "text-red-400" : "text-emerald-400"}`}>
+                {rubbing
+                  ? `⚠ Current FPT is below minimum — tool is rubbing, not cutting.`
+                  : `✓ Current FPT exceeds minimum — tool is cutting properly.`}
+              </p>
+              {rubbing && (
+                <p className="text-[10px] text-gray-400">
+                  Two ways out:
+                  <span className="block ml-2">• Raise feed to <span className="text-amber-300 font-semibold">{dispIn(minFpt_in) ?? ""}</span> FPT{minIpm !== null ? <> (<span className="text-amber-300 font-semibold">{dispIpm(minIpm)}</span>)</> : null}</span>
+                  {suggestedRpmDrop !== null && (
+                    <span className="block ml-2">• Drop RPM to <span className="text-amber-300 font-semibold">{suggestedRpmDrop.toLocaleString()}</span> (keeps current feed, thickens chip)</span>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </CalcCard>
@@ -1557,6 +1666,7 @@ function HelixEntry() {
 
   return (
     <CalcCard title="Helix Entry" category="Arcs & Contours"
+      titleHint="Helical interpolation into a closed pocket. Find the right ramp angle and pitch so the tool eats its way in cleanly."
       onClear={() => { setToolDia(""); setHelixDia(""); setRampAngle(""); setPitch(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Helical interpolation entry into a pocket. Helix dia = bore dia minus tool dia (clearance needed).
@@ -1618,6 +1728,7 @@ function NoMiddlePost() {
 
   return (
     <CalcCard title="No Middle Post" category="Arcs & Contours"
+      titleHint="Helical interpolation only leaves a clean bore if the tool is big enough. This tells you whether you'll get a stub of material in the middle."
       onClear={() => { setBoreDia(""); setToolDia(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         When helically entering solid stock, a tool smaller than half the bore diameter leaves a standing core post in the center that cannot be removed. Enter bore and tool diameters to check.
@@ -1716,6 +1827,7 @@ function BoltCircle() {
 
   return (
     <CalcCard title="Bolt Circle" category="Arcs & Contours" gcode
+      titleHint="X/Y coordinates for equally-spaced holes on a bolt circle. Optional G-code output drops straight into a program."
       onClear={() => { setCx("0"); setCy("0"); setBcr(""); setHoles(""); setStartAngle("0"); setZDepth(""); setFeedRate(""); setShowGcode(false); }}>
       <p className="text-[10px] text-gray-500 -mt-1">X/Y coordinates for equally-spaced holes on a bolt circle.</p>
       <Row label={`Center X (${dU})`}><NumIn value={cx} onChange={setCx} unit={dU} placeholder="0" /></Row>
@@ -1850,6 +1962,7 @@ function ChordSagitta() {
 
   return (
     <CalcCard title="Chord / Sagitta" category="Arcs & Contours"
+      titleHint="Arc geometry — solve radius, chord, and sagitta (arc height) from any two. Useful for fillets, gauges, and curved features."
       onClear={() => { setRadius(""); setChord(""); setSagitta(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Sagitta = arc height above the chord. Useful for understanding depth of curved surfaces.
@@ -1932,6 +2045,7 @@ function BoreEnlargement() {
 
   return (
     <CalcCard title="Bore Enlargement" category="Arcs & Contours"
+      titleHint="Opening up an existing bore? Plans the pass-count and WOC per pass so you don't gouge or chatter."
       onClear={() => { setToolDia(""); setExistingDia(""); setTargetDia(""); setWocPerPass(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Circular interpolation bore enlargement. Shows arc engagement and feed multiplier per radial pass.
@@ -2070,6 +2184,7 @@ function CornerClearance() {
 
   return (
     <CalcCard title="Corner Clearance" category="Arcs & Contours"
+      titleHint="Largest tool that fits an inside corner. Tool radius must be smaller than the part corner — this checks fit and clearance."
       onClear={() => { setPartCr(""); setToolDia(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Checks if a tool fits a part corner radius and recommends the next smaller standard diameter.
@@ -2230,6 +2345,7 @@ function EntryLoadSpike() {
 
   return (
     <CalcCard title="Entry Angle & Load Spike" category="Arcs & Contours"
+      titleHint="How hard the tool hits at first contact. Straight radial slams; an arc lead-in eases it in. Estimates the spike before you cut."
       onClear={() => { setDia(""); setWoc(""); setLeadRadius(""); setEntryType("radial"); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         When a tool first contacts material, instantaneous load spikes above steady-state. Entry method and arc lead-in radius determine how severe the spike is.
@@ -2415,6 +2531,7 @@ function ChamferMill() {
 
   return (
     <CalcCard title="Chamfer Mill" category="Arcs & Contours"
+      titleHint="Effective dia on a chamfer mill changes with Z-depth. Adjusts feed and SFM so the actual cutting edge gets the right speed."
       onClear={() => { setDia(""); setTipDia(""); setDepth(""); setFlutes(""); setRpm(""); setFpt(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
         Effective dia, edge engagement, and chip thinning along the angled flank.
