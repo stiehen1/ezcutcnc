@@ -2289,16 +2289,35 @@ export default function Mentor() {
   const [stepReqSent, setStepReqSent] = React.useState(false);
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
-  // Auto-deselect 'sweep' on closed pockets without pre-drill (no open edge to swing in from).
-  // Auto-select 'helical' as the recommended fallback so the user isn't left with nothing.
+  // Closed pocket entry defaults:
+  //   - No pre-drill: hide sweep (no open edge), fall back to helical Z-entry.
+  //   - With pre-drill: sweep becomes the XY-entry from hole to wall. If pre-drill leaves
+  //     a Z gap (pre-drill depth < pocket depth), also seed helical for the Z move.
   React.useEffect(() => {
-    if (form.mode === "deep_pocket" && form.dp_closed_pocket && !form.dp_pre_drill) {
+    if (form.mode !== "deep_pocket" || !form.dp_closed_pocket) return;
+    if (form.dp_pre_drill) {
+      // Pre-drill on: ensure sweep (XY) is present. Hide straight plunge (always wrong here).
       setEntryTypes(p => {
-        const cleaned = p.filter(k => k !== "sweep");
+        const cleaned = p.filter(k => k !== "straight");
+        const withSweep = cleaned.includes("sweep") || cleaned.includes("xy_radial")
+          ? cleaned
+          : [...cleaned, "sweep"];
+        const pocketDepth = form.dp_target_depth || 0;
+        const effDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : pocketDepth * 0.95;
+        const hasZGap = pocketDepth > 0 && (pocketDepth - effDepth) > 0.001;
+        if (hasZGap && !withSweep.includes("helical") && !withSweep.includes("ramp")) {
+          return [...withSweep, "helical"];
+        }
+        return withSweep;
+      });
+    } else {
+      // Closed, no pre-drill: strip sweep, fall back to helical.
+      setEntryTypes(p => {
+        const cleaned = p.filter(k => k !== "sweep" && k !== "xy_radial");
         return cleaned.length > 0 ? cleaned : ["helical"];
       });
     }
-  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill]);
+  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill, form.dp_target_depth, form.dp_pre_drill_depth]);
   React.useEffect(() => {
     if (form.mode === "slot") setEntryTypes([]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
@@ -2893,7 +2912,16 @@ export default function Mentor() {
         // Switch to normal milling mode temporarily — run the standard Mentor calc path
         // We do this by calling mentor.mutate with the current form (tool already populated from PDF)
         const specialMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
-        mentor.mutate({ ...form, mode: specialMode, operation: "milling", machine_id: activeMachineId ?? undefined } as any);
+        mentor.mutate(
+          { ...form, mode: specialMode, operation: "milling", machine_id: activeMachineId ?? undefined } as any,
+          {
+            onSuccess: () => {
+              // Snapshot form so the floating Re-run toast hides until inputs change again.
+              lastRunFormRef.current = JSON.stringify(form);
+              setFormDirty(false);
+            },
+          },
+        );
         return;
       }
 
@@ -2988,7 +3016,14 @@ export default function Mentor() {
               tool.flutes === 6 ? 25 :
               tool.flutes === 5 ? 35 :
               50;
-            const wocPct = Math.min(wocFromDepth, wocCapByFlutes);
+            let wocPct = Math.min(wocFromDepth, wocCapByFlutes);
+            // Thin Wall: scale down the bulk WOC so the rougher doesn't deflect a fragile
+            // wall during bulk removal. ~50% of the depth-tapered value, floored at the
+            // rubbing limit. The taper schedule below the card describes the near-wall
+            // step-down separately (handled by the finishing tool's passes).
+            if (form.dp_thin_wall) {
+              wocPct = Math.max(minWoc, wocPct * 0.50);
+            }
 
             // IPT feed multiplier — scale down with L/D to reduce cutting force
             //   L/D ≤ 4: full feed (1.00×)
@@ -3023,6 +3058,10 @@ export default function Mentor() {
           }
         }));
         setDpPhysics(physicsMap);
+        // Snapshot form + clear dirty so the floating Re-run toast hides until the
+        // user changes something. Same mechanism as the standard milling path below.
+        lastRunFormRef.current = JSON.stringify(form);
+        setFormDirty(false);
       } catch (err: any) {
         setDpError(err?.message ?? "Sequence lookup failed");
       } finally {
@@ -3209,11 +3248,37 @@ export default function Mentor() {
         <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f59e0b;border-bottom:1px solid #f59e0b40;">Straight Entry (Outside Edge)</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Entry Feed</td><td style="font-weight:600;color:#f59e0b;">${slotEntryIpm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(50% — shock load at first engagement)</span></td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (once engaged)</td><td style="font-weight:600;">${slotStraightFeed.toFixed(1)} IPM</td></tr>` : "";
-    const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows) ? `
+    const xyRadialFullFeed = result?.milling?.feed_ipm ?? 0;
+    const xyRadialEntryIpm = xyRadialFullFeed * 0.50;
+    const xyRadialRows = (entryTypes.includes("xy_radial") && xyRadialFullFeed > 0) ? `
+        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f59e0b;border-bottom:1px solid #f59e0b40;">Straight Radial — XY Breakout From Pre-Drilled Hole</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Breakout Feed</td><td style="font-weight:600;color:#f59e0b;">${xyRadialEntryIpm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(50% slot feed until clear)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Side-Mill Feed (after breakout)</td><td style="font-weight:600;">${xyRadialFullFeed.toFixed(1)} IPM</td></tr>
+        <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">First move from hole to wall is effectively slotting (full WOC on one side) — use slotting feed until the tool clears enough material for normal side-milling.</td></tr>` : "";
+    // Pre-drill banner: when pre-drill is on for a closed deep pocket, prefix the table with the Z/XY plan summary.
+    const isDeepPocketPreDrill = form.mode === "deep_pocket" && form.dp_closed_pocket && form.dp_pre_drill;
+    let preDrillBanner = "";
+    if (isDeepPocketPreDrill) {
+      const effDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : form.dp_target_depth * 0.95;
+      const gap = form.dp_target_depth > 0 ? Math.max(0, form.dp_target_depth - effDepth) : 0;
+      const zParts: string[] = [];
+      if (entryTypes.includes("helical")) zParts.push("Helical");
+      if (entryTypes.includes("ramp"))    zParts.push("Straight Ramp");
+      const zLabel = zParts.length > 0 ? zParts.join(" / ") : "—";
+      const xyParts: string[] = [];
+      if (entryTypes.includes("sweep"))     xyParts.push("Sweep / Roll-in");
+      if (entryTypes.includes("xy_radial")) xyParts.push("Straight Radial");
+      const xyLabel = xyParts.length > 0 ? xyParts.join(" / ") : "—";
+      preDrillBanner = gap > 0.001
+        ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drilled closed pocket — Z-entry through remaining ${gap.toFixed(3)}" gap: <b>${zLabel}</b>. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`
+        : `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drill reaches floor — tool drops to depth. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`;
+    }
+    const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows || xyRadialRows) ? `
       <h3>Entry Moves</h3>
+      ${preDrillBanner}
       ${emCaution ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:${emCaution === "high_hardness" ? "#450a0a" : "#451a03"};color:${emCaution === "high_hardness" ? "#fca5a5" : "#fcd34d"};">⚠ ${emCaution === "high_hardness" ? `Hard material (≥55 HRC): entry feed reduced to ${emFeedPct}% — do not skip arc lead-in.` : `Medium-hard material: entry feed reduced to ${emFeedPct}% of full feed.`}</p>` : ""}
       <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
-        ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}
+        ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}${xyRadialRows}
       </table>` : "";
 
     const tic = eng?.teeth_in_cut ?? null;
@@ -3810,12 +3875,46 @@ ${stabSection}
       if (form.dp_corner_radius > 0)      lines.push(L("Wall Corner R",   `${form.dp_corner_radius.toFixed(4)}"`));
       if (form.dp_floor_radius > 0)       lines.push(L("Floor Corner R",  `${form.dp_floor_radius.toFixed(4)}"`));
       lines.push(L("Thin Wall",           form.dp_thin_wall ? "Yes (bilateral stock strategy)" : "No"));
-      lines.push(L("Pocket Type",         form.dp_closed_pocket ? "Closed (pre-drill entry)" : "Open (sweep-in entry)"));
+      lines.push(L("Pocket Type",         form.dp_closed_pocket ? "Closed" : "Open (sweep-in from outside edge)"));
       if (form.dp_closed_pocket && form.dp_pocket_length > 0 && form.dp_pocket_width > 0) {
         lines.push(L("Pocket Size",       `${form.dp_pocket_length.toFixed(3)}" × ${form.dp_pocket_width.toFixed(3)}"`));
       }
-      if (form.dp_closed_pocket && form.dp_pre_drill_dia > 0) {
-        lines.push(L("Pre-Drill",         `Ø${form.dp_pre_drill_dia.toFixed(4)}" × ${form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth.toFixed(3) + '"' : "auto"} deep`));
+      if (form.dp_closed_pocket) {
+        if (form.dp_pre_drill) {
+          const effDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : form.dp_target_depth * 0.95;
+          const gap = form.dp_target_depth > 0 ? Math.max(0, form.dp_target_depth - effDepth) : 0;
+          const drillDepthStr = form.dp_pre_drill_depth > 0
+            ? `${form.dp_pre_drill_depth.toFixed(3)}"`
+            : `~${effDepth.toFixed(3)}" (auto, 95% of pocket depth)`;
+          if (form.dp_pre_drill_dia > 0) {
+            lines.push(L("Pre-Drill",     `Ø${form.dp_pre_drill_dia.toFixed(4)}" × ${drillDepthStr} deep`));
+          } else {
+            lines.push(L("Pre-Drill",     `auto Ø × ${drillDepthStr} deep`));
+          }
+          // Entry plan: Z + XY moves
+          const xyLabel = entryTypes.includes("xy_radial") && !entryTypes.includes("sweep")
+            ? "Straight Radial (slotting feed until clear)"
+            : entryTypes.includes("xy_radial") && entryTypes.includes("sweep")
+            ? "Sweep / Roll-in (primary), Straight Radial (alt)"
+            : "Sweep / Roll-in from hole to wall";
+          if (gap > 0.001) {
+            const zParts: string[] = [];
+            if (entryTypes.includes("helical")) zParts.push("Helical");
+            if (entryTypes.includes("ramp"))    zParts.push("Straight Ramp");
+            const zLabel = zParts.length > 0 ? zParts.join(" / ") : "Helical";
+            lines.push(L("Entry — Z move", `${zLabel} through remaining ${gap.toFixed(3)}" below pre-drill`));
+            lines.push(L("Entry — XY move", xyLabel));
+          } else {
+            lines.push(L("Entry",         `Pre-drill reaches floor — drop-in to depth, then ${xyLabel}`));
+          }
+        } else {
+          // Closed, no pre-drill — Z entry only
+          const zParts: string[] = [];
+          if (entryTypes.includes("helical")) zParts.push("Helical");
+          if (entryTypes.includes("ramp"))    zParts.push("Straight Ramp");
+          const zLabel = zParts.length > 0 ? zParts.join(" / ") : "Helical (no pre-drill)";
+          lines.push(L("Entry",           zLabel));
+        }
       }
       // Corner oversize warning — sequencer couldn't find an in-fit finisher
       if (dpResult?.corner_oversize && dpResult?.corner_oversize_note) {
@@ -4107,15 +4206,43 @@ ${stabSection}
       lines.push("");
 
       // ── ENTRY MOVES ─────────────────────────
-      if (em) {
+      // xy_radial uses local feed math (50% of side-mill feed) and does not require em.
+      const hasXyRadial = entryTypes.includes("xy_radial") && (result?.milling?.feed_ipm ?? 0) > 0;
+      if (em || hasXyRadial) {
         lines.push("ENTRY MOVES");
         lines.push(DIV);
-        lines.push(L("Entry Type", (() => {
-          const labelMap: Record<string, string> = { sweep: "Sweep / Roll-in", ramp: "Straight Ramp", helical: "Helical", straight: "Straight Plunge" };
-          const selected = entryTypes.filter(k => labelMap[k]);
-          return selected.length > 0 ? selected.map(k => labelMap[k]).join(" / ") : "Helical / Ramp";
-        })()));
-        if (entryTypes.includes("sweep")) {
+        // Pre-drill banner: summarize the Z + XY plan up front.
+        const isDpPreDrill = form.mode === "deep_pocket" && form.dp_closed_pocket && form.dp_pre_drill;
+        if (isDpPreDrill) {
+          const effDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : form.dp_target_depth * 0.95;
+          const gap = form.dp_target_depth > 0 ? Math.max(0, form.dp_target_depth - effDepth) : 0;
+          const zParts: string[] = [];
+          if (entryTypes.includes("helical")) zParts.push("Helical");
+          if (entryTypes.includes("ramp"))    zParts.push("Straight Ramp");
+          const xyParts: string[] = [];
+          if (entryTypes.includes("sweep"))     xyParts.push("Sweep / Roll-in");
+          if (entryTypes.includes("xy_radial")) xyParts.push("Straight Radial");
+          if (gap > 0.001) {
+            lines.push(L("Z-Entry Move",  `${zParts.join(" / ") || "—"}  (through remaining ${gap.toFixed(3)}" below pre-drill)`));
+            lines.push(L("XY-Entry Move", `${xyParts.join(" / ") || "—"}  (from hole to wall)`));
+          } else {
+            lines.push(L("Entry Plan",    `Pre-drill reaches floor — drop-in, then XY: ${xyParts.join(" / ") || "—"}`));
+          }
+        } else {
+          lines.push(L("Entry Type", (() => {
+            const labelMap: Record<string, string> = {
+              sweep: "Sweep / Roll-in",
+              ramp: "Straight Ramp",
+              helical: "Helical",
+              straight: "Straight Plunge",
+              slot_straight: "Straight Entry (outside edge)",
+              xy_radial: "Straight Radial (from pre-drilled hole)",
+            };
+            const selected = entryTypes.filter(k => labelMap[k]);
+            return selected.length > 0 ? selected.map(k => labelMap[k]).join(" / ") : "Helical / Ramp";
+          })()));
+        }
+        if (em && entryTypes.includes("sweep")) {
           const dia = form.tool_dia ?? 0;
           const radMin = (em.sweep_arc_radius_min_in != null && em.sweep_arc_radius_min_in > 0) ? em.sweep_arc_radius_min_in : dia * 0.50;
           const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : dia * 0.75;
@@ -4124,24 +4251,31 @@ ${stabSection}
           lines.push(L("Sweep Entry Feed", `${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM`));
           lines.push(L("Sweep Full Feed",  `${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM`));
         }
-        if (entryTypes.includes("helical")) {
+        if (em && entryTypes.includes("helical")) {
           lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
           lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
           lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
         }
-        if (entryTypes.includes("ramp")) {
+        if (em && entryTypes.includes("ramp")) {
           lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
           lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
           lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
         }
-        if (entryTypes.includes("straight")) {
+        if (em && entryTypes.includes("straight")) {
           lines.push(L("Straight Entry", `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM`));
         }
         if (entryTypes.includes("slot_straight")) {
           const slotFull = result?.milling?.feed_ipm ?? 0;
-          lines.push(L("Slot Entry Feed", `${(slotFull * 0.50).toFixed(1)} IPM  (50% — shock load at first engagement)`));
-          lines.push(L("Slot Full Feed",  `${slotFull.toFixed(1)} IPM`));
-        };
+          if (slotFull > 0) {
+            lines.push(L("Slot Entry Feed", `${(slotFull * 0.50).toFixed(1)} IPM  (50% — shock load at first engagement)`));
+            lines.push(L("Slot Full Feed",  `${slotFull.toFixed(1)} IPM`));
+          }
+        }
+        if (hasXyRadial) {
+          const xyFull = result?.milling?.feed_ipm ?? 0;
+          lines.push(L("Radial Breakout Feed", `${(xyFull * 0.50).toFixed(1)} IPM  (50% slot feed until clear)`));
+          lines.push(L("Side-Mill Feed (after breakout)", `${xyFull.toFixed(1)} IPM`));
+        }
         lines.push("");
       }
 
@@ -9394,47 +9528,101 @@ ${stabSection}
               <FieldLabel hint="Select one or more entry strategies — selecting multiple shows all methods side by side for comparison. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
                 Entry Type Preferences
               </FieldLabel>
-              <div className="flex flex-wrap gap-3">
-                {(() => {
-                  // Deep pocket entry constraints:
-                  //   Closed pocket, no pre-drill → no sweep (no open edge), helical recommended.
-                  //   Closed pocket, with pre-drill → sweep is allowed (pre-drilled hole = entry).
-                  //   Open pocket → sweep is recommended.
-                  const isClosedNoPredrill = form.mode === "deep_pocket" && form.dp_closed_pocket && !form.dp_pre_drill;
-                  const isClosed = form.mode === "deep_pocket" && form.dp_closed_pocket;
-                  return [
-                    { key: "sweep",        label: "Sweep / Roll-in",  color: "text-green-400 border-green-500/60",   recommended: form.tool_type !== "chamfer_mill" && form.mode !== "slot" && !isClosedNoPredrill, slotOnly: false, hideInSlot: true,  hideHere: isClosedNoPredrill, tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires open stock edge or pre-drilled hole to swing in from." },
-                    { key: "ramp",         label: "Straight Ramp",    color: "text-indigo-300 border-indigo-500/60", recommended: false,                             slotOnly: false, hideInSlot: false, hideHere: false, tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
-                    { key: "helical",      label: "Helical",          color: "text-indigo-300 border-indigo-500/60", recommended: form.tool_type === "chamfer_mill" || isClosedNoPredrill, slotOnly: false, hideInSlot: false, hideHere: false, tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets with no pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
-                    { key: "straight",     label: "Straight Plunge",  color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: false, hideInSlot: true,  hideHere: false, tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
-                    { key: "slot_straight",label: "Straight Entry",   color: "text-amber-400 border-amber-500/60",   recommended: false,                             slotOnly: true,  hideInSlot: false, hideHere: false, tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
-                  ].filter(({ slotOnly, hideInSlot, hideHere }) =>
-                    (form.mode === "slot" ? !hideInSlot : !slotOnly) && !hideHere
-                  );
-                })()
-                .map(({ key, label, color, recommended, tooltip }) => {
-                  const checked = entryTypes.includes(key);
+              {(() => {
+                // Deep pocket entry constraints:
+                //   Closed pocket, no pre-drill → no sweep (no open edge), helical recommended.
+                //   Closed pocket, with pre-drill → split into two sub-decisions:
+                //     - Z-entry through any remaining gap (helical/ramp) — only shown if gap > 0
+                //     - XY-entry from inside the hole out to the wall (sweep/straight radial)
+                //   Open pocket → sweep is recommended.
+                const isDeepPocket = form.mode === "deep_pocket";
+                const isClosed = isDeepPocket && form.dp_closed_pocket;
+                const isPreDrill = isDeepPocket && form.dp_pre_drill;
+                const pocketDepth = form.dp_target_depth || 0;
+                const effectivePreDrillDepth = form.dp_pre_drill_depth > 0
+                  ? form.dp_pre_drill_depth
+                  : pocketDepth * 0.95;
+                const zGap = pocketDepth > 0 ? Math.max(0, pocketDepth - effectivePreDrillDepth) : 0;
+                const hasZGap = isPreDrill && zGap > 0.001;
+
+                type Opt = { key: string; label: string; color: string; recommended: boolean; tooltip: string };
+
+                const sweepRec = form.tool_type !== "chamfer_mill" && form.mode !== "slot" && !isClosed;
+                const helicalRec = form.tool_type === "chamfer_mill" || (isClosed && !isPreDrill) || hasZGap;
+
+                const opts: Record<string, Opt> = {
+                  sweep:         { key: "sweep",         label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",   recommended: sweepRec,    tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires an open stock edge to swing in from (closed pockets cannot use this entry, even with a pre-drilled hole)." },
+                  ramp:          { key: "ramp",          label: "Straight Ramp",   color: "text-indigo-300 border-indigo-500/60", recommended: false,       tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
+                  helical:       { key: "helical",       label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: helicalRec,  tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets, and for clearing the remaining floor stock below a pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
+                  straight:      { key: "straight",      label: "Straight Plunge", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
+                  slot_straight: { key: "slot_straight", label: "Straight Entry",  color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
+                  xy_radial:     { key: "xy_radial",     label: "Straight Radial", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "From inside the pre-drilled hole, feed straight out to the pocket wall. This breakout move is effectively a slotting cut — feed and SFM should match slotting parameters until the tool clears enough material to begin side-milling. Higher shock than Sweep; use only when there is not enough room for a tangential arc." },
+                };
+
+                const renderChip = (o: Opt) => {
+                  const checked = entryTypes.includes(o.key);
                   return (
-                    <TooltipProvider key={key} delayDuration={200}>
+                    <TooltipProvider key={o.key} delayDuration={200}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== key) : [...p, key])}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
+                            onClick={() => setEntryTypes(p => checked ? p.filter(k => k !== o.key) : [...p, o.key])}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors ${checked ? o.color + " bg-zinc-800" : "text-zinc-500 border-zinc-700 bg-transparent"}`}
                           >
                             <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 ${checked ? "bg-current border-current" : "border-zinc-600"}`}>
                               {checked && <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 10 10" fill="currentColor"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
                             </span>
-                            {label}{recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
+                            {o.label}{o.recommended && <span className="text-[9px] text-green-500 ml-0.5">★</span>}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-72 text-xs">{tooltip}</TooltipContent>
+                        <TooltipContent side="top" className="max-w-72 text-xs">{o.tooltip}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   );
-                })}
-              </div>
+                };
+
+                if (isPreDrill) {
+                  // Pre-drill: split into Z-entry (only if gap remains) and XY-entry (always).
+                  return (
+                    <div className="space-y-3">
+                      {hasZGap && (
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1.5">
+                            Z-entry through remaining {zGap.toFixed(3)}" below pre-drill
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            {renderChip(opts.helical)}
+                            {renderChip(opts.ramp)}
+                          </div>
+                        </div>
+                      )}
+                      {!hasZGap && pocketDepth > 0 && (
+                        <p className="text-[10px] text-zinc-500 italic">
+                          Pre-drill reaches the pocket floor — tool drops straight in, no Z-entry move needed.
+                        </p>
+                      )}
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1.5">
+                          XY-entry from pre-drilled hole to pocket wall
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {renderChip({ ...opts.sweep, recommended: form.tool_type !== "chamfer_mill" })}
+                          {renderChip(opts.xy_radial)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // No pre-drill: flat list with the same hide rules as before.
+                const flat: Opt[] = form.mode === "slot"
+                  ? [opts.ramp, opts.helical, opts.slot_straight]
+                  : isClosed
+                    ? [opts.ramp, opts.helical, opts.straight]
+                    : [opts.sweep, opts.ramp, opts.helical, opts.straight];
+                return <div className="flex flex-wrap gap-3">{flat.map(renderChip)}</div>;
+              })()}
             </div>
             </>
           )}
@@ -9593,26 +9781,35 @@ ${stabSection}
                   const zPerMin = zPerRev * mil.rpm;
                   const timeToDepth = zPerMin > 0 ? rampDepth / zPerMin : 0;
                   const isLong = tld > 4;
+                  const timeStr = timeToDepth > 0
+                    ? (timeToDepth < 1 ? `${(timeToDepth * 60).toFixed(0)} sec` : `${timeToDepth.toFixed(1)} min`)
+                    : null;
+                  const cells: Array<[string, string, string?]> = [
+                    ["Entry Feed", `${entryFeed.toFixed(1)} IPM`, `${Math.round(feedMult*100)}% of main`],
+                    ["Ramp Angle", `${angle.toFixed(1)}°`],
+                    ["Z / rev",    `${zPerRev.toFixed(4)}"`],
+                    ["Z Feed",     `${zPerMin.toFixed(2)} IPM`],
+                    ["Ramp Depth", `${rampDepth.toFixed(3)}"`],
+                    ...(timeStr ? [["Time to Depth", timeStr] as [string, string]] : []),
+                  ];
                   return (
-                    <div className="mt-1 pl-3 border-l border-sky-700/40 space-y-0.5">
-                      <p className="text-[10px] text-sky-400">
-                        Helical ramp parameters
-                        {isLong && <span className="text-amber-400 ml-1">· conservative for L/D {tld.toFixed(1)}×</span>}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">
-                        Entry feed: <span className="text-zinc-200 font-mono">{entryFeed.toFixed(1)} IPM</span>
-                        <span className="text-zinc-500"> ({Math.round(feedMult*100)}% of main feed{isLong ? " — reduced for long reach" : ""})</span>
-                      </p>
-                      <p className="text-[10px] text-zinc-400">
-                        Ramp angle: <span className="text-zinc-200 font-mono">{angle.toFixed(1)}°</span>
-                        <span className="text-zinc-500"> · Z per rev: <span className="text-zinc-300 font-mono">{zPerRev.toFixed(4)}"</span> · Z feed: <span className="text-zinc-300 font-mono">{zPerMin.toFixed(2)} IPM</span></span>
-                      </p>
-                      {timeToDepth > 0 && (
-                        <p className="text-[10px] text-zinc-500">
-                          Ramp depth: ~{rampDepth.toFixed(3)}" · time: ~{timeToDepth < 1 ? `${(timeToDepth * 60).toFixed(0)} sec` : `${timeToDepth.toFixed(1)} min`}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-amber-400/80 leading-snug pt-0.5">
+                    <div className="mt-1.5 rounded-md border border-sky-700/30 bg-sky-950/15 px-2.5 py-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-sky-300">Helical Ramp Parameters</span>
+                        {isLong && (
+                          <span className="text-[9px] font-semibold text-amber-400">conservative · L/D {tld.toFixed(1)}×</span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-x-3 gap-y-1.5">
+                        {cells.map(([label, val, note]) => (
+                          <div key={label}>
+                            <div className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</div>
+                            <div className="text-[11px] font-mono text-zinc-100">{val}</div>
+                            {note && <div className="text-[9px] text-zinc-500">{note}</div>}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-amber-400/80 leading-snug mt-1.5">
                         {isLong
                           ? "Long reach — watch for chatter on first revolution. Coolant flood or TSC mandatory; deflection adds to Z load."
                           : "Flood or TSC coolant required — chip evacuation at bottom of ramp is the failure mode."}
@@ -9743,13 +9940,35 @@ ${stabSection}
                   </span>
                 )}
               </div>
-              {dpResult && (
-                <p className="text-[11px] text-zinc-500 mt-1">
-                  Depth {form.dp_target_depth.toFixed(3)}"  ·  Corner R{form.dp_corner_radius.toFixed(4)}"  ·
-                  Bulk Ø{dpResult.constraints.bulk_dia?.toFixed(4) ?? "—"}"  ·
-                  Corner Ø{dpResult.constraints.corner_dia?.toFixed(4) ?? "—"}"
-                </p>
-              )}
+              {dpResult && (() => {
+                const geo: string[] = [];
+                if (form.dp_closed_pocket && form.dp_pocket_length > 0 && form.dp_pocket_width > 0) {
+                  geo.push(`${form.dp_pocket_length.toFixed(3)}" L × ${form.dp_pocket_width.toFixed(3)}" W`);
+                }
+                geo.push(`${form.dp_target_depth.toFixed(3)}" Depth`);
+                if (form.dp_corner_radius > 0) geo.push(`R${form.dp_corner_radius.toFixed(4)}" Wall Corner`);
+                if (form.dp_floor_radius > 0)  geo.push(`R${form.dp_floor_radius.toFixed(4)}" Floor Corner`);
+                const bulks = (dpResult.bulk_tools ?? []) as any[];
+                const corner = dpResult.corner_tool ?? null;
+                const isCornerOversize = !!dpResult.corner_oversize;
+                const toolDias = [
+                  ...bulks.map(t => `Ø${Number(t.dia).toFixed(4)}"`),
+                  ...(corner && !isCornerOversize ? [`Ø${Number(corner.dia).toFixed(4)}" Finisher`] : []),
+                  ...(isCornerOversize ? ["Custom Finisher (quote required)"] : []),
+                ];
+                return (
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-[11px] text-zinc-500">
+                      <span className="text-zinc-400">Pocket Info:</span> {geo.join("  ·  ")}
+                    </p>
+                    {toolDias.length > 0 && (
+                      <p className="text-[11px] text-zinc-500">
+                        <span className="text-zinc-400">Tool Progression:</span> {toolDias.join("  →  ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </CardHeader>
             <CardContent className="space-y-3">
               {dpLoading && (
@@ -12428,6 +12647,31 @@ ${stabSection}
                         </div>
                       )}
 
+                      {/* Straight Radial — XY breakout from pre-drilled hole to wall */}
+                      {entryTypes.includes("xy_radial") && (() => {
+                        // Breakout from hole to wall is effectively slotting — use slot feed (50% until engaged).
+                        const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
+                        const entryFeed = fullFeed * 0.50;
+                        return (
+                          <div>
+                            <div className="border-b border-amber-500/30 pb-1 mb-1.5">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Radial</span>
+                              <span className="text-[9px] text-amber-600 ml-2">XY breakout from pre-drilled hole — treat as slotting</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                              <div className="flex flex-col">
+                                <div><span className="text-zinc-500">Breakout Feed</span><span className="ml-2 font-medium text-amber-300">{entryFeed.toFixed(1)} IPM</span></div>
+                                <div className="text-[10px] text-zinc-500">(50% slot feed until clear)</div>
+                              </div>
+                              <div className="flex flex-col">
+                                <div><span className="text-zinc-500">Side-Mill Feed (after breakout)</span><span className="ml-2 font-medium text-white">{fullFeed.toFixed(1)} IPM</span></div>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-1">From inside the pre-drilled hole, feed straight out toward the wall. This first move is effectively a slot — full WOC engagement on one side — so it needs slotting feed (~50% of side-mill feed) until the tool clears enough material to begin its normal side-milling pass.</p>
+                          </div>
+                        );
+                      })()}
+
                       {/* Straight Entry — traditional slotting from outside stock */}
                       {entryTypes.includes("slot_straight") && (() => {
                         const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
@@ -13797,8 +14041,8 @@ ${stabSection}
         </div>
       </div>
 
-    {/* Floating stale-results bar — always visible when inputs changed */}
-    {formDirty && customer !== null && !mentor.isPending && (
+    {/* Floating stale-results bar — visible when inputs changed AND we have results to be stale against */}
+    {formDirty && (customer !== null || dpResult !== null) && !mentor.isPending && !dpLoading && (
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border border-yellow-400/80 bg-zinc-900/95 px-4 py-2.5 shadow-xl backdrop-blur-sm">
         <span className="text-sm text-yellow-300">Inputs changed</span>
         <button

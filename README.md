@@ -6,6 +6,52 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ---
 
+## Recent Updates (May 2026)
+
+### Pocketing Strategy — Entry Type Restructure
+- **Sweep / Roll-in** is now hidden for any closed pocket (with or without a pre-drilled hole). A pre-drilled hole is an interior cavity, not an open edge to swing in from. Helical is the recommended fallback for closed pockets with no pre-drill.
+- **Tool Entry section regrouped** when pre-drill is on:
+  - **Z-entry through remaining gap** group (Helical / Straight Ramp) — only shown when the pre-drill is shallower than pocket depth. Sub-header shows the exact remaining depth, e.g. *"Z-entry through remaining 0.170″ below pre-drill"*.
+  - **XY-entry from pre-drilled hole to pocket wall** group (Sweep / Roll-in ★ recommended + Straight Radial alt). Always shown when pre-drill is on.
+- **Straight Plunge** hidden whenever pre-drill is on (defeats the purpose of pre-drilling).
+- **New entry type `xy_radial`** — "Straight Radial" XY breakout move from inside the pre-drilled hole. Treated as slotting feed (50% of side-mill feed) until the tool clears enough material to begin side-milling.
+- **Auto-select effect** updated to seed sensible defaults when pre-drill toggles: Sweep for XY, Helical for Z if gap exists, Straight Plunge stripped.
+- When pre-drill reaches the full pocket depth, a one-line info note appears in place of the Z-entry group: *"Pre-drill reaches the pocket floor — tool drops straight in, no Z-entry move needed."*
+
+### Pocketing Strategy — Recommended-Tool Card Cleanup
+- **Helical ramp parameters sub-block** (per tool card) reformatted from a dense run of inline text into a 3-column grid (Entry Feed / Ramp Angle / Z per rev / Z Feed / Ramp Depth / Time to Depth) inside a bordered card. Matches the visual rhythm of the RPM/Feed/IPT params row below.
+- **Progressive Reach Sequence header** rewritten:
+  - *Pocket Info* line: pocket L × W (closed pockets only), depth, wall corner R, floor corner R.
+  - *Tool Progression* line: each rougher Ø in sequence, then `Ø<dia>" Finisher` or `Custom Finisher (quote required)` if the sequencer can't find one in catalog. Replaces the previous Bulk Ø / Corner Ø summary.
+
+### Pocketing Strategy — Sequencer Rougher Diameter Cap
+- **Largest bulk rougher** capped at `corner_radius × 3.0` (was `× 4.0`). Old cap left too much corner stock for the finisher to remove — full-radial spike loads at every wall corner. Shop-validated: R0.236″ wall corner → 0.708″ cap → picks 0.750″ stocked diameter.
+- HEM's separate 0.625″ hard cap still applies; final cap = `min(pocket-fit, HEM cap, corner cap)`.
+
+### Pocketing Strategy — Thin Wall WOC
+- **Thin Wall toggle** now scales bulk-rougher WOC down by **0.50×** on every per-tool calc (floored at the rubbing limit: 5% HEM / 10% Traditional). Previously the toggle only affected the advisory taper schedule display — actual per-tool WOC% numbers didn't change.
+- The taper schedule (50% → 30% → 10% → 5% Trad; 10% → 5% → 3% HEM) remains below each tool card as the finisher's wall-approach guide.
+- Conservative default — doesn't try to encode bilateral-stock-vs-tree-buttress strategy differences. A dedicated "Thin Wall Milling" process is planned for that.
+
+### Stale-Results Notification — Fix
+- "Inputs changed" floating pill now correctly hides after a successful Re-run in **Pocketing Strategy** mode. The deep-pocket sequence run path previously never snapshotted the form or cleared `formDirty`, so the toast stayed visible even when nothing had changed since the last run.
+- Toast visibility gate updated to recognize per-mode result signals: shows when `customer` (standard milling) OR `dpResult` (pocketing) is present, hides while `mentor.isPending` OR `dpLoading` is true.
+- Special-tool sub-path (PDF-uploaded tool in pocketing mode) now also snapshots via per-call `onSuccess` callback.
+
+### Export Sync (Pocketing Entry Model)
+- **Plain-text pocketing-section export**: replaced one-liner "Pocket Type: Closed (pre-drill entry)" with a structured entry plan. Closed pockets with pre-drill show pre-drill spec, `Entry — Z move: Helical through remaining 0.170″`, and `Entry — XY move: Sweep / Roll-in`. Pre-drill reaching the floor reads `Pre-drill reaches floor — drop-in to depth, then Sweep / Roll-in`. Auto pre-drill depth now annotated `~3.230″ (auto, 95% of pocket depth)`.
+- **HTML email entry section**: new `xy_radial` row block (orange-themed, mirrors slot_straight). Pre-drill banner injected above the entry table summarizing Z + XY plan when applicable.
+- **Plain-text entry section**: labelMap now includes `slot_straight` (pre-existing bug — was missing) and `xy_radial`. Pre-drilled deep pockets emit `Z-Entry Move` + `XY-Entry Move` lines instead of generic "Entry Type". Section also renders when only `xy_radial` is selected (no longer requires `em` from engine).
+
+### Memory Notes (Persistence)
+The following project memories were added to support future sessions:
+- `feedback_sweep_closed_pocket.md` — Sweep is open-edge only; closed pockets cannot use Sweep entry regardless of pre-drill state.
+- `project_pocket_rougher_cap.md` — Rougher diameter cap is `corner_radius × 3.0` (shop-validated calibration).
+- `project_thin_wall_woc.md` — Thin Wall scales bulk rougher WOC by 0.50× (conservative default).
+- `project_thin_wall_milling.md` — Planned dedicated Thin Wall Milling process with bilateral-stock / tree-buttress / conservative strategy selector.
+
+---
+
 ## Recent Updates (April 2026)
 
 ### PDF Upload — Step Drill & LOC Extraction (late April 2026)
