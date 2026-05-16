@@ -316,6 +316,8 @@ export async function registerRoutes(
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_torque_rpm INTEGER`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_rpm INTEGER`);
     await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS curve_confidence TEXT`);
+    await pool.query(`ALTER TABLE machines ADD COLUMN IF NOT EXISTS spindle_count INTEGER DEFAULT 1`);
+    await pool.query(`ALTER TABLE user_machines ADD COLUMN IF NOT EXISTS spindle_count INTEGER DEFAULT 1`);
 
     // ── Makino MAG spindle corrections (ids 346-353) ────────────────────────
     // MAG A-series and MAG1/3/4 all use 33,000 rpm HSK-F80 direct-drive spindle,
@@ -923,6 +925,119 @@ export async function registerRoutes(
         SELECT 'Modig', $1, $2, $3, $4, $5, true, '{flood,tsc}', $6, $7, $8, $8, $9, $2, 'medium'
         WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Modig%' AND model ILIKE $1)
       `, [model, maxRpm, hp, taper, driveType, mtype, wayType, peakTq, baseRpm]);
+    }
+
+    // ── SNK catalog ──────────────────────────────────────────────────────────
+    // Two-family architecture: heavy CAT50/BT50 gear-driven (massive low-end torque)
+    // and HSK motor-spindle aerospace (broad constant-power, modest torque).
+    // machine_type mapping:
+    //   - true moving-bridge / portal / gantry-5-axis  → 'gantry'
+    //   - fixed-bridge / double-column bridge mill     → 'double_column'
+    //   - 5-axis horizontal                            → '5axis'
+    //   - horizontal boring mill                       → 'hbm'
+    // Confidence: 'medium' for rows with published torque (NB130P/HPS-120B); 'low' where
+    // torque was inferred from HP/RPM/class (most rows). HSK-A80 (HPS-120B) uses HSK80.
+    // [model, machine_type, taper, max_rpm, spindle_hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type, confidence]
+    const snkMachines: [string, string, string, number, number, number, number, number, string, string, string][] = [
+      ["HPS-120B",     "5axis",         "HSK80",  20000, 39, 84,   115,  2500, "linear", "direct", "medium"], // aerospace 5-axis horizontal; torque inferred from HP curve
+      ["NB130P",       "hbm",           "CAT50",  2000,  60, 1900, 2793, 400,  "box",    "gear",   "medium"], // 2793 ft-lb peak published; HP/base inferred
+      ["AIC-150",      "double_column", "CAT50",  3000,  25, 220,  450,  500,  "box",    "gear",   "low"],   // older fixed-bridge mill, classic gearbox architecture
+      ["RB-5M",        "double_column", "BT50",   6000,  40, 150,  300,  1000, "box",    "gear",   "low"],   // mold/die double column
+      ["HF-5M",        "gantry",        "HSK63",  20000, 50, 55,   95,   4000, "linear", "direct", "low"],   // high-speed aerospace aluminum moving gantry
+      ["DC-5A",        "gantry",        "HSK100", 15000, 60, 175,  320,  3000, "linear", "direct", "low"],   // 5-axis gantry, titanium-capable integral spindle
+      ["CM-5",         "gantry",        "CAT50",  4000,  50, 320,  650,  600,  "box",    "gear",   "low"],   // moving-portal mill, large castings
+      ["RB-200F",      "double_column", "BT50",   8000,  50, 180,  340,  1200, "box",    "gear",   "low"],   // double column general heavy
+      ["UH-50P",       "5axis",         "HSK63",  24000, 40, 42,   75,   5000, "linear", "direct", "low"],   // representative high-speed profiler (UH series)
+      ["NeoV-5M",      "gantry",        "HSK100", 18000, 80, 230,  400,  3500, "linear", "direct", "low"],   // representative NeoV gantry 5-axis
+    ];
+    for (const m of snkMachines) {
+      const [model, mtype, taper, maxRpm, hp, baseTq, peakTq, peakRpm, wayType, driveType, confidence] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence)
+        SELECT 'SNK', $1, $2, $3, $4, $5, $11, '{flood}', $6, $7, $8, $9, $10, $10, $12
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'SNK%' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq, peakTq, peakRpm, taper.startsWith("HSK"), confidence]);
+    }
+    // Backfill: SNK rows seeded under the original '5axis'/'double_column' mapping
+    // need to be reclassified now that 'gantry' is a valid machine_type.
+    await pool.query(`
+      UPDATE machines SET machine_type = 'gantry'
+      WHERE brand ILIKE 'SNK%' AND model IN ('HF-5M', 'DC-5A', 'CM-5', 'NeoV-5M')
+    `);
+    // Reclassify Modig moving-gantry machines (FlexiMill, RigiMill, MILL-EX
+    // are true moving-portal aerospace gantries, not 5-axis HMC class).
+    await pool.query(`
+      UPDATE machines SET machine_type = 'gantry'
+      WHERE brand ILIKE 'Modig%' AND model IN ('FlexiMill', 'FlexiMill HD', 'RigiMill', 'MILL-EX')
+    `);
+
+    // ── Aerospace Gantry Catalog ─────────────────────────────────────────────
+    // Tier-1 aerospace gantry builders. All rows are single-spindle except where
+    // spindle_count > 1 (synchronized multi-head extrusion/profile gantries).
+    // Torque values converted from Nm to ft-lb (×0.7376). Most are 'low' confidence
+    // because aerospace OEMs publish RPM/HP but rarely full torque curves.
+    // Taper normalization: HSK63A/HSK63F → HSK63, HSK-A100 → HSK100, BIG-PLUS CAT50 → CAT50.
+    // way_type: aerospace HSK gantries are linear; heavy CAT50 gantries are box/hydrostatic.
+    // [brand, model, machine_type, taper, max_rpm, hp, base_tq_ftlb, peak_tq_ftlb, peak_tq_rpm, way_type, drive_type, spindle_count, confidence, notes]
+    const gantryMachines: [string, string, string, string, number, number, number, number, number, string, string, number, string, string][] = [
+      // Ingersoll Machine Tools — massive aerospace portals, CFRP/Al/Ti
+      ["Ingersoll", "MasterMill",       "gantry", "HSK100", 12000, 100, 350,  700,  2000, "box",    "gear",   1, "low", "Large aerospace portal mill"],
+      ["Ingersoll", "PowerMill",        "gantry", "CAT50",  6000,  150, 800,  1800, 500,  "box",    "gear",   1, "low", "Heavy structural roughing portal"],
+      ["Ingersoll", "CyberMill",        "gantry", "HSK63",  24000, 60,  90,   170,  4000, "linear", "direct", 1, "low", "High-speed aero aluminum CFRP"],
+      // Fives / Forest-Liné — ultra-high-speed aerospace aluminum
+      ["Fives",     "Modumill",         "gantry", "HSK63",  30000, 60,  60,   135,  5000, "linear", "direct", 1, "low", "Forest-Liné high-speed aero aluminum"],
+      ["Fives",     "Flexmill",         "gantry", "HSK63",  24000, 50,  70,   145,  4500, "linear", "direct", 1, "low", "Forest-Liné monolithic aluminum"],
+      ["Fives",     "MGB",              "gantry", "HSK100", 18000, 75,  170,  295,  3000, "linear", "direct", 1, "low", "Forest-Liné aero structures HSK100"],
+      ["Fives",     "Modumill MultiSpindle 3", "gantry", "HSK63", 24000, 50, 70, 145, 4500, "linear", "direct", 3, "low", "3-head synchronized aero extrusion"],
+      // Zimmermann — dynamic 5-axis aero aluminum
+      ["Zimmermann", "FZ33",            "gantry", "HSK63",  30000, 55,  55,   120,  5000, "linear", "direct", 1, "low", "Thin-wall aluminum 5-axis"],
+      ["Zimmermann", "FZ37",            "gantry", "HSK63",  24000, 60,  65,   150,  4500, "linear", "direct", 1, "low", "Mid-size aero aluminum 5-axis"],
+      ["Zimmermann", "FZU",             "gantry", "HSK100", 18000, 75,  130,  220,  3500, "linear", "direct", 1, "low", "Large bridge aero structures"],
+      ["Zimmermann", "FZH",             "gantry", "HSK63",  30000, 60,  60,   140,  5000, "linear", "direct", 1, "low", "Horizontal gantry aero aluminum"],
+      // Fooke — linear-drive long-part portals
+      ["Fooke",     "ENDURA 700LINEAR", "gantry", "HSK63",  24000, 60,  150,  295,  3500, "linear", "direct", 1, "low", "Linear-motor aero extrusion machining"],
+      ["Fooke",     "ENDURA 900",       "gantry", "HSK100", 18000, 80,  220,  440,  3000, "linear", "direct", 1, "low", "Heavy aero structural"],
+      // DMG MORI gantry-class
+      ["DMG MORI",  "DMU 600 P",        "gantry", "HSK100", 12000, 80,  220,  440,  2500, "linear", "direct", 1, "low", "Large 5-axis portal"],
+      ["DMG MORI",  "DMC 340 U",        "gantry", "HSK63",  18000, 50,  90,   180,  3500, "linear", "direct", 1, "low", "Universal 5-axis portal"],
+      // TARUS — North American aero tooling
+      ["TARUS",     "5-Axis Bridge",    "gantry", "CAT50",  10000, 60,  500,  1100, 1000, "box",    "gear",   1, "low", "Aero fixture and tooling gantry"],
+      ["TARUS",     "Heavy Portal",     "gantry", "HSK100", 12000, 100, 400,  900,  1500, "box",    "gear",   1, "low", "Tooling and large alloy work"],
+      // Fidia — precision contour gantries
+      ["Fidia",     "GTF",              "gantry", "HSK63",  24000, 50,  75,   175,  4000, "linear", "direct", 1, "low", "High-speed contour aero surfacing"],
+      ["Fidia",     "D321",             "gantry", "HSK63",  30000, 60,  75,   220,  4500, "linear", "direct", 1, "low", "Ultra-precision aero surfacing"],
+      // Waldrich Coburg — extreme heavy aerospace
+      ["Waldrich Coburg", "Taurus",     "gantry", "CAT50",  6000,  150, 1100, 2950, 400,  "hydrostatic", "gear", 1, "low", "Heavy Ti / large steel structures"],
+      ["Waldrich Coburg", "Tectri",     "gantry", "HSK100", 10000, 125, 700,  1850, 800,  "hydrostatic", "gear", 1, "low", "Heavy aerospace alloy roughing"],
+      ["Waldrich Coburg", "PowerTec",   "gantry", "CAT50",  4500,  200, 1500, 3690, 350,  "hydrostatic", "gear", 1, "low", "Extreme titanium/steel portal"],
+      // Parpas — mold/die gantries
+      ["Parpas",    "THS",              "gantry", "HSK63",  24000, 60,  100,  160,  4000, "linear", "direct", 1, "low", "Mold & die direct-drive gantry"],
+      // Shibaura Machine — large iron cutting
+      ["Shibaura",  "MPF",              "gantry", "CAT50",  6000,  55,  400,  740,  600,  "box",    "gear",   1, "low", "Large iron cutting gantry"],
+      // KAAST — general-purpose gantry
+      ["KAAST",     "GBM Gantry",       "gantry", "CAT50",  6000,  30,  220,  370,  800,  "box",    "gear",   1, "low", "General purpose belt/geared gantry"],
+      // CMS — aluminum extrusion profilers (often multi-spindle)
+      ["CMS",       "Antares",          "gantry", "HSK63",  24000, 30,  60,   135,  4500, "linear", "direct", 1, "low", "Aluminum extrusion profile"],
+      ["CMS",       "Ares MultiSpindle 3", "gantry", "HSK63", 24000, 30, 60, 135, 4500, "linear", "direct", 3, "low", "3-head extrusion profiler"],
+      // Belotti — composite trimming twin/triple heads
+      ["Belotti",   "FLU MultiSpindle 2", "gantry", "HSK63", 24000, 30, 45, 110, 5000, "linear", "direct", 2, "low", "Twin-head composite trimming"],
+      ["Belotti",   "FLU MultiSpindle 3", "gantry", "HSK63", 24000, 30, 45, 110, 5000, "linear", "direct", 3, "low", "Triple-head composite trimming"],
+      // Handtmann — structural aluminum multi-spindle
+      ["Handtmann", "PBZ MultiSpindle 4", "gantry", "HSK63", 24000, 35, 75, 150, 4500, "linear", "direct", 4, "low", "4-head structural aluminum"],
+      // Jobs — Italian high-speed aero
+      ["Jobs",      "LinX 30",          "gantry", "HSK63",  30000, 60,  110,  220,  4500, "linear", "direct", 1, "low", "Linear-motor high-speed aero"],
+      ["Jobs",      "LinX 100",         "gantry", "HSK100", 18000, 75,  170,  295,  3000, "linear", "direct", 1, "low", "Large aero structures"],
+      // Breton — composite & aluminum gantries
+      ["Breton",    "Matrix",           "gantry", "HSK63",  24000, 45,  90,   180,  4000, "linear", "direct", 1, "low", "Composite & aluminum gantry"],
+      ["Breton",    "Matrix MultiSpindle 2", "gantry", "HSK63", 24000, 45, 90, 180, 4000, "linear", "direct", 2, "low", "Twin-head composite/aluminum"],
+    ];
+    for (const m of gantryMachines) {
+      const [brand, model, mtype, taper, maxRpm, hp, baseTq, peakTq, peakRpm, wayType, driveType, spindleCount, confidence, notes] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, machine_type, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, spindle_count)
+        SELECT $1, $2, $3, $4, $5, $6, $13, '{flood,tsc}', $7, $8, $9, $10, $11, $11, $12, $14
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE $1 || '%' AND model ILIKE $2)
+      `, [brand, model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq, peakTq, peakRpm, confidence, taper.startsWith("HSK"), spindleCount]);
     }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
