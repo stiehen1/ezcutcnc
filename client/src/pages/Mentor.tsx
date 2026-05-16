@@ -2692,7 +2692,12 @@ export default function Mentor() {
     return { wocPct: optWocPct, docXd: optDocXd, wocKey, docKey };
   }
 
-  function applySkuToForm(sku: SkuRecord) {
+  function applySkuToForm(sku: SkuRecord, opts?: { preserveCutParams?: boolean }) {
+    // preserveCutParams: used when swapping to a recommended tool — keep the user's
+    // prior DOC (as ×D ratio) and pre-fill WOC with the optimal value for the new
+    // tool's flute count. Without this flag, WOC/DOC are blanked (the SKU-picker default).
+    const _preserve = !!opts?.preserveCutParams;
+    const _priorDocXd = _preserve ? Number(form.doc_xd ?? 0) : 0;
     // Parse corner_condition: "square" | "ball" | number (CR in inches)
     const skuToolType = (sku.tool_type ?? "endmill").toLowerCase();
     const isChamfer = skuToolType === "chamfer_mill";
@@ -2729,13 +2734,27 @@ export default function Mentor() {
     setSkuDropdownOpen(false);
     setSkuResults([]);
     setSkuLocked(true);
-    // Leave WOC/DOC blank on SKU select — user should complete setup first, then hit Optimal
+    // Leave WOC/DOC blank on SKU select — user should complete setup first, then hit Optimal.
+    // When swapping to a recommended tool (preserveCutParams), keep prior DOC ×D and pre-fill
+    // WOC with the optimal value for the new tool's flute count in the current mode.
     const _skuDia = Number(sku.cutting_diameter_in);
     const _skuLoc = Number(sku.loc_in);
-    setWocText("");
-    setWocPreset(null);
-    setDocText("");
-    setDocPreset(null);
+    const _preserveOpt = _preserve
+      ? computeOptimalCutParams(form.mode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc, sku.geometry ?? "standard", sku.series ?? "")
+      : null;
+    const _preservedDocXd = _preserve && _priorDocXd > 0 ? _priorDocXd : 0;
+    const _preservedDocIn = _preservedDocXd > 0 ? _preservedDocXd * _skuDia : 0;
+    if (_preserve) {
+      setWocText(_preserveOpt ? ((_preserveOpt.wocPct / 100) * _skuDia).toFixed(4) : "");
+      setWocPreset(_preserveOpt?.wocKey ?? null);
+      setDocText(_preservedDocIn > 0 ? _preservedDocIn.toFixed(3) : "");
+      setDocPreset(null);
+    } else {
+      setWocText("");
+      setWocPreset(null);
+      setDocText("");
+      setDocPreset(null);
+    }
     setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
     setLocText(Number(sku.loc_in).toFixed(3));
     setStickoutText(defaultStickout != null ? defaultStickout.toFixed(3) : "");
@@ -2761,9 +2780,13 @@ export default function Mentor() {
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: _slotDia,
-      // Slot mode: pre-fill WOC/DOC (low = conservative default); otherwise leave blank.
-      woc_pct: _isSlotMode ? 100 : 0,
-      doc_xd: _isSlotMode ? getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard").doc.low : 0,
+      // Slot mode: pre-fill WOC/DOC (low = conservative default).
+      // preserveCutParams (tool swap): carry prior DOC ×D, set WOC to optimal for new flutes.
+      // Otherwise leave blank.
+      woc_pct: _isSlotMode ? 100 : (_preserve && _preserveOpt ? _preserveOpt.wocPct : 0),
+      doc_xd: _isSlotMode
+        ? getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard").doc.low
+        : (_preserve && _preservedDocXd > 0 ? _preservedDocXd : 0),
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
       lbs: sku.lbs_in ? Number(sku.lbs_in) : 0,
@@ -13259,7 +13282,7 @@ ${stabSection}
                   type="button"
                   className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
                   onClick={() => {
-                    applySkuToForm(recSku as any);
+                    applySkuToForm(recSku as any, { preserveCutParams: true });
                     setOptimalRec(null);
                     setTimeout(() => runRef.current(), 100);
                   }}
@@ -13445,7 +13468,7 @@ ${stabSection}
                                             const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
                                             const data: SkuRecord[] = await r.json();
                                             const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                            if (match) { applySkuToForm(match); setTimeout(() => runRef.current(), 100); }
+                                            if (match) { applySkuToForm(match, { preserveCutParams: true }); setTimeout(() => runRef.current(), 100); }
                                           } catch {}
                                         }}
                                       >{edp}</button>
