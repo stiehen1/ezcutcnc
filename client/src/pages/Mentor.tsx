@@ -2548,6 +2548,7 @@ export default function Mentor() {
   const [tmNeckText, setTmNeckText] = React.useState("");
   const [stickoutText, setStickoutText] = React.useState("");
   const [tmStickoutText, setTmStickoutText] = React.useState("");
+  const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
   const [stickoutViolation, setStickoutViolation] = React.useState<string | null>(null);
@@ -6013,8 +6014,13 @@ ${stabSection}
               </div>
             )}
 
-            {/* Feed Mill — Pocket Depth (optional) */}
-            {operation === "feedmill" && (
+            {/* Feed Mill — Pocket Depth (optional, requires uploaded print so LBS is known) */}
+            {operation === "feedmill" && form.lbs > 0 && (() => {
+              const reachCap = form.lbs;
+              const reachLabel = "LBS";
+              const typedDepth = parseDim(feedmillPocketDepthText);
+              const overCap = Number.isFinite(typedDepth) && typedDepth > reachCap;
+              return (
               <div className="mt-3 rounded-lg border border-cyan-700/40 bg-cyan-900/10 px-3 py-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-cyan-400">Deep Pocket Mode</span>
@@ -6022,12 +6028,24 @@ ${stabSection}
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1 space-y-1">
-                    <FieldLabel hint="Total pocket depth from surface to floor (inches). When set, the advisor calculates number of Z passes and estimated cycle time based on your DOC per pass.">Total Pocket Depth (in)</FieldLabel>
-                    <Input type="text" inputMode="decimal" className="no-spinners"
-                      placeholder="e.g. 2.500"
-                      value={form.feedmill_pocket_depth > 0 ? form.feedmill_pocket_depth.toFixed(3) : ""}
-                      onChange={(e) => { const n = parseDim(e.target.value); setForm(p => ({ ...p, feedmill_pocket_depth: Number.isFinite(n) && n > 0 ? n : 0 })); }}
+                    <FieldLabel hint={`Total pocket depth from surface to floor (inches). Cannot exceed the tool's ${reachLabel} (${reachCap.toFixed(3)}") — the non-cutting body would hit the floor. When set, the advisor calculates number of Z passes and estimated cycle time based on your DOC per pass.`}>Total Pocket Depth (in)</FieldLabel>
+                    <Input type="text" inputMode="decimal" className={`no-spinners ${overCap ? "border-amber-500" : ""}`}
+                      placeholder={`max ${reachCap.toFixed(3)}"`}
+                      value={feedmillPocketDepthText}
+                      onChange={(e) => setFeedmillPocketDepthText(e.target.value)}
+                      onBlur={() => {
+                        const n = parseDim(feedmillPocketDepthText);
+                        if (Number.isFinite(n) && n > 0) {
+                          const clamped = n > reachCap ? reachCap : n;
+                          setForm(p => ({ ...p, feedmill_pocket_depth: clamped }));
+                          setFeedmillPocketDepthText(clamped.toFixed(3));
+                        }
+                        else { setForm(p => ({ ...p, feedmill_pocket_depth: 0 })); setFeedmillPocketDepthText(""); }
+                      }}
                     />
+                    {overCap && (
+                      <p className="text-[10px] text-amber-400">Exceeds tool {reachLabel} ({reachCap.toFixed(3)}") — will clamp to {reachCap.toFixed(3)}" on blur.</p>
+                    )}
                   </div>
                   {form.feedmill_pocket_depth > 0 && form.feedmill_doc_in > 0 && (
                     <div className="flex-1 rounded border border-cyan-700/30 bg-zinc-900 px-3 py-2 space-y-0.5 self-end mb-0.5">
@@ -6043,7 +6061,8 @@ ${stabSection}
                   )}
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Machining Tips accordion — feed mill */}
             {operation === "feedmill" && (
