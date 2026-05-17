@@ -1039,6 +1039,16 @@ export async function registerRoutes(
         WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE $1 || '%' AND model ILIKE $2)
       `, [brand, model, maxRpm, hp, taper, driveType, mtype, wayType, baseTq, peakTq, peakRpm, confidence, taper.startsWith("HSK"), spindleCount]);
     }
+
+    // ── Makino V300 ──────────────────────────────────────────────────────────
+    // Precision die-mold VMC. 20k HSK-A63 direct-drive spindle, dual-contact (HSK).
+    // Travels X650/Y450/Z350 mm = 25.6/17.7/13.8 in. Linear roller guides.
+    // Torque inferred from 30 HP / 20k class curve (no published full curve).
+    await pool.query(`
+      INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, x_travel_in, y_travel_in, z_travel_in, machine_type, control, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence)
+      SELECT 'Makino', 'V300', 20000, 30, 'HSK-A63', 'direct', true, '{flood,tsc}', 1000, 25.6, 17.7, 13.8, 'vmc', 'Pro 5', 'linear', 75, 140, 6000, 6000, 'low'
+      WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Makino' AND model ILIKE 'V300')
+    `);
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
