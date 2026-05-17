@@ -2935,7 +2935,7 @@ export default function Mentor() {
     if (!(form.machine_hp > 0)) missing.push("Machine HP");
     if (!(form.max_rpm > 0)) missing.push("Max RPM");
     if (form.mode !== "deep_pocket" && !(form.tool_dia > 0)) missing.push("Tool Diameter");
-    if (form.tool_type === "chamfer_mill") {
+    if (operation === "milling" && form.tool_type === "chamfer_mill") {
       if (!(form.flutes > 0)) missing.push("Flute Count");
       if (!(form.chamfer_angle > 0)) missing.push("Chamfer Angle");
       if (!(form.chamfer_depth > 0)) missing.push("Chamfer Depth");
@@ -4795,7 +4795,16 @@ ${stabSection}
                         ...p,
                         operation: op as any,
                         ...(op === "milling" ? { mode: "" } : {}),
+                        // Clear chamfer-mill state when leaving Milling — the Endmill/Chamfer Mill
+                        // toggle is only rendered under Milling, so stale tool_type would block runs.
+                        ...(op !== "milling" && p.tool_type === "chamfer_mill"
+                          ? { tool_type: "endmill" as const, chamfer_angle: 90, chamfer_tip_dia: 0, chamfer_depth: 0 }
+                          : {}),
                       }));
+                      if (op !== "milling") {
+                        setChamferTipDiaText("");
+                        setChamferDepthText("");
+                      }
                     }}
                     className="rounded-lg flex flex-col items-center justify-between px-2 py-2.5 text-[10px] font-semibold border transition-all flex-1"
                     style={{
