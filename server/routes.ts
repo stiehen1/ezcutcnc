@@ -4388,8 +4388,9 @@ CRITICAL RULES — READ CAREFULLY:
 
 4. For DOVETAIL cutters specifically:
    - dovetail_angle = the INCLUDED angle of the dovetail V-form. This is the FULL angle, NOT the half-angle. If the print shows 30° on one side of the V, the included angle is 60°. If it shows 45° on one side, the included is 90°. Look for the angle labeled at the V-groove or cutting tip — use the largest angle shown at the cutting form as the included angle.
-   - lbs = the REACH/TSC dimension (distance from shank face to cutter zone, labeled TSC, e.g. ".625+.06/-.00 TSC" → 0.625)
-   - keyseat_arbor_dia = the narrow neck diameter between the shank and the cutting head (e.g. "Ø0.200" neck → 0.200)
+   - lbs = the NECK / REACH dimension (distance from shank face to the cutting head along the narrow neck). This is the SHORT horizontal length callout that brackets ONLY the necked-down section between the shank and the cutting wheel — NOT the OAL and NOT the LOC. It is sometimes labeled "TSC" (e.g. ".625+.06/-.00 TSC") but on many dovetail prints it is shown as an UNLABELED length dimension on the neck (e.g. ".97+.06/-.00"). On a typical dovetail you will see THREE horizontal dimensions stacked near the cutting end: (a) the OAL spanning the full tool — IGNORE for lbs, (b) the neck length spanning shank step to cutter back face — THIS is lbs, (c) the LOC bracketing only the cutting wheel thickness — this is loc. lbs > loc; lbs < OAL.
+   - keyseat_arbor_dia = the narrow neck diameter between the shank and the cutting head (e.g. "Ø0.750" neck → 0.750). This is the small Ø callout on the neck shaft, NOT the cutting wheel diameter.
+   - corner_radius = the R callout on the cutting wheel profile (e.g. "R.234" → 0.234). Dovetail cutters often have a corner radius at the wheel periphery — if you see an R.XXX callout on the cutting head (bold profile lines), extract it and set corner_condition = "corner_radius". Do NOT confuse with R callouts on the neck-to-wheel transition fillet (e.g. "R.083") — only extract the R on the cutting profile itself.
 
 5. keyseat_arbor_dia is the small narrow neck connecting the cutter disc/head to the shank — applies to both keyseat AND dovetail cutters.
 

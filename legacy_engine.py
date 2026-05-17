@@ -2896,22 +2896,33 @@ def run_dovetail(payload: dict) -> dict:
     arbor_dia      = float(payload.get("keyseat_arbor_dia", 0.0) or 0.0)
     stickout       = float(payload.get("stickout", 2.0) or 2.0)
     dovetail_angle = float(payload.get("dovetail_angle", 60.0) or 60.0)
+    corner_r       = float(payload.get("corner_radius", 0.0) or 0.0)
     doc_xd         = float(payload.get("doc_xd", 0.5) or 0.5)
     doc_in         = doc_xd * D
     final_slot_depth = float(payload.get("final_slot_depth", 0.0) or 0.0)
     flute_reach    = (D - arbor_dia) / 2.0 if arbor_dia > 0 else D / 2.0
-    if final_slot_depth > flute_reach:
-        final_slot_depth = flute_reach
+    # Corner radius reduces effective radial reach by R (the rounded shoulder eats into the wall depth).
+    effective_flute_reach = max(0.001, flute_reach - corner_r)
+    if final_slot_depth > effective_flute_reach:
+        final_slot_depth = effective_flute_reach
     mat            = str(payload.get("material", "steel_alloy") or "steel_alloy")
     mat_group      = get_material_group(mat)
 
     # Material toughness factor for pass depth conservatism
     _mat_factor = {"Aluminum": 1.0, "Steel": 1.5, "Stainless": 1.75,
                    "Inconel": 2.5, "Titanium": 2.0, "Cast Iron": 1.3}.get(mat_group, 1.5)
+    # Hardness bump: above 35 HRC, add up to 0.5× more conservatism (saturates at 55 HRC)
+    if hrc >= 35:
+        _mat_factor *= 1.0 + min(0.5, (hrc - 35) / 40.0)
     # Reach penalty: longer reach (lbs) relative to arbor dia = more flex risk
     _reach_factor = 1.0 + (lbs / (arbor_dia * 8.0)) if (arbor_dia > 0 and lbs > 0) else 1.0
+    # Head-to-neck leverage ratio: a wide cutting head on a narrow neck (mushroom shape)
+    # amplifies bending stress at the neck root. Ratio 1.0 = straight cylinder; 2.0+ = mushroom.
+    # Penalty is squared above 1.0 to capture the cantilever-load amplification.
+    head_neck_ratio = (D / arbor_dia) if arbor_dia > 0 else 1.0
+    _head_factor = 1.0 + max(0.0, (head_neck_ratio - 1.0) ** 2) * 0.40
     # Max safe DOC per pass (dovetail: slightly more conservative than keyseat due to angled forces)
-    max_safe_doc = (flute_reach / 2.0) / (_mat_factor * _reach_factor * 1.15)
+    max_safe_doc = (flute_reach / 2.0) / (_mat_factor * _reach_factor * _head_factor * 1.15)
     max_safe_doc = max(0.005, min(max_safe_doc, flute_reach))  # clamp: min 0.005", max flute_reach
 
     max_rpm        = float(payload.get("max_rpm", 12000) or 12000)
@@ -2989,23 +3000,95 @@ def run_dovetail(payload: dict) -> dict:
             f"Reduce stickout, take lighter passes, or use a stiffer toolholder."
         )
 
+    # Pre-rough recipe — dovetail cutters cannot plunge; the slot must be opened
+    # first with a standard endmill. Leave radial stock for the dovetail to finish.
+    # Stock per side scales with material toughness so harder material doesn't
+    # bog the dovetail neck on first contact.
+    pre_rough_stock_per_side = {
+        "Aluminum":  0.015,
+        "Steel":     0.010,
+        "Stainless": 0.008,
+        "Inconel":   0.006,
+        "Titanium":  0.006,
+        "Cast Iron": 0.010,
+    }.get(mat_group, 0.010)
+    # Pre-rough endmill: slightly narrower than the neck to clear it, with stock per side.
+    # Width = neck_dia − 2× stock; if neck dia unknown, fall back to D × 0.40.
+    pre_rough_slot_width = (arbor_dia - 2 * pre_rough_stock_per_side) if arbor_dia > 0 else (D * 0.40)
+    pre_rough_slot_width = max(0.030, pre_rough_slot_width)
+    # Pre-rough endmill diameter: use ~70% of slot width so chip evacuation works.
+    pre_rough_endmill_dia = max(0.030, pre_rough_slot_width * 0.70)
+    # Round to a sensible fractional/decimal size for shop use
+    _sizes = [0.0625, 0.094, 0.125, 0.156, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.625, 0.750]
+    pre_rough_endmill_dia = max([s for s in _sizes if s <= pre_rough_endmill_dia] or [_sizes[0]])
+    pre_rough = {
+        "stock_per_side_in":   round(pre_rough_stock_per_side, 4),
+        "slot_width_in":       round(pre_rough_slot_width, 4),
+        "endmill_dia_in":      round(pre_rough_endmill_dia, 4),
+        "axial_depth_in":      round(final_slot_depth, 4) if final_slot_depth > 0 else None,
+        "note": (
+            f"Open the slot first with a standard {pre_rough_endmill_dia:.3f}\" endmill, "
+            f"leaving {pre_rough_stock_per_side*1000:.0f} thou of radial stock per side "
+            f"for the dovetail to finish. Pre-rough the full axial depth so the dovetail "
+            f"engages only on the angled walls — it must never plunge."
+        ),
+    }
+
     # Multi-pass strategy
     multi_pass = None
     if final_slot_depth > 0:
         num_passes = max(1, math.ceil(final_slot_depth / max_safe_doc))
         depth_per_pass = final_slot_depth / num_passes
+
+        # Per-pass direction plan:
+        # Convention here treats the dovetail as forming TWO angled walls (Side A and Side B).
+        # Climb-mill both walls one at a time: cut Side A in N passes, retract, cut Side B in N passes.
+        # This gives both walls the chip-thinning + finish benefit and avoids reversing the load on
+        # the neck mid-pass.
+        passes = []
+        for i in range(num_passes):
+            is_finish = (i == num_passes - 1)
+            cumulative_depth = round(depth_per_pass * (i + 1), 4)
+            passes.append({
+                "index":             i + 1,
+                "depth_in":          round(depth_per_pass, 4),
+                "cumulative_in":     cumulative_depth,
+                "side_a_direction":  "climb",
+                "side_b_direction":  "climb",
+                "is_finish":         is_finish,
+                "note": (
+                    f"Pass {i+1}: climb-mill Side A to {cumulative_depth:.4f}\" wall depth, "
+                    f"retract, then climb-mill Side B to the same depth."
+                    + (" Final pass — back off feed 10–15% for finish." if is_finish and num_passes > 1 else "")
+                ),
+            })
+
         multi_pass = {
-            "final_slot_depth_in": round(final_slot_depth, 4),
-            "max_safe_doc_in":     round(max_safe_doc, 4),
-            "num_passes":          num_passes,
-            "depth_per_pass_in":   round(depth_per_pass, 4),
-            "aggressive":          doc_in > max_safe_doc,
+            "final_slot_depth_in":  round(final_slot_depth, 4),
+            "max_safe_doc_in":      round(max_safe_doc, 4),
+            "num_passes":           num_passes,
+            "depth_per_pass_in":    round(depth_per_pass, 4),
+            "aggressive":           doc_in > max_safe_doc,
+            "head_neck_ratio":      round(head_neck_ratio, 2),
+            "head_factor":          round(_head_factor, 2),
+            "mat_factor":           round(_mat_factor, 2),
+            "reach_factor":         round(_reach_factor, 2),
+            "pre_rough":            pre_rough,
+            "passes":               passes,
+            "direction_strategy":   "climb_both_walls",
         }
         if num_passes > 1:
             notes.append(
-                f"Multi-pass strategy recommended: {num_passes} passes of {depth_per_pass:.4f}\" each "
-                f"to reach {final_slot_depth:.4f}\" final slot depth. "
+                f"Multi-pass strategy: {num_passes} passes of {depth_per_pass:.4f}\" each "
+                f"to reach {final_slot_depth:.4f}\" final wall depth. Climb-mill Side A in {num_passes} steps, "
+                f"retract, then climb-mill Side B the same way. "
                 f"Max safe pass depth for this tool/material: {max_safe_doc:.4f}\"."
+            )
+        if head_neck_ratio >= 1.75:
+            notes.append(
+                f"Mushroom geometry — head/neck ratio is {head_neck_ratio:.2f}× "
+                f"(Ø{D:.3f}\" head on Ø{arbor_dia:.3f}\" neck). "
+                f"Pass depth derated to protect the neck root. Keep stickout minimum and use a hydraulic or shrink-fit holder."
             )
         if doc_in > max_safe_doc * 1.25:
             notes.append(
@@ -3019,6 +3102,11 @@ def run_dovetail(payload: dict) -> dict:
         "Climb milling direction for better finish on the angled walls.",
         "Keep the tool as short as possible — dovetail cutters are very sensitive to stickout.",
     ]
+    if corner_r > 0:
+        tips.append(
+            f"Corner radius R{corner_r:.3f}\" on the cutting wheel — effective wall reach is "
+            f"{effective_flute_reach:.4f}\" (flute reach {flute_reach:.4f}\" minus the rounded shoulder)."
+        )
 
     return {
         "customer": {
@@ -3059,18 +3147,24 @@ def run_dovetail(payload: dict) -> dict:
             "torque_pct":            None,
         },
         "stability": {
-            "deflection_in":  round(deflection, 5),
-            "stability_pct":  stability_pct,
-            "suggestions":    [],
+            "stickout_in":         round(stickout, 4),
+            "l_over_d":            round(stickout / D, 2) if D > 0 else 0,
+            "deflection_in":       round(deflection, 5),
+            "deflection_limit_in": 0.001,
+            "deflection_pct":      round((deflection / 0.001) * 100.0, 1),
+            "stability_pct":       stability_pct,
+            "suggestions":         [],
         },
         "dovetail": {
-            "dovetail_angle_deg": dovetail_angle,
-            "doc_in":             round(doc_in, 4),
-            "max_safe_doc_in":    round(max_safe_doc, 4),
-            "flute_reach_in":     round(flute_reach, 4),
-            "lead_ctf":           round(lead_ctf, 3),
-            "multi_pass":         multi_pass,
-            "tips":               tips,
+            "dovetail_angle_deg":       dovetail_angle,
+            "doc_in":                   round(doc_in, 4),
+            "max_safe_doc_in":          round(max_safe_doc, 4),
+            "flute_reach_in":           round(flute_reach, 4),
+            "effective_flute_reach_in": round(effective_flute_reach, 4),
+            "corner_radius_in":         round(corner_r, 4) if corner_r > 0 else None,
+            "lead_ctf":                 round(lead_ctf, 3),
+            "multi_pass":               multi_pass,
+            "tips":                     tips,
         },
         "debug": None,
     }
