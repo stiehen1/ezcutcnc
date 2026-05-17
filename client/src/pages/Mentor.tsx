@@ -5861,6 +5861,20 @@ ${stabSection}
                   />
                 </div>
                 <div className="space-y-2">
+                  <FieldLabel hint="Corner radius on the cutting wheel (R callout on the cutting profile). 0 if a sharp/square dovetail. Auto-extracted from the print when present.">Corner Radius (in)</FieldLabel>
+                  <Input type="text" inputMode="decimal" className="no-spinners"
+                    placeholder="e.g. 0.030 (0 if sharp)"
+                    value={crText}
+                    onChange={(e) => setCrText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(crText);
+                      if (!Number.isFinite(n) || n < 0) { setForm((p) => ({ ...p, corner_radius: 0, corner_condition: "square" })); setCrText(""); return; }
+                      setForm((p) => ({ ...p, corner_radius: n, corner_condition: n > 0 ? "corner_radius" : "square" }));
+                      setCrText(n > 0 ? n.toFixed(4) : "");
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
                   <FieldLabel hint="How far the cutter steps radially into the dovetail wall per pass. Dovetail cutters always enter laterally — they feed in from outside the part or a pre-slotted pocket, never plunge. Keep this conservative; the neck is narrower than the cutting head and limits how aggressively you can engage.">Radial Pass Depth (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.050"}
@@ -5874,9 +5888,11 @@ ${stabSection}
                       const n = parseFloat(e.target.value);
                       if (!Number.isFinite(n) || n <= 0) return;
                       const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
-                      if (n > maxDepth) {
+                      if (n > maxDepth + 0.0005) {
                         setForm((p) => ({ ...p, doc_xd: maxDepth / p.tool_dia }));
                         toast({ title: "Radial pass depth capped", description: `Max radial depth for this tool is ${maxDepth.toFixed(4)}" — limited by (cutter dia − neck dia) / 2.`, variant: "destructive" });
+                      } else if (n > maxDepth) {
+                        setForm((p) => ({ ...p, doc_xd: maxDepth / p.tool_dia }));
                       }
                     }}
                   />
@@ -5888,16 +5904,19 @@ ${stabSection}
                   <span className="text-yellow-400 animate-pulse font-semibold">⚠ Final Wall Depth (in)</span>
                 </FieldLabel>
                 <Input type="text" inputMode="decimal" className={`no-spinners ${form.final_slot_depth === 0 ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse placeholder-yellow-600/60" : "border-zinc-600"}`}
-                  placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${((form.tool_dia - form.keyseat_arbor_dia) / 2).toFixed(4)}"` : "e.g. 0.250"}
+                  placeholder={form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? `max ${Math.max(0, ((form.tool_dia - form.keyseat_arbor_dia) / 2) - (form.corner_radius || 0)).toFixed(4)}"` : "e.g. 0.250"}
                   value={finalSlotDepthText}
                   onChange={(e) => setFinalSlotDepthText(e.target.value)}
                   onBlur={() => {
                     let n = parseFloat(finalSlotDepthText);
                     if (!Number.isFinite(n) || n <= 0) { setForm((p) => ({ ...p, final_slot_depth: 0 })); setFinalSlotDepthText(""); return; }
-                    const maxDepth = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
-                    if (n > maxDepth) {
+                    const fluteReach = form.tool_dia > 0 && form.keyseat_arbor_dia > 0 ? (form.tool_dia - form.keyseat_arbor_dia) / 2 : Infinity;
+                    const maxDepth = Number.isFinite(fluteReach) ? Math.max(0, fluteReach - (form.corner_radius || 0)) : Infinity;
+                    if (n > maxDepth + 0.0005) {
                       n = maxDepth;
-                      toast({ title: "Final slot depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by flute reach (cut dia − neck dia) / 2.`, variant: "destructive" });
+                      toast({ title: "Final slot depth capped", description: `Max depth for this tool is ${maxDepth.toFixed(4)}" — limited by flute reach (cut dia − neck dia)/2${form.corner_radius > 0 ? ` minus the R${form.corner_radius.toFixed(3)}" corner` : ""}.`, variant: "destructive" });
+                    } else if (n > maxDepth) {
+                      n = maxDepth;
                     }
                     setForm((p) => ({ ...p, final_slot_depth: n }));
                     setFinalSlotDepthText(n.toFixed(4));
@@ -11844,29 +11863,68 @@ ${stabSection}
                 const n = mp.num_passes;
                 const d = mp.depth_per_pass_in;
                 const total = mp.final_slot_depth_in;
-                const passes = Array.from({ length: n }, (_, i) => ({
-                  label: n === 1 ? "Pass 1 (single pass)" : i < n - 1 ? `Pass ${i + 1} (roughing)` : `Pass ${n} (finish)`,
-                  doc: d,
+                const enginePasses: any[] = Array.isArray(mp.passes) ? mp.passes : [];
+                const passes = enginePasses.length > 0 ? enginePasses : Array.from({ length: n }, (_, i) => ({
+                  index: i + 1,
+                  depth_in: d,
+                  cumulative_in: d * (i + 1),
+                  side_a_direction: "climb",
+                  side_b_direction: "climb",
+                  is_finish: i === n - 1,
+                  note: "",
                 }));
+                const mushroom = (mp.head_neck_ratio ?? 1) >= 1.75;
                 return (
-                  <div className={`mb-3 rounded-xl border px-4 py-3 space-y-2 ${mp.aggressive ? "border-red-500/40 bg-red-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}>
+                  <div className={`mb-3 rounded-xl border px-4 py-3 space-y-3 ${mp.aggressive ? "border-red-500/40 bg-red-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}>
                     <div className={`text-xs font-bold uppercase tracking-widest ${mp.aggressive ? "text-red-400" : "text-yellow-400"}`}>
                       Multi-Pass Strategy{mp.aggressive ? " ⚠ Aggressive DOC" : ""}
                     </div>
-                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-1">
-                      <div><span className="text-muted-foreground">Total Depth</span><span className="ml-2 font-semibold">{total.toFixed(4)}"</span></div>
-                      <div><span className="text-muted-foreground">Passes</span><span className="ml-2 font-semibold">{n}</span></div>
-                      <div><span className="text-muted-foreground">Depth/Pass</span><span className="ml-2 font-semibold">{d.toFixed(4)}"</span></div>
-                    </div>
-                    <div className="space-y-1">
-                      {passes.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${i === n - 1 && n > 1 ? "bg-green-400" : "bg-yellow-400"}`} />
-                          <span className="text-zinc-300">{p.label}</span>
-                          <span className="ml-auto text-zinc-400">{p.doc.toFixed(4)}"</span>
+
+                    {/* Pre-rough recipe */}
+                    {mp.pre_rough && (
+                      <div className="rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 space-y-1">
+                        <div className="text-[11px] font-bold uppercase tracking-widest text-blue-400">Step 1 — Pre-Rough with Standard Endmill</div>
+                        <div className="grid grid-cols-3 gap-x-3 gap-y-1 text-xs">
+                          <div><span className="text-muted-foreground">Endmill Ø</span><span className="ml-1 font-semibold">{mp.pre_rough.endmill_dia_in.toFixed(3)}"</span></div>
+                          <div><span className="text-muted-foreground">Slot Width</span><span className="ml-1 font-semibold">{mp.pre_rough.slot_width_in.toFixed(4)}"</span></div>
+                          <div><span className="text-muted-foreground">Stock/Side</span><span className="ml-1 font-semibold">{(mp.pre_rough.stock_per_side_in * 1000).toFixed(0)} thou</span></div>
                         </div>
-                      ))}
+                        <p className="text-xs text-muted-foreground leading-relaxed">{mp.pre_rough.note}</p>
+                      </div>
+                    )}
+
+                    {/* Dovetail pass plan */}
+                    <div className="rounded-md border border-indigo-500/30 bg-indigo-500/5 px-3 py-2 space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Step 2 — Dovetail Form</div>
+                      <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                        <div><span className="text-muted-foreground">Total Depth</span><span className="ml-2 font-semibold">{total.toFixed(4)}"</span></div>
+                        <div><span className="text-muted-foreground">Passes/Side</span><span className="ml-2 font-semibold">{n}</span></div>
+                        <div><span className="text-muted-foreground">Depth/Pass</span><span className="ml-2 font-semibold">{d.toFixed(4)}"</span></div>
+                      </div>
+                      {(mp.head_neck_ratio != null) && (
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Head/Neck Ratio</span>
+                          <span className={`ml-2 font-semibold ${mushroom ? "text-amber-400" : "text-zinc-200"}`}>{mp.head_neck_ratio.toFixed(2)}×</span>
+                          {mushroom && <span className="ml-2 text-amber-400">⚠ mushroom geometry — pass depth derated</span>}
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {passes.map((p: any, i: number) => (
+                          <div key={i} className="text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.is_finish && n > 1 ? "bg-green-400" : "bg-yellow-400"}`} />
+                              <span className="text-zinc-200 font-semibold">Pass {p.index}{p.is_finish && n > 1 ? " (finish)" : ""}</span>
+                              <span className="ml-auto text-zinc-400">{p.depth_in.toFixed(4)}" → cum {p.cumulative_in.toFixed(4)}"</span>
+                            </div>
+                            <div className="ml-4 text-muted-foreground">{p.note}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
+                        Climb-mill Side A in {n} step{n === 1 ? "" : "s"}, retract, then climb-mill Side B the same way. Climb both walls — never reverse direction mid-pass on a dovetail neck.
+                      </p>
                     </div>
+
                     {mp.aggressive && (
                       <p className="text-xs text-red-400 leading-relaxed">⚠ Current pass depth exceeds recommended safe limit. Consider reducing Cut Pass Depth to {mp.max_safe_doc_in.toFixed(4)}" or less.</p>
                     )}
