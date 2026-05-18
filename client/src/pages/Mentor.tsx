@@ -12387,11 +12387,11 @@ ${stabSection}
                 {customer.peripheral_feed_ipm != null && (
                   <Kpi
                     label={UL("Peripheral Feed (ref)", "Peripheral Feed (ref)")}
-                    hint={form.mode === "circ_interp" ? "Reference only — what the cutting edge sees at the wall once the tool orbits the bore. Do NOT program this value unless your CAM is in TCP / feed-at-tool-tip mode. Verifies the actual chip load." : "Peripheral feed at the wall."}
+                    hint={form.mode === "circ_interp" ? "Reference only — feed the cutting edge actually sees as the tool orbits the bore. Verifies chip load. Do NOT program this value unless your CAM is in TCP / feed-at-tool-tip mode." : "Peripheral feed at the cutting edge."}
                     value={
                       <span className="text-zinc-400">
                         {UC(customer.peripheral_feed_ipm, 25.4, metric ? 1 : 2)}
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">at wall</span>
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">at edge</span>
                       </span>
                     }
                   />
@@ -12494,8 +12494,8 @@ ${stabSection}
                   }
                 />
                 <Kpi
-                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "surfacing" ? UL("Stepover ae (in)", "Stepover ae (mm)") : form.mode === "circ_interp" ? UL("Radial Wall ae (in)", "Radial Wall ae (mm)") : UL("WOC (in)", "WOC (mm)")}
-                  hint={form.mode === "circ_interp" ? "Total radial stock to remove = (target bore − existing bore) ÷ 2. This is the total wall the tool must interpolate through, split across radial passes." : undefined}
+                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "surfacing" ? UL("Stepover ae (in)", "Stepover ae (mm)") : form.mode === "circ_interp" ? UL("Stock to Remove (in)", "Stock to Remove (mm)") : UL("WOC (in)", "WOC (mm)")}
+                  hint={form.mode === "circ_interp" ? "Stock removed per side = (target bore − existing bore) ÷ 2. The engine splits this across radial passes (see Radial Step / Pass)." : undefined}
                   value={
                     <>
                       {form.mode === "circ_interp" && customer.ci_a_e_in != null
