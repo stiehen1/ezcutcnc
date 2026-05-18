@@ -1342,7 +1342,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                   placeholder="e.g. 1.000"
                   value={axialDepth}
                   onChange={e => setAxialDepth(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="no-spinners w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 {(() => {
                   const d = parseFloat(axialDepth);
@@ -1373,7 +1373,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       setSelDias(prev => prev.filter(d => d < cr * 2));
                     }
                   }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="no-spinners w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 {(() => {
                   const cr = parseFloat(partCornerRadius);
@@ -1407,7 +1407,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                   placeholder="e.g. 0.030"
                   value={maxFloorRadius}
                   onChange={e => setMaxFloorRadius(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="no-spinners w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 {(() => {
                   const fr = parseFloat(maxFloorRadius);
@@ -1439,7 +1439,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                 placeholder="e.g. 0.125"
                 value={reqChamferLength}
                 onChange={e => setReqChamferLength(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="no-spinners w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
 
@@ -1504,6 +1504,18 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
             Clear All
           </button>
         </div>
+        {selToolTypes[0] === "chamfer_mill" && (
+          <p className="text-xs text-yellow-400 pt-2">
+            Not finding the exact chamfer mill combination you need?{" "}
+            <a href="mailto:sales@corecutterusa.com" className="underline hover:text-yellow-300">We can quote special configurations easily.</a>
+          </p>
+        )}
+        {selToolTypes[0] === "endmill" && (
+          <p className="text-xs text-yellow-400 pt-2">
+            Not finding the exact endmill combination you need?{" "}
+            <a href="mailto:sales@corecutterusa.com" className="underline hover:text-yellow-300">We can quote special configurations easily.</a>
+          </p>
+        )}
       </div>
 
       {/* ── Error ── */}
