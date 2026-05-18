@@ -520,26 +520,26 @@ CMH_MIN_CHIP_FRAC    = 0.30   # 30% of base ipt_frac × body_dia
 # (15% pullback from catalog max for conservative starting point).
 CHAMFER_IPT_MULT = {
     # Group fallbacks
-    "Aluminum":            1.75,
-    "Non-Ferrous":         1.75,
-    "Abrasive Non-Ferrous": 1.45,
-    "Plastics":            1.75,
+    "Aluminum":            1.15,
+    "Non-Ferrous":         1.20,
+    "Abrasive Non-Ferrous": 1.20,
+    "Plastics":            1.15,
     "Steel":               1.75,
     "Stainless":           1.75,
     "Cast Iron":           1.55,
     "Titanium":            1.35,
-    "Inconel":             1.15,
-    # Aluminum / non-ferrous / plastic
-    "aluminum_wrought":    1.75,
-    "aluminum_wrought_hs": 1.75,
-    "aluminum_cast":       1.75,
-    "plastic_unfilled":    1.75,
-    "plastic_filled":      1.55,
-    "composite_tpc":       1.35,
-    "non_ferrous":         1.75,
-    "manganese_bronze":    1.45,
-    "silicon_bronze":      1.45,
-    "copper_beryllium":    1.35,
+    "Inconel":             1.30,
+    # Aluminum / non-ferrous / plastic — IPT_FRAC already aggressive, minimal chamfer headroom
+    "aluminum_wrought":    1.15,   # 1/2" chamfer target ~0.006 fpt @ 0.0090 IPT_FRAC
+    "aluminum_wrought_hs": 1.15,
+    "aluminum_cast":       1.15,
+    "plastic_unfilled":    1.15,
+    "plastic_filled":      1.10,
+    "composite_tpc":       1.05,
+    "non_ferrous":         1.20,
+    "manganese_bronze":    1.20,
+    "silicon_bronze":      1.20,
+    "copper_beryllium":    1.10,
     # Carbon / alloy / free-machining steels
     "steel_mild":          1.75,
     "steel_free":          1.75,
@@ -575,17 +575,17 @@ CHAMFER_IPT_MULT = {
     "titanium_cp":         1.35,
     "titanium_64":         1.35,
     "titanium":            1.35,
-    # HRSA / superalloys — edge-strength limit; minimal headroom over endmill
-    "monel_k500":          1.45,
-    "inconel_625":         1.15,
-    "inconel_718":         1.15,
-    "inconel_617":         1.15,
-    "hastelloy_x":         1.15,
-    "waspaloy":            1.10,
-    "mp35n":               1.10,
-    "hiTemp_fe":           1.15,
-    "hiTemp_co":           1.10,
-    "inconel":             1.15,
+    # HRSA / superalloys — edge-strength limit; modest headroom over endmill (+10–15%)
+    "monel_k500":          1.60,
+    "inconel_625":         1.30,
+    "inconel_718":         1.30,
+    "inconel_617":         1.30,
+    "hastelloy_x":         1.30,
+    "waspaloy":            1.25,
+    "mp35n":               1.25,
+    "hiTemp_fe":           1.30,
+    "hiTemp_co":           1.25,
+    "inconel":             1.30,
     # Hardened — carbide corner protection critical
     "hardened_lt55":       1.20,
     "hardened_gt55":       1.10,
@@ -1679,6 +1679,17 @@ def run_chamfer_mill(payload: dict) -> dict:
 
     feed_ipm = rpm * ipt * flutes
 
+    # Practical feed ceiling — beyond ~250 IPM, servo response and finish degrade
+    # on most machines, and rapid-traverse limits typically govern. Cap and
+    # back-solve ipt so the displayed chip load matches what's actually commanded.
+    CHAMFER_MAX_FEED_IPM = 250.0
+    if feed_ipm > CHAMFER_MAX_FEED_IPM:
+        feed_ipm = CHAMFER_MAX_FEED_IPM
+        ipt = feed_ipm / max(1.0, rpm * flutes)
+        notes_feed_capped = True
+    else:
+        notes_feed_capped = False
+
     # HP estimate — chamfer geometry is triangular, not rectangular.
     # WOC grows with depth: actual_woc = depth × tan(half_angle) = (D_eff - tip_dia) / 2
     # Cross-section removed is a triangle → MRR = 0.5 × woc × depth × feed
@@ -1777,6 +1788,11 @@ def run_chamfer_mill(payload: dict) -> dict:
         notes.append(
             f"⚠ Chip load ({ipt:.5f}\") is below CMH minimum ({cmh_min_ipt:.5f}\"). "
             f"The tip flat will rub rather than cut — increase feed or chamfer depth."
+        )
+    if notes_feed_capped:
+        notes.append(
+            f"Feed capped at {CHAMFER_MAX_FEED_IPM:.0f} IPM — servo response and finish degrade "
+            f"beyond this on most machines, and rapid-traverse limits typically govern."
         )
 
     # Contextual tips
