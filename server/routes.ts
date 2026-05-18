@@ -1420,20 +1420,79 @@ export async function registerRoutes(
       const MAX_FLUTES_FILTER = (maxFlutesRaw && !isNaN(maxFlutesRaw)) ? ` AND s.flutes <= ${maxFlutesRaw}` : "";
       const minFlutesRaw = req.query.min_flutes ? parseInt(String(req.query.min_flutes)) : null;
       const MIN_FLUTES_FILTER = (minFlutesRaw && !isNaN(minFlutesRaw)) ? ` AND s.flutes >= ${minFlutesRaw}` : "";
+      const celRaw = req.query.required_chamfer_length ? parseFloat(String(req.query.required_chamfer_length)) : null;
+      const CEL_FILTER = (celRaw && !isNaN(celRaw) && celRaw > 0) ? ` AND s.max_cutting_edge_length >= ${celRaw}` : "";
+
+      // Cross-filter inputs from other dropdowns (each excluded from its own dropdown query)
+      const seriesRaw = req.query.series ? String(req.query.series).split(",").map(s => s.trim()).filter(Boolean) : [];
+      const SERIES_FILTER = seriesRaw.length
+        ? ` AND s.series = ANY(ARRAY[${seriesRaw.map(s => `'${s.replace(/'/g, "''")}'`).join(",")}]::text[])`
+        : "";
+      const flutesRaw = req.query.flutes ? String(req.query.flutes).split(",").map(Number).filter(n => !isNaN(n)) : [];
+      const FLUTES_FILTER = flutesRaw.length
+        ? ` AND s.flutes = ANY(ARRAY[${flutesRaw.join(",")}]::int[])`
+        : "";
+      const locRaw = req.query.loc ? String(req.query.loc).split(",").map(Number).filter(n => !isNaN(n)) : [];
+      const LOC_FILTER = locRaw.length
+        ? ` AND s.loc_in = ANY(ARRAY[${locRaw.join(",")}]::float[])`
+        : "";
+      const cornerRaw = req.query.corner ? String(req.query.corner).split(",").map(s => s.trim()).filter(Boolean) : [];
+      const CORNER_FILTER = cornerRaw.length
+        ? ` AND s.corner_condition = ANY(ARRAY[${cornerRaw.map(s => `'${s.replace(/'/g, "''")}'`).join(",")}]::text[])`
+        : "";
+      const coatingRaw = req.query.coating ? String(req.query.coating).split(",").map(s => s.trim()).filter(Boolean) : [];
+      const COATING_FILTER = coatingRaw.length
+        ? ` AND s.coating = ANY(ARRAY[${coatingRaw.map(s => `'${s.replace(/'/g, "''")}'`).join(",")}]::text[])`
+        : "";
+      const geomRaw = req.query.geometry ? String(req.query.geometry).split(",").map(s => s.trim()).filter(Boolean) : [];
+      const GEOM_FILTER = geomRaw.length
+        ? ` AND s.geometry = ANY(ARRAY[${geomRaw.map(s => `'${s.replace(/'/g, "''")}'`).join(",")}]::text[])`
+        : "";
+      const ccRaw = req.query.center_cutting ? String(req.query.center_cutting) : "all";
+      const CC_FILTER = ccRaw === "yes" ? ` AND s.center_cutting = TRUE`
+                      : ccRaw === "no"  ? ` AND s.center_cutting = FALSE`
+                      : "";
+      const chAngleRaw = req.query.chamfer_angle ? String(req.query.chamfer_angle).split(",").map(Number).filter(n => !isNaN(n)) : [];
+      const CHANGLE_FILTER = chAngleRaw.length
+        ? ` AND s.chamfer_angle = ANY(ARRAY[${chAngleRaw.join(",")}]::float[])`
+        : "";
+      const tipDiaRaw = req.query.tip_diameter ? String(req.query.tip_diameter).split(",").map(Number).filter(n => !isNaN(n)) : [];
+      const TIPDIA_FILTER = tipDiaRaw.length
+        ? ` AND s.tip_diameter = ANY(ARRAY[${tipDiaRaw.join(",")}]::float[])`
+        : "";
+      const LBS_EXCLUDE_FILTER = (req.query.lbs_exclude === "true") ? ` AND (s.lbs_in IS NULL OR s.lbs_in = 0)` : "";
+
       const BASE = `FROM skus s JOIN sku_uploads u ON s.upload_id = u.id WHERE u.is_current = TRUE`;
+
+      // Every active filter goes into COMMON. Each dropdown query then strips
+      // only its own column's filter so its current selection doesn't hide
+      // other reachable values — but every OTHER filter (including diameter)
+      // still narrows it.
+      const COMMON =
+        `${TYPE_FILTER}${MAT_FILTER}${DIA_FILTER}` +                                       // structural + diameter
+        `${SERIES_FILTER}${FLUTES_FILTER}${LOC_FILTER}${CORNER_FILTER}${COATING_FILTER}` + // discrete dropdowns
+        `${GEOM_FILTER}${CC_FILTER}${CHANGLE_FILTER}${TIPDIA_FILTER}` +
+        `${LBS_FILTER}${LBS_EXCLUDE_FILTER}` +
+        `${CR_FILTER}${FR_FILTER}${AXIAL_FILTER}${REACH_FILTER}${CEL_FILTER}` +            // continuous inputs
+        `${MAX_FLUTES_FILTER}${MIN_FLUTES_FILTER}`;
+
+      // Helper: strip named filter chunks out of COMMON for the dropdown of that column
+      const without = (...exclude: string[]) =>
+        exclude.filter(s => s.length > 0).reduce((acc, e) => acc.replace(e, ""), COMMON);
+
       const [diameters, locs, lbsLengths, coatings, flutes, corners, geometries, chamferLengths, chamferAngles, tipDiameters, series, centerCuttingVals] = await Promise.all([
-        pool.query(`SELECT DISTINCT cutting_diameter_in AS v ${BASE}${TYPE_FILTER}${MAT_FILTER}${CR_FILTER}${FR_FILTER}${REACH_FILTER} AND cutting_diameter_in IS NOT NULL ORDER BY cutting_diameter_in`),
-        pool.query(`SELECT DISTINCT loc_in AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER}${LBS_FILTER}${AXIAL_FILTER} AND loc_in IS NOT NULL ORDER BY loc_in`),
-        pool.query(`SELECT DISTINCT lbs_in AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER}${LBS_AXIAL_FILTER} AND lbs_in IS NOT NULL AND lbs_in > 0 ORDER BY lbs_in`),
-        pool.query(`SELECT DISTINCT coating AS v ${BASE}${TYPE_FILTER}${MAT_FILTER} AND coating IS NOT NULL ORDER BY coating`),
-        pool.query(`SELECT DISTINCT flutes AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER}${MAX_FLUTES_FILTER}${MIN_FLUTES_FILTER} AND flutes IS NOT NULL ORDER BY flutes`),
-        pool.query(`SELECT DISTINCT corner_condition AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER}${FR_FILTER} AND corner_condition IS NOT NULL ORDER BY corner_condition`),
-        pool.query(`SELECT DISTINCT geometry AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER} AND geometry IS NOT NULL ORDER BY geometry`),
-        pool.query(`SELECT DISTINCT max_cutting_edge_length AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER} AND max_cutting_edge_length IS NOT NULL ORDER BY max_cutting_edge_length`),
-        pool.query(`SELECT DISTINCT chamfer_angle AS v ${BASE}${TYPE_FILTER}${MAT_FILTER} AND chamfer_angle IS NOT NULL ORDER BY chamfer_angle`),
-        pool.query(`SELECT DISTINCT tip_diameter AS v ${BASE}${TYPE_FILTER}${MAT_FILTER} AND tip_diameter IS NOT NULL ORDER BY tip_diameter`),
-        pool.query(`SELECT DISTINCT series AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER}${CR_FILTER}${FR_FILTER}${REACH_FILTER}${MAX_FLUTES_FILTER}${MIN_FLUTES_FILTER} AND series IS NOT NULL ORDER BY series`),
-        pool.query(`SELECT DISTINCT center_cutting AS v ${BASE}${TYPE_FILTER}${DIA_FILTER}${MAT_FILTER} AND center_cutting IS NOT NULL ORDER BY center_cutting`),
+        pool.query(`SELECT DISTINCT cutting_diameter_in AS v ${BASE}${without(DIA_FILTER, CR_FILTER)} AND cutting_diameter_in IS NOT NULL ORDER BY cutting_diameter_in`),
+        pool.query(`SELECT DISTINCT loc_in AS v ${BASE}${without(LOC_FILTER)} AND loc_in IS NOT NULL ORDER BY loc_in`),
+        pool.query(`SELECT DISTINCT lbs_in AS v ${BASE}${without(LBS_FILTER, LBS_EXCLUDE_FILTER, AXIAL_FILTER, REACH_FILTER)}${LBS_AXIAL_FILTER} AND lbs_in IS NOT NULL AND lbs_in > 0 ORDER BY lbs_in`),
+        pool.query(`SELECT DISTINCT coating AS v ${BASE}${without(COATING_FILTER)} AND coating IS NOT NULL ORDER BY coating`),
+        pool.query(`SELECT DISTINCT flutes AS v ${BASE}${without(FLUTES_FILTER, MAX_FLUTES_FILTER, MIN_FLUTES_FILTER)} AND flutes IS NOT NULL ORDER BY flutes`),
+        pool.query(`SELECT DISTINCT corner_condition AS v ${BASE}${without(CORNER_FILTER, FR_FILTER)} AND corner_condition IS NOT NULL ORDER BY corner_condition`),
+        pool.query(`SELECT DISTINCT geometry AS v ${BASE}${without(GEOM_FILTER)} AND geometry IS NOT NULL ORDER BY geometry`),
+        pool.query(`SELECT DISTINCT max_cutting_edge_length AS v ${BASE}${without(CEL_FILTER)} AND max_cutting_edge_length IS NOT NULL ORDER BY max_cutting_edge_length`),
+        pool.query(`SELECT DISTINCT chamfer_angle AS v ${BASE}${without(CHANGLE_FILTER)} AND chamfer_angle IS NOT NULL ORDER BY chamfer_angle`),
+        pool.query(`SELECT DISTINCT tip_diameter AS v ${BASE}${without(TIPDIA_FILTER)} AND tip_diameter IS NOT NULL ORDER BY tip_diameter`),
+        pool.query(`SELECT DISTINCT series AS v ${BASE}${without(SERIES_FILTER)} AND series IS NOT NULL ORDER BY series`),
+        pool.query(`SELECT DISTINCT center_cutting AS v ${BASE}${without(CC_FILTER)} AND center_cutting IS NOT NULL ORDER BY center_cutting`),
       ]);
       return res.json({
         diameters: diameters.rows.map((r: any) => r.v),
