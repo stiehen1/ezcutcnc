@@ -106,7 +106,12 @@ function Hint({ text, diagram }: { text: React.ReactNode; diagram?: React.ReactN
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-help text-muted-foreground hover:text-foreground transition-colors text-[11px]">ⓘ</span>
+          <button
+            type="button"
+            onClick={e => e.preventDefault()}
+            className="inline-flex items-center justify-center cursor-help text-muted-foreground hover:text-foreground transition-colors text-[11px] leading-none p-0.5 -m-0.5 rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-ring pointer-events-auto"
+            aria-label="More info"
+          >ⓘ</button>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-64 text-xs space-y-1.5">
           {diagram && <div className="flex justify-center">{diagram}</div>}
