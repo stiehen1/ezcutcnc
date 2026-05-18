@@ -85,6 +85,8 @@ export const mentorSchemas = {
 
     existing_hole_dia: z.number().min(0).default(0),
     target_hole_dia: z.number().min(0).default(0),
+    circ_entry: z.enum(["auto", "pre_drill", "helical"]).default("auto"),
+    center_cutting: z.boolean().default(true),
 
     hardness_value: z.number().min(0).default(0),
     hardness_scale: z.enum(["hrb", "hrc"]).default("hrc"),
@@ -177,6 +179,31 @@ export const mentorSchemas = {
       peripheral_feed_ipm: z.number().nullable().optional(),
       ci_a_e_in: z.number().nullable().optional(),
       ci_feed_ratio: z.number().nullable().optional(),
+
+      // Circular interpolation — per-pass sequencer output
+      circ_passes: z.array(z.object({
+        pass: z.number().int(),
+        kind: z.enum(["rough", "finish"]),
+        bore_start_in: z.number(),
+        bore_end_in: z.number(),
+        ae_in: z.number(),
+        engagement_deg: z.number(),
+        engagement_zone: z.enum(["light", "moderate", "heavy", "tight"]),
+        doc_in: z.number(),
+        rpm: z.number(),
+        feed_ipm: z.number(),
+        peripheral_feed_ipm: z.number(),
+        time_sec: z.number(),
+        chip_thin_factor: z.number().nullable().optional(),
+        note: z.string().nullable().optional(),
+      })).nullable().optional(),
+      circ_total_time_sec: z.number().nullable().optional(),
+      circ_entry_mode: z.enum(["pre_drill", "helical"]).nullable().optional(),
+      circ_helix_pitch_in: z.number().nullable().optional(),
+      circ_helix_feed_ipm: z.number().nullable().optional(),
+      circ_helix_time_sec: z.number().nullable().optional(),
+      circ_suggested_predrill_in: z.number().nullable().optional(),
+      circ_error: z.string().nullable().optional(),
 
       recommended_stepover: z.number().nullable().optional(),
       ra_actual_uin: z.number().nullable().optional(),
