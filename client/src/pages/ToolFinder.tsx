@@ -795,9 +795,22 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     if (selDias.length > 0) params.set("diameter", selDias.join(","));
     if (material !== "all") params.set("material", material);
     if (selLbs && !excludeLbs) params.set("lbs", selLbs);
+    if (excludeLbs)            params.set("lbs_exclude",   "true");
     if (partCornerRadius) params.set("part_corner_radius", partCornerRadius);
     if (maxFloorRadius)   params.set("max_floor_radius",   maxFloorRadius);
     if (axialDepth)       params.set("axial_depth",        axialDepth);
+    if (reqChamferLength) params.set("required_chamfer_length", reqChamferLength);
+    if (selSeries.length)       params.set("series",        selSeries.join(","));
+    if (chamferFluteStyle === "helical")  params.set("flutes", "3,5");
+    else if (chamferFluteStyle === "straight") params.set("flutes", "2,4");
+    else if (selFlutes.length)  params.set("flutes",        selFlutes.join(","));
+    if (selLoc)                 params.set("loc",           selLoc);
+    if (selCorners.length)      params.set("corner",        selCorners.join(","));
+    if (selCoatings.length)     params.set("coating",       selCoatings.join(","));
+    if (centerCutting !== "all") params.set("center_cutting", centerCutting);
+    if (selGeometries.length)   params.set("geometry",      selGeometries.join(","));
+    if (selChamferAngles.length) params.set("chamfer_angle", selChamferAngles.join(","));
+    if (selTipDiameters.length)  params.set("tip_diameter",  selTipDiameters.join(","));
     if (qpTip) applyQpFluteParams(params);
     fetch(`/api/tools/options?${params}`)
       .then(r => r.json())
@@ -840,7 +853,13 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       }))
       .catch(() => {})
       .finally(() => setLoadingOpts(false));
-  }, [selToolTypes, selDias, material, selLbs, excludeLbs, partCornerRadius, maxFloorRadius, axialDepth, qpTip]);
+  }, [
+    selToolTypes, selDias, material, selLbs, excludeLbs,
+    partCornerRadius, maxFloorRadius, axialDepth, reqChamferLength,
+    selSeries, selFlutes, chamferFluteStyle, selLoc, selCorners, selCoatings,
+    centerCutting, selGeometries, selChamferAngles, selTipDiameters,
+    qpTip,
+  ]);
 
   // LBS tools only come in standard geometry — hide chipbreaker/truncated rougher when LBS is selected
   const lbsActive = selLbs !== "" && !excludeLbs;
@@ -1426,24 +1445,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           {/* Chamfer-mill-only fields */}
           {selToolTypes[0] === "chamfer_mill" && (<>
 
-            {/* Part Chamfer Length — filters tools whose Max CEL meets or exceeds this value */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold flex items-center gap-1.5">
-                Part Chamfer Length (in)
-                <Hint text="Hypotenuse length of the chamfer on your part. Shows tools whose Max Cutting Edge Length is ≥ this value." diagram={<DiagramChamferLength />} />
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="e.g. 0.125"
-                value={reqChamferLength}
-                onChange={e => setReqChamferLength(e.target.value)}
-                className="no-spinners w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-
-            {/* Flute Style — optional, shown last */}
+            {/* Flute Style — optional */}
             <div className="space-y-1">
               <label className="text-xs font-semibold flex items-center gap-1.5">
                 Flute Style
@@ -1475,10 +1477,42 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               </div>
             </div>
 
+            {/* Part Chamfer Length — describes the PART (not a tool attribute);
+                title is orange to distinguish it from the tool-attribute fields above.
+                Editing this clears every other tool-attribute selection so the
+                chamfer length leads the search and the user re-picks from the
+                narrowed dropdowns (prevents stale combinations that yield zero results). */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold flex items-center gap-1.5 text-orange-400">
+                Part Chamfer Length (in)
+                <Hint text="Hypotenuse length of the chamfer on your part. Shows tools whose Max Cutting Edge Length is ≥ this value. Entering a value clears the other filters so they re-narrow to tools that can reach this length." diagram={<DiagramChamferLength />} />
+              </label>
+              <input
+                type="number"
+                step="0.001"
+                min="0"
+                placeholder="e.g. 0.125"
+                value={reqChamferLength}
+                onChange={e => {
+                  setReqChamferLength(e.target.value);
+                  if (e.target.value !== "") {
+                    setSelDias([]);
+                    setSelChamferAngles([]);
+                    setSelTipDiameters([]);
+                    setSelSeries([]);
+                    setSelCoatings([]);
+                    setChamferFluteStyle("");
+                    setCenterCutting("all");
+                  }
+                }}
+                className="no-spinners w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+
           </>)}
 
           </div>
-        </div>
+          </div>
 
         {/* Search / Clear buttons */}
         <div className="flex items-center gap-3 pt-1">

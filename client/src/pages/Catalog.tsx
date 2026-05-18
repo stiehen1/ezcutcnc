@@ -110,7 +110,7 @@ function coerceRow(raw: Record<string, string>): Record<string, any> {
   };
 }
 
-export default function Catalog() {
+export default function Catalog({ embedded = false }: { embedded?: boolean } = {}) {
   const [uploads, setUploads] = useState<UploadRecord[] | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -190,18 +190,27 @@ export default function Catalog() {
   // Load history on first render
   if (uploads === null && !loadingHistory) loadHistory();
 
-  return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <div className="max-w-3xl mx-auto space-y-8">
-
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">SKU Catalog</h1>
-            <p className="text-sm text-gray-400 mt-1">Upload your cutting tool catalog as CSV. Each upload creates a new version.</p>
-          </div>
-          <a href="/" className="text-xs text-indigo-400 hover:text-indigo-300 underline">← Back to Mentor</a>
+  const Outer = embedded
+    ? ({ children }: { children: React.ReactNode }) => <div className="space-y-8">{children}</div>
+    : ({ children }: { children: React.ReactNode }) => (
+        <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
+          <div className="max-w-3xl mx-auto space-y-8">{children}</div>
         </div>
+      );
+
+  return (
+    <Outer>
+
+        {/* Header — hidden in embedded mode (Admin provides its own chrome) */}
+        {!embedded && (
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">SKU Catalog</h1>
+              <p className="text-sm text-gray-400 mt-1">Upload your cutting tool catalog as CSV. Each upload creates a new version.</p>
+            </div>
+            <a href="/" className="text-xs text-indigo-400 hover:text-indigo-300 underline">← Back to Mentor</a>
+          </div>
+        )}
 
         {/* Upload area */}
         <div className="space-y-3">
@@ -309,7 +318,6 @@ export default function Catalog() {
           )}
         </div>
 
-      </div>
-    </div>
+    </Outer>
   );
 }
