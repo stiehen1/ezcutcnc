@@ -1705,7 +1705,12 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                     {selToolTypes[0] === "chamfer_mill" && <>
                       <th className="text-center px-2 py-2 font-semibold">Angle</th>
                       <th className="text-center px-2 py-2 font-semibold">Tip Dia</th>
-                      <th className={`text-center px-2 py-2 font-semibold ${reqChamferLength ? "text-amber-400" : ""}`}>Max CEL</th>
+                      <th className={`text-center px-2 py-2 font-semibold ${reqChamferLength ? "text-amber-400" : ""}`}>
+                        <span className="inline-flex items-center justify-center gap-1">
+                          Max CEL
+                          <Hint text="Max Cutting Edge Length — the longest chamfer hypotenuse the tool can produce. Equals (tool dia − tip dia) / 2 / sin(½ × included angle)." />
+                        </span>
+                      </th>
                     </>}
                     <th className="px-2 py-2 text-center font-normal text-[10px] text-muted-foreground italic leading-tight">Favorite</th>
                     <th className="px-2 py-2 text-center font-normal text-[10px] text-muted-foreground italic leading-tight">3D Model</th>
