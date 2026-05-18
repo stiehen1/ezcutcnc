@@ -12384,21 +12384,27 @@ ${stabSection}
                       />
                       <Kpi
                         label={form.mode === "circ_interp" ? UL("▶ Program Feed (IPM)", "▶ Program Feed (mm/min)") : UL("Feed (IPM)", "Feed (mm/min)")}
-                        hint={form.mode === "circ_interp" ? "ENTER THIS NUMBER IN YOUR CAM. This is the tool centerline feed — what gets posted to G-code. (If your CAM has a 'feed at tool tip' / TCP / arc-compensation mode ON, use the Peripheral Feed instead.)" : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
+                        hint={form.mode === "circ_interp" ? "Centerline feed varies pass-by-pass as the bore opens up — see the Pass Schedule below for the per-pass program feed you'll enter into CAM." : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
                         value={
-                          <span className={form.mode === "circ_interp" ? "text-amber-300 font-bold" : undefined}>
-                            {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
-                            {customer.status ? (
-                              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
-                              </span>
-                            ) : null}
-                            {firstIpm != null && (
-                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {UC(firstIpm, 25.4, metric ? 1 : 2)} first pass
-                              </span>
-                            )}
-                          </span>
+                          form.mode === "circ_interp" ? (
+                            <span className="text-[11px] font-normal text-yellow-300 leading-tight">
+                              see Pass Schedule below
+                            </span>
+                          ) : (
+                            <span>
+                              {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
+                              {customer.status ? (
+                                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                  {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
+                                </span>
+                              ) : null}
+                              {firstIpm != null && (
+                                <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                  {UC(firstIpm, 25.4, metric ? 1 : 2)} first pass
+                                </span>
+                              )}
+                            </span>
+                          )
                         }
                       />
                     </>
@@ -12408,31 +12414,43 @@ ${stabSection}
                 {customer.peripheral_feed_ipm != null && (
                   <Kpi
                     label={UL("Peripheral Feed (ref)", "Peripheral Feed (ref)")}
-                    hint={form.mode === "circ_interp" ? "Reference only — feed the cutting edge actually sees as the tool orbits the bore. Verifies chip load. Do NOT program this value unless your CAM is in TCP / feed-at-tool-tip mode." : "Peripheral feed at the cutting edge."}
+                    hint={form.mode === "circ_interp" ? "Peripheral (at-wall) feed varies pass-by-pass as the bore opens up — see the Pass Schedule below for the per-pass peripheral feed." : "Peripheral feed at the cutting edge."}
                     value={
-                      <span className="text-zinc-400">
-                        {UC(customer.peripheral_feed_ipm, 25.4, metric ? 1 : 2)}
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">at edge</span>
-                      </span>
+                      form.mode === "circ_interp" ? (
+                        <span className="text-[11px] font-normal text-yellow-300 leading-tight">
+                          see Pass Schedule below
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400">
+                          {UC(customer.peripheral_feed_ipm, 25.4, metric ? 1 : 2)}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">at edge</span>
+                        </span>
+                      )
                     }
                   />
                 )}
 
                 <Kpi
                   label={UL("FPT (in)", "FPT (mm)")}
-                  hint="Base chip load per tooth before radial chip thinning correction. Calculated as a fixed fraction of diameter for the material. This is the starting point; the engine adjusts it for WOC via the chip thinning factor."
+                  hint={form.mode === "circ_interp" ? "Chip load per tooth varies pass-by-pass with bore engagement — see the Pass Schedule below for the per-pass IPT." : "Base chip load per tooth before radial chip thinning correction. Calculated as a fixed fraction of diameter for the material. This is the starting point; the engine adjusts it for WOC via the chip thinning factor."}
                   value={
-                    <>
-                      {UC(customer.fpt, 25.4, metric ? 4 : 5)}
-                      {customer.diameter ? (
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">
-                          ({fmtNum((customer.fpt / customer.diameter) * 100, 1)}%)
-                        </span>
-                      ) : null}
-                    </>
+                    form.mode === "circ_interp" ? (
+                      <span className="text-[11px] font-normal text-yellow-300 leading-tight">
+                        see Pass Schedule below
+                      </span>
+                    ) : (
+                      <>
+                        {UC(customer.fpt, 25.4, metric ? 4 : 5)}
+                        {customer.diameter ? (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            ({fmtNum((customer.fpt / customer.diameter) * 100, 1)}%)
+                          </span>
+                        ) : null}
+                      </>
+                    )
                   }
                 />
-                {customer.adj_fpt != null ? (
+                {customer.adj_fpt != null && form.mode !== "circ_interp" ? (
                   <Kpi
                     label={UL(
                       form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)",
@@ -12451,7 +12469,7 @@ ${stabSection}
                     }
                   />
                 ) : null}
-                {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
+                {form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
                   const wocFrac = form.woc_pct / 100;
                   const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocFrac))));
                   const actualChip = customer.adj_fpt * ctf;
@@ -12551,19 +12569,14 @@ ${stabSection}
                 )}
                 {form.mode === "circ_interp" && (customer as any).circ_passes && (customer as any).circ_passes.length > 0 && (() => {
                   const allPasses = (customer as any).circ_passes as Array<any>;
-                  const roughPasses = allPasses.filter((p: any) => p.kind === "rough");
-                  // Use the heaviest rough pass step as the representative step (per shop convention)
-                  const heaviest = roughPasses.length > 0
-                    ? roughPasses.reduce((a, b) => (a.ae_in >= b.ae_in ? a : b))
-                    : allPasses[0];
                   return (
                     <Kpi
                       label={UL("Radial Step / Pass (in)", "Radial Step / Pass (mm)")}
-                      hint="Engine-sequenced radial step. Shows the heaviest rough pass; tight-wrap passes near the start may be smaller (see Pass Schedule below). Finish pass is reported separately."
+                      hint="Radial step varies pass-by-pass — tight-wrap passes near the start are smaller, later passes grow as the bore opens up. See the Pass Schedule below for the per-pass ae."
                       value={
-                        <span className="text-amber-400 font-semibold">
-                          {UC(heaviest.ae_in, 25.4, metric ? 3 : 4)}
-                          <span className="ml-1 text-xs font-normal text-muted-foreground">({allPasses.length} pass{allPasses.length !== 1 ? "es" : ""})</span>
+                        <span className="text-[11px] font-normal text-amber-400 leading-tight">
+                          see Pass Schedule below
+                          <span className="block text-[10px] font-normal text-muted-foreground mt-0.5">({allPasses.length} pass{allPasses.length !== 1 ? "es" : ""})</span>
                         </span>
                       }
                     />
@@ -13033,25 +13046,8 @@ ${stabSection}
                     {/* Programming reminders */}
                     <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
                       <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">④ Programming Notes</div>
-                      <div className="text-[10px] text-zinc-300 leading-snug space-y-0.5">
-                        {(() => {
-                          // Detect "start conservative, open up" narrative — first pass ae materially smaller than the heaviest
-                          const roughs = passes.filter((p: any) => p.kind === "rough");
-                          if (roughs.length >= 3) {
-                            const firstAe = roughs[0].ae_in;
-                            const maxAe = Math.max(...roughs.map((p: any) => p.ae_in));
-                            if (maxAe > firstAe * 1.5) {
-                              return (
-                                <div className="text-[10px] text-amber-200 leading-snug mb-1">
-                                  ⓘ <span className="text-white font-semibold">Pre-drill is close to tool size</span> — the first pass starts conservative (ae = {firstAe.toFixed(4)}") to keep engagement near 120°. As the bore opens up, the schedule grows ae (up to {maxAe.toFixed(4)}") and peripheral feed climbs. This is the right shape — early passes are wrap-limited, later passes are chip-thinning-limited.
-                                </div>
-                              );
-                            }
-                          }
-                          return null;
-                        })()}
-                        <div>• <span className="text-white">In CAM</span>: enter RPM + chip load (IPT) + engagement target from the CAM Inputs card. CAM derives centerline feed = peripheral × (tool dia / bore dia) for each pass automatically.</div>
-                        <div>• <span className="text-white">Peripheral feed</span> (amber column) is what the cutting edge sees. <span className="text-white">CL feed</span> is what the spindle nose travels — useful as a sanity check on what CAM outputs.</div>
+                      <div className="text-[10px] text-zinc-300 leading-snug space-y-1">
+                        <div>• <span className="text-white">Stay in the cut between passes.</span> Don't retract to center and re-enter — at the end of each orbit, sweep the tool radially outward to the next pass's bore with a smooth bi-lateral X-Y arc (tangent in, tangent out). The tool stays engaged, chip load stays continuous, and you avoid the witness mark a re-entry leaves on the wall.</div>
                         <div>• <span className="text-white">CCW = climb</span> on an internal bore. Use CCW for the finish pass.</div>
                         {entryMode === "helical" && <div>• <span className="text-white">Helical entry</span>: ramp to full depth at the helix feed/pitch above, then start pass 1.</div>}
                       </div>
