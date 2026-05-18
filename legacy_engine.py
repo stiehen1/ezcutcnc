@@ -3605,10 +3605,12 @@ def run(payload=None):
         _d_cap = float(payload.get("target_hole_dia",   0) or 0)
         _d_m   = float(payload.get("tool_dia", tool_dia) or tool_dia)
         if _d_cap > _d_m and _d_m > 0:
-            _ci_a_e_in = (_d_cap - max(_d_w, _d_m)) / 2.0
-            _ci_a_e_in = max(0.0, min(_ci_a_e_in, _d_m))
-            if _ci_a_e_in > 0:
-                data["woc_pct"] = (_ci_a_e_in / _d_m) * 100.0
+            # Per-side wall stock (display value — "Stock to Remove")
+            _ci_a_e_in = max(0.0, (_d_cap - max(_d_w, _d_m)) / 2.0)
+            # NOTE: do NOT overwrite data["woc_pct"]. The slider value is the
+            # per-pass radial step intent (the sequencer uses it as the ae
+            # ceiling). Using the total wall stock here would drive HP/force/
+            # deflection as if we were slotting the entire annulus in one pass.
             _ci_feed_ratio = (_d_cap - _d_m) / _d_cap   # peripheral → centerline
         # Bore depth is a user-entered feature dimension (doc_xd from form); no default override.
     # ── end circ_interp pre-processing ──────────────────────────────────────
@@ -6594,6 +6596,58 @@ def run(payload=None):
             _circ_total_time_sec = None
     # ── end circ_interp sequencer ──────────────────────────────────────────
 
+    # ── circ_interp: time-weighted average load across passes ───────────────
+    # The straight-line feed_ipm overstates cutting load for circ_interp because
+    # it doesn't account for orbiting (centerline ≠ peripheral) or per-pass ae
+    # variation. We compute a time-weighted job-average MRR from the sequencer
+    # and rebuild HP/torque/force/deflection from that — one honest number
+    # that represents what the cut actually does over the full operation.
+    _circ_avg_mrr = None
+    _circ_avg_hp = None
+    _circ_avg_torque = None
+    _circ_avg_force = None
+    _circ_avg_deflection = None
+    _circ_avg_teeth = None
+    if mode == "circ_interp" and _circ_passes and len(_circ_passes) > 0:
+        _t_total = sum(float(p.get("time_sec", 0) or 0) for p in _circ_passes)
+        if _t_total > 0:
+            _mrr_accum = 0.0
+            _teeth_accum = 0.0
+            _flutes_for_teeth = int(data.get("flutes", 4) or 4)
+            for _p in _circ_passes:
+                _ae_p = float(_p.get("ae_in", 0) or 0)
+                _doc_p = float(_p.get("doc_in", 0) or 0)
+                _peri_p = float(_p.get("peripheral_feed_ipm", 0) or 0)
+                _t_p = float(_p.get("time_sec", 0) or 0)
+                _eng_p = float(_p.get("engagement_deg", 0) or 0)
+                _mrr_p = _ae_p * _doc_p * _peri_p
+                _mrr_accum += _mrr_p * _t_p
+                # Bore-wrap teeth-in-cut per pass: (engagement_arc / 360) × flutes.
+                # Uses the schedule's true wrap angle (not straight-line woc/D).
+                _teeth_p = (_eng_p / 360.0) * _flutes_for_teeth
+                _teeth_accum += _teeth_p * _t_p
+            _circ_avg_mrr = _mrr_accum / _t_total
+            _circ_avg_teeth = _teeth_accum / _t_total
+            _hp_factor = HP_PER_CUIN.get(
+                data.get("material", material_group),
+                HP_PER_CUIN.get(material_group, 1.0)
+            ) * GEOMETRY_KC_FACTOR.get(
+                str(data.get("geometry", "standard") or "standard").lower(), 1.0
+            ) * hardness_kc_mult(float(data.get("hardness_hrc", 0) or 0))
+            _circ_avg_hp = _circ_avg_mrr * _hp_factor
+            if float(rpm) > 0:
+                _circ_avg_torque = _circ_avg_hp * 63025.0 / float(rpm)
+            # Scale force and deflection by the MRR ratio (both scale roughly
+            # linearly with chip cross-section / cutting load).
+            _mrr_global_for_ratio = float(doc) * float(woc) * float(feed_ipm)
+            if _mrr_global_for_ratio > 0:
+                _scale = _circ_avg_mrr / _mrr_global_for_ratio
+                _force_global = float(locals().get("total_force", locals().get("force", 0.0)) or 0.0)
+                _defl_global = float(locals().get("deflection", 0.0) or 0.0)
+                _circ_avg_force = _force_global * _scale
+                _circ_avg_deflection = _defl_global * _scale
+    # ── end circ_interp average load ───────────────────────────────────────
+
     result = {
         "customer": {
             "material": data.get("material"),
@@ -6605,9 +6659,19 @@ def run(payload=None):
             "feed_ipm": feed_ipm,
             "doc_in": doc,
             "woc_in": woc,
-            "mrr_in3_min": float(doc) * float(woc) * float(feed_ipm),
-            "spindle_load_pct": round(min(float(hp_required) / machine_hp, 9.99) * 100, 1) if machine_hp > 0 else 0.0,
-            "hp_required": float(hp_required),
+            "mrr_in3_min": (
+                float(_circ_avg_mrr) if (mode == "circ_interp" and _circ_avg_mrr is not None)
+                else float(doc) * float(woc) * float(feed_ipm)
+            ),
+            "spindle_load_pct": (
+                round(min(float(_circ_avg_hp) / machine_hp, 9.99) * 100, 1)
+                if (mode == "circ_interp" and _circ_avg_hp is not None and machine_hp > 0)
+                else (round(min(float(hp_required) / machine_hp, 9.99) * 100, 1) if machine_hp > 0 else 0.0)
+            ),
+            "hp_required": (
+                float(_circ_avg_hp) if (mode == "circ_interp" and _circ_avg_hp is not None)
+                else float(hp_required)
+            ),
             "fpt": round(_ipt_base, 6),
             "adj_fpt": round(float(ipt), 6) if _chip_thinning_active else None,
             "peripheral_feed_ipm": round(_peripheral_feed_ipm, 2) if _peripheral_feed_ipm else None,
@@ -6638,24 +6702,46 @@ def run(payload=None):
             "recommended_woc_pct": locals().get("_woc_target_pct") if locals().get("_woc_reduction", 0) > 0 else None,
         },
         "engineering": {
-            "deflection_in": locals().get("deflection", 0.0),
+            "deflection_in": (
+                float(_circ_avg_deflection) if (mode == "circ_interp" and _circ_avg_deflection is not None)
+                else locals().get("deflection", 0.0)
+            ),
             "chip_thickness_in": float(chip_t),
             "chatter_index": locals().get("chatter_index", 0.0),
-            "teeth_in_cut": _teeth_in_cut_result,
+            "teeth_in_cut": (
+                round(float(_circ_avg_teeth), 2)
+                if (mode == "circ_interp" and _circ_avg_teeth is not None)
+                else _teeth_in_cut_result
+            ),
             "engagement_angle_deg": _engagement_angle_deg,
             "helix_wrap_deg": _helix_wrap_deg,
             "engagement_continuous": _engagement_continuous,
             "tool_life_min": float(tool_life_min),
-            "force_lbf": locals().get("total_force", locals().get("force", 0.0)),
-            "torque_inlbf": round(hp_required * 63025.0 / float(rpm), 2) if float(rpm) > 0 else None,
+            "force_lbf": (
+                float(_circ_avg_force) if (mode == "circ_interp" and _circ_avg_force is not None)
+                else locals().get("total_force", locals().get("force", 0.0))
+            ),
+            "torque_inlbf": (
+                round(float(_circ_avg_torque), 2)
+                if (mode == "circ_interp" and _circ_avg_torque is not None)
+                else (round(hp_required * 63025.0 / float(rpm), 2) if float(rpm) > 0 else None)
+            ),
             "torque_capacity_inlbf": SPINDLE_TORQUE_CAPACITY.get(data.get("spindle_taper", "CAT40"), None),
             "torque_pct": (
                 round(
-                    (hp_required * 63025.0 / float(rpm)) /
+                    float(_circ_avg_torque) /
                     SPINDLE_TORQUE_CAPACITY[data.get("spindle_taper", "CAT40")] * 100.0, 1
                 )
-                if float(rpm) > 0 and data.get("spindle_taper", "CAT40") in SPINDLE_TORQUE_CAPACITY
-                else None
+                if (mode == "circ_interp" and _circ_avg_torque is not None
+                    and data.get("spindle_taper", "CAT40") in SPINDLE_TORQUE_CAPACITY)
+                else (
+                    round(
+                        (hp_required * 63025.0 / float(rpm)) /
+                        SPINDLE_TORQUE_CAPACITY[data.get("spindle_taper", "CAT40")] * 100.0, 1
+                    )
+                    if float(rpm) > 0 and data.get("spindle_taper", "CAT40") in SPINDLE_TORQUE_CAPACITY
+                    else None
+                )
             ),
         },
         "stability": _stability,
