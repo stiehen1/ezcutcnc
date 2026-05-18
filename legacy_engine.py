@@ -1757,6 +1757,14 @@ def run_chamfer_mill(payload: dict) -> dict:
             "peripheral_feed_ipm": None,
             "ci_a_e_in":       None,
             "ci_feed_ratio":   None,
+            "circ_passes":     None,
+            "circ_total_time_sec": None,
+            "circ_entry_mode": None,
+            "circ_helix_pitch_in": None,
+            "circ_helix_feed_ipm": None,
+            "circ_helix_time_sec": None,
+            "circ_suggested_predrill_in": None,
+            "circ_error":      None,
             "status":          None,
             "status_hint":     None,
             "risk":            "low",
@@ -2843,6 +2851,14 @@ def run_keyseat(payload: dict) -> dict:
             "peripheral_feed_ipm": None,
             "ci_a_e_in":        None,
             "ci_feed_ratio":    None,
+            "circ_passes":      None,
+            "circ_total_time_sec": None,
+            "circ_entry_mode":  None,
+            "circ_helix_pitch_in": None,
+            "circ_helix_feed_ipm": None,
+            "circ_helix_time_sec": None,
+            "circ_suggested_predrill_in": None,
+            "circ_error":       None,
             "status":           "warning" if stability_pct > 100 else "ok",
             "status_hint":      "High deflection — reduce stickout" if stability_pct > 100 else None,
             "risk":             "high" if stability_pct > 175 else ("medium" if stability_pct > 100 else "low"),
@@ -3127,6 +3143,14 @@ def run_dovetail(payload: dict) -> dict:
             "peripheral_feed_ipm": None,
             "ci_a_e_in":        None,
             "ci_feed_ratio":    None,
+            "circ_passes":      None,
+            "circ_total_time_sec": None,
+            "circ_entry_mode":  None,
+            "circ_helix_pitch_in": None,
+            "circ_helix_feed_ipm": None,
+            "circ_helix_time_sec": None,
+            "circ_suggested_predrill_in": None,
+            "circ_error":       None,
             "status":           "warning" if stability_pct > 100 else "ok",
             "status_hint":      "High deflection — reduce stickout or take lighter passes" if stability_pct > 100 else None,
             "risk":             "high" if stability_pct > 175 else ("medium" if stability_pct > 100 else "low"),
@@ -3565,24 +3589,27 @@ def run(payload=None):
 
     # ── Circular Interpolation pre-processing ───────────────────────────────
     # Derive WOC and feed correction factor from hole geometry.
-    # D_m  = tool diameter
-    # D_w  = existing hole diameter
+    # D_m   = tool diameter
+    # D_w   = existing hole diameter
     # D_cap = target hole diameter
-    # a_e  = radial wall to remove per pass = (D_cap - D_w) / 2
-    # Feed correction: peripheral feed > tool-center feed by ratio D_cap/D_m
-    # → programmed (tool-center) feed = straight-calc feed × (D_m / D_cap)
+    # D_orbit = D_cap − D_m  (diameter the tool centerline traces)
+    # a_e   = radial wall to remove per pass = (D_cap - D_w) / 2
+    #
+    # Feed conversion: in one orbit revolution the cutting edge travels π·D_cap
+    # around the wall (peripheral path) while the tool center travels π·D_orbit.
+    # So peripheral/centerline = D_cap/D_orbit, and centerline = peripheral × D_orbit/D_cap.
     _ci_a_e_in = None
     _ci_feed_ratio = None
     if mode == "circ_interp":
         _d_w   = float(payload.get("existing_hole_dia", 0) or 0)
         _d_cap = float(payload.get("target_hole_dia",   0) or 0)
         _d_m   = float(payload.get("tool_dia", tool_dia) or tool_dia)
-        if _d_cap > _d_w > 0 and _d_m > 0:
-            _ci_a_e_in = (_d_cap - _d_w) / 2.0
-            # Cap a_e at full tool diameter (can't engage more than the tool width)
-            _ci_a_e_in = min(_ci_a_e_in, _d_m)
-            data["woc_pct"] = (_ci_a_e_in / _d_m) * 100.0
-            _ci_feed_ratio = _d_m / _d_cap   # multiply straight-calc feed by this to get programmed feed
+        if _d_cap > _d_m and _d_m > 0:
+            _ci_a_e_in = (_d_cap - max(_d_w, _d_m)) / 2.0
+            _ci_a_e_in = max(0.0, min(_ci_a_e_in, _d_m))
+            if _ci_a_e_in > 0:
+                data["woc_pct"] = (_ci_a_e_in / _d_m) * 100.0
+            _ci_feed_ratio = (_d_cap - _d_m) / _d_cap   # peripheral → centerline
         # Bore depth is a user-entered feature dimension (doc_xd from form); no default override.
     # ── end circ_interp pre-processing ──────────────────────────────────────
 
@@ -6194,6 +6221,379 @@ def run(payload=None):
             if _cc_risk is None:
                 _cc_risk = "info"
 
+    # ── Circular Interpolation pass sequencer ──────────────────────────────
+    # Walks from existing bore (or helical-entry footprint) to target bore.
+    # Per pass:
+    #   • engagement arc from true tool-in-bore geometry (D_tool, D_curr, D_next)
+    #   • chip-thinning factor scales feed back to constant IPT
+    #   • passes with engagement ≥150° get radial step halved until they clear
+    #   • last pass = finish (0.005–0.010" stock @ 60% feed)
+    # Returns array of pass dicts + total time + entry-mode summary.
+    _circ_passes = None
+    _circ_total_time_sec = None
+    _circ_entry_mode = None
+    _circ_helix_pitch_in = None
+    _circ_helix_feed_ipm = None
+    _circ_helix_time_sec = None
+    _circ_suggested_predrill_in = None
+    _circ_error = None
+    if mode == "circ_interp":
+        try:
+            _d_tool = float(data.get("diameter", 0) or 0)
+            _d_w_in = float(payload.get("existing_hole_dia", 0) or 0)
+            _d_cap_in = float(payload.get("target_hole_dia", 0) or 0)
+            _bore_depth = float(doc or 0)
+            _entry_pref = str(payload.get("circ_entry", "auto") or "auto").lower()
+            _center_cut = bool(payload.get("center_cutting", True))
+
+            # Validate inputs — surface a clean error string the UI can display.
+            if _d_tool <= 0:
+                _circ_error = "Tool diameter is required."
+            elif _d_cap_in <= 0:
+                _circ_error = "Enter the target (finish) bore diameter."
+            elif _d_cap_in <= _d_tool:
+                _circ_error = (f"Target bore ({_d_cap_in:.4f}\") must be larger than tool "
+                               f"diameter ({_d_tool:.4f}\"). Circular interpolation requires "
+                               f"a bore at least slightly larger than the tool — for a bore at or below tool dia use drilling.")
+            elif _d_w_in > 0 and _d_w_in < _d_tool + 0.010:
+                _circ_error = (f"Existing hole ({_d_w_in:.4f}\") is too tight for tool "
+                               f"({_d_tool:.4f}\"). Need ≥{(_d_tool + 0.010):.4f}\" for "
+                               f"safe entry (0.005\" radial clearance per side minimum).")
+            elif _d_w_in >= _d_cap_in:
+                _circ_error = (f"Existing hole ({_d_w_in:.4f}\") is already ≥ target "
+                               f"({_d_cap_in:.4f}\"). Nothing to interpolate.")
+
+            # Entry-mode resolution
+            if _circ_error is None:
+                if _d_w_in > 0:
+                    _circ_entry_mode = "pre_drill"
+                else:
+                    # no pre-drill — need helical entry (center-cutting required)
+                    if not _center_cut:
+                        _circ_suggested_predrill_in = round(_d_tool + 0.030, 4)
+                        _circ_error = (
+                            f"Tool is not center-cutting — helical entry requires "
+                            f"a center-cutting end mill. Either pre-drill a "
+                            f"{_circ_suggested_predrill_in:.4f}\" hole (tool dia + 0.030\" "
+                            f"clearance) and enter it as the existing hole, or pick a "
+                            f"center-cutting tool."
+                        )
+                    else:
+                        _circ_entry_mode = "helical"
+
+            # Build the pass schedule
+            if _circ_error is None:
+                # Engagement zone thresholds (degrees) — tight ≥150°, light <90°.
+                _ZONE_TIGHT = 150.0
+                _ZONE_HEAVY = 120.0
+                _ZONE_LIGHT = 90.0
+
+                def _engagement_deg(d_curr, d_next, d_tool):
+                    """True tool-in-bore arc-of-engagement (deg) for a circ-interp pass
+                    growing the bore from d_curr to d_next with a tool of d_tool.
+                    Two-circle intersection geometry: the chord across the tool that
+                    sits inside the previous wall.
+
+                    Reduces to the standard 2·acos(1 − 2·ae/D) when d_curr ≈ d_tool
+                    (helical-footprint case) but correctly drops the wrap angle as
+                    the bore opens up.
+                    """
+                    import math as _m
+                    ae = max(0.0, (d_next - d_curr) / 2.0)
+                    if ae <= 0 or d_tool <= 0:
+                        return 0.0
+                    if ae >= d_tool:
+                        return 180.0
+                    # tool center orbits at radius R_orbit = (d_next - d_tool)/2
+                    # previous wall is at radius R_prev = d_curr/2 from bore center
+                    R_orbit = (d_next - d_tool) / 2.0
+                    R_prev = d_curr / 2.0
+                    r_tool = d_tool / 2.0
+                    if R_orbit <= 0:
+                        # Tool overlaps bore center — degenerates to slot-like wrap
+                        return 180.0
+                    # angle subtended at tool center by the chord where tool
+                    # surface meets previous wall: law of cosines on triangle
+                    # (bore center, tool center, intersection point)
+                    cos_half = (R_orbit * R_orbit + r_tool * r_tool - R_prev * R_prev) / (2.0 * R_orbit * r_tool)
+                    cos_half = max(-1.0, min(1.0, cos_half))
+                    half = _m.acos(cos_half)
+                    # Tool is in cut on the OUTER side; arc = 2·(π − half) when the
+                    # previous wall cuts through the tool. Convert to engaged arc.
+                    engaged = 2.0 * (_m.pi - half)
+                    return max(0.0, min(180.0, _m.degrees(engaged)))
+
+                # Chip thinning correction — in circular interpolation the actual
+                # chip the tool sees is set by the engagement ANGLE on each pass,
+                # NOT by ae/D. At ≥180° wrap (slot-like) chip = IPT (no thinning).
+                # At low wrap the chip thins as sin(θ/2). We use that geometry for
+                # both the primary calc and per-pass scaling.
+                def _ct_from_engagement(eng_deg):
+                    if eng_deg <= 0:
+                        return 1.0
+                    if eng_deg >= 180.0:
+                        return 1.0  # slot — no thinning
+                    import math as _mm
+                    s = _mm.sin(_mm.radians(eng_deg / 2.0))
+                    return 1.0 / max(0.20, s)  # clamp boost ≤ 5× to avoid blow-up
+
+                # Primary peripheral feed already came out of the engine's main
+                # calc using its (ae/D)-based chip-thinning. For per-pass scaling
+                # we treat that primary feed as the at-wall feed at a reference
+                # engagement of ~120° (the typical heavy rough), and rescale
+                # by engagement angle.
+                _primary_ref_eng = 120.0
+                _primary_ct = _ct_from_engagement(_primary_ref_eng)
+                _peripheral_primary = float(_peripheral_feed_ipm or feed_ipm or 0)
+                if _peripheral_primary <= 0:
+                    raise RuntimeError("Primary feed not available for pass sequencer")
+
+                # Starting bore: pre-drilled OR helical-entry footprint (= tool dia)
+                if _circ_entry_mode == "pre_drill":
+                    _d_curr = _d_w_in
+                else:
+                    _d_curr = _d_tool
+
+                # Nominal radial step from WOC% slider (acts as a CEILING on ae);
+                # actual ae per pass is solved to hold a target engagement angle.
+                _nominal_woc_pct = float(payload.get("woc_pct", 15.0) or 15.0)
+                _nominal_woc_pct = max(5.0, min(35.0, _nominal_woc_pct))
+                _nominal_ae = _nominal_woc_pct / 100.0 * _d_tool
+
+                # Target engagement angle for adaptive ae sizing.
+                # As the bore opens up the same ae produces less wrap; grow ae
+                # to hold this target so feed and MRR stay high.
+                _TARGET_ENG_DEG = 120.0
+
+                def _solve_ae_for_engagement(d_curr, d_tool, target_deg, ae_max):
+                    """Bisect for ae that yields engagement ≈ target_deg, capped at ae_max."""
+                    lo, hi = 0.001, ae_max
+                    # If even max ae undershoots target → return max (tool is loose in bore)
+                    eng_at_max = _engagement_deg(d_curr, d_curr + 2.0 * hi, d_tool)
+                    if eng_at_max <= target_deg:
+                        return hi
+                    # If min ae already overshoots target → return min (will be caught by pullback)
+                    eng_at_lo = _engagement_deg(d_curr, d_curr + 2.0 * lo, d_tool)
+                    if eng_at_lo >= target_deg:
+                        return lo
+                    for _ in range(20):
+                        mid = (lo + hi) / 2.0
+                        eng_mid = _engagement_deg(d_curr, d_curr + 2.0 * mid, d_tool)
+                        if eng_mid > target_deg:
+                            hi = mid
+                        else:
+                            lo = mid
+                    return (lo + hi) / 2.0
+
+                # Reserve finish stock — 0.007" per side, capped to half the total wall
+                _radial_total = (_d_cap_in - _d_curr) / 2.0
+                if _radial_total <= 0:
+                    raise RuntimeError("Nothing to remove after entry footprint")
+                _finish_stock = min(0.007, _radial_total * 0.5)
+                _d_finish_start = _d_cap_in - 2.0 * _finish_stock
+                if _d_finish_start <= _d_curr:
+                    # Bore is so small we go straight to finish
+                    _d_finish_start = _d_curr
+
+                _passes = []
+                _pass_no = 0
+                _rough_done = (_d_finish_start <= _d_curr)
+                _MAX_PASSES = 30  # safety net
+                while not _rough_done and _pass_no < _MAX_PASSES:
+                    _pass_no += 1
+                    # Adaptive ae: cap at the nominal slider value, AND cap at
+                    # what would yield target engagement (so loose-bore passes
+                    # don't go past target wrap). Also clamp to the remaining
+                    # wall so we don't overshoot the finish-stock boundary.
+                    _ae_remaining = (_d_finish_start - _d_curr) / 2.0
+                    if _ae_remaining <= 1e-6:
+                        break
+                    _ae_target_eng = _solve_ae_for_engagement(_d_curr, _d_tool, _TARGET_ENG_DEG, _nominal_ae)
+                    _ae_try = min(_ae_target_eng, _nominal_ae, _ae_remaining)
+                    if _ae_try <= 1e-6:
+                        break
+                    _d_next = _d_curr + 2.0 * _ae_try
+                    _eng = _engagement_deg(_d_curr, _d_next, _d_tool)
+                    # Tight-wrap pullback: halve ae until engagement drops below
+                    # the management threshold (150°). Keep at least 0.002" step.
+                    # This is the SAFETY NET for passes where the solver couldn't
+                    # find an ae ≤ nominal that holds engagement < 150° (i.e. the
+                    # bore is so tight the tool is forced into heavy wrap).
+                    _shrink_iters = 0
+                    while _eng >= _ZONE_TIGHT and _ae_try > 0.002 and _shrink_iters < 6:
+                        _ae_try = max(0.002, _ae_try * 0.5)
+                        _d_next = _d_curr + 2.0 * _ae_try
+                        _eng = _engagement_deg(_d_curr, _d_next, _d_tool)
+                        _shrink_iters += 1
+
+                    # DOC pullback for tight passes — keep until engagement drops
+                    _doc_pass = _bore_depth
+                    if _eng >= _ZONE_TIGHT and _bore_depth > 0:
+                        # cap at 1×D when tight (slot-like treatment)
+                        _doc_pass = min(_bore_depth, _d_tool)
+
+                    # Feed scaling: hold actual chip thickness constant despite chip
+                    # thinning. CT uses the TRUE bore-engagement angle (not ae/D).
+                    # feed_pass = feed_primary × CT_pass / CT_primary.
+                    _ct_pass = _ct_from_engagement(_eng)
+                    _peripheral_pass = _peripheral_primary * (_ct_pass / _primary_ct)
+                    # Centerline-to-peripheral ratio: in one orbit revolution the
+                    # cutting edge travels π·D_bore around the wall while the tool
+                    # center travels π·D_orbit. So feed_center = feed_peripheral
+                    # × D_orbit / D_bore. (D_orbit = D_bore − D_tool.)
+                    # As bore opens, centerline climbs toward peripheral (ratio → 1).
+                    _feed_ratio_pass = (_d_next - _d_tool) / _d_next if _d_next > 0 else 0.0
+                    _feed_pass = _peripheral_pass * _feed_ratio_pass
+
+                    # ── Tight-wrap SFM derate ─────────────────────────────────
+                    # ≥150° engagement → SFM penalty for heat soak (each flute
+                    # has minimal out-of-cut time). Linear 0% at 150° → 25% at 180°.
+                    _rpm_pass = float(rpm)
+                    _sfm_derate_pct = 0.0
+                    if _eng >= _ZONE_TIGHT:
+                        _sfm_derate_pct = min(0.25, (_eng - _ZONE_TIGHT) / 30.0 * 0.25)
+                        _rpm_pass = _rpm_pass * (1.0 - _sfm_derate_pct)
+                        _peripheral_pass = _peripheral_pass * (1.0 - _sfm_derate_pct)
+                        _feed_pass = _feed_pass * (1.0 - _sfm_derate_pct)
+
+                    # ── Centripetal / servo-loop feed cap ─────────────────────
+                    # Tool centerline orbits a circle of dia (d_next - d_tool).
+                    # In a tight orbit the CNC's lookahead and accel limits cap
+                    # achievable feed. Conservative model: feed_cap ≈ 60·√(2·a·r)
+                    # IPM with a ≈ 1 g and r = orbit radius (m).
+                    _orbit_dia_in = max(0.0, _d_next - _d_tool)
+                    _orbit_r_m = (_orbit_dia_in / 2.0) * 0.0254
+                    _accel_capped = False
+                    if _orbit_r_m > 0:
+                        _accel_cap_mps = (2.0 * 9.8 * _orbit_r_m) ** 0.5
+                        _accel_cap_ipm = _accel_cap_mps * 1000.0 / 25.4 * 60.0
+                        if _accel_cap_ipm > 0 and _feed_pass > _accel_cap_ipm:
+                            _accel_capped = True
+                            _scale = _accel_cap_ipm / _feed_pass
+                            _peripheral_pass = _peripheral_pass * _scale
+                            _feed_pass = _accel_cap_ipm
+
+                    # Chip-evacuation tight-clearance flag (note only, no math change)
+                    _chip_evac_warn = (
+                        _eng >= _ZONE_TIGHT and
+                        ((_d_next - _d_tool) / 2.0) < 0.030
+                    )
+
+                    _zone = ("tight" if _eng >= _ZONE_TIGHT
+                             else "heavy" if _eng >= _ZONE_HEAVY
+                             else "moderate" if _eng >= _ZONE_LIGHT
+                             else "light")
+                    _notes_pass = []
+                    if _shrink_iters > 0:
+                        _notes_pass.append(f"tight-wrap pullback ×{_shrink_iters} (ae halved to drop engagement <{_ZONE_TIGHT:.0f}°)")
+                    if _sfm_derate_pct > 0:
+                        _notes_pass.append(f"SFM derated {_sfm_derate_pct*100:.0f}% (heat-soak protection at ≥150° wrap)")
+                    if _accel_capped:
+                        _notes_pass.append("feed capped by servo/centripetal limit on tight orbit")
+                    if _chip_evac_warn:
+                        _notes_pass.append("tight chip clearance — verify TSC or air blast, watch for re-cutting")
+                    if _pass_no == 1 and _circ_entry_mode == "helical" and not _notes_pass:
+                        _notes_pass.append("first pass after helical entry — starts near full wrap")
+                    _note = "; ".join(_notes_pass) if _notes_pass else None
+
+                    # Recompute time after all feed caps applied
+                    _orbit_circ_in = 3.141592653589793 * _orbit_dia_in
+                    _time_pass = (_orbit_circ_in / _feed_pass) * 60.0 if _feed_pass > 0 else 0.0
+
+                    _passes.append({
+                        "pass": _pass_no,
+                        "kind": "rough",
+                        "bore_start_in": round(_d_curr, 4),
+                        "bore_end_in": round(_d_next, 4),
+                        "ae_in": round(_ae_try, 4),
+                        "engagement_deg": round(_eng, 1),
+                        "engagement_zone": _zone,
+                        "doc_in": round(_doc_pass, 4),
+                        "rpm": int(round(_rpm_pass)),
+                        "feed_ipm": round(_feed_pass, 2),
+                        "peripheral_feed_ipm": round(_peripheral_pass, 2),
+                        "time_sec": round(_time_pass, 1),
+                        "chip_thin_factor": round(_ct_pass, 3),
+                        "note": _note,
+                    })
+
+                    _d_curr = _d_next
+                    if _d_curr >= _d_finish_start - 1e-6:
+                        _rough_done = True
+
+                # Finish pass: 0.005–0.010" stock @ 60% of roughing peripheral feed
+                if _d_curr < _d_cap_in - 1e-6:
+                    _pass_no += 1
+                    _ae_finish = (_d_cap_in - _d_curr) / 2.0
+                    _eng_finish = _engagement_deg(_d_curr, _d_cap_in, _d_tool)
+                    _ct_finish = _ct_from_engagement(_eng_finish)
+                    _peripheral_finish = 0.60 * _peripheral_primary * (_ct_finish / _primary_ct)
+                    # Same centerline/peripheral conversion: feed_ctr = feed_per × D_orbit / D_bore
+                    _feed_ratio_finish = (_d_cap_in - _d_tool) / _d_cap_in if _d_cap_in > 0 else 0.0
+                    _feed_finish = _peripheral_finish * _feed_ratio_finish
+
+                    # Apply centripetal cap to finish pass as well
+                    _orbit_dia_finish = max(0.0, _d_cap_in - _d_tool)
+                    _orbit_r_finish_m = (_orbit_dia_finish / 2.0) * 0.0254
+                    _accel_capped_finish = False
+                    if _orbit_r_finish_m > 0:
+                        _accel_cap_finish_mps = (2.0 * 9.8 * _orbit_r_finish_m) ** 0.5
+                        _accel_cap_finish_ipm = _accel_cap_finish_mps * 1000.0 / 25.4 * 60.0
+                        if _accel_cap_finish_ipm > 0 and _feed_finish > _accel_cap_finish_ipm:
+                            _accel_capped_finish = True
+                            _scale_f = _accel_cap_finish_ipm / _feed_finish
+                            _peripheral_finish = _peripheral_finish * _scale_f
+                            _feed_finish = _accel_cap_finish_ipm
+                    _orbit_circ_finish = 3.141592653589793 * _orbit_dia_finish
+                    _time_finish = (_orbit_circ_finish / _feed_finish) * 60.0 if _feed_finish > 0 else 0.0
+                    _zone_finish = ("tight" if _eng_finish >= _ZONE_TIGHT
+                                    else "heavy" if _eng_finish >= _ZONE_HEAVY
+                                    else "moderate" if _eng_finish >= _ZONE_LIGHT
+                                    else "light")
+                    _finish_notes = ["finish pass — 0.005–0.010\" stock at 60% feed"]
+                    if _accel_capped_finish:
+                        _finish_notes.append("feed capped by servo/centripetal limit")
+                    _passes.append({
+                        "pass": _pass_no,
+                        "kind": "finish",
+                        "bore_start_in": round(_d_curr, 4),
+                        "bore_end_in": round(_d_cap_in, 4),
+                        "ae_in": round(_ae_finish, 4),
+                        "engagement_deg": round(_eng_finish, 1),
+                        "engagement_zone": _zone_finish,
+                        "doc_in": round(_bore_depth, 4),
+                        "rpm": int(rpm),
+                        "feed_ipm": round(_feed_finish, 2),
+                        "peripheral_feed_ipm": round(_peripheral_finish, 2),
+                        "time_sec": round(_time_finish, 1),
+                        "chip_thin_factor": round(_ct_finish, 3),
+                        "note": "; ".join(_finish_notes),
+                    })
+
+                # Helical entry timing (no pre-drill case)
+                if _circ_entry_mode == "helical" and _bore_depth > 0:
+                    import math as _mh
+                    _ramp_deg = 2.0
+                    _circ_helix_pitch_in = round(3.141592653589793 * _d_tool * _mh.tan(_mh.radians(_ramp_deg)), 4)
+                    if _circ_helix_pitch_in > 0:
+                        _circ_helix_feed_ipm = round(0.45 * _peripheral_primary, 2)
+                        _revs_helix = _bore_depth / _circ_helix_pitch_in
+                        # one rev = π·D_tool linear distance along helix path
+                        _helix_path_in = _revs_helix * 3.141592653589793 * _d_tool
+                        _circ_helix_time_sec = round((_helix_path_in / _circ_helix_feed_ipm) * 60.0, 1) if _circ_helix_feed_ipm > 0 else 0.0
+
+                _circ_passes = _passes
+                _circ_total_time_sec = round(
+                    sum(p["time_sec"] for p in _passes) + (_circ_helix_time_sec or 0.0),
+                    1
+                )
+        except Exception as _circ_err:
+            # Don't break the engine if the sequencer hits something unexpected
+            _circ_error = f"Pass sequencer error: {type(_circ_err).__name__}: {_circ_err}"
+            _circ_passes = None
+            _circ_total_time_sec = None
+    # ── end circ_interp sequencer ──────────────────────────────────────────
+
     result = {
         "customer": {
             "material": data.get("material"),
@@ -6213,6 +6613,14 @@ def run(payload=None):
             "peripheral_feed_ipm": round(_peripheral_feed_ipm, 2) if _peripheral_feed_ipm else None,
             "ci_a_e_in": round(_ci_a_e_in, 4) if _ci_a_e_in else None,
             "ci_feed_ratio": round(_ci_feed_ratio, 3) if _ci_feed_ratio else None,
+            "circ_passes": _circ_passes,
+            "circ_total_time_sec": _circ_total_time_sec,
+            "circ_entry_mode": _circ_entry_mode,
+            "circ_helix_pitch_in": _circ_helix_pitch_in,
+            "circ_helix_feed_ipm": _circ_helix_feed_ipm,
+            "circ_helix_time_sec": _circ_helix_time_sec,
+            "circ_suggested_predrill_in": _circ_suggested_predrill_in,
+            "circ_error": _circ_error,
             "recommended_stepover": _rec_so,
             "ra_actual_uin": _ra_actual,
             "ra_feed_capped": _ra_feed_capped,

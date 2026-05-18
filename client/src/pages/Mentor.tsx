@@ -2130,6 +2130,8 @@ export default function Mentor() {
         if (inputs.tool_dia)      setToolDiaText(Number(inputs.tool_dia).toFixed(4));
         if (inputs.woc_pct && _rDia) setWocText(((Number(inputs.woc_pct) / 100) * _rDia).toFixed(4));
         if (inputs.doc_xd  && _rDia) setDocText((Number(inputs.doc_xd) * _rDia).toFixed(3));
+        if (inputs.existing_hole_dia) setExistingHoleText(Number(inputs.existing_hole_dia).toFixed(4));
+        if (inputs.target_hole_dia)   setTargetHoleText(Number(inputs.target_hole_dia).toFixed(4));
         if (inputs.loc)           setLocText(Number(inputs.loc).toFixed(3));
         if (inputs.stickout)      setStickoutText(Number(inputs.stickout).toFixed(3));
         if (inputs.lbs)           setLbsText(Number(inputs.lbs).toFixed(3));
@@ -2999,6 +3001,9 @@ export default function Mentor() {
       if (form.mode !== "deep_pocket" && !(form.flutes > 0)) missing.push("Flute Count");
       if (form.mode === "circ_interp") {
         if (!(form.doc_xd > 0)) missing.push("Bore Depth");
+        if (!(form.target_hole_dia > 0)) missing.push("Target Bore Diameter");
+        if (form.target_hole_dia > 0 && form.tool_dia > 0 && form.target_hole_dia <= form.tool_dia) missing.push("Target Bore must exceed Tool Diameter");
+        if (form.target_hole_dia > 0 && form.existing_hole_dia > 0 && form.target_hole_dia <= form.existing_hole_dia) missing.push("Target Bore must exceed Existing Bore");
       } else if (form.mode === "surfacing") {
         if (!(form.surfacing_ap_in > 0)) missing.push("Axial Pass Depth (ap)");
         if (!(form.target_ra_uin > 0)) missing.push("Surface Finish Target (Ra)");
@@ -8870,6 +8875,146 @@ ${stabSection}
           {/* ── Standard WOC/DOC (milling only — hidden for surfacing, chamfer_mill, deep_pocket) ── */}
           {operation === "milling" && form.mode !== "surfacing" && form.mode !== "deep_pocket" && form.tool_type !== "chamfer_mill" && <div className="flex gap-3 items-start">
             <div className="flex-1 min-w-0 space-y-2 border-r border-border pr-3">
+              {form.mode === "circ_interp" ? (
+                <div className="space-y-2">
+                  {/* ── Existing Bore (pre-drill or 0 for helical) ── */}
+                  <div className="space-y-1">
+                    <FieldLabel hint="Diameter of the starting hole (pre-drill). Leave at 0 to let the engine helical-enter — center-cutting end mill required.">
+                      Existing Bore <span className="font-normal text-zinc-500">(pre-drill, optional)</span>
+                    </FieldLabel>
+                    <div className="flex h-9 items-center rounded-md border border-input px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                        placeholder="0 = helical entry"
+                        value={existingHoleText}
+                        onChange={(e) => setExistingHoleText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(existingHoleText);
+                          if (Number.isFinite(n) && n >= 0) {
+                            setForm((p) => ({ ...p, existing_hole_dia: n }));
+                            setExistingHoleText(n > 0 ? n.toFixed(4) : "");
+                          } else {
+                            setExistingHoleText(form.existing_hole_dia > 0 ? form.existing_hole_dia.toFixed(4) : "");
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">in</span>
+                    </div>
+                  </div>
+                  {/* ── Target Bore (REQUIRED) ── */}
+                  <div className="space-y-1">
+                    <FieldLabel hint="Finish bore diameter. Required. Must be larger than the tool diameter — the engine will sequence multiple radial passes to grow from the existing bore (or tool dia for helical entry) up to this target.">
+                      Target Bore <span className="font-normal text-red-400">*</span>
+                    </FieldLabel>
+                    <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!targetHoleText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                        placeholder="finish bore dia"
+                        value={targetHoleText}
+                        onChange={(e) => setTargetHoleText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(targetHoleText);
+                          if (Number.isFinite(n) && n > 0) {
+                            setForm((p) => ({ ...p, target_hole_dia: n }));
+                            setTargetHoleText(n.toFixed(4));
+                          } else {
+                            setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(4) : "");
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">in</span>
+                    </div>
+                    {form.target_hole_dia > 0 && form.tool_dia > 0 && form.target_hole_dia <= form.tool_dia && (
+                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target ({form.target_hole_dia.toFixed(4)}") must exceed tool ({form.tool_dia.toFixed(4)}"). Use drilling for bores ≤ tool dia.</p>
+                    )}
+                    {form.target_hole_dia > 0 && form.existing_hole_dia > 0 && form.target_hole_dia <= form.existing_hole_dia && (
+                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target must exceed existing bore ({form.existing_hole_dia.toFixed(4)}").</p>
+                    )}
+                  </div>
+                  {/* ── Entry Mode + WOC ── */}
+                  <div className="space-y-1">
+                    <FieldLabel hint="Entry strategy. Pre-Drill = use an existing hole. Helical = ramp down in a tight helix (requires center-cutting tool). Auto = pre-drill if existing > 0 else helical.">
+                      Entry Mode
+                    </FieldLabel>
+                    <div className="grid grid-cols-3 gap-1">
+                      {([
+                        { v: "auto", label: "Auto", hint: "Pre-drill if entered, else helical" },
+                        { v: "pre_drill", label: "Pre-Drill", hint: "Use existing hole" },
+                        { v: "helical", label: "Helical", hint: "Helix in (center-cutting)" },
+                      ] as const).map((opt) => (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => setForm((p) => ({ ...p, circ_entry: opt.v }))}
+                          className="rounded py-1 text-[10px] font-semibold border transition-all leading-tight"
+                          style={{
+                            background: form.circ_entry === opt.v ? "#eab308" : "transparent",
+                            borderColor: form.circ_entry === opt.v ? "#eab308" : "rgba(255,255,255,0.25)",
+                            color: form.circ_entry === opt.v ? "#000" : "rgba(255,255,255,0.6)",
+                          }}
+                          title={opt.hint}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* ── Radial step / pass (WOC%) ── */}
+                  <div className="space-y-1">
+                    <FieldLabel hint="Radial step per pass as % of tool diameter. The engine sequences enough passes to grow from existing → target. Tight-wrap passes (engagement ≥150°) auto-pull-back to keep the tool happy.">
+                      Radial Step <span className="font-normal text-zinc-500">(per pass, % of dia)</span>
+                    </FieldLabel>
+                    <div className="flex h-9 items-center rounded-md border border-input px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                        placeholder="10–25"
+                        value={wocText}
+                        onChange={(e) => setWocText(e.target.value)}
+                        onBlur={() => {
+                          const raw = wocText.trim();
+                          const n = parseFloat(raw.replace(/[^\d.]/g, ""));
+                          if (Number.isFinite(n) && n > 0) {
+                            const pct = n >= 1 ? n : n * 100;
+                            const clamped = Math.max(5, Math.min(35, pct));
+                            setForm((p) => ({ ...p, woc_pct: clamped }));
+                            setWocText(clamped.toFixed(1));
+                          } else {
+                            setWocText(form.woc_pct ? form.woc_pct.toFixed(1) : "");
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">{form.woc_pct ? `${form.woc_pct.toFixed(0)}%` : ""}</span>
+                    </div>
+                    <div className="flex gap-1 mt-1">
+                      {([
+                        { key: "low" as const,  label: "Light",  val: 10 },
+                        { key: "med" as const,  label: "Nominal",  val: 15 },
+                        { key: "high" as const, label: "Heavy", val: 25 },
+                      ]).map(({ key, label, val }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => { setForm((p) => ({ ...p, woc_pct: val })); setWocText(val.toFixed(1)); setWocPreset(key); }}
+                          className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
+                          style={{
+                            background: wocPreset === key ? "#eab308" : "transparent",
+                            borderColor: wocPreset === key ? "#eab308" : "rgba(255,255,255,0.25)",
+                            color: wocPreset === key ? "#000" : "rgba(255,255,255,0.6)",
+                          }}
+                        >
+                          {label} <span className="opacity-75">{val}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (<>
               <div className="flex items-center justify-between">
                 <FieldLabel hint="Radial width of cut — also known as Stepover or Cut Width. Enter as a decimal (0.100 = 10% of dia) or percent (10%).">WOC <span className="font-normal text-zinc-500">(Radial)</span></FieldLabel>
                 {WOC_PRESETS[form.mode] && (() => {
@@ -9057,6 +9202,7 @@ ${stabSection}
                 );
               })()}
               {/* circ_interp 3-phase advisory moved to results panel */}
+              </>)}
             </div>
             <div className="flex-1 min-w-0 space-y-2">
               {form.mode === "circ_interp" ? (
@@ -10000,16 +10146,18 @@ ${stabSection}
                   const predrillDia = toolDia > 0 ? toolDia + 0.010 : 0;
                   return (
                     <div className="space-y-3">
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
-                        <input
-                          type="checkbox"
-                          checked={form.slot_closed}
-                          onChange={e => { setForm(p => ({ ...p, slot_closed: e.target.checked })); setEntryTypes([]); }}
-                          className="w-3.5 h-3.5 accent-sky-400"
-                        />
-                        <span className="text-zinc-300">Closed slot (no open end)</span>
-                        <span className="text-[10px] text-zinc-500">— both ends bounded by material; tool cannot enter from outside the stock</span>
-                      </label>
+                      <div>
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+                          <input
+                            type="checkbox"
+                            checked={form.slot_closed}
+                            onChange={e => { setForm(p => ({ ...p, slot_closed: e.target.checked })); setEntryTypes([]); }}
+                            className="w-3.5 h-3.5 accent-sky-400"
+                          />
+                          <span className="text-zinc-300 whitespace-nowrap">Closed slot (no open end)</span>
+                        </label>
+                        <p className="text-[10px] text-zinc-500 mt-0.5 ml-[22px]">Both ends bounded by material; tool cannot enter from outside the stock.</p>
+                      </div>
                       <div className="flex flex-wrap gap-3">{slotFlat.map(renderChip)}</div>
                       {form.slot_closed && entryTypes.includes("predrill_plunge") && toolDia > 0 && (
                         <div className="text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
@@ -12214,10 +12362,10 @@ ${stabSection}
                         }
                       />
                       <Kpi
-                        label={form.mode === "circ_interp" ? UL("Feed (IPM) — tool centerline", "Feed (mm/min) — tool centerline") : UL("Feed (IPM)", "Feed (mm/min)")}
-                        hint={form.mode === "circ_interp" ? "ENTER THIS NUMBER IN YOUR CAM. This is the tool centerline feed — already corrected for bore geometry. The cutting edge at the wall travels faster; see Peripheral Feed for the actual chip load the tool sees." : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
+                        label={form.mode === "circ_interp" ? UL("▶ Program Feed (IPM)", "▶ Program Feed (mm/min)") : UL("Feed (IPM)", "Feed (mm/min)")}
+                        hint={form.mode === "circ_interp" ? "ENTER THIS NUMBER IN YOUR CAM. This is the tool centerline feed — what gets posted to G-code. (If your CAM has a 'feed at tool tip' / TCP / arc-compensation mode ON, use the Peripheral Feed instead.)" : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
                         value={
-                          <>
+                          <span className={form.mode === "circ_interp" ? "text-amber-300 font-bold" : undefined}>
                             {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
                             {customer.status ? (
                               <span className="ml-1 text-xs font-normal text-muted-foreground">
@@ -12229,7 +12377,7 @@ ${stabSection}
                                 {UC(firstIpm, 25.4, metric ? 1 : 2)} first pass
                               </span>
                             )}
-                          </>
+                          </span>
                         }
                       />
                     </>
@@ -12238,11 +12386,12 @@ ${stabSection}
 
                 {customer.peripheral_feed_ipm != null && (
                   <Kpi
-                    label={UL("Peripheral Feed (IPM)", "Peripheral Feed (mm/min)")}
+                    label={UL("Peripheral Feed (ref)", "Peripheral Feed (ref)")}
+                    hint={form.mode === "circ_interp" ? "Reference only — feed the cutting edge actually sees as the tool orbits the bore. Verifies chip load. Do NOT program this value unless your CAM is in TCP / feed-at-tool-tip mode." : "Peripheral feed at the cutting edge."}
                     value={
-                      <span className="text-amber-400">
+                      <span className="text-zinc-400">
                         {UC(customer.peripheral_feed_ipm, 25.4, metric ? 1 : 2)}
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">at wall</span>
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">at edge</span>
                       </span>
                     }
                   />
@@ -12345,8 +12494,8 @@ ${stabSection}
                   }
                 />
                 <Kpi
-                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "surfacing" ? UL("Stepover ae (in)", "Stepover ae (mm)") : form.mode === "circ_interp" ? UL("Radial Wall ae (in)", "Radial Wall ae (mm)") : UL("WOC (in)", "WOC (mm)")}
-                  hint={form.mode === "circ_interp" ? "Total radial stock to remove = (target bore − existing bore) ÷ 2. This is the total wall the tool must interpolate through, split across radial passes." : undefined}
+                  label={form.mode === "face" ? UL("Step-Over (in)", "Step-Over (mm)") : form.mode === "surfacing" ? UL("Stepover ae (in)", "Stepover ae (mm)") : form.mode === "circ_interp" ? UL("Stock to Remove (in)", "Stock to Remove (mm)") : UL("WOC (in)", "WOC (mm)")}
+                  hint={form.mode === "circ_interp" ? "Stock removed per side = (target bore − existing bore) ÷ 2. The engine splits this across radial passes (see Radial Step / Pass)." : undefined}
                   value={
                     <>
                       {form.mode === "circ_interp" && customer.ci_a_e_in != null
@@ -12379,17 +12528,21 @@ ${stabSection}
                     }
                   />
                 )}
-                {form.mode === "circ_interp" && customer.ci_a_e_in != null && (() => {
-                  const passes = Math.max(1, Math.ceil(customer.ci_a_e_in / (form.tool_dia * 0.25)));
-                  const stepPerPass = customer.ci_a_e_in / passes;
+                {form.mode === "circ_interp" && (customer as any).circ_passes && (customer as any).circ_passes.length > 0 && (() => {
+                  const allPasses = (customer as any).circ_passes as Array<any>;
+                  const roughPasses = allPasses.filter((p: any) => p.kind === "rough");
+                  // Use the heaviest rough pass step as the representative step (per shop convention)
+                  const heaviest = roughPasses.length > 0
+                    ? roughPasses.reduce((a, b) => (a.ae_in >= b.ae_in ? a : b))
+                    : allPasses[0];
                   return (
                     <Kpi
                       label={UL("Radial Step / Pass (in)", "Radial Step / Pass (mm)")}
-                      hint="Radial stock removed per pass = total radial wall ÷ number of passes. Keeps each pass load manageable and bore geometry accurate."
+                      hint="Engine-sequenced radial step. Shows the heaviest rough pass; tight-wrap passes near the start may be smaller (see Pass Schedule below). Finish pass is reported separately."
                       value={
                         <span className="text-amber-400 font-semibold">
-                          {UC(stepPerPass, 25.4, metric ? 3 : 4)}
-                          <span className="ml-1 text-xs font-normal text-muted-foreground">({passes} pass{passes !== 1 ? "es" : ""})</span>
+                          {UC(heaviest.ae_in, 25.4, metric ? 3 : 4)}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">({allPasses.length} pass{allPasses.length !== 1 ? "es" : ""})</span>
                         </span>
                       }
                     />
@@ -12430,6 +12583,24 @@ ${stabSection}
                   );
                 })()}
                 <Kpi label={UL("MRR (in³/min)", "MRR (cm³/min)")} hint="Material Removal Rate — volume of material removed per minute. The key productivity metric: higher MRR = faster cycle time. MRR = WOC × DOC × Feed IPM." value={UC(customer.mrr_in3_min, 16.387, metric ? 2 : 4)} />
+
+                {form.mode === "circ_interp" && (customer as any).circ_total_time_sec != null && (customer as any).circ_total_time_sec > 0 && (() => {
+                  const sec = Number((customer as any).circ_total_time_sec);
+                  const display = sec < 60 ? `${sec.toFixed(1)}s` : `${Math.floor(sec / 60)}m ${(sec - Math.floor(sec / 60) * 60).toFixed(0)}s`;
+                  const passes = (customer as any).circ_passes ?? [];
+                  return (
+                    <Kpi
+                      label="Bore Cycle Time"
+                      hint="Total time to grow the bore from existing → target, including helical entry (if used). Sum of all per-pass times. See the Pass Schedule below for the per-pass breakdown."
+                      value={
+                        <span className="text-amber-300 font-semibold">
+                          {display}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">({passes.length} pass{passes.length === 1 ? "" : "es"})</span>
+                        </span>
+                      }
+                    />
+                  );
+                })()}
 
                 <Kpi label={UL("HP Req", "kW Req")} hint="Estimated cutting power required for this operation. Calculated from MRR × material unit power (HP·min/in³), adjusted for geometry and workpiece hardness." value={UC(customer.hp_required, 0.7457, 2)} />
                 <Kpi label={UL("Avail HP", "Avail kW")} hint="Your machine's nameplate HP derated by spindle drive efficiency (Direct 96%, Belt 92%, Gear 88%). This is the actual cutting power available at the spindle." value={UC(customer.machine_hp, 0.7457, metric ? 1 : 1)} />
@@ -12636,110 +12807,232 @@ ${stabSection}
                 </>
               ) : null}
 
-              {/* Circular Interpolation Advisory — shown after KPIs when circ_interp */}
-              {form.mode === "circ_interp" && customer && form.tool_dia > 0 && (() => {
-                const D = form.tool_dia;
-                const entryBore = form.existing_hole_dia > 0 ? form.existing_hole_dia : 0;
-                const targetBore = form.target_hole_dia > entryBore ? form.target_hole_dia : 0;
-                const radialWall = customer.ci_a_e_in ?? ((targetBore - entryBore) / 2);
-                if (radialWall <= 0) return null;
-                const aePerPass = Math.max(0.001, (form.woc_pct / 100) * D);
-                const passes = Math.max(1, Math.ceil(radialWall / aePerPass));
-                const aeFinish = 0.007;
-                const radialClearance = entryBore > 0 ? (entryBore - D) / 2 : null;
-                const feedCam = customer.feed_ipm ?? 0;
-                const feedPeripheral = customer.peripheral_feed_ipm ?? 0;
-                const engAngle = (ae: number) => {
-                  const arg = Math.max(-1, Math.min(1, 1 - (2 * ae) / D));
-                  return 2 * Math.acos(arg) * (180 / Math.PI);
-                };
-                const zoneColor = (deg: number) =>
-                  deg < 90 ? "#4ade80" : deg < 150 ? "#facc15" : deg <= 180 ? "#fb923c" : "#f87171";
-                const zoneLabel = (deg: number) =>
-                  deg < 90 ? "Light" : deg < 150 ? "Moderate" : deg <= 180 ? "Heavy" : "Too High";
-                const entryDeg = engAngle(aePerPass);
-                const finishDeg = engAngle(aeFinish);
+              {/* Circular Interpolation Advisory — engine-driven pass schedule */}
+              {form.mode === "circ_interp" && customer && (() => {
+                const circError = (customer as any).circ_error as string | null | undefined;
+                const passes = (customer as any).circ_passes as Array<any> | null | undefined;
+                const totalSec = (customer as any).circ_total_time_sec as number | null | undefined;
+                const entryMode = (customer as any).circ_entry_mode as "pre_drill" | "helical" | null | undefined;
+                const helixPitch = (customer as any).circ_helix_pitch_in as number | null | undefined;
+                const helixFeed = (customer as any).circ_helix_feed_ipm as number | null | undefined;
+                const helixSec = (customer as any).circ_helix_time_sec as number | null | undefined;
+                const suggestedPredrill = (customer as any).circ_suggested_predrill_in as number | null | undefined;
                 const phaseStyle = { background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" };
+                const zoneColor = (z: string) =>
+                  z === "light" ? "#4ade80" : z === "moderate" ? "#facc15" : z === "heavy" ? "#fb923c" : "#f87171";
+                const fmtTime = (s: number) => {
+                  if (!Number.isFinite(s) || s <= 0) return "—";
+                  if (s < 60) return `${s.toFixed(1)}s`;
+                  const m = Math.floor(s / 60);
+                  const rem = s - m * 60;
+                  return `${m}m ${rem.toFixed(0)}s`;
+                };
+
+                // Error state — show block + (if applicable) the auto-suggested pre-drill
+                if (circError) {
+                  return (
+                    <div className="mt-3 rounded-xl border border-red-600/50 bg-red-950/20 px-3 py-3 space-y-2">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-red-300">Circular Interpolation — Input Error</div>
+                      <p className="text-[11px] text-red-200 leading-snug">{circError}</p>
+                      {suggestedPredrill != null && suggestedPredrill > 0 && (
+                        <div className="mt-1 rounded-md px-2 py-1.5" style={{ background: "rgba(248,113,113,0.10)", border: "1px solid rgba(248,113,113,0.35)" }}>
+                          <div className="text-[10px] font-semibold text-amber-300">Suggested pre-drill: <span className="text-white">{suggestedPredrill.toFixed(4)}"</span></div>
+                          <div className="text-[9px] text-zinc-400">Run a drilling op at this dia first, then enter it as the Existing Bore.</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (!passes || passes.length === 0) return null;
+
+                const totalRough = passes.filter((p: any) => p.kind === "rough").length;
+                const hasFinish = passes.some((p: any) => p.kind === "finish");
                 return (
                   <div className="mt-3 rounded-xl border border-indigo-600/40 bg-indigo-950/20 px-3 py-3 space-y-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 mb-1">Circular Interpolation — Process Advisory</div>
-                    {/* Feed summary */}
-                    <div className="rounded-md px-2 py-1.5 flex items-center justify-between gap-4" style={phaseStyle}>
-                      <div>
-                        <div className="text-[9px] text-zinc-500 mb-0.5">CAM Feed (tool centerline)</div>
-                        <div className="text-sm font-bold text-white">{feedCam.toFixed(2)} IPM</div>
-                        <div className="text-[9px] text-amber-300">Enter this in CAM</div>
-                      </div>
-                      {feedPeripheral > 0 && (
-                        <div>
-                          <div className="text-[9px] text-zinc-500 mb-0.5">Peripheral Feed (at wall)</div>
-                          <div className="text-sm font-bold text-amber-400">{feedPeripheral.toFixed(2)} IPM</div>
-                          <div className="text-[9px] text-zinc-400">Actual chip load</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Circular Interpolation — Pass Schedule</div>
+                      {totalSec != null && totalSec > 0 && (
+                        <div className="text-[10px] text-zinc-300">
+                          Total: <span className="font-bold text-white">{fmtTime(totalSec)}</span>
+                          {" "}({totalRough} rough{hasFinish ? " + 1 finish" : ""})
                         </div>
                       )}
-                      <div>
-                        <div className="text-[9px] text-zinc-500 mb-0.5">Radial wall</div>
-                        <div className="text-sm font-bold text-white">{radialWall.toFixed(4)}"</div>
-                        <div className="text-[9px] text-zinc-400">{passes} pass{passes !== 1 ? "es" : ""} · {aePerPass.toFixed(4)}"/pass</div>
-                      </div>
                     </div>
-                    {/* Phase 1 — Entry */}
+
+                    {/* Entry phase */}
                     <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
-                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">① Entry</div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-400">Bore clearance</span>
-                        <span className="text-[10px] font-semibold" style={{ color: radialClearance == null ? "#94a3b8" : radialClearance >= 0.050 ? "#4ade80" : "#f87171" }}>
-                          {radialClearance != null ? `${radialClearance.toFixed(3)}" per side ${radialClearance >= 0.050 ? "✓" : "⚠ tight"}` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Entry type</span>
-                        <span className="text-[10px] font-semibold text-sky-300">Sweep / Roll-in preferred</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Ramp angle (if no pre-drill)</span>
-                        <span className="text-[10px] font-semibold text-sky-300">≤2°</span>
-                      </div>
-                    </div>
-                    {/* Phase 2 — Cutting */}
-                    <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
-                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">② Cutting — {passes} radial pass{passes !== 1 ? "es" : ""} · {aePerPass.toFixed(4)}"/pass</div>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <div className="text-[9px] text-zinc-500 mb-0.5">Engagement / pass</div>
-                          <div className="text-sm font-bold" style={{ color: zoneColor(entryDeg) }}>{entryDeg.toFixed(1)}°</div>
-                          <div className="text-[9px]" style={{ color: zoneColor(entryDeg) }}>{zoneLabel(entryDeg)}</div>
-                          <div className="mt-1 rounded-full overflow-hidden" style={{ height: 3, background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (entryDeg / 360) * 100)}%`, background: zoneColor(entryDeg) }} />
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">① Entry — {entryMode === "helical" ? "Helical Interpolation" : "Pre-Drilled Hole"}</div>
+                      {entryMode === "helical" && helixPitch != null && helixFeed != null ? (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <div className="text-[9px] text-zinc-500">Helix pitch</div>
+                            <div className="text-[11px] font-semibold text-sky-300">{helixPitch.toFixed(4)}"/rev</div>
+                            <div className="text-[9px] text-zinc-500">(2° ramp angle)</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-zinc-500">Helix feed</div>
+                            <div className="text-[11px] font-semibold text-sky-300">{helixFeed.toFixed(2)} IPM</div>
+                            <div className="text-[9px] text-zinc-500">45% of peripheral</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-zinc-500">Helix time</div>
+                            <div className="text-[11px] font-semibold text-sky-300">{fmtTime(helixSec ?? 0)}</div>
+                            <div className="text-[9px] text-zinc-500">to bore depth</div>
                           </div>
                         </div>
-                        <div className="flex-1">
-                          <div className="text-[9px] text-zinc-500 mb-0.5">Direction</div>
-                          <div className="text-[10px] text-zinc-300 leading-snug">CCW = climb cut (preferred for finish). CW = conventional.</div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-300">
+                          Starts in pre-drilled hole at <span className="font-semibold text-white">{(form.existing_hole_dia ?? 0).toFixed(4)}"</span>.
+                          {form.existing_hole_dia > 0 && form.tool_dia > 0 && (
+                            <span className="ml-1 text-zinc-400">Radial clearance: {((form.existing_hole_dia - form.tool_dia) / 2).toFixed(3)}" per side.</span>
+                          )}
                         </div>
-                        <div className="flex-1">
-                          <div className="text-[9px] text-zinc-500 mb-0.5">Bore-to-feed note</div>
-                          <div className="text-[10px] text-zinc-300 leading-snug">Larger bore → lower arc → higher feed is correct.</div>
-                        </div>
-                      </div>
-                      {entryDeg > 150 && (
-                        <p className="text-[10px] text-amber-400 mt-1">⚠ High engagement — increase radial passes or reduce step per pass</p>
                       )}
                     </div>
-                    {/* Phase 3 — Finish */}
+
+                    {/* ── CAM Inputs — the values you type into CAM ── */}
+                    {(() => {
+                      // Pull representative values from the dominant rough pass
+                      const roughPasses = passes.filter((p: any) => p.kind === "rough");
+                      const rep = roughPasses.length > 0
+                        ? roughPasses.reduce((a: any, b: any) => (a.ae_in >= b.ae_in ? a : b))
+                        : passes[0];
+                      const finishPass = passes.find((p: any) => p.kind === "finish");
+                      const flutes = Number(customer.flutes ?? 0);
+                      const repIpt = flutes > 0 && rep.rpm > 0 ? rep.peripheral_feed_ipm / (rep.rpm * flutes) : 0;
+                      const finIpt = finishPass && flutes > 0 && finishPass.rpm > 0 ? finishPass.peripheral_feed_ipm / (finishPass.rpm * flutes) : 0;
+                      return (
+                        <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
+                          <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">② CAM Inputs <span className="font-normal text-zinc-500 normal-case tracking-normal">— type these into your CAM</span></div>
+                          <div className="grid grid-cols-4 gap-3 mt-1">
+                            <div>
+                              <div className="text-[9px] text-zinc-500">RPM</div>
+                              <div className="text-sm font-bold text-white">{rep.rpm}</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-zinc-500">Chip Load (IPT)</div>
+                              <div className="text-sm font-bold text-white">{repIpt.toFixed(5)}"</div>
+                              <div className="text-[9px] text-zinc-500">per tooth, {flutes} flutes</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-amber-300 font-semibold uppercase tracking-wider">▶ Program Feed</div>
+                              <div className="text-sm font-bold text-amber-300">{rep.feed_ipm.toFixed(2)} IPM</div>
+                              <div className="text-[9px] text-zinc-500">centerline — into CAM</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-zinc-500">Target Engagement</div>
+                              <div className="text-sm font-bold text-white">120°</div>
+                              <div className="text-[9px] text-zinc-500">CAM grows ae to hold</div>
+                            </div>
+                          </div>
+                          <div className="mt-1.5 text-[9px] text-zinc-400 leading-snug">
+                            <span className="text-zinc-300">Peripheral (at-wall) feed = {rep.peripheral_feed_ipm.toFixed(1)} IPM</span> — reference only, NOT what you program. This is what the cutting edge sees once the tool orbits the bore. If your CAM has a "feed at tool tip" / TCP / arc-compensation option <strong>ON</strong>, then program {rep.peripheral_feed_ipm.toFixed(1)} instead.
+                          </div>
+                          {finishPass && (
+                            <div className="mt-2 pt-2 border-t border-indigo-900/40">
+                              <div className="text-[9px] font-bold text-amber-300 mb-0.5">Finish pass</div>
+                              <div className="grid grid-cols-4 gap-3">
+                                <div>
+                                  <div className="text-[9px] text-zinc-500">Stock left</div>
+                                  <div className="text-[11px] font-semibold text-white">{finishPass.ae_in.toFixed(4)}"</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-zinc-500">Chip Load</div>
+                                  <div className="text-[11px] font-semibold text-white">{finIpt.toFixed(5)}"</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-amber-300 font-semibold">▶ Program Feed</div>
+                                  <div className="text-[11px] font-semibold text-amber-300">{finishPass.feed_ipm.toFixed(2)} IPM</div>
+                                  <div className="text-[9px] text-zinc-500">(periph {finishPass.peripheral_feed_ipm.toFixed(1)})</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-zinc-500">RPM</div>
+                                  <div className="text-[11px] font-semibold text-white">{finishPass.rpm}</div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Pass schedule — reference only, CAM will compute centerline feed itself */}
+                    <div className="rounded-md overflow-hidden" style={phaseStyle}>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 px-2 pt-1.5">③ Pass Schedule <span className="font-normal text-zinc-500 normal-case tracking-normal">— what to expect (reference; CAM derives centerline feed from peripheral × bore/tool ratio)</span></div>
+                      <div className="px-2 pb-1.5">
+                        <table className="w-full text-[10px] mt-1">
+                          <thead>
+                            <tr className="text-zinc-500">
+                              <th className="text-left font-medium py-0.5">#</th>
+                              <th className="text-left font-medium py-0.5">Bore</th>
+                              <th className="text-right font-medium py-0.5">ae</th>
+                              <th className="text-right font-medium py-0.5">Eng°</th>
+                              <th className="text-right font-medium py-0.5">DOC</th>
+                              <th className="text-right font-medium py-0.5">RPM</th>
+                              <th className="text-right font-medium py-0.5" title="Centerline feed — what you program in CAM. Tool axis travel rate.">▶ Program<br/>Feed</th>
+                              <th className="text-right font-medium py-0.5" title="Peripheral feed — at the wall, what the cutting edge actually sees. Reference only (or use this if CAM is in TCP / feed-at-tool-tip mode).">Periph<br/>(ref)</th>
+                              <th className="text-right font-medium py-0.5">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(() => {
+                              const baseRpm = Math.max(...passes.map((p: any) => p.rpm));
+                              return passes.map((p: any) => {
+                                const rpmDerated = p.rpm < baseRpm;
+                                return (
+                                  <tr key={p.pass} className="border-t border-indigo-900/30">
+                                    <td className="py-0.5 text-zinc-300">{p.pass}{p.kind === "finish" && <span className="ml-1 text-[8px] text-amber-300 font-bold">FIN</span>}</td>
+                                    <td className="py-0.5 text-zinc-300">{p.bore_start_in.toFixed(4)} → {p.bore_end_in.toFixed(4)}</td>
+                                    <td className="py-0.5 text-right text-zinc-300">{p.ae_in.toFixed(4)}</td>
+                                    <td className="py-0.5 text-right font-semibold" style={{ color: zoneColor(p.engagement_zone) }}>{p.engagement_deg.toFixed(0)}°</td>
+                                    <td className="py-0.5 text-right text-zinc-300">{p.doc_in.toFixed(3)}"</td>
+                                    <td className="py-0.5 text-right" style={{ color: rpmDerated ? "#fb923c" : "#cbd5e1" }}>{p.rpm}</td>
+                                    <td className="py-0.5 text-right text-amber-300 font-semibold">{p.feed_ipm.toFixed(2)}</td>
+                                    <td className="py-0.5 text-right text-zinc-500">{p.peripheral_feed_ipm.toFixed(1)}</td>
+                                    <td className="py-0.5 text-right text-zinc-300">{fmtTime(p.time_sec)}</td>
+                                  </tr>
+                                );
+                              });
+                            })()}
+                          </tbody>
+                        </table>
+                        {passes.some((p: any) => p.note) && (
+                          <div className="mt-1.5 space-y-0.5">
+                            {passes.filter((p: any) => p.note).map((p: any) => (
+                              <div key={`note-${p.pass}`} className="text-[9px] text-amber-300/90">
+                                Pass {p.pass}: {p.note}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Programming reminders */}
                     <div className="rounded-md px-2 py-1.5" style={phaseStyle}>
-                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">③ Finish Pass</div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-400">Engagement (0.007" stock)</span>
-                        <span className="text-[10px] font-semibold" style={{ color: zoneColor(finishDeg) }}>{finishDeg.toFixed(1)}° — {zoneLabel(finishDeg)}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Leave stock</span>
-                        <span className="text-[10px] font-semibold text-sky-300">0.005–0.010" for cleanup pass</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[10px] text-zinc-400">Feed on finish</span>
-                        <span className="text-[10px] font-semibold text-sky-300">50–70% of roughing · never dwell inside bore</span>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-1">④ Programming Notes</div>
+                      <div className="text-[10px] text-zinc-300 leading-snug space-y-0.5">
+                        {(() => {
+                          // Detect "start conservative, open up" narrative — first pass ae materially smaller than the heaviest
+                          const roughs = passes.filter((p: any) => p.kind === "rough");
+                          if (roughs.length >= 3) {
+                            const firstAe = roughs[0].ae_in;
+                            const maxAe = Math.max(...roughs.map((p: any) => p.ae_in));
+                            if (maxAe > firstAe * 1.5) {
+                              return (
+                                <div className="text-[10px] text-amber-200 leading-snug mb-1">
+                                  ⓘ <span className="text-white font-semibold">Pre-drill is close to tool size</span> — the first pass starts conservative (ae = {firstAe.toFixed(4)}") to keep engagement near 120°. As the bore opens up, the schedule grows ae (up to {maxAe.toFixed(4)}") and peripheral feed climbs. This is the right shape — early passes are wrap-limited, later passes are chip-thinning-limited.
+                                </div>
+                              );
+                            }
+                          }
+                          return null;
+                        })()}
+                        <div>• <span className="text-white">In CAM</span>: enter RPM + chip load (IPT) + engagement target from the CAM Inputs card. CAM derives centerline feed = peripheral × (tool dia / bore dia) for each pass automatically.</div>
+                        <div>• <span className="text-white">Peripheral feed</span> (amber column) is what the cutting edge sees. <span className="text-white">CL feed</span> is what the spindle nose travels — useful as a sanity check on what CAM outputs.</div>
+                        <div>• <span className="text-white">CCW = climb</span> on an internal bore. Use CCW for the finish pass.</div>
+                        {entryMode === "helical" && <div>• <span className="text-white">Helical entry</span>: ramp to full depth at the helix feed/pitch above, then start pass 1.</div>}
                       </div>
                     </div>
                   </div>
