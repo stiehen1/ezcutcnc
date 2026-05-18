@@ -1753,7 +1753,7 @@ def run_chamfer_mill(payload: dict) -> dict:
             "spindle_load_pct": round((hp_required / machine_hp) * 100.0, 1) if machine_hp > 0 else 0.0,
             "hp_required":     round(hp_required, 3),
             "fpt":             round(ipt, 6),
-            "adj_fpt":         None,
+            "adj_fpt":         round(ipt * math.sin(half_angle_rad), 6),  # actual chip after lead-angle thinning
             "peripheral_feed_ipm": None,
             "ci_a_e_in":       None,
             "ci_feed_ratio":   None,
@@ -1764,7 +1764,7 @@ def run_chamfer_mill(payload: dict) -> dict:
         },
         "engineering": {
             "deflection_in":          0.0,
-            "chip_thickness_in":      round(ipt, 6),
+            "chip_thickness_in":      round(ipt * math.sin(half_angle_rad), 6),  # actual chip after lead thinning
             "chatter_index":          0.0,
             # Teeth in cut: derived from actual WOC/D_eff radial engagement fraction.
             # woc = depth × tan(half_angle); woc/D_eff = 0.5 always for CMS (point tip).
