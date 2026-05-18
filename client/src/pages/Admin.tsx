@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "wouter";
+import Catalog from "@/pages/Catalog";
 
 type User = {
   email: string;
@@ -75,7 +76,7 @@ export default function Admin() {
   const [authError, setAuthError] = React.useState("");
   const [authLoading, setAuthLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
-  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access" | "teams" | "announcements">("registrations");
+  const [tab, setTab] = React.useState<"registrations" | "users" | "activity" | "usage" | "access" | "teams" | "announcements" | "skus">("registrations");
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [access, setAccess] = React.useState<AccessData | null>(null);
   const [teams, setTeams] = React.useState<TeamMember[] | null>(null);
@@ -344,7 +345,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 border border-border">
-          {(["registrations", "users", "activity", "usage", "access", "teams", "announcements"] as const).map(t => (
+          {(["registrations", "users", "activity", "usage", "access", "teams", "announcements", "skus"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -355,12 +356,20 @@ export default function Admin() {
                   : t === "registrations" ? "#059669"
                   : t === "teams" ? "#0369a1"
                   : t === "announcements" ? "#be185d"
+                  : t === "skus" ? "#ea580c"
                   : "#6366f1"
                   : "transparent",
                 color: tab === t ? "#fff" : "#a1a1aa",
               }}
             >
-              {t === "registrations" ? "Registrations" : t === "users" ? "Toolbox Users" : t === "activity" ? "Activity" : t === "usage" ? "Usage" : t === "teams" ? "Teams" : t === "announcements" ? "Announcements" : "Access"}
+              {t === "registrations" ? "Registrations"
+                : t === "users" ? "Toolbox Users"
+                : t === "activity" ? "Activity"
+                : t === "usage" ? "Usage"
+                : t === "teams" ? "Teams"
+                : t === "announcements" ? "Announcements"
+                : t === "skus" ? "SKU Catalog"
+                : "Access"}
             </button>
           ))}
         </div>
@@ -916,6 +925,11 @@ export default function Admin() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* SKU Catalog tab */}
+        {tab === "skus" && (
+          <Catalog embedded />
         )}
 
         <div className="text-center pt-2">
