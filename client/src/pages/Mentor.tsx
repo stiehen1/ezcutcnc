@@ -4418,7 +4418,7 @@ ${stabSection}
       lines.push(DIV);
       lines.push(L("Spindle Speed",  `${Math.round(cust.rpm).toLocaleString()} RPM`));
       lines.push(L("SFM",            String(Math.round(cust.sfm ?? 0))));
-      lines.push(L("Feed Rate",      `${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
+      lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
       {
         const sc = STOCK_CONDITION_INFO[form.stock_condition];
         if (sc && sc.sfmMult < 1.0 && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0) {
@@ -4456,6 +4456,27 @@ ${stabSection}
       if (cust.peripheral_feed_ipm != null)
         lines.push(L("Peripheral Feed",`${cust.peripheral_feed_ipm.toFixed(2)} IPM`));
       lines.push("");
+
+      // ── BORE INTERPOLATION (circ_interp only — pass summary) ──
+      if (form.mode === "circ_interp") {
+        const passes = (cust as any).circ_passes as Array<any> | null | undefined;
+        const totalSec = (cust as any).circ_total_time_sec as number | null | undefined;
+        const entryMode = (cust as any).circ_entry_mode as string | null | undefined;
+        if (passes && passes.length > 0) {
+          const roughCount = passes.filter((p: any) => p.kind === "rough").length;
+          const hasFinish = passes.some((p: any) => p.kind === "finish");
+          const passSummary = `${roughCount} rough${hasFinish ? " + 1 finish" : ""}`;
+          const cycle = totalSec != null && totalSec > 0
+            ? (totalSec < 60 ? `${totalSec.toFixed(1)}s` : `${Math.floor(totalSec / 60)}m ${Math.round(totalSec - Math.floor(totalSec / 60) * 60)}s`)
+            : "—";
+          lines.push("BORE INTERPOLATION");
+          lines.push(DIV);
+          lines.push(L("Entry",          entryMode === "helical" ? "Helical Interpolation" : "Pre-Drilled Hole"));
+          lines.push(L("Passes",         passSummary));
+          lines.push(L("Cycle Time",     cycle));
+          lines.push("");
+        }
+      }
 
       // ── ENTRY MOVES ─────────────────────────
       // xy_radial uses local feed math (50% of side-mill feed) and does not require em.
