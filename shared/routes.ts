@@ -198,6 +198,7 @@ export const mentorSchemas = {
         note: z.string().nullable().optional(),
       })).nullable().optional(),
       circ_total_time_sec: z.number().nullable().optional(),
+      circ_headline_pass: z.number().int().nullable().optional(),
       circ_entry_mode: z.enum(["pre_drill", "helical"]).nullable().optional(),
       circ_helix_pitch_in: z.number().nullable().optional(),
       circ_helix_feed_ipm: z.number().nullable().optional(),
