@@ -13001,11 +13001,18 @@ ${stabSection}
 
                     {/* ── CAM Inputs — the values you type into CAM ── */}
                     {(() => {
-                      // Pull representative values from the dominant rough pass
+                      // Headline = SLOWEST rough pass (safest starting feed).
+                      // Pass 1 is usually the bottleneck — tight wrap right after
+                      // pre-drill / helical entry — so we program that and let
+                      // CAM ramp up as the bore opens (see Pass Schedule below).
                       const roughPasses = passes.filter((p: any) => p.kind === "rough");
                       const rep = roughPasses.length > 0
-                        ? roughPasses.reduce((a: any, b: any) => (a.ae_in >= b.ae_in ? a : b))
+                        ? roughPasses.reduce((a: any, b: any) => (a.feed_ipm <= b.feed_ipm ? a : b))
                         : passes[0];
+                      const peakRough = roughPasses.length > 0
+                        ? roughPasses.reduce((a: any, b: any) => (a.feed_ipm >= b.feed_ipm ? a : b))
+                        : null;
+                      const showRamp = peakRough != null && peakRough.feed_ipm > rep.feed_ipm * 1.05;
                       const finishPass = passes.find((p: any) => p.kind === "finish");
                       const flutes = Number(customer.flutes ?? 0);
                       const repIpt = flutes > 0 && rep.rpm > 0 ? rep.peripheral_feed_ipm / (rep.rpm * flutes) : 0;
@@ -13027,6 +13034,7 @@ ${stabSection}
                               <div className="text-[9px] text-amber-300 font-semibold uppercase tracking-wider">▶ Program Feed</div>
                               <div className="text-sm font-bold text-amber-300">{rep.feed_ipm.toFixed(2)} IPM</div>
                               <div className="text-[9px] text-zinc-500">centerline — into CAM</div>
+                              <div className="text-[9px] text-zinc-500">Pass {rep.pass} (slowest)</div>
                             </div>
                             <div>
                               <div className="text-[9px] text-zinc-500">Target Engagement</div>
@@ -13034,6 +13042,11 @@ ${stabSection}
                               <div className="text-[9px] text-zinc-500">CAM grows ae to hold</div>
                             </div>
                           </div>
+                          {showRamp && (
+                            <div className="mt-1.5 text-[9px] text-amber-200/90 leading-snug">
+                              <strong>Starting feed</strong> — pass {rep.pass} is the tightest engagement, so it's the slowest. CAM will ramp feed up to ~{peakRough!.feed_ipm.toFixed(1)} IPM as the bore opens (see Pass Schedule below). Program {rep.feed_ipm.toFixed(2)} to be safe through the first cut.
+                            </div>
+                          )}
                           <div className="mt-1.5 text-[9px] text-zinc-400 leading-snug">
                             <span className="text-zinc-300">Peripheral (at-wall) feed = {rep.peripheral_feed_ipm.toFixed(1)} IPM</span> — reference only, NOT what you program. This is what the cutting edge sees once the tool orbits the bore. If your CAM has a "feed at tool tip" / TCP / arc-compensation option <strong>ON</strong>, then program {rep.peripheral_feed_ipm.toFixed(1)} instead.
                           </div>

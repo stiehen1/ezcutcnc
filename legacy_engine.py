@@ -6596,6 +6596,30 @@ def run(payload=None):
             _circ_total_time_sec = None
     # ── end circ_interp sequencer ──────────────────────────────────────────
 
+    # ── circ_interp: headline feed = slowest rough pass (safest to program) ─
+    # The earlier peripheral→centerline conversion at the top of this function
+    # uses a single bore-final ratio, which corresponds to the schedule's
+    # NOMINAL pass (first one to hit the requested ae ceiling). That pass is
+    # usually mid-schedule — easier than pass 1, which is the tight first cut
+    # right after pre-drill / helical entry. Programmers see the headline and
+    # trust it, so we want pass 1's feed as the safe starting number whenever
+    # it's the slowest rough pass in the schedule. Later passes climb feed as
+    # the bore opens; CAM derives those from the schedule.
+    _circ_headline_pass_idx = None
+    if mode == "circ_interp" and _circ_passes and len(_circ_passes) > 0:
+        _rough_passes = [(_i, _p) for _i, _p in enumerate(_circ_passes)
+                         if str(_p.get("kind", "rough")) == "rough"]
+        if _rough_passes:
+            _p1_idx, _p1 = _rough_passes[0]
+            _p1_feed = float(_p1.get("feed_ipm", 0) or 0)
+            _slowest_feed = min(float(_p.get("feed_ipm", 0) or 0) for _, _p in _rough_passes)
+            # Pass 1 is the headline iff it's at the floor (≤ all others within tol).
+            if _p1_feed > 0 and _p1_feed <= _slowest_feed + 1e-6:
+                feed_ipm = _p1_feed
+                _peripheral_feed_ipm = float(_p1.get("peripheral_feed_ipm", _peripheral_feed_ipm) or _peripheral_feed_ipm)
+                _circ_headline_pass_idx = _p1_idx + 1  # 1-based for UI
+    # ── end circ_interp headline override ──────────────────────────────────
+
     # ── circ_interp: time-weighted average load across passes ───────────────
     # The straight-line feed_ipm overstates cutting load for circ_interp because
     # it doesn't account for orbiting (centerline ≠ peripheral) or per-pass ae
@@ -6678,6 +6702,7 @@ def run(payload=None):
             "ci_a_e_in": round(_ci_a_e_in, 4) if _ci_a_e_in else None,
             "ci_feed_ratio": round(_ci_feed_ratio, 3) if _ci_feed_ratio else None,
             "circ_passes": _circ_passes,
+            "circ_headline_pass": _circ_headline_pass_idx,
             "circ_total_time_sec": _circ_total_time_sec,
             "circ_entry_mode": _circ_entry_mode,
             "circ_helix_pitch_in": _circ_helix_pitch_in,
