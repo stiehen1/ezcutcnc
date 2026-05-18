@@ -514,10 +514,87 @@ CMH_SFM_MULT         = 1.15   # +15% SFM vs CMS/baseline at 30° shear
 CMH_FORCE_FACTOR     = round(1.0 - (CMH_SHEAR_ANGLE_DEG / 45.0) * 0.10, 4)  # ~0.933
 # Minimum chip fraction: below this × base_ipt, CMH tip flat rubs instead of cutting.
 CMH_MIN_CHIP_FRAC    = 0.30   # 30% of base ipt_frac × body_dia
-# Chamfer mills tolerate ~2× the endmill chip load: short edge contact, low MRR,
-# minimal chip evacuation demand. Shop-calibrated: 17-4 PH 1/2" CMH 0.0042 fpt,
-# CMS 0.0028 fpt — both land at ~2.0× over IPT_FRAC-derived endmill baseline.
-CHAMFER_IPT_MULT     = 2.0
+# Chamfer chip-load multiplier over endmill IPT_FRAC. Chip-evac/deflection headroom
+# governs for soft materials (1.75×); edge strength governs for HRSA/hardened (1.1–1.4×).
+# Shop-calibrated anchor: 17-4 PH 1/2" CMH ~0.0036 fpt, CMS ~0.0024 fpt @ 250–275 SFM
+# (15% pullback from catalog max for conservative starting point).
+CHAMFER_IPT_MULT = {
+    # Group fallbacks
+    "Aluminum":            1.15,
+    "Non-Ferrous":         1.20,
+    "Abrasive Non-Ferrous": 1.20,
+    "Plastics":            1.15,
+    "Steel":               1.75,
+    "Stainless":           1.75,
+    "Cast Iron":           1.55,
+    "Titanium":            1.35,
+    "Inconel":             1.30,
+    # Aluminum / non-ferrous / plastic — IPT_FRAC already aggressive, minimal chamfer headroom
+    "aluminum_wrought":    1.15,   # 1/2" chamfer target ~0.006 fpt @ 0.0090 IPT_FRAC
+    "aluminum_wrought_hs": 1.15,
+    "aluminum_cast":       1.15,
+    "plastic_unfilled":    1.15,
+    "plastic_filled":      1.10,
+    "composite_tpc":       1.05,
+    "non_ferrous":         1.20,
+    "manganese_bronze":    1.20,
+    "silicon_bronze":      1.20,
+    "copper_beryllium":    1.10,
+    # Carbon / alloy / free-machining steels
+    "steel_mild":          1.75,
+    "steel_free":          1.75,
+    "steel_alloy":         1.75,
+    "steel_tool":          1.35,
+    # Tool steels — carbide edge strength governs
+    "tool_steel_p20":      1.35,
+    "tool_steel_a2":       1.25,
+    "tool_steel_h13":      1.25,
+    "tool_steel_s7":       1.25,
+    "tool_steel_d2":       1.20,
+    "cpm_10v":             1.20,
+    # Stainless
+    "stainless_fm":        1.75,
+    "stainless_ferritic":  1.75,
+    "stainless_410":       1.75,
+    "stainless_trimrite":  1.65,
+    "stainless_420":       1.55,
+    "stainless_440c":      1.45,
+    "stainless_304":       1.75,
+    "stainless_316":       1.75,
+    "stainless_ph":        1.75,   # CALIBRATION ANCHOR (CMH ~0.0036 / CMS ~0.0024 @ 250–275 SFM)
+    "stainless_duplex":    1.45,
+    "stainless_superduplex": 1.25,
+    "stainless_martensitic": 1.75,
+    "stainless_austenitic":  1.75,
+    # Cast iron
+    "cast_iron_gray":      1.55,
+    "cast_iron_ductile":   1.55,
+    "cast_iron_cgi":       1.45,
+    "cast_iron_malleable": 1.55,
+    # Titanium
+    "titanium_cp":         1.35,
+    "titanium_64":         1.35,
+    "titanium":            1.35,
+    # HRSA / superalloys — edge-strength limit; modest headroom over endmill (+10–15%)
+    "monel_k500":          1.60,
+    "inconel_625":         1.30,
+    "inconel_718":         1.30,
+    "inconel_617":         1.30,
+    "hastelloy_x":         1.30,
+    "waspaloy":            1.25,
+    "mp35n":               1.25,
+    "hiTemp_fe":           1.30,
+    "hiTemp_co":           1.25,
+    "inconel":             1.30,
+    # Hardened — carbide corner protection critical
+    "hardened_lt55":       1.20,
+    "hardened_gt55":       1.10,
+    # Armor
+    "armor_milspec":       1.20,
+    "armor_ar400":         1.20,
+    "armor_ar500":         1.15,
+    "armor_ar600":         1.10,
+}
 
 # Helix angle by Core Cutter tool series.
 # QTR3 is variable-helix (40/41/42°); 41° is the representative average for force calcs.
@@ -1594,12 +1671,24 @@ def run_chamfer_mill(payload: dict) -> dict:
     rpm = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * d_eff) / 12.0
 
-    ipt = ipt_frac * body_dia * lead_ctf * series_mult * CHAMFER_IPT_MULT
+    chamfer_mult = CHAMFER_IPT_MULT.get(_mat_key, CHAMFER_IPT_MULT.get(mat_group, 1.35))
+    ipt = ipt_frac * body_dia * lead_ctf * series_mult * chamfer_mult
 
     # CMH minimum chip load — tip flat rubs below this threshold
-    cmh_min_ipt = ipt_frac * body_dia * CMH_MIN_CHIP_FRAC * lead_ctf * CHAMFER_IPT_MULT if is_cmh else 0.0
+    cmh_min_ipt = ipt_frac * body_dia * CMH_MIN_CHIP_FRAC * lead_ctf * chamfer_mult if is_cmh else 0.0
 
     feed_ipm = rpm * ipt * flutes
+
+    # Practical feed ceiling — beyond ~250 IPM, servo response and finish degrade
+    # on most machines, and rapid-traverse limits typically govern. Cap and
+    # back-solve ipt so the displayed chip load matches what's actually commanded.
+    CHAMFER_MAX_FEED_IPM = 250.0
+    if feed_ipm > CHAMFER_MAX_FEED_IPM:
+        feed_ipm = CHAMFER_MAX_FEED_IPM
+        ipt = feed_ipm / max(1.0, rpm * flutes)
+        notes_feed_capped = True
+    else:
+        notes_feed_capped = False
 
     # HP estimate — chamfer geometry is triangular, not rectangular.
     # WOC grows with depth: actual_woc = depth × tan(half_angle) = (D_eff - tip_dia) / 2
@@ -1699,6 +1788,11 @@ def run_chamfer_mill(payload: dict) -> dict:
         notes.append(
             f"⚠ Chip load ({ipt:.5f}\") is below CMH minimum ({cmh_min_ipt:.5f}\"). "
             f"The tip flat will rub rather than cut — increase feed or chamfer depth."
+        )
+    if notes_feed_capped:
+        notes.append(
+            f"Feed capped at {CHAMFER_MAX_FEED_IPM:.0f} IPM — servo response and finish degrade "
+            f"beyond this on most machines, and rapid-traverse limits typically govern."
         )
 
     # Contextual tips
