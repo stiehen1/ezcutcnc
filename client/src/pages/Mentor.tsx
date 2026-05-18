@@ -9033,7 +9033,7 @@ ${stabSection}
                             title={tipReason}
                             onClick={() => {
                               setForm(p => ({ ...p, woc_pct: optPct }));
-                              setWocText(optPct.toFixed(1));
+                              setWocText(((optPct / 100) * D).toFixed(4));
                               setWocPreset("optimal");
                             }}
                           >Optimal</button>
@@ -9045,20 +9045,23 @@ ${stabSection}
                         type="text"
                         inputMode="decimal"
                         className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                        placeholder="10–25"
+                        placeholder="0.075"
                         value={wocText}
                         onChange={(e) => setWocText(e.target.value)}
                         onBlur={() => {
                           const raw = wocText.trim();
+                          const hasPercent = raw.includes("%");
                           const n = parseFloat(raw.replace(/[^\d.]/g, ""));
-                          if (Number.isFinite(n) && n > 0) {
-                            const pct = n >= 1 ? n : n * 100;
+                          const dia = form.tool_dia || 0;
+                          if (Number.isFinite(n) && n > 0 && dia > 0) {
+                            // Treat as percent if user typed "%", or value is clearly a percent (>=1)
+                            const pct = hasPercent || n >= 1 ? n : (n / dia) * 100;
                             const clamped = Math.max(5, Math.min(35, pct));
                             setForm((p) => ({ ...p, woc_pct: clamped }));
-                            setWocText(clamped.toFixed(1));
+                            setWocText(((clamped / 100) * dia).toFixed(4));
                             setWocPreset(null);
                           } else {
-                            setWocText(form.woc_pct ? form.woc_pct.toFixed(1) : "");
+                            setWocText(form.woc_pct && dia > 0 ? ((form.woc_pct / 100) * dia).toFixed(4) : "");
                           }
                         }}
                       />
@@ -9073,7 +9076,7 @@ ${stabSection}
                         <button
                           key={key}
                           type="button"
-                          onClick={() => { setForm((p) => ({ ...p, woc_pct: val })); setWocText(val.toFixed(1)); setWocPreset(key); }}
+                          onClick={() => { const dia = form.tool_dia || 0; setForm((p) => ({ ...p, woc_pct: val })); setWocText(dia > 0 ? ((val / 100) * dia).toFixed(4) : ""); setWocPreset(key); }}
                           className="flex-1 rounded py-0.5 text-[9px] font-semibold border transition-all leading-tight"
                           style={{
                             background: wocPreset === key ? "#eab308" : "transparent",
@@ -9085,6 +9088,9 @@ ${stabSection}
                         </button>
                       ))}
                     </div>
+                    <p className="text-[10px] text-amber-300/80 leading-snug mt-1.5">
+                      Target avg WOC per pass. The first pass (and any wrapping into a tight corner) runs lighter — see the per-pass table for what each pass actually cuts.
+                    </p>
                   </div>
                 </div>
               ) : (<>
