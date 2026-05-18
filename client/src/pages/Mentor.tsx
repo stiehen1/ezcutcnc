@@ -8893,7 +8893,39 @@ ${stabSection}
           </div>
           </>)}
 
+          {/* ── Rigidity Setup — stickout lives here (tool setup), not in Cut Engagement ── */}
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-sky-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Rigidity Setup</div>
+            <div className="flex-1 border-t-2 border-sky-500" />
+          </div>
+          <div className="max-w-sm space-y-2">
+            <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
+            <Input
+              type="text" inputMode="decimal"
+              className="no-spinners"
+              placeholder="e.g. 1.500"
+              value={stickoutText}
+              onChange={(e) => { setStickoutText(e.target.value); setStickoutViolation(null); }}
+              onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
+              onBlur={() => {
+                const n = parseDim(stickoutText);
+                let val = metric ? n / 25.4 : n;
+                if (Number.isFinite(val) && val > 0) {
+                  const _fw = (form as any).flute_wash ?? 0;
+                  const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                  if (_minSo > 0 && val < _minSo) {
+                    val = _minSo;
+                    const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
+                    setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                  } else { setStickoutViolation(null); }
+                  setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
+              }}
+            />
+            {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
+          </div>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">{form.mode === "deep_pocket" ? "Pocketing Workflow" : "Cut Engagement"}</div>
@@ -8932,38 +8964,6 @@ ${stabSection}
                       <span className="text-xs text-muted-foreground shrink-0">in</span>
                     </div>
                   </div>
-                  {/* ── Target Bore (REQUIRED) ── */}
-                  <div className="space-y-1">
-                    <FieldLabel hint="Finish bore diameter. Required. Must be larger than the tool diameter — the engine will sequence multiple radial passes to grow from the existing bore (or tool dia for helical entry) up to this target.">
-                      Target Bore <span className="font-normal text-red-400">*</span>
-                    </FieldLabel>
-                    <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!targetHoleText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                        placeholder="finish bore dia"
-                        value={targetHoleText}
-                        onChange={(e) => setTargetHoleText(e.target.value)}
-                        onBlur={() => {
-                          const n = parseFloat(targetHoleText);
-                          if (Number.isFinite(n) && n > 0) {
-                            setForm((p) => ({ ...p, target_hole_dia: n }));
-                            setTargetHoleText(n.toFixed(4));
-                          } else {
-                            setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(4) : "");
-                          }
-                        }}
-                      />
-                      <span className="text-xs text-muted-foreground shrink-0">in</span>
-                    </div>
-                    {form.target_hole_dia > 0 && form.tool_dia > 0 && form.target_hole_dia <= form.tool_dia && (
-                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target ({form.target_hole_dia.toFixed(4)}") must exceed tool ({form.tool_dia.toFixed(4)}"). Use drilling for bores ≤ tool dia.</p>
-                    )}
-                    {form.target_hole_dia > 0 && form.existing_hole_dia > 0 && form.target_hole_dia <= form.existing_hole_dia && (
-                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target must exceed existing bore ({form.existing_hole_dia.toFixed(4)}").</p>
-                    )}
-                  </div>
                   {/* ── Entry Mode + WOC ── */}
                   <div className="space-y-1">
                     <FieldLabel hint="Entry strategy. Pre-Drill = use an existing hole. Helical = ramp down in a tight helix (requires center-cutting tool). Auto = pre-drill if existing > 0 else helical.">
@@ -8993,10 +8993,53 @@ ${stabSection}
                     </div>
                   </div>
                   {/* ── Radial step / pass (WOC%) ── */}
-                  <div className="space-y-1">
-                    <FieldLabel hint="Radial step per pass as % of tool diameter. The engine sequences enough passes to grow from existing → target. Tight-wrap passes (engagement ≥150°) auto-pull-back to keep the tool happy.">
-                      Radial Step <span className="font-normal text-zinc-500">(per pass, % of dia)</span>
-                    </FieldLabel>
+                  <div className="space-y-1 pt-3">
+                    <div className="flex items-center justify-between">
+                      <FieldLabel hint="Radial width of cut per pass — also known as Stepover. The engine sequences enough passes to grow from existing → target bore. Tight-wrap passes (engagement ≥150°) auto-pull-back to keep the tool happy.">
+                        WOC <span className="font-normal text-zinc-500">(per pass, % of dia)</span>
+                      </FieldLabel>
+                      {(() => {
+                        // Optimal radial step — sized by per-side clearance between
+                        // pre-drilled hole and tool dia. Tight clearance = conservative
+                        // ceiling (pass 1 will wrap heavy regardless); generous clearance
+                        // = aggressive ceiling. Helical entry (no pre-drill) defaults
+                        // to 10% — the sequencer's bisection pulls pass 1 back to ~120°
+                        // wrap automatically.
+                        const D = form.tool_dia || 0;
+                        const hasHole = (form.existing_hole_dia ?? 0) > 0;
+                        const helical = form.circ_entry === "helical" || (form.circ_entry === "auto" && !hasHole);
+                        if (!(D > 0)) return null;
+                        let optPct: number;
+                        let tipReason: string;
+                        if (helical || !hasHole) {
+                          optPct = 10;
+                          tipReason = "Helical entry — no pre-drill. Pass 1 starts from the tool footprint; bisection pulls back to ~120° wrap automatically.";
+                        } else {
+                          const clearance = (form.existing_hole_dia - D) / 2;
+                          const clearancePct = (clearance / D) * 100;
+                          if (clearancePct < 5)       { optPct = 8;  tipReason = "Very tight pre-drill — barely larger than tool."; }
+                          else if (clearancePct < 15) { optPct = 11; tipReason = "Tight pre-drill — pass 1 still wrap-limited."; }
+                          else if (clearancePct < 30) { optPct = 15; tipReason = "Moderate pre-drill clearance — standard nominal."; }
+                          else if (clearancePct < 50) { optPct = 20; tipReason = "Generous pre-drill — plenty of orbit room."; }
+                          else                        { optPct = 25; tipReason = "Very generous pre-drill — aggressive ceiling fine."; }
+                          tipReason += ` (clearance per side ${clearance.toFixed(3)}" = ${clearancePct.toFixed(1)}%×D)`;
+                        }
+                        const isActive = wocPreset === "optimal";
+                        return (
+                          <button
+                            type="button"
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors leading-tight"
+                            style={isActive ? { borderColor: "#38bdf8", background: "#38bdf8", color: "#000" } : { borderColor: "rgba(56,189,248,0.5)", color: "#38bdf8" }}
+                            title={tipReason}
+                            onClick={() => {
+                              setForm(p => ({ ...p, woc_pct: optPct }));
+                              setWocText(optPct.toFixed(1));
+                              setWocPreset("optimal");
+                            }}
+                          >Optimal</button>
+                        );
+                      })()}
+                    </div>
                     <div className="flex h-9 items-center rounded-md border border-input px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background">
                       <input
                         type="text"
@@ -9013,6 +9056,7 @@ ${stabSection}
                             const clamped = Math.max(5, Math.min(35, pct));
                             setForm((p) => ({ ...p, woc_pct: clamped }));
                             setWocText(clamped.toFixed(1));
+                            setWocPreset(null);
                           } else {
                             setWocText(form.woc_pct ? form.woc_pct.toFixed(1) : "");
                           }
@@ -9022,7 +9066,7 @@ ${stabSection}
                     </div>
                     <div className="flex gap-1 mt-1">
                       {([
-                        { key: "low" as const,  label: "Light",  val: 10 },
+                        { key: "low" as const,  label: "Light",  val: 8 },
                         { key: "med" as const,  label: "Nominal",  val: 15 },
                         { key: "high" as const, label: "Heavy", val: 25 },
                       ]).map(({ key, label, val }) => (
@@ -9282,6 +9326,38 @@ ${stabSection}
                   {form.loc > 0 && form.doc_xd === 0 && (
                     <p className="text-[10px] text-zinc-500">Max depth: {form.lbs > 0 ? `${form.lbs.toFixed(3)}" LBS` : `${form.loc.toFixed(3)}" LOC`}</p>
                   )}
+                  {/* ── Target Bore (REQUIRED) ── */}
+                  <div className="space-y-1 pt-3">
+                    <FieldLabel hint="Finish bore diameter. Required. Must be larger than the tool diameter — the engine will sequence multiple radial passes to grow from the existing bore (or tool dia for helical entry) up to this target.">
+                      Target Bore <span className="font-normal text-red-400">*</span>
+                    </FieldLabel>
+                    <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!targetHoleText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
+                        placeholder="finish bore dia"
+                        value={targetHoleText}
+                        onChange={(e) => setTargetHoleText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(targetHoleText);
+                          if (Number.isFinite(n) && n > 0) {
+                            setForm((p) => ({ ...p, target_hole_dia: n }));
+                            setTargetHoleText(n.toFixed(4));
+                          } else {
+                            setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(4) : "");
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">in</span>
+                    </div>
+                    {form.target_hole_dia > 0 && form.tool_dia > 0 && form.target_hole_dia <= form.tool_dia && (
+                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target ({form.target_hole_dia.toFixed(4)}") must exceed tool ({form.tool_dia.toFixed(4)}"). Use drilling for bores ≤ tool dia.</p>
+                    )}
+                    {form.target_hole_dia > 0 && form.existing_hole_dia > 0 && form.target_hole_dia <= form.existing_hole_dia && (
+                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target must exceed existing bore ({form.existing_hole_dia.toFixed(4)}").</p>
+                    )}
+                  </div>
                 </div>
               ) : (<>
               <div className="flex items-center justify-between">
@@ -9413,33 +9489,6 @@ ${stabSection}
                 );
               })()}
               </>)}
-              {/* Tool Stickout — lives under DOC */}
-              <div className="mt-10 pt-5 border-t border-zinc-800 space-y-2">
-                <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
-                <Input
-                  type="text" inputMode="decimal"
-                  className="no-spinners"
-                  placeholder="e.g. 1.500"
-                  value={stickoutText}
-                  onChange={(e) => { setStickoutText(e.target.value); setStickoutViolation(null); }}
-                  onFocus={() => { if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)); }}
-                  onBlur={() => {
-                    const n = parseDim(stickoutText);
-                    let val = metric ? n / 25.4 : n;
-                    if (Number.isFinite(val) && val > 0) {
-                      const _fw = (form as any).flute_wash ?? 0;
-                      const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
-                      if (_minSo > 0 && val < _minSo) {
-                        val = _minSo;
-                        const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
-                      } else { setStickoutViolation(null); }
-                      setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
-                    } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
-                  }}
-                />
-                {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-              </div>
             </div>
           </div>}
 
@@ -10018,15 +10067,9 @@ ${stabSection}
             </div>
           )}
 
-          {/* Tool Stickout — for surfacing/chamfer_mill always, and deep_pocket only when
-              the user is overriding the sequencer with a specific tool. In sequencer mode
-              the engine derives reach per-tool from target_depth, so a single stickout
-              input has no meaning across multiple recommended tools. */}
-          {operation === "milling" && (
-            form.mode === "surfacing"
-            || form.tool_type === "chamfer_mill"
-            || (form.mode === "deep_pocket" && dpSpecialTool && pdfExtracted)
-          ) && (
+          {/* Tool Stickout — chamfer_mill only. Other modes (surfacing, deep_pocket,
+              milling) use the Rigidity Setup section above the Cut Engagement banner. */}
+          {operation === "milling" && form.tool_type === "chamfer_mill" && (
             <div className="mt-6 pt-4 border-t border-zinc-800 space-y-2">
               <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
               <Input
