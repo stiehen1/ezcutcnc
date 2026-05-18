@@ -8965,7 +8965,7 @@ ${stabSection}
                     </div>
                   </div>
                   {/* ── Entry Mode + WOC ── */}
-                  <div className="space-y-1">
+                  <div className="space-y-1 pt-3">
                     <FieldLabel hint="Entry strategy. Pre-Drill = use an existing hole. Helical = ramp down in a tight helix (requires center-cutting tool). Auto = pre-drill if existing > 0 else helical.">
                       Entry Mode
                     </FieldLabel>
@@ -8993,7 +8993,7 @@ ${stabSection}
                     </div>
                   </div>
                   {/* ── Radial step / pass (WOC%) ── */}
-                  <div className="space-y-1 pt-3">
+                  <div className="space-y-1 pt-5">
                     <div className="flex items-center justify-between">
                       <FieldLabel hint="Radial width of cut per pass — also known as Stepover. The engine sequences enough passes to grow from existing → target bore. Tight-wrap passes (engagement ≥150°) auto-pull-back to keep the tool happy.">
                         WOC <span className="font-normal text-zinc-500">(per pass, % of dia)</span>
@@ -9286,82 +9286,99 @@ ${stabSection}
             <div className="flex-1 min-w-0 space-y-2">
               {form.mode === "circ_interp" ? (
                 <div className="space-y-1">
-                  <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
-                  <div className={`flex h-9 items-center overflow-hidden rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!docText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
+                  {/* ── Target Bore (REQUIRED) ── */}
+                  <FieldLabel hint="Finish bore diameter. Required. Must be larger than the tool diameter — the engine will sequence multiple radial passes to grow from the existing bore (or tool dia for helical entry) up to this target.">
+                    Target Bore <span className="font-normal text-red-400">*</span>
+                  </FieldLabel>
+                  <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!targetHoleText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                     <input
                       type="text"
                       inputMode="decimal"
                       className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                      value={docText}
-                      placeholder="set after setup"
-                      onChange={(e) => setDocText(e.target.value)}
+                      placeholder="finish bore dia"
+                      value={targetHoleText}
+                      onChange={(e) => setTargetHoleText(e.target.value)}
                       onBlur={() => {
-                        const n = parseFloat(docText);
-                        const dia = form.tool_dia || 0.5;
-                        // Cap = LBS if set (reduced-neck reach), else LOC
-                        const reach = form.lbs > 0 ? form.lbs : form.loc;
+                        const n = parseFloat(targetHoleText);
                         if (Number.isFinite(n) && n > 0) {
-                          const clamped = reach > 0 ? Math.min(n, reach) : n;
-                          const xd = clamped / dia;
-                          setForm((p) => ({ ...p, doc_xd: xd }));
-                          setDocText(clamped.toFixed(3));
-                          setDocPreset(null);
+                          setForm((p) => ({ ...p, target_hole_dia: n }));
+                          setTargetHoleText(n.toFixed(4));
                         } else {
-                          setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
+                          setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(4) : "");
                         }
                       }}
                     />
-                    <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                      {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
-                    </span>
+                    <span className="text-xs text-muted-foreground shrink-0">in</span>
                   </div>
-                  {/* Bore depth vs reach warnings */}
-                  {form.doc_xd > 0 && form.tool_dia > 0 && (() => {
-                    const boreIn = form.doc_xd * form.tool_dia;
-                    const reach = form.lbs > 0 ? form.lbs : form.loc;
-                    if (reach <= 0) return null;
-                    const ratio = boreIn / reach;
-                    if (ratio <= 1.0) return null;
-                    const reachLabel = form.lbs > 0 ? "LBS" : "LOC";
-                    return (
-                      <p className="text-[10px] text-red-400">
-                        ⛔ Bore depth ({boreIn.toFixed(3)}") exceeds tool {reachLabel} ({reach.toFixed(3)}") — clamped to max reach.
-                      </p>
-                    );
-                  })()}
-                  {form.loc > 0 && form.doc_xd === 0 && (
-                    <p className="text-[10px] text-zinc-500">Max depth: {form.lbs > 0 ? `${form.lbs.toFixed(3)}" LBS` : `${form.loc.toFixed(3)}" LOC`}</p>
+                  {form.target_hole_dia > 0 && form.tool_dia > 0 && form.target_hole_dia <= form.tool_dia && (
+                    <p className="text-[10px] text-red-400 mt-0.5">⛔ Target ({form.target_hole_dia.toFixed(4)}") must exceed tool ({form.tool_dia.toFixed(4)}"). Use drilling for bores ≤ tool dia.</p>
                   )}
-                  {/* ── Target Bore (REQUIRED) ── */}
+                  {form.target_hole_dia > 0 && form.existing_hole_dia > 0 && form.target_hole_dia <= form.existing_hole_dia && (
+                    <p className="text-[10px] text-red-400 mt-0.5">⛔ Target must exceed existing bore ({form.existing_hole_dia.toFixed(4)}").</p>
+                  )}
+                  {/* ── Bore Depth ── */}
                   <div className="space-y-1 pt-3">
-                    <FieldLabel hint="Finish bore diameter. Required. Must be larger than the tool diameter — the engine will sequence multiple radial passes to grow from the existing bore (or tool dia for helical entry) up to this target.">
-                      Target Bore <span className="font-normal text-red-400">*</span>
-                    </FieldLabel>
-                    <div className={`flex h-9 items-center rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!targetHoleText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
+                    <FieldLabel hint="Total depth of the bore or pocket feature — this is a part dimension, not a tool dimension. Cannot exceed the tool's LOC (or LBS on reduced-neck tools).">Bore Depth</FieldLabel>
+                    <div className={`flex h-9 items-center overflow-hidden rounded-md border px-3 text-sm gap-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background bg-background ${!docText && operation === "milling" ? "border-yellow-400/70 ring-1 ring-yellow-400/50 animate-pulse" : "border-input"}`}>
                       <input
                         type="text"
                         inputMode="decimal"
                         className="flex-1 min-w-0 bg-transparent outline-none no-spinners"
-                        placeholder="finish bore dia"
-                        value={targetHoleText}
-                        onChange={(e) => setTargetHoleText(e.target.value)}
+                        value={docText}
+                        placeholder="set after setup"
+                        onChange={(e) => setDocText(e.target.value)}
                         onBlur={() => {
-                          const n = parseFloat(targetHoleText);
+                          const n = parseFloat(docText);
+                          const dia = form.tool_dia || 0.5;
+                          // Cap = LBS if set (reduced-neck reach), else LOC
+                          const reach = form.lbs > 0 ? form.lbs : form.loc;
                           if (Number.isFinite(n) && n > 0) {
-                            setForm((p) => ({ ...p, target_hole_dia: n }));
-                            setTargetHoleText(n.toFixed(4));
+                            const clamped = reach > 0 ? Math.min(n, reach) : n;
+                            const xd = clamped / dia;
+                            setForm((p) => ({ ...p, doc_xd: xd }));
+                            setDocText(clamped.toFixed(3));
+                            setDocPreset(null);
                           } else {
-                            setTargetHoleText(form.target_hole_dia > 0 ? form.target_hole_dia.toFixed(4) : "");
+                            setDocText(form.doc_xd ? (form.doc_xd * dia).toFixed(3) : "");
                           }
                         }}
                       />
-                      <span className="text-xs text-muted-foreground shrink-0">in</span>
+                      <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                        {form.doc_xd ? `${parseFloat(form.doc_xd.toFixed(2))}xD` : ""}
+                      </span>
                     </div>
-                    {form.target_hole_dia > 0 && form.tool_dia > 0 && form.target_hole_dia <= form.tool_dia && (
-                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target ({form.target_hole_dia.toFixed(4)}") must exceed tool ({form.tool_dia.toFixed(4)}"). Use drilling for bores ≤ tool dia.</p>
-                    )}
-                    {form.target_hole_dia > 0 && form.existing_hole_dia > 0 && form.target_hole_dia <= form.existing_hole_dia && (
-                      <p className="text-[10px] text-red-400 mt-0.5">⛔ Target must exceed existing bore ({form.existing_hole_dia.toFixed(4)}").</p>
+                    {/* Bore depth vs reach warnings + multi-pass axial advisory */}
+                    {form.doc_xd > 0 && form.tool_dia > 0 && form.loc > 0 && (() => {
+                      const boreIn = form.doc_xd * form.tool_dia;
+                      const reach = form.lbs > 0 ? form.lbs : form.loc;
+                      const reachLabel = form.lbs > 0 ? "LBS" : "LOC";
+                      // Use LOC as the single-pass axial limit (the cutting flutes).
+                      // Past that, the user has to plan axial stepdowns.
+                      const singlePassCap = form.loc;
+                      const exceedsReach = reach > 0 && boreIn > reach;
+                      if (exceedsReach) {
+                        const steps = Math.ceil(boreIn / singlePassCap);
+                        const perStep = boreIn / steps;
+                        return (
+                          <p className="text-[10px] text-red-400">
+                            ⛔ Bore depth ({boreIn.toFixed(3)}") exceeds tool {reachLabel} ({reach.toFixed(3)}") — physically unreachable. Plan {steps} axial passes of ~{perStep.toFixed(3)}" each, or pick a longer tool.
+                          </p>
+                        );
+                      }
+                      // Advisory: bore deeper than LOC means multiple Z-steps even if LBS allows it
+                      if (boreIn > singlePassCap * 1.02) {
+                        const steps = Math.ceil(boreIn / singlePassCap);
+                        const perStep = boreIn / steps;
+                        return (
+                          <p className="text-[10px] text-amber-400">
+                            ⚠ Bore depth ({boreIn.toFixed(3)}") exceeds tool LOC ({singlePassCap.toFixed(3)}") — single-pass interp not viable. Plan {steps} axial passes of ~{perStep.toFixed(3)}" each at this WOC, then repeat the radial sequence per level.
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {form.loc > 0 && form.doc_xd === 0 && (
+                      <p className="text-[10px] text-zinc-500">Max depth: {form.lbs > 0 ? `${form.lbs.toFixed(3)}" LBS` : `${form.loc.toFixed(3)}" LOC`}</p>
                     )}
                   </div>
                 </div>
