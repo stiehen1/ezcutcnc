@@ -1053,7 +1053,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           <label className="text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap">
             <span className="rounded bg-blue-500 px-1 py-0.5 text-[9px] font-bold text-white leading-tight">REQ</span>
             Product Category
-            <Hint text="Endmills: square, ballnose, corner radius. Chamfer mills: angled edge for deburring and chamfering." />
+            <Hint text="Filters between endmills and chamfer mills." />
           </label>
           <div className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
             selToolTypes.length === 0
@@ -1119,7 +1119,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Tool Series
-              <Hint text="Filter by product series (e.g. VST5, VXR, CMH120). Useful when you already know which line you want." />
+              <Hint text="Filter by product series (e.g. VST5, VXR, CMH120)." />
             </label>
             <MultiSelect
               placeholder="All series..."
@@ -1133,7 +1133,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Cut Diameter
-              <Hint text="The cutting diameter." />
+              <Hint text="Cutting diameter of the tool." />
             </label>
             <SingleSelect
               placeholder={qpTip && selDias.length > 1 ? `${selDias.length} sizes from Quick Pick — pick one to narrow` : "Select a diameter..."}
@@ -1148,7 +1148,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           {selToolTypes[0] === "chamfer_mill" && <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Chamfer Angle (°)
-              <Hint text="Half-angle of the cutting edge. 45°: standard chamfer. 60°: thread prep. 82°/90°: countersinking." />
+              <Hint text="Included angle of the chamfer mill." />
             </label>
             <MultiSelect
               placeholder="All angles..."
@@ -1163,7 +1163,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           {selToolTypes[0] === "chamfer_mill" && <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Tip Diameter (in)
-              <Hint text="Diameter at the tool tip. Smaller tip = chamfer closer to a shoulder or in tighter spaces." />
+              <Hint text="Non-center-cutting chamfer mill tip — used for touch-off on the machine." />
             </label>
             <MultiSelect
               placeholder="All tip diameters..."
@@ -1178,7 +1178,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           {selToolTypes[0] !== "chamfer_mill" && <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Flute Count
-              <Hint text="More flutes = better finish and higher feeds. Fewer flutes = better chip evacuation for aluminum." />
+              <Hint text="Filters by number of cutting edges on the tool." />
             </label>
             <MultiSelect
               placeholder="Select flute counts..."
@@ -1193,7 +1193,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Length of Cut (LOC)
-              <Hint text="Usable flute length. Must meet or exceed your axial depth. Longer LOC reduces rigidity." />
+              <Hint text="Usable flute length of the cutter." />
             </label>
             <SingleSelect
               placeholder={selDias.length !== 1 ? "Select a diameter first" : "All Lengths"}
@@ -1209,7 +1209,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
             <label className="text-xs font-semibold flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5">
                 Length Below Shank (LBS)
-                <Hint text="Reduced neck below shank for deeper reach. Short LBS lengths can be extended quickly as a modification — contact Core Cutter. Check 'Exclude LBS' for standard straight-shank tools only." />
+                <Hint text="Reduced neck below the shank. Short LBS lengths can be extended quickly as a modification — contact Core Cutter. Check 'Exclude LBS' for standard straight-shank tools only." />
               </span>
               <label className="flex items-center gap-1 text-[10px] font-normal cursor-pointer whitespace-nowrap">
                 <input
@@ -1234,7 +1234,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           {selToolTypes[0] !== "chamfer_mill" && <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Corner Condition
-              <Hint text="Square: sharp corners. Ballnose: 3D contouring. Corner radius: added strength and better finish on shoulders." />
+              <Hint text="Square, ballnose, or corner radius geometry at the tool's cutting edge." />
             </label>
             <MultiSelect
               placeholder="Select corner conditions..."
@@ -1249,7 +1249,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Coating
-              <Hint text="AlTiN: high-temp alloys. TiN: general purpose. ZrN: aluminum/non-ferrous." />
+              <Hint text="D-Max (DLC): aluminum. A-Max: aluminum series (typ. 5-fl). P-Max: steel/stainless. T-Max: stainless/superalloys/titanium. C-Max: hardened steel. Uncoated: also valid for aluminum." />
             </label>
             <MultiSelect
               placeholder="Select coatings..."
@@ -1263,7 +1263,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Center Cutting
-              <Hint text="Center cutting: can plunge directly. Non-center cutting: requires pre-drilled hole or ramp entry." />
+              <Hint text="Differentiates our center-cutting tools from our non-center-cutting tools." />
             </label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -1284,7 +1284,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
           {selToolTypes[0] !== "chamfer_mill" && <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Flute Geometry
-              <Hint text="Standard: general milling. Chipbreaker: high-feed roughing (≥8% WOC, ≥1×D). Truncated Rougher: aggressive removal (≥10% WOC, ≥1×D)." />
+              <Hint text="Standard: general milling. Chipbreaker: heavy roughing >10% WOC. Truncated Rougher: aggressive removal >15% WOC." />
             </label>
             <MultiSelect
               placeholder="All geometries..."
@@ -1436,7 +1436,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               <label className="text-xs font-semibold flex items-center gap-1.5">
                 Flute Style
                 <span className="text-[10px] font-normal text-muted-foreground italic">optional</span>
-                <Hint text="Helically Fluted (3 & 5 flute): better finish, harder materials. Straight Fluted (2 & 4 flute): general purpose. Leave unselected to show all styles." />
+                <Hint text="Helically fluted (3 & 5 flute) vs straight fluted (2 & 4 flute)." />
               </label>
               <div className="flex gap-2">
                 {([
