@@ -211,6 +211,7 @@ type SkuRecord = {
   chamfer_angle?: number;
   tip_diameter?: number;
   max_cutting_edge_length?: number;
+  center_cutting?: boolean;
 };
 
 function fmtNum(n: unknown, digits = 2): string {
@@ -1968,6 +1969,9 @@ export default function Mentor() {
     chamfer_tip_dia: 0,
     chamfer_depth: 0,
 
+    // Tool capability from SKU
+    center_cutting: null as boolean | null,
+
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK80" | "HSK100" | "HSK125" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8" | "KM80",
     machine_type: "vmc" as "vmc" | "hmc" | "hbm" | "5axis" | "mill_turn" | "lathe" | "swiss" | "double_column" | "gantry",
     mill_spindle_rpm: 0,        // B-axis mill spindle RPM (mill_turn only)
@@ -2837,6 +2841,7 @@ export default function Mentor() {
       tool_series: sku.series ?? "",
       helix_angle: Number(sku.helix ?? 0),
       coating: String(sku.coating ?? ""),
+      center_cutting: sku.center_cutting != null ? Boolean(sku.center_cutting) : null,
       ...(isChamfer ? (() => {
         // chamfer_depth is a feature input, not a tool spec — keep it across any tool
         // change as long as the new tool can geometrically produce it. Clear only when
@@ -4042,12 +4047,26 @@ ${stabSection}
       lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
       if (form.tool_series) lines.push(L("Series",       form.tool_series));
       lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
-      lines.push(L("Flutes",       String(form.flutes || "—")));
+      const _fluteText = form.tool_type === "chamfer_mill"
+        ? `${form.flutes || "—"} (${form.chamfer_series === "CMH" ? "Helical" : "Straight"})`
+        : String(form.flutes || "—");
+      lines.push(L("Flutes",       _fluteText));
       if (form.loc > 0)    lines.push(L("LOC",           `${form.loc.toFixed(4)}"`));
       if (form.lbs > 0)    lines.push(L("LBS",           `${form.lbs.toFixed(4)}"`));
-      lines.push(L("Corner",       cornerLabel));
-      lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
+      if (form.tool_type === "chamfer_mill" && form.chamfer_angle > 0) {
+        lines.push(L("Included Angle", `${form.chamfer_angle}°`));
+      }
+      if (form.tool_type !== "chamfer_mill") lines.push(L("Corner", cornerLabel));
+      const _geoText = form.tool_type === "chamfer_mill"
+        ? (form.chamfer_series === "CMH" ? "High-Performance" : "Standard")
+        : (geoLabel[form.geometry] ?? form.geometry);
+      lines.push(L("Geometry",     _geoText));
       if (form.coating)    lines.push(L("Coating",       form.coating));
+      const _ccVal = form.tool_type === "chamfer_mill"
+        ? (form.chamfer_series === "CMS")
+        : (form as any).center_cutting;
+      if (_ccVal === true)       lines.push(L("Center Cutting", "Yes"));
+      else if (_ccVal === false) lines.push(L("Center Cutting", "No"));
       lines.push("");
     }
 
