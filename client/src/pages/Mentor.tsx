@@ -1950,6 +1950,9 @@ export default function Mentor() {
     surfacing_ap_in: 0,
     surfacing_tilt_deg: 0,
 
+    // Slotting
+    slot_closed: false,
+
     // Deep Pocket / Thin Wall strategy
     dp_target_depth: 0,
     dp_corner_radius: 0,
@@ -3444,6 +3447,14 @@ export default function Mentor() {
         <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Breakout Feed</td><td style="font-weight:600;color:#f59e0b;">${xyRadialEntryIpm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(50% slot feed until clear)</span></td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Side-Mill Feed (after breakout)</td><td style="font-weight:600;">${xyRadialFullFeed.toFixed(1)} IPM</td></tr>
         <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">First move from hole to wall is effectively slotting (full WOC on one side) — use slotting feed until the tool clears enough material for normal side-milling.</td></tr>` : "";
+    const predrillToolDia = Number(form.tool_dia) || 0;
+    const predrillFullFeed = result?.milling?.feed_ipm ?? 0;
+    const predrillPlungeRows = (entryTypes.includes("predrill_plunge") && predrillToolDia > 0) ? `
+        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#22c55e;border-bottom:1px solid #22c55e40;">Pre-drill + Plunge (Closed Slot)</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Hole Dia</td><td style="font-weight:600;">≥${(predrillToolDia + 0.010).toFixed(4)}" <span style="color:#888;font-weight:400;">(tool dia + 0.010" clearance)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Hole Depth</td><td style="font-weight:600;">≥ slot DOC</td></tr>
+        ${predrillFullFeed > 0 ? `<tr><td style="color:#888;padding:2px 8px 2px 0;">Slot Feed (after drop-in)</td><td style="font-weight:600;">${predrillFullFeed.toFixed(1)} IPM</td></tr>` : ""}
+        <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">Drill clearance hole at one end of slot, drop endmill into hole, then feed laterally through slot at full feed.</td></tr>` : "";
     // Pre-drill banner: when pre-drill is on for a closed deep pocket, prefix the table with the Z/XY plan summary.
     const isDeepPocketPreDrill = form.mode === "deep_pocket" && form.dp_closed_pocket && form.dp_pre_drill;
     let preDrillBanner = "";
@@ -3462,12 +3473,12 @@ export default function Mentor() {
         ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drilled closed pocket — Z-entry through remaining ${gap.toFixed(3)}" gap: <b>${zLabel}</b>. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`
         : `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drill reaches floor — tool drops to depth. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`;
     }
-    const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows || xyRadialRows) ? `
+    const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows || xyRadialRows || predrillPlungeRows) ? `
       <h3>Entry Moves</h3>
       ${preDrillBanner}
       ${emCaution ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:${emCaution === "high_hardness" ? "#450a0a" : "#451a03"};color:${emCaution === "high_hardness" ? "#fca5a5" : "#fcd34d"};">⚠ ${emCaution === "high_hardness" ? `Hard material (≥55 HRC): entry feed reduced to ${emFeedPct}% — do not skip arc lead-in.` : `Medium-hard material: entry feed reduced to ${emFeedPct}% of full feed.`}</p>` : ""}
       <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
-        ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}${xyRadialRows}
+        ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}${xyRadialRows}${predrillPlungeRows}
       </table>` : "";
 
     const tic = eng?.teeth_in_cut ?? null;
@@ -4473,6 +4484,7 @@ ${stabSection}
               straight: "Straight Plunge",
               slot_straight: "Straight Entry (outside edge)",
               xy_radial: "Straight Radial (from pre-drilled hole)",
+              predrill_plunge: "Pre-drill + Plunge (closed slot)",
             };
             const selected = entryTypes.filter(k => labelMap[k]);
             return selected.length > 0 ? selected.map(k => labelMap[k]).join(" / ") : "Helical / Ramp";
@@ -4511,6 +4523,17 @@ ${stabSection}
           const xyFull = result?.milling?.feed_ipm ?? 0;
           lines.push(L("Radial Breakout Feed", `${(xyFull * 0.50).toFixed(1)} IPM  (50% slot feed until clear)`));
           lines.push(L("Side-Mill Feed (after breakout)", `${xyFull.toFixed(1)} IPM`));
+        }
+        if (entryTypes.includes("predrill_plunge")) {
+          const toolDia = Number(form.tool_dia) || 0;
+          const slotFull = result?.milling?.feed_ipm ?? 0;
+          if (toolDia > 0) {
+            lines.push(L("Pre-drill Hole Dia", `≥${(toolDia + 0.010).toFixed(4)}"  (tool dia + 0.010" clearance)`));
+            lines.push(L("Pre-drill Hole Depth", `≥ slot DOC`));
+            if (slotFull > 0) {
+              lines.push(L("Slot Feed (after drop-in)", `${slotFull.toFixed(1)} IPM`));
+            }
+          }
         }
         lines.push("");
       }
@@ -9906,6 +9929,7 @@ ${stabSection}
                   straight:      { key: "straight",      label: "Straight Plunge", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
                   slot_straight: { key: "slot_straight", label: "Straight Entry",  color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
                   xy_radial:     { key: "xy_radial",     label: "Straight Radial", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "From inside the pre-drilled hole, feed straight out to the pocket wall. This breakout move is effectively a slotting cut — feed and SFM should match slotting parameters until the tool clears enough material to begin side-milling. Higher shock than Sweep; use only when there is not enough room for a tangential arc." },
+                  predrill_plunge:{ key: "predrill_plunge", label: "Pre-drill + Plunge", color: "text-green-400 border-green-500/60", recommended: true,        tooltip: "Drill a clearance hole at one end of the slot, then drop the endmill into the hole and feed laterally through the slot. Cleanest entry for closed slots — no shock load, no helix bore needed. Recommended hole diameter: tool dia + 0.010\" clearance." },
                 };
 
                 const renderChip = (o: Opt) => {
@@ -9964,12 +9988,44 @@ ${stabSection}
                   );
                 }
 
+                // Slot mode: branch on open vs closed slot.
+                //   Open-ended (default): Sweep / Roll-in, Straight Ramp, Straight Entry from outside edge.
+                //   Closed (blind both ends): Straight Ramp or Pre-drill + Plunge — no outside-edge entry.
+                if (form.mode === "slot") {
+                  const sweepSlot: Opt = { ...opts.sweep, recommended: !form.slot_closed };
+                  const slotFlat: Opt[] = form.slot_closed
+                    ? [opts.ramp, opts.predrill_plunge]
+                    : [sweepSlot, opts.ramp, opts.slot_straight];
+                  const toolDia = Number(form.tool_dia) || 0;
+                  const predrillDia = toolDia > 0 ? toolDia + 0.010 : 0;
+                  return (
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+                        <input
+                          type="checkbox"
+                          checked={form.slot_closed}
+                          onChange={e => { setForm(p => ({ ...p, slot_closed: e.target.checked })); setEntryTypes([]); }}
+                          className="w-3.5 h-3.5 accent-sky-400"
+                        />
+                        <span className="text-zinc-300">Closed slot (no open end)</span>
+                        <span className="text-[10px] text-zinc-500">— both ends bounded by material; tool cannot enter from outside the stock</span>
+                      </label>
+                      <div className="flex flex-wrap gap-3">{slotFlat.map(renderChip)}</div>
+                      {form.slot_closed && entryTypes.includes("predrill_plunge") && toolDia > 0 && (
+                        <div className="text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
+                          <span className="font-semibold">Pre-drill hole:</span>
+                          {" ≥"}{predrillDia.toFixed(3)}{"\""} dia (tool dia + 0.010" clearance),
+                          {" depth ≥ slot DOC. Drop endmill into hole, then feed laterally through the slot at full feed."}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 // No pre-drill: flat list with the same hide rules as before.
-                const flat: Opt[] = form.mode === "slot"
-                  ? [opts.ramp, opts.helical, opts.slot_straight]
-                  : isClosed
-                    ? [opts.ramp, opts.helical, opts.straight]
-                    : [opts.sweep, opts.ramp, opts.helical, opts.straight];
+                const flat: Opt[] = isClosed
+                  ? [opts.ramp, opts.helical, opts.straight]
+                  : [opts.sweep, opts.ramp, opts.helical, opts.straight];
                 return <div className="flex flex-wrap gap-3">{flat.map(renderChip)}</div>;
               })()}
             </div>
@@ -13146,6 +13202,36 @@ ${stabSection}
                               </div>
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Approach from outside the workpiece edge — tool enters air before engaging material. Ramp to full feed once the tool is fully engaged in the slot.</p>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Pre-drill + Plunge — closed slot entry */}
+                      {entryTypes.includes("predrill_plunge") && (() => {
+                        const toolDia = Number(form.tool_dia) || 0;
+                        const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
+                        const docIn = result?.milling?.doc_in ?? (form.doc_xd > 0 && form.tool_dia > 0 ? form.doc_xd * form.tool_dia : null);
+                        if (toolDia <= 0) return null;
+                        return (
+                          <div>
+                            <div className="border-b border-green-500/30 pb-1 mb-1.5">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-green-400">Pre-drill + Plunge</span>
+                              <span className="text-[9px] text-green-500/80 ml-2">Closed slot — drop endmill into clearance hole, then feed through slot</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                              <div className="flex flex-col">
+                                <div><span className="text-zinc-500">Pre-drill Hole Dia</span><span className="ml-2 font-medium text-green-300">≥{(toolDia + 0.010).toFixed(4)}"</span></div>
+                                <div className="text-[10px] text-zinc-500">(tool dia + 0.010" clearance)</div>
+                              </div>
+                              <div className="flex flex-col">
+                                <div><span className="text-zinc-500">Hole Depth</span><span className="ml-2 font-medium text-white">≥ slot DOC</span></div>
+                                {docIn != null && <div className="text-[10px] text-zinc-500">≥{docIn.toFixed(4)}"</div>}
+                              </div>
+                              {fullFeed > 0 && (
+                                <div className="col-span-2"><span className="text-zinc-500">Slot Feed (after drop-in)</span><span className="ml-2 font-medium text-white">{fullFeed.toFixed(1)} IPM</span></div>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-1">Drill a clearance hole at one end of the slot, plunge the endmill into it, then feed laterally through the slot at full feed. Cleanest entry for closed slots — no shock load, no helix bore needed.</p>
                           </div>
                         );
                       })()}
