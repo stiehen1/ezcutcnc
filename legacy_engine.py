@@ -136,7 +136,7 @@ BASE_SFM = {
     "stainless_440c":        200,   # 440C — high-carbon, abrasive; behaves closer to tool steel
     "stainless_304":         180,   # 304/304L/321 — midpoint 140–220 SFM (was 225 — too high)
     "stainless_316":         160,   # 316/316L Mo-bearing — midpoint 120–200 SFM (was 195 — too high)
-    "stainless_ph":          190,   # 17-4PH/15-5PH/13-8MO — midpoint 140–240 SFM (was 240 — too high)
+    "stainless_ph":          235,   # 17-4PH/15-5PH/13-8MO — shop-calibrated 250–275 SFM chamfer; 235 endmill baseline
     "stainless_duplex":      145,   # Duplex 2205 — midpoint 110–180 SFM
     "stainless_superduplex": 120,   # Super duplex 2507 — midpoint 90–150 SFM
     "stainless_martensitic": 215,   # legacy fallback → stainless_410
@@ -514,6 +514,10 @@ CMH_SFM_MULT         = 1.15   # +15% SFM vs CMS/baseline at 30° shear
 CMH_FORCE_FACTOR     = round(1.0 - (CMH_SHEAR_ANGLE_DEG / 45.0) * 0.10, 4)  # ~0.933
 # Minimum chip fraction: below this × base_ipt, CMH tip flat rubs instead of cutting.
 CMH_MIN_CHIP_FRAC    = 0.30   # 30% of base ipt_frac × body_dia
+# Chamfer mills tolerate ~2× the endmill chip load: short edge contact, low MRR,
+# minimal chip evacuation demand. Shop-calibrated: 17-4 PH 1/2" CMH 0.0042 fpt,
+# CMS 0.0028 fpt — both land at ~2.0× over IPT_FRAC-derived endmill baseline.
+CHAMFER_IPT_MULT     = 2.0
 
 # Helix angle by Core Cutter tool series.
 # QTR3 is variable-helix (40/41/42°); 41° is the representative average for force calcs.
@@ -1590,10 +1594,10 @@ def run_chamfer_mill(payload: dict) -> dict:
     rpm = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * d_eff) / 12.0
 
-    ipt = ipt_frac * body_dia * lead_ctf * series_mult
+    ipt = ipt_frac * body_dia * lead_ctf * series_mult * CHAMFER_IPT_MULT
 
     # CMH minimum chip load — tip flat rubs below this threshold
-    cmh_min_ipt = ipt_frac * body_dia * CMH_MIN_CHIP_FRAC * lead_ctf if is_cmh else 0.0
+    cmh_min_ipt = ipt_frac * body_dia * CMH_MIN_CHIP_FRAC * lead_ctf * CHAMFER_IPT_MULT if is_cmh else 0.0
 
     feed_ipm = rpm * ipt * flutes
 
