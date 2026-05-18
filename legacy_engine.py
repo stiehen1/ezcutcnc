@@ -6607,18 +6607,27 @@ def run(payload=None):
     _circ_avg_torque = None
     _circ_avg_force = None
     _circ_avg_deflection = None
+    _circ_avg_teeth = None
     if mode == "circ_interp" and _circ_passes and len(_circ_passes) > 0:
         _t_total = sum(float(p.get("time_sec", 0) or 0) for p in _circ_passes)
         if _t_total > 0:
             _mrr_accum = 0.0
+            _teeth_accum = 0.0
+            _flutes_for_teeth = int(data.get("flutes", 4) or 4)
             for _p in _circ_passes:
                 _ae_p = float(_p.get("ae_in", 0) or 0)
                 _doc_p = float(_p.get("doc_in", 0) or 0)
                 _peri_p = float(_p.get("peripheral_feed_ipm", 0) or 0)
                 _t_p = float(_p.get("time_sec", 0) or 0)
+                _eng_p = float(_p.get("engagement_deg", 0) or 0)
                 _mrr_p = _ae_p * _doc_p * _peri_p
                 _mrr_accum += _mrr_p * _t_p
+                # Bore-wrap teeth-in-cut per pass: (engagement_arc / 360) × flutes.
+                # Uses the schedule's true wrap angle (not straight-line woc/D).
+                _teeth_p = (_eng_p / 360.0) * _flutes_for_teeth
+                _teeth_accum += _teeth_p * _t_p
             _circ_avg_mrr = _mrr_accum / _t_total
+            _circ_avg_teeth = _teeth_accum / _t_total
             _hp_factor = HP_PER_CUIN.get(
                 data.get("material", material_group),
                 HP_PER_CUIN.get(material_group, 1.0)
@@ -6699,7 +6708,11 @@ def run(payload=None):
             ),
             "chip_thickness_in": float(chip_t),
             "chatter_index": locals().get("chatter_index", 0.0),
-            "teeth_in_cut": _teeth_in_cut_result,
+            "teeth_in_cut": (
+                round(float(_circ_avg_teeth), 2)
+                if (mode == "circ_interp" and _circ_avg_teeth is not None)
+                else _teeth_in_cut_result
+            ),
             "engagement_angle_deg": _engagement_angle_deg,
             "helix_wrap_deg": _helix_wrap_deg,
             "engagement_continuous": _engagement_continuous,

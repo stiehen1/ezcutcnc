@@ -2460,8 +2460,16 @@ export default function Mentor() {
   }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill, form.dp_target_depth, form.dp_pre_drill_depth]);
   React.useEffect(() => {
     if (form.mode === "slot") setEntryTypes([]);
+    else if (form.mode === "circ_interp") {
+      // Circ interp: tool entry comes from the Entry Mode selector above.
+      // helical / auto-with-no-hole → helical; pre_drill / auto-with-hole → sweep.
+      const ce = form.circ_entry;
+      const hasHole = (form.existing_hole_dia ?? 0) > 0;
+      const helical = ce === "helical" || (ce === "auto" && !hasHole);
+      setEntryTypes(helical ? ["helical"] : ["sweep"]);
+    }
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
-  }, [form.tool_type, form.mode]);
+  }, [form.tool_type, form.mode, form.circ_entry, form.existing_hole_dia]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [runoutText, setRunoutText] = React.useState("");
@@ -10055,8 +10063,8 @@ ${stabSection}
             </div>
           )}
 
-          {/* Tool Entry */}
-          {operation === "milling" && (
+          {/* Tool Entry — hidden for circ_interp (Entry Mode field above already covers entry strategy) */}
+          {operation === "milling" && form.mode !== "circ_interp" && (
             <>
             <div className="flex items-center gap-3 my-7">
               <div className="flex-1 border-t-2 border-orange-500" />
@@ -12998,15 +13006,15 @@ ${stabSection}
                         <table className="w-full text-[10px] mt-1">
                           <thead>
                             <tr className="text-zinc-500">
-                              <th className="text-left font-medium py-0.5">#</th>
-                              <th className="text-left font-medium py-0.5">Bore</th>
-                              <th className="text-right font-medium py-0.5">ae</th>
-                              <th className="text-right font-medium py-0.5">Eng°</th>
-                              <th className="text-right font-medium py-0.5">DOC</th>
-                              <th className="text-right font-medium py-0.5">RPM</th>
-                              <th className="text-right font-medium py-0.5" title="Centerline feed — what you program in CAM. Tool axis travel rate.">▶ Program<br/>Feed</th>
-                              <th className="text-right font-medium py-0.5" title="Peripheral feed — at the wall, what the cutting edge actually sees. Reference only (or use this if CAM is in TCP / feed-at-tool-tip mode).">Periph<br/>(ref)</th>
-                              <th className="text-right font-medium py-0.5">Time</th>
+                              <th className="text-center font-medium py-0.5">#</th>
+                              <th className="text-center font-medium py-0.5">Bore</th>
+                              <th className="text-center font-medium py-0.5">ae</th>
+                              <th className="text-center font-medium py-0.5" title="Tool Engagement Angle — arc of bore the tool is in contact with on each pass.">TEA</th>
+                              <th className="text-center font-medium py-0.5">DOC</th>
+                              <th className="text-center font-medium py-0.5">RPM</th>
+                              <th className="text-center font-medium py-0.5" title="Centerline feed — what you program in CAM. Tool axis travel rate.">Program<br/>Feed</th>
+                              <th className="text-center font-medium py-0.5" title="Peripheral feed — at the wall, what the cutting edge actually sees. Reference only (or use this if CAM is in TCP / feed-at-tool-tip mode).">Periph<br/>Feed</th>
+                              <th className="text-center font-medium py-0.5">Time</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -13016,15 +13024,15 @@ ${stabSection}
                                 const rpmDerated = p.rpm < baseRpm;
                                 return (
                                   <tr key={p.pass} className="border-t border-indigo-900/30">
-                                    <td className="py-0.5 text-zinc-300">{p.pass}{p.kind === "finish" && <span className="ml-1 text-[8px] text-amber-300 font-bold">FIN</span>}</td>
-                                    <td className="py-0.5 text-zinc-300">{p.bore_start_in.toFixed(4)} → {p.bore_end_in.toFixed(4)}</td>
-                                    <td className="py-0.5 text-right text-zinc-300">{p.ae_in.toFixed(4)}</td>
-                                    <td className="py-0.5 text-right font-semibold" style={{ color: zoneColor(p.engagement_zone) }}>{p.engagement_deg.toFixed(0)}°</td>
-                                    <td className="py-0.5 text-right text-zinc-300">{p.doc_in.toFixed(3)}"</td>
-                                    <td className="py-0.5 text-right" style={{ color: rpmDerated ? "#fb923c" : "#cbd5e1" }}>{p.rpm}</td>
-                                    <td className="py-0.5 text-right text-amber-300 font-semibold">{p.feed_ipm.toFixed(2)}</td>
-                                    <td className="py-0.5 text-right text-zinc-500">{p.peripheral_feed_ipm.toFixed(1)}</td>
-                                    <td className="py-0.5 text-right text-zinc-300">{fmtTime(p.time_sec)}</td>
+                                    <td className="py-0.5 text-center text-zinc-300">{p.pass}{p.kind === "finish" && <span className="ml-1 text-[8px] text-amber-300 font-bold">FIN</span>}</td>
+                                    <td className="py-0.5 text-center text-zinc-300">{p.bore_start_in.toFixed(4)} → {p.bore_end_in.toFixed(4)}</td>
+                                    <td className="py-0.5 text-center text-zinc-300">{p.ae_in.toFixed(4)}</td>
+                                    <td className="py-0.5 text-center font-semibold" style={{ color: zoneColor(p.engagement_zone) }}>{p.engagement_deg.toFixed(0)}°</td>
+                                    <td className="py-0.5 text-center text-zinc-300">{p.doc_in.toFixed(3)}"</td>
+                                    <td className="py-0.5 text-center" style={{ color: rpmDerated ? "#fb923c" : "#cbd5e1" }}>{p.rpm}</td>
+                                    <td className="py-0.5 text-center text-amber-300 font-semibold">{p.feed_ipm.toFixed(2)}</td>
+                                    <td className="py-0.5 text-center text-zinc-500">{p.peripheral_feed_ipm.toFixed(1)}</td>
+                                    <td className="py-0.5 text-center text-zinc-300">{fmtTime(p.time_sec)}</td>
                                   </tr>
                                 );
                               });
