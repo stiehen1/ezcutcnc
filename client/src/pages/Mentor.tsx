@@ -8189,33 +8189,6 @@ ${stabSection}
             </div>
           )}
 
-          {/* Machining Tips accordion — chamfer mill */}
-          {form.tool_type === "chamfer_mill" && (
-            <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setMachiningTipsOpen(o => !o)}
-              >
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-              </button>
-              {machiningTipsOpen && (
-                <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                  <div><span className="font-semibold text-white">Think "wipe the edge" — not "cut the edge."</span> Chamfer tools concentrate load at the tip. Keep radial engagement under 10–15% of diameter and axial depth just enough to hit size. Light, consistent engagement protects the tip and produces a cleaner edge than aggressive cuts.</div>
-                  <div><span className="font-semibold text-white">Helical flutes (CMH style) are a major advantage.</span> Straight flutes hit the full edge instantly — helical flutes engage progressively along the cutting edge, dramatically reducing tip shock. This eliminates micro-chipping, reduces vibration, improves chip evacuation, and makes chamfer milling behave more like an endmill than a scraper. CMH geometry shines in production work, tough materials, and interrupted cuts (cross-holes, cast edges, flame-cut stock).</div>
-                  <div><span className="font-semibold text-white">Always use helical or rolling entry.</span> Never plunge straight onto an edge. Use a helical interpolation entry or a lead-in arc to let the helix engage progressively — this is where you unlock the full benefit of helical geometry. Lead-out the same way.</div>
-                  <div><span className="font-semibold text-white">Chip load lives in a narrow window.</span> Too low = rubbing = poor finish and rapid wear. Too high = instant tip failure. Start at 0.0005–0.002 IPT depending on tool size and material. Keep feed consistent throughout the cut — any deceleration (CAM look-ahead, arc moves, direction changes) causes rubbing at the tip.</div>
-                  <div><span className="font-semibold text-white">Z-depth controls chamfer size.</span> A 0.001" Z shift produces a noticeable chamfer size change. Use your Z wear offset to dial in size — not reprogramming. This is how tight-tolerance chamfers are held in production.</div>
-                  <div><span className="font-semibold text-white">Climb mill always.</span> Better finish, lower burr formation, less material pull-in. Conventional is only useful on very thin or unsupported edges where pull-in is a concern.</div>
-                  <div><span className="font-semibold text-white">Flat tip (CMH style with tip land) outlasts sharp-tip tools in production.</span> Sharp tips are fragile — flat tip geometry distributes load away from the point and produces more consistent chamfer size over tool life.</div>
-                  <div className="pt-1 border-t border-zinc-700 text-zinc-500"><span className="font-semibold text-zinc-400">Material notes:</span> Aluminum — high SFM, DLC (D-Max) coating, air blast can beat flood. Steel/stainless — P-Max coating, stable constant engagement is critical. Stainless — never dwell. HRSA — very light engagement, T-Max coating, constant contact, zero rubbing.</div>
-                  <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Chamfer Mills) for you — contact us!</span></div>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Corner Condition — endmill only */}
           {form.tool_type !== "chamfer_mill" && form.mode !== "deep_pocket" && <div className="space-y-1.5">
             <FieldLabel hint="End geometry of the tool. Square = sharp corner, 0° entry radius. Corner Radius = bull nose for 3D contouring. Ball Nose = hemispherical tip for 3D contouring.">Corner Condition</FieldLabel>
@@ -10090,11 +10063,15 @@ ${stabSection}
             </div>
           )}
 
-          {/* Tool Stickout — chamfer_mill only. Other modes (surfacing, deep_pocket,
-              milling) use the Rigidity Setup section above the Cut Engagement banner. */}
-          {operation === "milling" && form.tool_type === "chamfer_mill" && (
-            <div className="mt-6 pt-4 border-t border-zinc-800 space-y-2">
-              <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
+          {/* Rigidity Setup — chamfer_mill (mirrors the endmill section above the Cut Engagement banner for consistency). */}
+          {operation === "milling" && form.tool_type === "chamfer_mill" && (<>
+            <div className="flex items-center gap-3 my-7">
+              <div className="flex-1 border-t-2 border-sky-500" />
+              <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Rigidity Setup</div>
+              <div className="flex-1 border-t-2 border-sky-500" />
+            </div>
+            <div className="max-w-sm space-y-2">
+              <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
               <Input
                 type="text" inputMode="decimal"
                 className="no-spinners"
@@ -10127,7 +10104,7 @@ ${stabSection}
               />
               {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
             </div>
-          )}
+          </>)}
 
           {/* Tool Entry — hidden for circ_interp (Entry Mode field above already covers entry strategy) */}
           {operation === "milling" && form.mode !== "circ_interp" && (
@@ -12023,190 +12000,6 @@ ${stabSection}
                 </div>
               )}
 
-              {/* Chamfer Mill: geometry + chip thinning panel */}
-              {chamferResult && (
-                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 text-sm space-y-3">
-                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Chamfer Geometry</div>
-
-                  {/* Tool identity */}
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <div><span className="text-muted-foreground">Series</span><span className="ml-2 font-semibold text-indigo-300">{form.chamfer_series}</span></div>
-                    <div><span className="text-muted-foreground">Included Angle</span><span className="ml-2 font-semibold">{chamferResult.chamfer_angle_deg}°</span></div>
-                    <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 — point (CMS)"}</span></div>
-                    <div><span className="text-muted-foreground">Tool Edge Length</span><span className="ml-2 font-semibold">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
-                    <div><span className="text-muted-foreground">Max Chamfer Length</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
-                    {chamferResult.chamfer_depth_in > 0 && (() => {
-                      const halfRad = (chamferResult.chamfer_angle_deg / 2) * (Math.PI / 180);
-                      const faceWidth = Math.cos(halfRad) > 0 ? chamferResult.chamfer_depth_in / Math.cos(halfRad) : 0;
-                      return (<>
-                        <div><span className="text-muted-foreground">Chamfer Length (print)</span><span className="ml-2 font-semibold">{faceWidth.toFixed(4)}"</span></div>
-                        <div><span className="text-muted-foreground">Z Depth (CAM)</span><span className="ml-2 font-semibold text-blue-400">{chamferResult.chamfer_depth_in.toFixed(4)}"</span></div>
-                      </>);
-                    })()}
-                  </div>
-
-                  {/* D_eff */}
-                  <div className="flex items-center justify-between rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2">
-                    <div>
-                      <span className="text-xs font-semibold text-orange-400">Effective Cut Dia (D_eff)</span>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">RPM &amp; SFM are based on D_eff — diameter at the outer edge of the chamfer, not the body OD.</p>
-                    </div>
-                    <span className="text-base font-mono font-bold text-orange-400 ml-3 shrink-0">{chamferResult.d_eff_in.toFixed(4)}"</span>
-                  </div>
-
-                  {/* Growing WOC + edge engagement */}
-                  {chamferResult.edge_pct > 0 && (
-                    <div className="space-y-2">
-                      <div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                          <span>Flank engaged at depth</span>
-                          <span className="font-semibold text-white">{chamferResult.edge_pct.toFixed(1)}% of cutting edge</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-zinc-700">
-                          <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, chamferResult.edge_pct)}%` }} />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                          <span>Radial WOC at this depth <span className="text-zinc-600">(grows as depth increases)</span></span>
-                          <span className="font-semibold text-amber-400">{chamferResult.actual_woc_in?.toFixed(4)}" — {chamferResult.woc_pct_d_eff?.toFixed(0)}% of D_eff</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-zinc-700">
-                          <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${Math.min(100, chamferResult.woc_pct_d_eff ?? 0)}%` }} />
-                        </div>
-                        <p className="text-[10px] text-zinc-600 mt-0.5">
-                          {(chamferResult.woc_pct_d_eff ?? 0) >= 45
-                            ? "≈ slot-equivalent engagement — not a light finishing cut"
-                            : "WOC and cutting force scale proportionally with depth"}
-                        </p>
-                      </div>
-                      {/* Chip room / flute count context */}
-                      <div className="flex items-center justify-between rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 text-xs">
-                        <div>
-                          <span className="text-zinc-400">Chip room factor </span>
-                          <span className="font-mono font-semibold text-white">{chamferResult.chip_room_mult?.toFixed(2)}×</span>
-                          <span className="text-zinc-600 ml-2">({form.flutes}-flute {form.chamfer_series})</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-zinc-400">Max single rough pass </span>
-                          <span className="font-mono font-semibold text-amber-400">{chamferResult.max_rough_depth_in?.toFixed(4)}"</span>
-                        </div>
-                      </div>
-                      {chamferResult.flute_nonstandard && (
-                        <p className="text-[10px] text-amber-400">
-                          ⚠ {form.chamfer_series} is standard in {(chamferResult.std_flutes as number[])?.join('- and ')}-flute. Verify {form.flutes}-flute is a custom configuration.
-                        </p>
-                      )}
-                      {chamferResult.std_flutes && !chamferResult.flute_nonstandard && (
-                        <p className="text-[10px] text-zinc-600">
-                          {form.chamfer_series} standard: {(chamferResult.std_flutes as number[]).map((f: number, i: number) =>
-                            `${f}-flute (${f === Math.min(...chamferResult.std_flutes as number[]) ? "more chip room, deeper cuts" : "better finish, lighter DOC"})`
-                          ).join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* CMH shear angle badge */}
-                  {chamferResult.cmh_shear_angle_deg != null && (
-                    <div className="flex items-start gap-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
-                      <div className="flex-1 space-y-0.5">
-                        <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">CMH Shear Angle — {chamferResult.cmh_shear_angle_deg}°</div>
-                        <div className="grid grid-cols-2 gap-x-4 text-xs mt-1">
-                          <div><span className="text-muted-foreground">SFM boost</span><span className="ml-2 font-semibold text-emerald-400">+{chamferResult.cmh_sfm_boost_pct}%</span></div>
-                          <div><span className="text-muted-foreground">Force factor</span><span className="ml-2 font-semibold">{chamferResult.cmh_force_factor?.toFixed(3)}×</span></div>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">
-                          Shear geometry distributes load progressively along the flank — like a helical endmill vs straight-flute. Lower instantaneous force means less heat and a higher SFM ceiling. CMH must be run aggressively enough to cut through the tip flat, not rub.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* CMH minimum chip warning */}
-                  {chamferResult.cmh_min_ipt != null && chamferResult.cmh_min_ipt_ok === false && (
-                    <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-400">
-                      ⚠ Chip load below CMH minimum ({chamferResult.cmh_min_ipt.toFixed(5)}"). Tip flat will rub — increase feed or chamfer depth.
-                    </div>
-                  )}
-
-                  {/* Chip thinning */}
-                  <div className="border-t border-white/10 pt-2 space-y-1">
-                    <div className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider mb-1">Angled-Flank Chip Thinning</div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                      <div><span className="text-muted-foreground">Chip thin factor</span><span className="ml-2 font-mono font-semibold">{chamferResult.chip_thin_factor?.toFixed(4)} × FPT</span></div>
-                      <div><span className="text-muted-foreground">FPT multiplier applied</span><span className="ml-2 font-mono font-semibold text-emerald-400">{chamferResult.lead_ctf?.toFixed(2)}×</span></div>
-                      <div><span className="text-muted-foreground">Target chip thickness</span><span className="ml-2 font-mono font-semibold">{chamferResult.base_chip_in?.toFixed(5)}"</span></div>
-                      <div><span className="text-muted-foreground">Programmed FPT</span><span className="ml-2 font-mono font-semibold text-yellow-300">{result?.customer?.fpt?.toFixed(5)}"</span></div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      At {chamferResult.chamfer_angle_deg}° ({chamferResult.chamfer_angle_deg/2}° half-angle), each tooth only removes {((chamferResult.chip_thin_factor ?? 1) * 100).toFixed(0)}% of the programmed FPT as actual chip thickness.
-                      Feed is corrected {chamferResult.lead_ctf?.toFixed(2)}× so real chip load matches a standard endmill at the same material target.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Chamfer tips */}
-              {chamferResult?.tips && (chamferResult.tips as string[]).length > 0 && (
-                <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-2">
-                  <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Chamfer Tips</div>
-                  {(chamferResult.tips as string[]).map((tip: string, i: number) => (
-                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
-                  ))}
-                </div>
-              )}
-
-
-              {/* Chamfer multi-pass strategy card */}
-              {result?.multi_pass && form.tool_type === "chamfer_mill" && (() => {
-                const mp = result.multi_pass as any;
-                if (mp.single_pass_ok) return (
-                  <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 flex items-center gap-2">
-                    <span className="text-emerald-400 text-sm">✓</span>
-                    <span className="text-xs text-emerald-300 font-semibold">Single pass OK</span>
-                    <span className="text-xs text-muted-foreground">— depth is within single-pass limit for this tool/material</span>
-                  </div>
-                );
-                const nRough: number = mp.num_rough_passes;
-                const dRough: number = mp.rough_depth_per_pass;
-                const dFull: number  = mp.finish_depth_in;
-                const dAllow: number = mp.finish_allowance_in;
-                const passes = [
-                  ...Array.from({ length: nRough }, (_, i) => ({
-                    label: `Pass ${i + 1} — Roughing`,
-                    depth: dRough * (i + 1),
-                    isFinish: false,
-                  })),
-                  { label: `Pass ${nRough + 1} — Finish`, depth: dFull, isFinish: true },
-                ];
-                return (
-                  <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 space-y-2">
-                    <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Multi-Pass Chamfer Strategy</div>
-                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-1">
-                      <div><span className="text-muted-foreground">Total depth</span><span className="ml-2 font-semibold">{dFull.toFixed(4)}"</span></div>
-                      <div><span className="text-muted-foreground">Total passes</span><span className="ml-2 font-semibold">{mp.num_passes}</span></div>
-                      <div><span className="text-muted-foreground">Finish allowance</span><span className="ml-2 font-semibold">{dAllow.toFixed(3)}"</span></div>
-                    </div>
-                    <div className="space-y-1">
-                      {passes.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.isFinish ? "bg-green-400" : "bg-amber-400"}`} />
-                          <span className="text-zinc-300 flex-1">{p.label}</span>
-                          <span className="text-zinc-400">to {p.depth.toFixed(4)}"</span>
-                          {!p.isFinish && <span className="text-zinc-600 text-[10px]">({dRough.toFixed(4)}"/pass)</span>}
-                          {p.isFinish && <span className="text-emerald-500 text-[10px]">(full depth)</span>}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      WOC grows proportionally with depth — single-pass on large chamfers risks poor finish and accelerated wear.
-                      Use helical interpolation (G02/G03) for each pass for best surface quality.
-                    </p>
-                  </div>
-                );
-              })()}
-
               {/* Dovetail info */}
               {dovetailResult && (
                 <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-2">
@@ -12852,6 +12645,189 @@ ${stabSection}
                   );
                 })()}
               </div>
+
+              {/* Chamfer tips — rendered above geometry so the most actionable advice sits right under the KPIs */}
+              {chamferResult?.tips && (chamferResult.tips as string[]).length > 0 && (
+                <div className="mt-3 mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Chamfer Tips</div>
+                  {(chamferResult.tips as string[]).map((tip: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground leading-relaxed">• {tip}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Chamfer Mill: geometry + chip thinning panel (rendered after Customer KPIs for consistency) */}
+              {chamferResult && (
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 text-sm space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-widest text-indigo-400">Chamfer Geometry</div>
+
+                  {/* Tool identity */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Series</span><span className="ml-2 font-semibold text-indigo-300">{form.chamfer_series}</span></div>
+                    <div><span className="text-muted-foreground">Included Angle</span><span className="ml-2 font-semibold">{chamferResult.chamfer_angle_deg}°</span></div>
+                    <div><span className="text-muted-foreground">Tip Dia</span><span className="ml-2 font-semibold">{chamferResult.tip_dia_in > 0 ? `${chamferResult.tip_dia_in.toFixed(4)}"` : "0 — point (CMS)"}</span></div>
+                    <div><span className="text-muted-foreground">Tool Edge Length</span><span className="ml-2 font-semibold">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
+                    <div><span className="text-muted-foreground">Max Chamfer Length</span><span className="ml-2 font-semibold text-orange-300">{chamferResult.edge_length_in?.toFixed(4)}"</span></div>
+                    {chamferResult.chamfer_depth_in > 0 && (() => {
+                      const halfRad = (chamferResult.chamfer_angle_deg / 2) * (Math.PI / 180);
+                      const faceWidth = Math.cos(halfRad) > 0 ? chamferResult.chamfer_depth_in / Math.cos(halfRad) : 0;
+                      return (<>
+                        <div><span className="text-muted-foreground">Chamfer Length (print)</span><span className="ml-2 font-semibold">{faceWidth.toFixed(4)}"</span></div>
+                        <div><span className="text-muted-foreground">Z Depth (CAM)</span><span className="ml-2 font-semibold text-blue-400">{chamferResult.chamfer_depth_in.toFixed(4)}"</span></div>
+                      </>);
+                    })()}
+                  </div>
+
+                  {/* D_eff */}
+                  <div className="flex items-center justify-between rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2">
+                    <div>
+                      <span className="text-xs font-semibold text-orange-400">Effective Cut Dia (D_eff)</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">RPM &amp; SFM are based on D_eff — diameter at the outer edge of the chamfer, not the body OD.</p>
+                    </div>
+                    <span className="text-base font-mono font-bold text-orange-400 ml-3 shrink-0">{chamferResult.d_eff_in.toFixed(4)}"</span>
+                  </div>
+
+                  {/* Growing WOC + edge engagement */}
+                  {chamferResult.edge_pct > 0 && (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Flank engaged at depth</span>
+                          <span className="font-semibold text-white">{chamferResult.edge_pct.toFixed(1)}% of cutting edge</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-700">
+                          <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, chamferResult.edge_pct)}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Radial WOC at this depth <span className="text-zinc-600">(grows as depth increases)</span></span>
+                          <span className="font-semibold text-amber-400">{chamferResult.actual_woc_in?.toFixed(4)}" — {chamferResult.woc_pct_d_eff?.toFixed(0)}% of D_eff</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-700">
+                          <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${Math.min(100, chamferResult.woc_pct_d_eff ?? 0)}%` }} />
+                        </div>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">
+                          {(chamferResult.woc_pct_d_eff ?? 0) >= 45
+                            ? "≈ slot-equivalent engagement — not a light finishing cut"
+                            : "WOC and cutting force scale proportionally with depth"}
+                        </p>
+                      </div>
+                      {/* Chip room / flute count context */}
+                      <div className="flex items-center justify-between rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 text-xs">
+                        <div>
+                          <span className="text-zinc-400">Chip room factor </span>
+                          <span className="font-mono font-semibold text-white">{chamferResult.chip_room_mult?.toFixed(2)}×</span>
+                          <span className="text-zinc-600 ml-2">({form.flutes}-flute {form.chamfer_series})</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-zinc-400">Max single rough pass </span>
+                          <span className="font-mono font-semibold text-amber-400">{chamferResult.max_rough_depth_in?.toFixed(4)}"</span>
+                        </div>
+                      </div>
+                      {chamferResult.flute_nonstandard && (
+                        <p className="text-[10px] text-amber-400">
+                          ⚠ {form.chamfer_series} is standard in {(chamferResult.std_flutes as number[])?.join('- and ')}-flute. Verify {form.flutes}-flute is a custom configuration.
+                        </p>
+                      )}
+                      {chamferResult.std_flutes && !chamferResult.flute_nonstandard && (
+                        <p className="text-[10px] text-zinc-600">
+                          {form.chamfer_series} standard: {(chamferResult.std_flutes as number[]).map((f: number, i: number) =>
+                            `${f}-flute (${f === Math.min(...chamferResult.std_flutes as number[]) ? "more chip room, deeper cuts" : "better finish, lighter DOC"})`
+                          ).join(" · ")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CMH shear angle badge */}
+                  {chamferResult.cmh_shear_angle_deg != null && (
+                    <div className="flex items-start gap-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+                      <div className="flex-1 space-y-0.5">
+                        <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">CMH Shear Angle — {chamferResult.cmh_shear_angle_deg}°</div>
+                        <div className="grid grid-cols-2 gap-x-4 text-xs mt-1">
+                          <div><span className="text-muted-foreground">SFM boost</span><span className="ml-2 font-semibold text-emerald-400">+{chamferResult.cmh_sfm_boost_pct}%</span></div>
+                          <div><span className="text-muted-foreground">Force factor</span><span className="ml-2 font-semibold">{chamferResult.cmh_force_factor?.toFixed(3)}×</span></div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">
+                          Shear geometry distributes load progressively along the flank — like a helical endmill vs straight-flute. Lower instantaneous force means less heat and a higher SFM ceiling. CMH must be run aggressively enough to cut through the tip flat, not rub.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CMH minimum chip warning */}
+                  {chamferResult.cmh_min_ipt != null && chamferResult.cmh_min_ipt_ok === false && (
+                    <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-400">
+                      ⚠ Chip load below CMH minimum ({chamferResult.cmh_min_ipt.toFixed(5)}"). Tip flat will rub — increase feed or chamfer depth.
+                    </div>
+                  )}
+
+                  {/* Chip thinning */}
+                  <div className="border-t border-white/10 pt-2 space-y-1">
+                    <div className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider mb-1">Angled-Flank Chip Thinning</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div><span className="text-muted-foreground">Chip thin factor</span><span className="ml-2 font-mono font-semibold">{chamferResult.chip_thin_factor?.toFixed(4)} × FPT</span></div>
+                      <div><span className="text-muted-foreground">FPT multiplier applied</span><span className="ml-2 font-mono font-semibold text-emerald-400">{chamferResult.lead_ctf?.toFixed(2)}×</span></div>
+                      <div><span className="text-muted-foreground">Target chip thickness</span><span className="ml-2 font-mono font-semibold">{chamferResult.base_chip_in?.toFixed(5)}"</span></div>
+                      <div><span className="text-muted-foreground">Programmed FPT</span><span className="ml-2 font-mono font-semibold text-yellow-300">{result?.customer?.fpt?.toFixed(5)}"</span></div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      At {chamferResult.chamfer_angle_deg}° ({chamferResult.chamfer_angle_deg/2}° half-angle), each tooth only removes {((chamferResult.chip_thin_factor ?? 1) * 100).toFixed(0)}% of the programmed FPT as actual chip thickness.
+                      Feed is corrected {chamferResult.lead_ctf?.toFixed(2)}× so real chip load matches a standard endmill at the same material target.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Chamfer multi-pass strategy card */}
+              {result?.multi_pass && form.tool_type === "chamfer_mill" && (() => {
+                const mp = result.multi_pass as any;
+                if (mp.single_pass_ok) return (
+                  <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 flex items-center gap-2">
+                    <span className="text-emerald-400 text-sm">✓</span>
+                    <span className="text-xs text-emerald-300 font-semibold">Single pass OK</span>
+                    <span className="text-xs text-muted-foreground">— depth is within single-pass limit for this tool/material</span>
+                  </div>
+                );
+                const nRough: number = mp.num_rough_passes;
+                const dRough: number = mp.rough_depth_per_pass;
+                const dFull: number  = mp.finish_depth_in;
+                const dAllow: number = mp.finish_allowance_in;
+                const passes = [
+                  ...Array.from({ length: nRough }, (_, i) => ({
+                    label: `Pass ${i + 1} — Roughing`,
+                    depth: dRough * (i + 1),
+                    isFinish: false,
+                  })),
+                  { label: `Pass ${nRough + 1} — Finish`, depth: dFull, isFinish: true },
+                ];
+                return (
+                  <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 space-y-2">
+                    <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Multi-Pass Chamfer Strategy</div>
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-1">
+                      <div><span className="text-muted-foreground">Total depth</span><span className="ml-2 font-semibold">{dFull.toFixed(4)}"</span></div>
+                      <div><span className="text-muted-foreground">Total passes</span><span className="ml-2 font-semibold">{mp.num_passes}</span></div>
+                      <div><span className="text-muted-foreground">Finish allowance</span><span className="ml-2 font-semibold">{dAllow.toFixed(3)}"</span></div>
+                    </div>
+                    <div className="space-y-1">
+                      {passes.map((p, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.isFinish ? "bg-green-400" : "bg-amber-400"}`} />
+                          <span className="text-zinc-300 flex-1">{p.label}</span>
+                          <span className="text-zinc-400">to {p.depth.toFixed(4)}"</span>
+                          {!p.isFinish && <span className="text-zinc-600 text-[10px]">({dRough.toFixed(4)}"/pass)</span>}
+                          {p.isFinish && <span className="text-emerald-500 text-[10px]">(full depth)</span>}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      WOC grows proportionally with depth — single-pass on large chamfers risks poor finish and accelerated wear.
+                      Use helical interpolation (G02/G03) for each pass for best surface quality.
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Stock Condition advisory — first-pass guidance for forged / cast / case-hardened / etc. */}
               {(() => {
