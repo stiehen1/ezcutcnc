@@ -211,6 +211,7 @@ type SkuRecord = {
   chamfer_angle?: number;
   tip_diameter?: number;
   max_cutting_edge_length?: number;
+  center_cutting?: boolean;
 };
 
 function fmtNum(n: unknown, digits = 2): string {
@@ -1356,7 +1357,32 @@ export default function Mentor() {
           ? ("hydraulic" as const)
           : ("weldon" as const))
       : null;
-    setForm(p => ({
+    // Each machine_type only exposes a subset of workholding options in the UI button row.
+    // If the prior workholding isn't valid for the new machine type, snap to a sensible
+    // default for that lineup — otherwise the orphaned value still drives downstream UI
+    // (e.g. the part-overhang field stays visible with no matching button selected).
+    const _allowedWH: Record<string, readonly string[]> = {
+      vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","toe_clamps","soft_jaws"],
+      hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","soft_jaws"],
+      "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
+      gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+      hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+      double_column: ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+      lathe:         ["soft_jaws","form_jaws","6_jaw_chuck","pie_jaws","hydraulic_chuck","power_chuck","collet_chuck","3_jaw_chuck","step_jaws","expanding_mandrel","tailstock_supported","between_centers","steady_rest"],
+      mill_turn:     ["soft_jaws","form_jaws","6_jaw_chuck","pie_jaws","hydraulic_chuck","power_chuck","collet_chuck","3_jaw_chuck","step_jaws","expanding_mandrel","dovetail","rigid_fixture","modular_quickchange","tailstock_supported","between_centers","steady_rest","ijaw","autochuck"],
+      swiss:         ["gang_tooling","guide_bushing","collet_chuck","soft_jaws","step_jaws","expanding_mandrel"],
+    };
+    const _whDefaults: Record<string, string> = {
+      vmc: "vise", hmc: "rigid_fixture", "5axis": "zero_point",
+      gantry: "rigid_fixture", hbm: "rigid_fixture", double_column: "rigid_fixture",
+      lathe: "collet_chuck", mill_turn: "collet_chuck", swiss: "collet_chuck",
+    };
+    setForm(p => {
+      const allowed = _allowedWH[machType];
+      const _typeWH = allowed && !allowed.includes(p.workholding)
+        ? (_whDefaults[machType] as typeof p.workholding)
+        : null;
+      return ({
       ...p,
       max_rpm: effectiveRpm || p.max_rpm,
       machine_hp: effectiveHp || p.machine_hp,
@@ -1364,7 +1390,7 @@ export default function Mentor() {
       spindle_drive: effectiveDrive as any,
       dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
-      workholding: _heavyWH ?? p.workholding,
+      workholding: _heavyWH ?? _typeWH ?? p.workholding,
       toolholder:  _heavyTH ?? p.toolholder,
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
@@ -1373,7 +1399,8 @@ export default function Mentor() {
       lathe_has_sub_spindle: isLiveToolType && (_machData.sub_rpm ?? 0) > 0 ? true : p.lathe_has_sub_spindle,
       live_tool_connection: (typeof m.live_tool_connection === "string" ? m.live_tool_connection : "") || "",
       live_tool_hp: _machData.live_hp ?? 0,
-    }));
+      });
+    });
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
     const _machNo = m.shop_machine_no ? ` #${m.shop_machine_no}` : "";
@@ -1941,6 +1968,9 @@ export default function Mentor() {
     chamfer_angle: 90,
     chamfer_tip_dia: 0,
     chamfer_depth: 0,
+
+    // Tool capability from SKU
+    center_cutting: null as boolean | null,
 
     spindle_taper: "CAT40" as "CAT30" | "CAT40" | "CAT50" | "BT30" | "BT40" | "BT50" | "HSK32" | "HSK50" | "HSK63" | "HSK80" | "HSK100" | "HSK125" | "VDI30" | "VDI40" | "VDI50" | "BMT45" | "BMT55" | "BMT65" | "CAPTO C6" | "CAPTO C8" | "KM80",
     machine_type: "vmc" as "vmc" | "hmc" | "hbm" | "5axis" | "mill_turn" | "lathe" | "swiss" | "double_column" | "gantry",
@@ -2811,6 +2841,7 @@ export default function Mentor() {
       tool_series: sku.series ?? "",
       helix_angle: Number(sku.helix ?? 0),
       coating: String(sku.coating ?? ""),
+      center_cutting: sku.center_cutting != null ? Boolean(sku.center_cutting) : null,
       ...(isChamfer ? (() => {
         // chamfer_depth is a feature input, not a tool spec — keep it across any tool
         // change as long as the new tool can geometrically produce it. Clear only when
@@ -4016,12 +4047,26 @@ ${stabSection}
       lines.push(L("Tool Type",    toolTypeLabel[form.tool_type] ?? form.tool_type));
       if (form.tool_series) lines.push(L("Series",       form.tool_series));
       lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
-      lines.push(L("Flutes",       String(form.flutes || "—")));
+      const _fluteText = form.tool_type === "chamfer_mill"
+        ? `${form.flutes || "—"} (${form.chamfer_series === "CMH" ? "Helical" : "Straight"})`
+        : String(form.flutes || "—");
+      lines.push(L("Flutes",       _fluteText));
       if (form.loc > 0)    lines.push(L("LOC",           `${form.loc.toFixed(4)}"`));
       if (form.lbs > 0)    lines.push(L("LBS",           `${form.lbs.toFixed(4)}"`));
-      lines.push(L("Corner",       cornerLabel));
-      lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
+      if (form.tool_type === "chamfer_mill" && form.chamfer_angle > 0) {
+        lines.push(L("Included Angle", `${form.chamfer_angle}°`));
+      }
+      if (form.tool_type !== "chamfer_mill") lines.push(L("Corner", cornerLabel));
+      const _geoText = form.tool_type === "chamfer_mill"
+        ? (form.chamfer_series === "CMH" ? "High-Performance" : "Standard")
+        : (geoLabel[form.geometry] ?? form.geometry);
+      lines.push(L("Geometry",     _geoText));
       if (form.coating)    lines.push(L("Coating",       form.coating));
+      const _ccVal = form.tool_type === "chamfer_mill"
+        ? (form.chamfer_series === "CMS")
+        : (form as any).center_cutting;
+      if (_ccVal === true)       lines.push(L("Center Cutting", "Yes"));
+      else if (_ccVal === false) lines.push(L("Center Cutting", "No"));
       lines.push("");
     }
 
