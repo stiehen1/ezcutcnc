@@ -2764,7 +2764,16 @@ export default function Mentor() {
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
     if (isChamfer) {
       setChamferTipDiaText(sku.tip_diameter ? Number(sku.tip_diameter).toFixed(4) : "");
-      setChamferDepthText("");
+      // Only clear chamfer_depth if the new tool's geometry cannot produce it.
+      // Max producible = (cutting_dia - tip_dia) / 2 / sin(half_angle) — edge length along flute.
+      const _priorDepth = Number(form.chamfer_depth ?? 0);
+      const _newAngle = Number(sku.chamfer_angle ?? form.chamfer_angle ?? 90);
+      const _newTip   = Number(sku.tip_diameter ?? 0);
+      const _newDia   = Number(sku.cutting_diameter_in ?? 0);
+      const _halfRad  = (_newAngle / 2) * (Math.PI / 180);
+      const _maxDepth = Math.sin(_halfRad) > 0 ? (_newDia - _newTip) / 2 / Math.sin(_halfRad) : 0;
+      const _carryDepth = form.tool_type === "chamfer_mill" && _priorDepth > 0 && _priorDepth <= _maxDepth;
+      setChamferDepthText(_carryDepth ? _priorDepth.toFixed(4) : "");
     }
     // In slot mode, pre-fill WOC=100% and DOC=med immediately on SKU select
     const _isSlotMode = (form.mode as string) === "slot";
@@ -2802,12 +2811,24 @@ export default function Mentor() {
       tool_series: sku.series ?? "",
       helix_angle: Number(sku.helix ?? 0),
       coating: String(sku.coating ?? ""),
-      ...(isChamfer ? {
-        chamfer_angle: Number(sku.chamfer_angle ?? 90),
-        chamfer_tip_dia: Number(sku.tip_diameter ?? 0),
-        chamfer_depth: 0,
-        chamfer_series: String(sku.series ?? "").toUpperCase().startsWith("CMS") ? "CMS" as const : "CMH" as const,
-      } : {}),
+      ...(isChamfer ? (() => {
+        // chamfer_depth is a feature input, not a tool spec — keep it across any tool
+        // change as long as the new tool can geometrically produce it. Clear only when
+        // the new tool's edge length is too short for the prior depth.
+        const _priorDepth = Number(form.chamfer_depth ?? 0);
+        const _newAngle = Number(sku.chamfer_angle ?? form.chamfer_angle ?? 90);
+        const _newTip   = Number(sku.tip_diameter ?? 0);
+        const _newDia   = Number(sku.cutting_diameter_in ?? 0);
+        const _halfRad  = (_newAngle / 2) * (Math.PI / 180);
+        const _maxDepth = Math.sin(_halfRad) > 0 ? (_newDia - _newTip) / 2 / Math.sin(_halfRad) : 0;
+        const _carry = form.tool_type === "chamfer_mill" && _priorDepth > 0 && _priorDepth <= _maxDepth;
+        return {
+          chamfer_angle: _newAngle,
+          chamfer_tip_dia: _newTip,
+          chamfer_depth: _carry ? _priorDepth : 0,
+          chamfer_series: String(sku.series ?? "").toUpperCase().startsWith("CMS") ? "CMS" as const : "CMH" as const,
+        };
+      })() : {}),
     }));
     setSkuChamferEdgeLength(isChamfer ? 1 : null); // just a truthy flag — values computed from geometry
   }
@@ -3309,8 +3330,8 @@ export default function Mentor() {
         ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first pass</span>` : "") : null)}
         ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first pass</span>` : "") : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
-        ${kpiBox("Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
-        ${mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
+        ${kpiBox(form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
+        ${form.tool_type !== "chamfer_mill" && mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
         ${form.mode === "surfacing" && mil.d_eff_in != null ? kpiBox("D_eff (in)", `${mil.d_eff_in.toFixed(4)}" (${((mil.d_eff_in / (form.tool_dia || 0.5)) * 100).toFixed(0)}% of Ø)`) : ""}
         ${form.mode === "surfacing" && mil.scallop_height_in != null ? kpiBox("Scallop Height", `${mil.scallop_height_in.toFixed(6)}" / ${(mil.scallop_height_in * 25400).toFixed(0)} µm`) : ""}
         ${kpiBox(form.mode === "face" ? "Step-Over (in)" : form.mode === "surfacing" ? "Stepover ae (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
@@ -4348,11 +4369,17 @@ ${stabSection}
       }
       if (cust.fpt != null)     lines.push(L("Chipload (FPT)", `${cust.fpt.toFixed(5)}"`));
       if (cust.adj_fpt != null && cust.fpt != null && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005) {
-        lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
-        lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
-        if (form.woc_pct > 0) {
-          const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100))));
-          lines.push(L("Act. Chip Thick", `${(cust.adj_fpt * ctf).toFixed(5)}"`));
+        const isChamfer = form.tool_type === "chamfer_mill";
+        if (isChamfer) {
+          lines.push(L("Actual Chip",    `${cust.adj_fpt.toFixed(5)}"  (after lead-angle thinning)`));
+          lines.push(L("Lead Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — programmed FPT is boosted by 1/sin(half-angle); actual chip is smaller`));
+        } else {
+          lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
+          lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
+          if (form.woc_pct > 0) {
+            const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100))));
+            lines.push(L("Act. Chip Thick", `${(cust.adj_fpt * ctf).toFixed(5)}"`));
+          }
         }
       }
       if (eng?.chip_thickness_in != null) {
@@ -12136,8 +12163,13 @@ ${stabSection}
                 />
                 {customer.adj_fpt != null ? (
                   <Kpi
-                    label={UL("Adj FPT (in)", "Adj FPT (mm)")}
-                    hint="Adjusted chip load per tooth after applying the radial chip thinning factor (RCTF) for your WOC. At low radial engagement, the tool must feed faster to generate the same actual chip thickness. This is the value the engine uses to compute feed IPM."
+                    label={UL(
+                      form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)",
+                      form.tool_type === "chamfer_mill" ? "Actual Chip (mm)" : "Adj FPT (mm)"
+                    )}
+                    hint={form.tool_type === "chamfer_mill"
+                      ? "Actual chip thickness formed at the cutting edge after lead-angle thinning. Programmed FPT is boosted by 1/sin(half-angle) so that the chip the tool actually sees lands at the target — this value IS that target chip."
+                      : "Adjusted chip load per tooth after applying the radial chip thinning factor (RCTF) for your WOC. At low radial engagement, the tool must feed faster to generate the same actual chip thickness. This is the value the engine uses to compute feed IPM."}
                     value={
                       <>
                         {UC(customer.adj_fpt, 25.4, metric ? 4 : 5)}
@@ -12148,7 +12180,7 @@ ${stabSection}
                     }
                   />
                 ) : null}
-                {customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
+                {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
                   const wocFrac = form.woc_pct / 100;
                   const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocFrac))));
                   const actualChip = customer.adj_fpt * ctf;
