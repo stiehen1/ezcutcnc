@@ -10000,16 +10000,18 @@ ${stabSection}
                   const predrillDia = toolDia > 0 ? toolDia + 0.010 : 0;
                   return (
                     <div className="space-y-3">
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
-                        <input
-                          type="checkbox"
-                          checked={form.slot_closed}
-                          onChange={e => { setForm(p => ({ ...p, slot_closed: e.target.checked })); setEntryTypes([]); }}
-                          className="w-3.5 h-3.5 accent-sky-400"
-                        />
-                        <span className="text-zinc-300">Closed slot (no open end)</span>
-                        <span className="text-[10px] text-zinc-500">— both ends bounded by material; tool cannot enter from outside the stock</span>
-                      </label>
+                      <div>
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+                          <input
+                            type="checkbox"
+                            checked={form.slot_closed}
+                            onChange={e => { setForm(p => ({ ...p, slot_closed: e.target.checked })); setEntryTypes([]); }}
+                            className="w-3.5 h-3.5 accent-sky-400"
+                          />
+                          <span className="text-zinc-300 whitespace-nowrap">Closed slot (no open end)</span>
+                        </label>
+                        <p className="text-[10px] text-zinc-500 mt-0.5 ml-[22px]">Both ends bounded by material; tool cannot enter from outside the stock.</p>
+                      </div>
                       <div className="flex flex-wrap gap-3">{slotFlat.map(renderChip)}</div>
                       {form.slot_closed && entryTypes.includes("predrill_plunge") && toolDia > 0 && (
                         <div className="text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
