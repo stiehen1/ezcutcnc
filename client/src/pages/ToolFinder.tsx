@@ -206,6 +206,38 @@ const DiagramFloorRadius = () => (
   </div>
 );
 
+const DiagramChamferLength = () => (
+  <div style={{ display: "inline-block", textAlign: "center" }}>
+  {/* Side view: 45° chamfer on a part edge. L = hypotenuse (chamfer length). */}
+  <svg width="160" height="115" viewBox="0 0 160 115" style={{ display: "block" }}>
+    {/* Part material — sharp 90° edge, chamfer cut at top-right */}
+    {/* Original edge would go (40,15) → (130,15) → (130,95). Chamfer clips top-right corner. */}
+    {/* Chamfer end-points: (90,15) on top, (130,55) on right side — 45° hypotenuse */}
+    <path d="M40,15 L90,15 L130,55 L130,95 L40,95 Z" fill="#374151" stroke="#6b7280" strokeWidth="1"/>
+    {/* Phantom of removed corner (dashed) */}
+    <path d="M90,15 L130,15 L130,55" fill="none" stroke="#4b5563" strokeWidth="1" strokeDasharray="3,2"/>
+    {/* Chamfer face — bright orange, the hero */}
+    <line x1="90" y1="15" x2="130" y2="55" stroke="#f97316" strokeWidth="2.5"/>
+    {/* L dimension line offset above/right of the hypotenuse */}
+    {/* perpendicular to (90,15)→(130,55): normal direction = (1,-1)/√2, offset 10 px outward */}
+    <line x1="97" y1="8" x2="137" y2="48" stroke="#f97316" strokeWidth="1.2"/>
+    {/* Tick marks at each end of the L line */}
+    <line x1="94" y1="11" x2="100" y2="5"  stroke="#f97316" strokeWidth="1"/>
+    <line x1="134" y1="51" x2="140" y2="45" stroke="#f97316" strokeWidth="1"/>
+    {/* L label rotated to match hypotenuse angle (45°) */}
+    <text x="118" y="22" fill="#f97316" fontSize="13" fontFamily="monospace" fontWeight="bold" transform="rotate(45,118,22)">L</text>
+    {/* "← enter this" hint, sitting just below the L label */}
+    <text x="105" y="40" fill="#f97316" fontSize="7" transform="rotate(45,105,40)">← enter this</text>
+    {/* Right-angle marker at the original corner (phantom) */}
+    <path d="M122,15 L122,23 L130,23" fill="none" stroke="#6b7280" strokeWidth="0.8"/>
+    {/* Edge labels */}
+    <text x="55" y="11" fill="#9ca3af" fontSize="7">top edge</text>
+    <text x="135" y="78" fill="#9ca3af" fontSize="7">side</text>
+  </svg>
+  <div style={{ fontSize: 7, color: "#94a3b8", marginTop: 2 }}>side view — L = chamfer hypotenuse length</div>
+  </div>
+);
+
 const DiagramAxialDepth = () => (
   <svg width="130" height="115" viewBox="0 0 130 115" style={{ display: "block" }}>
     {/* Part pocket walls */}
@@ -1153,7 +1185,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               options={options.chamferAngles}
               selected={selChamferAngles}
               onChange={setSelChamferAngles}
-              fmt={v => `${v}°`}
+              fmt={v => `${v}° (${(v as number) / 2}° chamfer)`}
             />
           </div>}
 
@@ -1187,8 +1219,8 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
             />
           </div>}
 
-          {/* LOC */}
-          <div className="space-y-1">
+          {/* LOC — hidden for chamfer mills */}
+          {selToolTypes[0] !== "chamfer_mill" && <div className="space-y-1">
             <label className="text-xs font-semibold flex items-center gap-1.5">
               Length of Cut (LOC)
               <Hint text="Usable flute length of the cutter." />
@@ -1200,7 +1232,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
               onChange={v => setSelLoc(v != null ? String(v) : "")}
               fmt={v => fmtLen(v as number)}
             />
-          </div>
+          </div>}
 
           {/* LBS — hidden for chamfer mills */}
           {selToolTypes[0] !== "chamfer_mill" && <div className="space-y-1">
@@ -1398,7 +1430,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
             <div className="space-y-1">
               <label className="text-xs font-semibold flex items-center gap-1.5">
                 Part Chamfer Length (in)
-                <Hint text="Hypotenuse length of the chamfer on your part. Shows tools whose Max Cutting Edge Length is ≥ this value." />
+                <Hint text="Hypotenuse length of the chamfer on your part. Shows tools whose Max Cutting Edge Length is ≥ this value." diagram={<DiagramChamferLength />} />
               </label>
               <input
                 type="number"
@@ -1619,7 +1651,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                     <th className="text-left px-2 py-2 font-semibold">Description</th>
                     <th className="text-center px-2 py-2 font-semibold">Dia</th>
                     <th className="text-center px-2 py-2 font-semibold">FL</th>
-                    <th className="text-center px-2 py-2 font-semibold">LOC</th>
+                    {selToolTypes[0] !== "chamfer_mill" && <th className="text-center px-2 py-2 font-semibold">LOC</th>}
                     <th className="text-center px-2 py-2 font-semibold">OAL</th>
                     {selToolTypes[0] !== "chamfer_mill" && <th className="text-center px-2 py-2 font-semibold"><span className="inline-flex items-center justify-center gap-1">LBS <Hint text="Reduced-neck extension for deeper reach. Core Cutter can extend short LBS lengths quickly as a modification — contact us." /></span></th>}
                     {selToolTypes[0] !== "chamfer_mill" && <th className="text-center px-2 py-2 font-semibold">Corner</th>}
@@ -1667,9 +1699,11 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       </td>
                       <td className="px-2 py-2 text-right font-mono whitespace-nowrap">{fmtDia(row.cutting_diameter_in != null ? Number(row.cutting_diameter_in) : null)}</td>
                       <td className="px-2 py-2 text-right font-mono">{row.flutes ?? "—"}</td>
-                      <td className="px-2 py-2 text-right font-mono whitespace-nowrap">
-                        {row.loc_in != null ? `${Number(row.loc_in).toFixed(4)}"` : "—"}
-                      </td>
+                      {selToolTypes[0] !== "chamfer_mill" && (
+                        <td className="px-2 py-2 text-right font-mono whitespace-nowrap">
+                          {row.loc_in != null ? `${Number(row.loc_in).toFixed(4)}"` : "—"}
+                        </td>
+                      )}
                       <td className="px-2 py-2 text-right font-mono whitespace-nowrap">
                         {row.oal_in != null ? `${Number(row.oal_in).toFixed(4)}"` : "—"}
                       </td>
@@ -1689,7 +1723,7 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{row.coating ?? "—"}</td>
                       {selToolTypes[0] === "chamfer_mill" && <>
                         <td className="px-2 py-2 text-right font-mono whitespace-nowrap">
-                          {row.chamfer_angle != null ? `${row.chamfer_angle}°` : "—"}
+                          {row.chamfer_angle != null ? `${row.chamfer_angle}° (${Number(row.chamfer_angle) / 2}°)` : "—"}
                         </td>
                         <td className="px-2 py-2 text-right font-mono whitespace-nowrap">
                           {fmtDia(row.tip_diameter != null ? Number(row.tip_diameter) : null)}
