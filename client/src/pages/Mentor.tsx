@@ -1356,7 +1356,32 @@ export default function Mentor() {
           ? ("hydraulic" as const)
           : ("weldon" as const))
       : null;
-    setForm(p => ({
+    // Each machine_type only exposes a subset of workholding options in the UI button row.
+    // If the prior workholding isn't valid for the new machine type, snap to a sensible
+    // default for that lineup — otherwise the orphaned value still drives downstream UI
+    // (e.g. the part-overhang field stays visible with no matching button selected).
+    const _allowedWH: Record<string, readonly string[]> = {
+      vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","toe_clamps","soft_jaws"],
+      hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","soft_jaws"],
+      "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
+      gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+      hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+      double_column: ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+      lathe:         ["soft_jaws","form_jaws","6_jaw_chuck","pie_jaws","hydraulic_chuck","power_chuck","collet_chuck","3_jaw_chuck","step_jaws","expanding_mandrel","tailstock_supported","between_centers","steady_rest"],
+      mill_turn:     ["soft_jaws","form_jaws","6_jaw_chuck","pie_jaws","hydraulic_chuck","power_chuck","collet_chuck","3_jaw_chuck","step_jaws","expanding_mandrel","dovetail","rigid_fixture","modular_quickchange","tailstock_supported","between_centers","steady_rest","ijaw","autochuck"],
+      swiss:         ["gang_tooling","guide_bushing","collet_chuck","soft_jaws","step_jaws","expanding_mandrel"],
+    };
+    const _whDefaults: Record<string, string> = {
+      vmc: "vise", hmc: "rigid_fixture", "5axis": "zero_point",
+      gantry: "rigid_fixture", hbm: "rigid_fixture", double_column: "rigid_fixture",
+      lathe: "collet_chuck", mill_turn: "collet_chuck", swiss: "collet_chuck",
+    };
+    setForm(p => {
+      const allowed = _allowedWH[machType];
+      const _typeWH = allowed && !allowed.includes(p.workholding)
+        ? (_whDefaults[machType] as typeof p.workholding)
+        : null;
+      return ({
       ...p,
       max_rpm: effectiveRpm || p.max_rpm,
       machine_hp: effectiveHp || p.machine_hp,
@@ -1364,7 +1389,7 @@ export default function Mentor() {
       spindle_drive: effectiveDrive as any,
       dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
-      workholding: _heavyWH ?? p.workholding,
+      workholding: _heavyWH ?? _typeWH ?? p.workholding,
       toolholder:  _heavyTH ?? p.toolholder,
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
@@ -1373,7 +1398,8 @@ export default function Mentor() {
       lathe_has_sub_spindle: isLiveToolType && (_machData.sub_rpm ?? 0) > 0 ? true : p.lathe_has_sub_spindle,
       live_tool_connection: (typeof m.live_tool_connection === "string" ? m.live_tool_connection : "") || "",
       live_tool_hp: _machData.live_hp ?? 0,
-    }));
+      });
+    });
     setActiveMachineId(m.id ?? null);
     const _namePart = m.brand && m.model?.startsWith(m.brand) ? m.model : [m.brand, m.model].filter(Boolean).join(" ");
     const _machNo = m.shop_machine_no ? ` #${m.shop_machine_no}` : "";
