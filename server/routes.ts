@@ -1481,7 +1481,7 @@ export async function registerRoutes(
         exclude.filter(s => s.length > 0).reduce((acc, e) => acc.replace(e, ""), COMMON);
 
       const [diameters, locs, lbsLengths, coatings, flutes, corners, geometries, chamferLengths, chamferAngles, tipDiameters, series, centerCuttingVals] = await Promise.all([
-        pool.query(`SELECT DISTINCT cutting_diameter_in AS v ${BASE}${without(DIA_FILTER, CR_FILTER)} AND cutting_diameter_in IS NOT NULL ORDER BY cutting_diameter_in`),
+        pool.query(`SELECT DISTINCT cutting_diameter_in AS v ${BASE}${without(DIA_FILTER)} AND cutting_diameter_in IS NOT NULL ORDER BY cutting_diameter_in`),
         pool.query(`SELECT DISTINCT loc_in AS v ${BASE}${without(LOC_FILTER)} AND loc_in IS NOT NULL ORDER BY loc_in`),
         pool.query(`SELECT DISTINCT lbs_in AS v ${BASE}${without(LBS_FILTER, LBS_EXCLUDE_FILTER, AXIAL_FILTER, REACH_FILTER)}${LBS_AXIAL_FILTER} AND lbs_in IS NOT NULL AND lbs_in > 0 ORDER BY lbs_in`),
         pool.query(`SELECT DISTINCT coating AS v ${BASE}${without(COATING_FILTER)} AND coating IS NOT NULL ORDER BY coating`),
