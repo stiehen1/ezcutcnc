@@ -2592,6 +2592,7 @@ export default function Mentor() {
   const [stickoutText, setStickoutText] = React.useState("");
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
+  const [partStickoutText, setPartStickoutText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
   const [stickoutViolation, setStickoutViolation] = React.useState<string | null>(null);
@@ -2633,6 +2634,11 @@ export default function Mentor() {
   React.useEffect(() => {
     if (form.stickout > 0) setStickoutText(metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3));
   }, [form.stickout]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep part stickout text display in sync whenever form.part_stickout is set programmatically
+  React.useEffect(() => {
+    setPartStickoutText(form.part_stickout > 0 ? form.part_stickout.toFixed(3) : "");
+  }, [form.part_stickout]);
 
   // When material (isoCategory) changes in HEM, reset WOC+DOC to optimal for new material
   // so stale values from a prior material don't carry over — but only if user was using a preset
@@ -3249,6 +3255,7 @@ export default function Mentor() {
               woc_pct: wocPct,
               edp: tool.edp,
               operation: "milling" as any,
+              center_cutting: (form as any).center_cutting ?? undefined,
               debug: false,
             });
             physicsMap[tool.edp] = physResult;
@@ -3281,6 +3288,8 @@ export default function Mentor() {
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
         stickout: form.stickout || form.loc * 1.25,
         machine_id: activeMachineId ?? undefined,
+        // center_cutting is null when SKU hasn't specified it — drop the key so Zod's default(true) applies
+        center_cutting: (form as any).center_cutting ?? undefined,
         debug: false,
       });
       lastRunFormRef.current = JSON.stringify(form);
@@ -4255,7 +4264,8 @@ ${stabSection}
       if (drillResult.peck_depth_in != null)
         lines.push(L("Q (Peck Depth)", `${drillResult.peck_depth_in.toFixed(4)}"`));
       if (drillResult.peck_schedule && drillResult.peck_schedule.length > 0) {
-        lines.push("  Peck schedule:");
+        lines.push("");
+        lines.push("  Pecking Optimizer — decrease peck depth as hole deepens:");
         drillResult.peck_schedule.forEach((q: number, i: number) => {
           const isLast = i === drillResult.peck_schedule!.length - 1;
           lines.push(`    Peck ${i + 1}${isLast ? "+" : ""}:  ${q.toFixed(4)}"`);
@@ -7585,15 +7595,17 @@ ${stabSection}
               <Input
                 type="text" inputMode="decimal" className="no-spinners"
                 placeholder={(form.workholding === "guide_bushing" || form.workholding === "gang_tooling") ? "e.g. 0.250" : form.workholding === "collet_chuck" ? "e.g. 1.000" : "e.g. 2.500"}
-                value={form.part_stickout > 0 ? form.part_stickout.toFixed(3) : ""}
-                onChange={e => {
-                  const n = parseFloat(e.target.value);
-                  setForm(p => ({ ...p, part_stickout: Number.isFinite(n) && n >= 0 ? n : 0 }));
-                }}
-                onBlur={e => {
-                  const n = parseFloat(e.target.value);
-                  if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, part_stickout: parseFloat(n.toFixed(3)) }));
-                  else setForm(p => ({ ...p, part_stickout: 0 }));
+                value={partStickoutText}
+                onChange={e => setPartStickoutText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(partStickoutText);
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm(p => ({ ...p, part_stickout: parseFloat(n.toFixed(3)) }));
+                    setPartStickoutText(n.toFixed(3));
+                  } else {
+                    setForm(p => ({ ...p, part_stickout: 0 }));
+                    setPartStickoutText("");
+                  }
                 }}
               />
               <p className="text-[10px] text-zinc-500 mt-1">Used to adjust workholding compliance in the stability model — longer overhang increases chatter risk.</p>
@@ -11682,8 +11694,9 @@ ${stabSection}
 
               {/* Step drill note */}
               {drillResult.largest_dia != null && drillResult.entry_dia != null && drillResult.largest_dia !== drillResult.entry_dia && (
-                <div className="rounded-lg border border-sky-500 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
-                  Step drill — SFM on ø{drillResult.largest_dia.toFixed(4)}" (largest) · Feed (IPR) on ø{drillResult.entry_dia.toFixed(4)}" (entry)
+                <div className="rounded-lg border border-sky-500 bg-sky-500/10 px-3 py-2 text-xs text-sky-300 space-y-1">
+                  <div>Step drill — SFM on ø{drillResult.largest_dia.toFixed(4)}" (largest) · Feed (IPR) on ø{drillResult.entry_dia.toFixed(4)}" (entry)</div>
+                  <div className="text-sky-300/70">Feed is sized for the entry-tip plunge into solid — the weakest cross-section. Once past the first step shoulder, each step removes only a thin annulus and CAM can ramp feed up at each shoulder transition.</div>
                 </div>
               )}
 

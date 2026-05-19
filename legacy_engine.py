@@ -17,6 +17,8 @@ from engine.physics import (
     drill_torque,
     drill_depth_torque_factor,
     drill_min_ipr,
+    drill_micro_sfm_bonus,
+    drill_coolant_fed_sfm_bonus,
     recommend_drill_cycle,
     REAM_SFM,
     _REAM_NON_CF_MULT,
@@ -1533,30 +1535,38 @@ def hem_typical_woc_range_pct(material_group, flutes):
 # ============================================================
 
 # SFM for solid carbide drills (base — flood coolant, 135° point)
+# Calibrated against MZE manufacturer cutting condition table at Ø.2480 reference diameter
+# (mid-size where micro-drill bonus = 1.00). See project_drill_sfm_sweep.md for the per-material
+# audit. Coolant-fed bonus is now diameter+material aware (drill_coolant_fed_sfm_bonus).
 DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
-    "steel_mild": 140, "steel_free": 150, "steel_alloy": 100, "steel_tool": 70,
+    # Mild steel 1010 / 4140 anchored to MZE Ø.2480: 175 / 160 SFM. 4140 HT (HRC ≥36) handled by hardness_sfm_mult.
+    "steel_mild": 175, "steel_free": 175, "steel_alloy": 160, "steel_tool": 70,
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
-    # Base = flood external coolant, non-coolant-fed drill. coolant_fed × 1.15 bonus brings these up to through-coolant target.
-    # stainless_304 validated: 60 SFM non-coolant-fed → 69 SFM coolant-fed ≈ 70 reference target.
-    "stainless_304": 60, "stainless_316": 52,
-    "stainless_410": 74, "stainless_trimrite": 71, "stainless_420": 70, "stainless_440c": 57,
-    "stainless_martensitic": 74, "stainless_fm": 87, "stainless_ferritic": 78,
-    "stainless_ph": 52, "stainless_duplex": 48, "stainless_superduplex": 39,
-    "stainless_austenitic": 57,
-    "cast_iron_gray": 130, "cast_iron_ductile": 110, "cast_iron_cgi": 100, "cast_iron_malleable": 120,
+    # Stainless 304/316 anchored to MZE Ø.2480: 80 SFM. 316 slightly lower (Mo penalty).
+    # Coolant-fed bonus now handles the +13–30% bump from external→internal coolant; no longer baked in here.
+    "stainless_304": 80, "stainless_316": 70,
+    "stainless_410": 90, "stainless_trimrite": 85, "stainless_420": 85, "stainless_440c": 70,
+    "stainless_martensitic": 90, "stainless_fm": 100, "stainless_ferritic": 95,
+    "stainless_ph": 65, "stainless_duplex": 60, "stainless_superduplex": 50,
+    "stainless_austenitic": 70,
+    # Cast iron gray/ductile anchored to MZE Ø.2480: 195 / 175 SFM.
+    "cast_iron_gray": 195, "cast_iron_ductile": 175, "cast_iron_cgi": 145, "cast_iron_malleable": 170,
     "titanium_cp": 60, "titanium_64": 45,
     "hiTemp_fe": 30, "hiTemp_co": 25,
-    "inconel_625": 25, "inconel_718": 20,
-    "monel_k500": 35, "hastelloy_x": 22, "inconel_617": 20, "waspaloy": 18, "mp35n": 15,
-    "hardened_lt55": 50, "hardened_gt55": 30,
-    "tool_steel_p20": 75, "tool_steel_a2": 60, "tool_steel_h13": 55,
-    "tool_steel_s7": 60, "tool_steel_d2": 45, "cpm_10v": 30,
-    "manganese_bronze": 110, "silicon_bronze": 130, "copper_beryllium": 100,
+    # Inconel 718 anchored to MZE Ø.2480: 80 SFM nominal. Engine uses conservative 60 as a
+    # starting point — users can push up if their setup proves rigid and chips are healthy.
+    "inconel_625": 60, "inconel_718": 60,
+    "monel_k500": 75, "hastelloy_x": 55, "inconel_617": 50, "waspaloy": 40, "mp35n": 35,
+    # Hardened steel 40–55 HRC (H13/L6) anchored to MZE Ø.2480: 80 SFM. Engine 75.
+    "hardened_lt55": 75, "hardened_gt55": 30,
+    "tool_steel_p20": 100, "tool_steel_a2": 85, "tool_steel_h13": 80,
+    "tool_steel_s7": 85, "tool_steel_d2": 65, "cpm_10v": 45,
+    "manganese_bronze": 110, "silicon_bronze": 130, "copper_beryllium": 200,  # BeCu AT/HT centerline per Materion guide (C17200 aged HRC 36–45)
     # Legacy group fallbacks
-    "Aluminum": 350, "Non-Ferrous": 250, "Abrasive Non-Ferrous": 110, "Steel": 100, "Stainless": 80,
-    "Cast Iron": 120, "Titanium": 50, "Inconel": 25, "Plastics": 150,
+    "Aluminum": 350, "Non-Ferrous": 250, "Abrasive Non-Ferrous": 110, "Steel": 160, "Stainless": 80,
+    "Cast Iron": 175, "Titanium": 50, "Inconel": 60, "Plastics": 150,
 }
 
 # IPR base for 0.5" diameter solid carbide drill — scales with dia^0.6
@@ -1581,7 +1591,7 @@ DRILL_IPR_BASE = {
     "armor_milspec": 0.0018, "armor_ar400": 0.0015, "armor_ar500": 0.0012, "armor_ar600": 0.0008,
     "tool_steel_p20": 0.0035, "tool_steel_a2": 0.0028, "tool_steel_h13": 0.0025,
     "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022, "cpm_10v": 0.0018,
-    "manganese_bronze": 0.005, "silicon_bronze": 0.0055, "copper_beryllium": 0.0045,
+    "manganese_bronze": 0.005, "silicon_bronze": 0.0055, "copper_beryllium": 0.009,  # BeCu free-cuts; anchor 0.002 IPR at Ø.040 after dia^0.6 scaling per Materion guide
     # Legacy group fallbacks
     "Aluminum": 0.009, "Non-Ferrous": 0.007, "Abrasive Non-Ferrous": 0.005, "Steel": 0.004, "Stainless": 0.0042,
     "Cast Iron": 0.005, "Titanium": 0.003, "Inconel": 0.0015, "Plastics": 0.006,
@@ -1957,12 +1967,26 @@ def run_drilling(payload: dict) -> dict:
 
     # SFM — calculated at largest diameter
     pa_factor   = DRILL_POINT_ANGLE_FACTOR.get(pa, 1.10)
-    cool_factor = DRILL_COOLANT_SFM.get(coolant, 1.00)
+    # Coolant-fed (through-the-drill) supersedes external coolant — when the drill has internal
+    # coolant, that IS the dominant delivery path. Don't stack external coolant multipliers on top.
     if coolant_fed:
-        cool_factor = min(cool_factor * 1.15, 1.50)   # through-drill coolant: +15% SFM bonus
+        cool_factor = drill_coolant_fed_sfm_bonus(sfm_dia, mat, mat_group)
+    else:
+        cool_factor = DRILL_COOLANT_SFM.get(coolant, 1.00)
     geo_factor  = DRILL_GEOMETRY_SFM.get(drill_geometry, 1.00)
     base_sfm = DRILL_SFM.get(mat, DRILL_SFM.get(mat_group, 100))
-    base_sfm *= cool_factor * geo_factor * hardness_sfm_mult(hrc)  # PA factor applies to IPR only, not SFM
+    # hardness_sfm_mult excludes materials whose HRC is intrinsic to the alloy spec
+    # (Inconel/superalloys, hardened tool steels, named tool steels, age-hardened BeCu).
+    # The base SFM already accounts for their hardness; applying the mult double-counts it.
+    _drill_no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
+                             "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+                             "copper_beryllium")
+    if mat_group not in _drill_no_hrc_penalty and mat not in _drill_no_hrc_penalty:
+        base_sfm *= hardness_sfm_mult(hrc)
+    base_sfm *= cool_factor * geo_factor  # PA factor applies to IPR only, not SFM
+    # Micro-drill SFM bonus — base table calibrated for ~1/4" drills; micro-drills run hotter SFM.
+    # Bonus scales with sfm_dia (the operating dia that drives RPM/heat) — not feed_dia.
+    base_sfm *= drill_micro_sfm_bonus(sfm_dia)
 
     # RPM — uses sfm_dia (largest)
     target_rpm = (base_sfm * 3.82) / sfm_dia
