@@ -4433,12 +4433,16 @@ CRITICAL RULES — READ CAREFULLY:
 2. tool_dia is the CUTTING diameter — the Ø dimension at the tip/cutting end of the tool. On standard endmills the cutting dia equals the shank dia. On REDUCED-SHANK / MICRO tools (e.g. QTR3-style, stub cutters) the shank is LARGER than the cutting end — in this case tool_dia is the SMALL Ø at the tip (e.g. Ø0.0590), NOT the shank. The shank Ø (e.g. Ø0.250) goes in shank_dia. Rule: tool_dia = the Ø callout nearest the cutting tip/flutes. shank_dia = the Ø callout on the large body/shank end. If both ends are labeled with different diameters, the SMALLER one at the cutting tip is tool_dia. tool_dia is NEVER 0. On keyseat cutters it is the disc/wheel diameter (the big cutting part).
 
 2b. For STEP DRILLS specifically — this is the most important rule for step drills:
-   - A step drill has multiple cutting diameters shown with BOLD lines on the profile drawing. The shank/body is shown with thin or dashed lines and is NOT a cutting diameter.
-   - tool_dia = the SMALLEST cutting diameter (at the very tip of the drill — the first material it contacts). Example: if the print shows Ø0.1875 (shank, dashed/thin line), Ø0.141 (step, bold), Ø0.103 (tip, bold) → tool_dia = 0.103.
-   - drill_step_diameters = ALL larger cutting diameters in ascending order, NOT including tool_dia. Example: [0.141]. The shank diameter (Ø0.1875) is NEVER in drill_step_diameters — it goes in shank_dia.
-   - drill_step_lengths = the "STEP END" dimension(s) measured from the drill tip — one per step diameter. Example: 0.268 → [0.268].
+   - Bold lines = cutting surfaces, thin/dashed lines = non-cutting (rule 0 above). Apply this to EACH diameter callout on the profile.
+   - tool_dia = the SMALLEST cutting diameter (at the very tip of the drill — the first material it contacts).
+   - drill_step_diameters = ALL larger cutting diameters in ascending order, NOT including tool_dia. Add a callout to this list ONLY if its profile line in the main side view is drawn BOLD. If the line is thin or dashed, it is non-cutting body and goes in shank_dia instead.
+   - shank_dia = the large cylindrical body OD at the far end (away from the tip). Two cases:
+       (a) If the shank line in the main profile view is THIN or DASHED, the shank is non-cutting. Put it in shank_dia and DO NOT include it in drill_step_diameters. (Most step drills.)
+       (b) If the shank line in the main profile view is BOLD, the tool cuts all the way up to the shank diameter — meaning the shank OD IS the largest cutting diameter. In this case, ALSO add the shank value as the last entry of drill_step_diameters (so the engine treats it as the largest cutting step) AND keep it in shank_dia. The same number appears in both fields. Example: CC-09440 has Ø.125 shank drawn bold with the cutting profile running into it — drill_step_diameters includes 0.125 as the largest step AND shank_dia = 0.125.
+   - drill_step_lengths = the "STEP END" dimension(s) measured from the drill tip — one per entry in drill_step_diameters, in the same order. If case (b) applies, the last step length is the dimension from the tip to where the cutting profile meets the shank.
    - drill_flute_length = the "LOC" dimension (fluted cutting length). The "CLEAR" dimension is the clearance relief length (slightly longer) — use LOC, not CLEAR.
-   - Summary for the CC-14371 example: tool_dia=0.103, shank_dia=0.1875, drill_step_diameters=[0.141], drill_step_lengths=[0.268], drill_flute_length=0.625, oal=2.50.
+   - Example A (shank non-cutting): CC-14371 — Ø0.1875 shank (thin/dashed), Ø0.141 step (bold), Ø0.103 tip (bold) → tool_dia=0.103, drill_step_diameters=[0.141], shank_dia=0.1875.
+   - Example B (shank IS the largest cutting dia): CC-09440 — Ø0.125 shank line drawn BOLD because the cutting profile runs into the shank; intermediate steps Ø0.062/0.084/0.090 bold; tip Ø0.040 bold → tool_dia=0.040, drill_step_diameters=[0.062, 0.084, 0.090, 0.125], shank_dia=0.125.
 
 3. For KEYSEAT cutters specifically:
    - loc = the disc WIDTH (thickness of the cutting wheel, e.g. ".1875±.001" → 0.1875)
@@ -4564,7 +4568,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [{
           role: "user",
           content: [

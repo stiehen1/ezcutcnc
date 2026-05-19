@@ -813,12 +813,126 @@ def threadmill_spring_pass(thread_class: str) -> bool:
 # DRILLING PHYSICS — Solid Carbide Drills
 # ============================================================
 
+def drill_micro_sfm_bonus(D: float) -> float:
+    """Micro-drill SFM multiplier.
+
+    Carbide drill manufacturer charts (Tru-Edge, RedLine, etc.) show micro-drills running
+    at higher SFM than the engine's base table predicts. The base SFM values are calibrated
+    for typical drill sizes (~Ø.250) where heat dissipation, flute volume, and chip evac
+    set the limit. Micro-drills (<0.100") have less chip volume to remove and can run hotter
+    surface speed without thermal failure.
+
+    Curve dialed in alongside the DRILL_SFM sweep (project_drill_sfm_sweep.md) — base values
+    are now higher, so the bonus is correspondingly smaller to avoid double-counting.
+    Anchors: D≥0.100"→1.00, D=0.040"→1.30, D=0.020"→1.45. Linear interp between.
+    """
+    if D >= 0.100: return 1.00
+    if D <= 0.020: return 1.45
+    if D >= 0.040:
+        # 0.040→1.30, 0.100→1.00: linear over 0.060 span
+        return 1.30 - (D - 0.040) * (0.30 / 0.060)
+    # 0.020→1.45, 0.040→1.30: linear over 0.020 span
+    return 1.45 - (D - 0.020) * (0.15 / 0.020)
+
+
+# Coolant-fed SFM bonus class — how much benefit through-coolant gives at the cutting edge.
+# Derived from MZE (external coolant) vs MZS (internal coolant) manufacturer comparison.
+# Bigger drills get bigger bonus because chip evacuation is the dominant limit; small drills
+# already evacuate chips fine. Superalloys are thermally limited and get no bonus regardless
+# of drill size — coolant helps with heat but the SFM ceiling is set by edge temperature.
+#
+#   "chip_limited" — Steel, stainless, cast iron, free-machining alloys. Full diameter curve.
+#   "moderate"     — Aluminum, non-ferrous. Chip evac matters but heat isn't an issue;
+#                    bonus saturates lower than chip-limited materials.
+#   "heat_limited" — Inconel, Ti beta, hardened steel ≥50HRC. No SFM bonus.
+#                    (Coolant still helps tool life, but engine doesn't model that here.)
+_COOLANT_FED_CLASS = {
+    # Heat-limited — flat at 1.00 across all sizes
+    "Inconel":     "heat_limited",
+    "hiTemp_fe":   "heat_limited",
+    "hiTemp_co":   "heat_limited",
+    "hardened_lt55": "heat_limited",  # 40–55 HRC steels
+    "hardened_gt55": "heat_limited",  # 55+ HRC
+    # Moderate — aluminum / non-ferrous, modest bonus at large dia only
+    "Aluminum":    "moderate",
+    "Non-Ferrous": "moderate",
+    "Abrasive Non-Ferrous": "moderate",  # BeCu, Mn bronze, Si bronze — chip-limited but free-cutting
+    "Plastics":    "moderate",
+    # Chip-limited — biggest bonus; SFM curve climbs fastest with diameter
+    "Steel":       "chip_limited",
+    "Stainless":   "chip_limited",
+    "Cast Iron":   "chip_limited",
+    "Titanium":    "chip_limited",  # Ti CP / Ti-6-4 — chip evac IS the limit; beta-Ti drops to heat_limited (see material override)
+}
+
+# Per-material override (when group-level class is wrong for a specific alloy)
+_COOLANT_FED_CLASS_MATERIAL = {
+    "titanium_beta": "heat_limited",  # beta titanium: thermally limited
+    # Hardened tool steels — already in heat_limited via group fallback but explicit for clarity
+    "tool_steel_d2": "chip_limited",  # annealed D2 is still chip-limited
+    "tool_steel_h13": "chip_limited",
+    "tool_steel_a2": "chip_limited",
+    "tool_steel_p20": "chip_limited",
+    "tool_steel_s7": "chip_limited",
+}
+
+
+def drill_coolant_fed_sfm_bonus(D: float, mat: str, mat_group: str) -> float:
+    """Coolant-fed (through-the-drill) SFM bonus, diameter- and material-aware.
+
+    Replaces the previous flat 1.15× multiplier. Calibrated against MZE/MZS
+    manufacturer cutting condition tables (external vs internal coolant).
+
+    Diameter curve (chip-limited materials):
+      D ≤ 0.10"   → 1.10× (minimal — micro drills already evacuate chips fine)
+      D = 0.25"   → 1.45×
+      D = 0.50"   → 1.80×
+      D ≥ 0.75"   → 2.00× (chip evac dominant; matches MZE/MZS ~2× at large dia)
+
+    Moderate materials (aluminum, non-ferrous): curve saturates lower (max 1.50× at large dia).
+    Heat-limited materials (Inconel, hardened, Ti beta): flat 1.00× — no SFM bonus.
+    """
+    # Resolve coolant-fed class — material-specific override wins, then group fallback
+    cls = _COOLANT_FED_CLASS_MATERIAL.get(mat)
+    if cls is None:
+        cls = _COOLANT_FED_CLASS.get(mat_group, "chip_limited")
+
+    if cls == "heat_limited":
+        return 1.00
+
+    # Diameter curve — same shape for chip_limited and moderate, scaled to different caps
+    if cls == "moderate":
+        cap = 1.50
+    else:  # chip_limited
+        cap = 2.00
+
+    # Piecewise linear in D, anchored at:
+    #   D ≤ 0.10 → 1.10
+    #   D = 0.25 → 1.10 + (cap-1.10) × 0.45
+    #   D = 0.50 → 1.10 + (cap-1.10) × 0.78
+    #   D ≥ 0.75 → cap
+    if D <= 0.10:
+        return 1.10
+    if D >= 0.75:
+        return cap
+    # Linear in two segments: (0.10, 1.10) → (0.50, mid) → (0.75, cap)
+    mid_at_050 = 1.10 + (cap - 1.10) * 0.78
+    if D <= 0.50:
+        # 0.10 → 1.10, 0.50 → mid_at_050
+        frac = (D - 0.10) / (0.50 - 0.10)
+        return 1.10 + (mid_at_050 - 1.10) * frac
+    # 0.50 → mid_at_050, 0.75 → cap
+    frac = (D - 0.50) / (0.75 - 0.50)
+    return mid_at_050 + (cap - mid_at_050) * frac
+
+
 # Minimum IPR by material group — below this the cutting edge rubs instead of shearing.
 # Critical chip thickness ≈ 20–35% of edge radius; practical floor scales with drill diameter.
 # Rule of thumb: min_ipr = max(material_floor, 0.002 × D)
 _DRILL_MIN_IPR = {
     "Aluminum":    0.002,
     "Non-Ferrous": 0.002,
+    "Abrasive Non-Ferrous": 0.003,  # BeCu work-hardens if drill rubs — Materion: "never let it rub, maintain positive feed"
     "Plastics":    0.001,
     "Steel":       0.003,
     "Stainless":   0.004,   # work-hardens rapidly if rubbing — most critical
@@ -833,6 +947,7 @@ _DRILL_MIN_IPR = {
 _DRILL_MIN_IPR_PCT_D = {
     "Aluminum":    0.008,   # 0.8%×D
     "Non-Ferrous": 0.008,
+    "Abrasive Non-Ferrous": 0.025,  # 2.5%×D — BeCu min positive feed; Ø.040 → 0.001 IPR floor
     "Plastics":    0.005,
     "Steel":       0.010,   # 1.0%×D
     "Stainless":   0.010,   # 1.0%×D (shop-validated: .103" → ~0.001 IPR)
