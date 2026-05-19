@@ -4514,7 +4514,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "thread_tpi": <number, threads per inch for threadmills, 0 if not applicable>,
   "drill_step_diameters": <array — for step drills: the larger cutting diameters ONLY (NOT the shank, NOT tool_dia). Ascending order. Example: tool_dia=0.103, step=0.141, shank=0.1875 → [0.141]. [] if single-diameter drill>,
   "drill_step_lengths": <array of "STEP END" lengths in inches measured from the drill tip, one per step diameter. Example: 0.268 → [0.268]. [] if not applicable>,
-  "drill_point_angle": <number, the included point angle in degrees at the drill tip (e.g. 140°). Return closest standard: 118, 130, 135, 140, or 145. 135 if not shown.>,
+  "drill_point_angle": <number, the included point angle in degrees at the drill tip (e.g. 140°). Return closest standard: 118, 120, 130, 135, 140, or 145. 120° is common on straight-flute step drills for non-ferrous (plunging) work. 135 if not shown.>,
   "drill_flute_length": 0,
   "ream_step_diameters": <array of step diameters in ascending order (smallest first) for step reamers — read from the print's step Ø callouts. [] if single-diameter reamer or not applicable>,
   "ream_step_lengths": <array of step lengths in inches measured from the reamer tip — one entry per step diameter, same order. [] if not applicable>,

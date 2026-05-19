@@ -1034,20 +1034,33 @@ def drill_torque(D: float, ipr: float, material_group: str, hardness_hrc: float 
 def recommend_drill_cycle(
     D: float, depth: float, mat_group: str, hrc: float,
     point_angle: int, coolant: str, blind: bool,
-    coolant_fed: bool = False, drill_geometry: str = "standard"
+    coolant_fed: bool = False, drill_geometry: str = "standard",
+    step_count: int = 0
 ) -> tuple:
-    """Returns (cycle, note, peck, r_plane, peck_schedule)."""
+    """Returns (cycle, note, peck, r_plane, peck_schedule).
+
+    step_count = number of additional cutting diameters above the tip (0 for single-dia drills,
+    len(drill_step_diameters) for step drills). Multiple steps cut simultaneously and share one
+    flute for chip evacuation — chip column severity scales with step count.
+    """
     depth_to_dia = depth / D if D > 0 else 0
     stringy = mat_group in ("Stainless", "Titanium", "Inconel")
     hard    = hrc >= 40
     tsc     = coolant in ("tsc_low", "tsc_high")
 
-    # Chip-breaking score: 118°=0, 135°=1, 140°=2
-    chip_score = {118: 0, 130: 1, 135: 1, 140: 2, 145: 2}.get(int(point_angle), 1)
+    # Chip-breaking score: sharper points (lower angle) produce longer chips → score 0
+    # 120° straight-flute step drills behave like 118° for chip formation
+    pa_key = int(point_angle) if int(point_angle) > 0 else 135
+    chip_score = {118: 0, 120: 0, 130: 1, 135: 1, 140: 2, 145: 2}.get(pa_key, 1)
 
     # Flute capacity bonus by drill geometry
     # standard: up to 5×D, med_helix: 5–7×D, high_helix: 7–9×D (neutral baseline)
     flute_bonus = {"standard": 0.0, "med_helix": 2.0, "high_helix": 4.0}.get(drill_geometry, 0.0)
+
+    # Step-drill chip-evacuation penalty — N steps above the tip all cut simultaneously,
+    # feeding chips into the same tip-sized flute bottleneck. Each added step roughly
+    # halves the effective chip-evac window before pecking is needed.
+    step_penalty = 0.4 * max(0, step_count)
 
     # G81 threshold — how deep before any pecking is needed
     # Neutral baseline (non-stringy, 135° point, no coolant) hits 5/7/9×D per geometry
@@ -1060,6 +1073,7 @@ def recommend_drill_cycle(
     if not stringy:      g81_limit += 0.5
     if stringy:          g81_limit -= 1.5   # stringy chips rope early → start pecking sooner
     if hard:             g81_limit += 0.5   # hard = shorter chips
+    g81_limit -= step_penalty                   # step drills peck sooner
 
     # G73 threshold — chip-break peck viable up to here
     # Coolant-through → G73 most of the time (coolant pushes chips out, full retract rarely needed)
@@ -1074,6 +1088,7 @@ def recommend_drill_cycle(
     elif chip_score == 1:         g73_limit += 0.5
     if hard:                      g73_limit += 1.0
     if stringy and (tsc or coolant_fed): g73_limit -= 2.0  # coolant-assisted stringy still needs G83 sooner than non-stringy
+    g73_limit -= step_penalty                   # step drills cross into G83 sooner
 
     # R plane: clearance above part for chip flush between pecks
     # Tight R = faster cycle; needs coolant to actually flush chips in that gap
