@@ -4649,6 +4649,35 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         if (extracted.variable_helix !== true) extracted.variable_helix = true;
       }
 
+      // Step drill/reamer collapse — engine only needs entry dia (smallest, feed basis)
+      // and largest dia (SFM basis). Intermediate steps don't affect SFM/RPM/IPR.
+      // Peck advice falls back to depth / feed_dia (worst-case) when step_lengths is empty.
+      // UI also only renders one step row, so submitting more would mismatch the display.
+      if (Array.isArray(extracted.drill_step_diameters) && extracted.drill_step_diameters.length > 0) {
+        const dias = (extracted.drill_step_diameters as number[]).filter(d => typeof d === "number" && d > 0);
+        if (dias.length > 0) {
+          const maxDia = Math.max(...dias);
+          extracted.drill_step_diameters = [maxDia];
+          extracted.drill_steps = 1;
+        } else {
+          extracted.drill_step_diameters = [];
+          extracted.drill_steps = 0;
+        }
+        extracted.drill_step_lengths = [];
+      }
+      if (Array.isArray(extracted.ream_step_diameters) && extracted.ream_step_diameters.length > 0) {
+        const dias = (extracted.ream_step_diameters as number[]).filter(d => typeof d === "number" && d > 0);
+        if (dias.length > 0) {
+          const maxDia = Math.max(...dias);
+          extracted.ream_step_diameters = [maxDia];
+          extracted.ream_steps = 1;
+        } else {
+          extracted.ream_step_diameters = [];
+          extracted.ream_steps = 0;
+        }
+        extracted.ream_step_lengths = [];
+      }
+
       return res.json({ ok: true, extracted });
     } catch (err: any) {
       console.error("PDF extraction error:", err?.message ?? err, err?.status, err?.error);
