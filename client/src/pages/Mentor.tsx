@@ -3086,8 +3086,10 @@ export default function Mentor() {
       }
     }
 
-    // Hardened material block — 50 HRC+ requires 6+ flutes (non-slotting)
-    if ((operation === "milling" || operation === "feedmilling") && form.mode !== "slot") {
+    // Hardened material block — 50 HRC+ requires 6+ flutes (non-slotting endmills only).
+    // Chamfer mills are exempt: the cut is on the flank with progressively-growing WOC,
+    // not the full-edge engagement that drives the 6-flute requirement on endmills.
+    if ((operation === "milling" || operation === "feedmilling") && form.mode !== "slot" && form.tool_type !== "chamfer_mill") {
       const isHardened50Plus =
         form.material === "hardened_gt55" ||
         (form.hardness_scale === "hrc" && form.hardness_value >= 50);
@@ -4734,7 +4736,7 @@ ${stabSection}
   // Optional: gate engineering even if toggle is on but no data returned
 
   // ── Tool Finder → apply SKU and switch to milling ────────────────────────
-  function handleToolFinderSelect(tool: any, extras?: { mode?: string; isoMat?: string }) {
+  function handleToolFinderSelect(tool: any, extras?: { mode?: string; isoMat?: string; chamferLength?: number }) {
     applySkuToForm(tool as any);
     setOperation("milling");
     mentor.reset();
@@ -4742,6 +4744,10 @@ ${stabSection}
     if (extras?.isoMat) {
       setIsoCategory(extras.isoMat.toUpperCase() as IsoCategory);
       setForm(p => ({ ...p, material: "" }));
+    }
+    if (extras?.chamferLength && extras.chamferLength > 0 && tool?.tool_type === "chamfer_mill") {
+      setForm(p => ({ ...p, chamfer_depth: extras.chamferLength as number }));
+      setChamferDepthText((extras.chamferLength as number).toFixed(4));
     }
     toast({
       title: "Tool loaded into Milling Calculator",

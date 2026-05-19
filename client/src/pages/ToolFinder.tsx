@@ -642,7 +642,7 @@ function QuickPick({ onApply, onOperationPick, onClear, applied, summary }: {
 }
 
 // ── Main Tool Finder component ────────────────────────────────────────────────
-export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuRow, extras?: { mode?: string; isoMat?: string }) => void }) {
+export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuRow, extras?: { mode?: string; isoMat?: string; chamferLength?: number }) => void }) {
   const EMPTY_OPTIONS: Options = {
     toolTypes: [], diameters: [], locs: [], lbsLengths: [], flutes: [], coatings: [], corners: [], geometries: [], chamferLengths: [], chamferAngles: [], tipDiameters: [], series: [], centerCuttingVals: [],
   };
@@ -1808,7 +1808,17 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
                       <td className="px-2 py-2">
                         <button
                           type="button"
-                          onClick={() => onSelectTool(row, qpTip ? { mode: qpTip.mode, isoMat: qpTip.isoMat } : (material && material !== "all" ? { isoMat: material } : undefined))}
+                          onClick={() => {
+                            const chamferLen = (row.tool_type === "chamfer_mill" && reqChamferLength)
+                              ? parseFloat(reqChamferLength)
+                              : NaN;
+                            const chamferExtra = Number.isFinite(chamferLen) && chamferLen > 0 ? { chamferLength: chamferLen } : {};
+                            const base = qpTip
+                              ? { mode: qpTip.mode, isoMat: qpTip.isoMat }
+                              : (material && material !== "all" ? { isoMat: material } : {});
+                            const extras = { ...base, ...chamferExtra };
+                            onSelectTool(row, Object.keys(extras).length ? extras : undefined);
+                          }}
                           className="rounded px-2.5 py-1 text-[10px] font-semibold border border-indigo-500 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-colors whitespace-nowrap"
                         >
                           Use Tool →
