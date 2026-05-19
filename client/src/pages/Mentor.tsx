@@ -4092,12 +4092,6 @@ ${stabSection}
       lines.push(L("Flute Geometry", _drillGeoLabel[form.drill_geometry as string] ?? form.drill_geometry));
       lines.push(L("Coolant Thru", form.drill_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"));
       if (form.coating)  lines.push(L("Coating",     form.coating));
-      if (_isStep && form.drill_step_diameters?.length > 0) {
-        form.drill_step_diameters.forEach((d: number, i: number) => {
-          const lenStr = form.drill_step_lengths?.[i] != null ? `  × ${form.drill_step_lengths[i].toFixed(3)}" from tip` : "";
-          lines.push(L(`  Step ${i + 1}`,  `Ø${d.toFixed(4)}"${lenStr}`));
-        });
-      }
       lines.push("");
     } else if (operation === "reaming") {
       lines.push("TOOL");
@@ -4118,12 +4112,6 @@ ${stabSection}
       lines.push(L("Lead Chamfer", _leadLabel[form.ream_lead_chamfer as string] ?? form.ream_lead_chamfer));
       lines.push(L("Coolant Thru", form.ream_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"));
       if (form.coating)  lines.push(L("Coating",     form.coating));
-      if (_isStepR && form.ream_step_diameters?.length > 0) {
-        form.ream_step_diameters.forEach((d: number, i: number) => {
-          const lenStr = form.ream_step_lengths?.[i] != null ? `  × ${form.ream_step_lengths[i].toFixed(3)}" from tip` : "";
-          lines.push(L(`  Step ${i + 1}`,  `Ø${d.toFixed(4)}"${lenStr}`));
-        });
-      }
       lines.push("");
     } else if (operation === "threadmilling") {
       lines.push("TOOL");
@@ -4366,8 +4354,6 @@ ${stabSection}
       if (form.coolant) lines.push(L("Coolant",       form.coolant));
       if (drillResult.entry_dia != null && drillResult.largest_dia != null && drillResult.entry_dia !== drillResult.largest_dia) {
         lines.push(L("Step Drill",  `Entry ø${drillResult.entry_dia.toFixed(4)}" · Largest ø${drillResult.largest_dia.toFixed(4)}"`));
-        lines.push(L("  SFM basis", `ø${drillResult.largest_dia.toFixed(4)}"  (largest dia)`));
-        lines.push(L("  Feed basis",`ø${drillResult.entry_dia.toFixed(4)}"  (entry/smallest dia)`));
       }
       lines.push("");
 
@@ -4379,6 +4365,10 @@ ${stabSection}
       lines.push(L("Feed Rate",     `${drillResult.ipm?.toFixed(3) ?? "—"} IPM`));
       lines.push(L("Feed / Rev",    `${drillResult.ipr?.toFixed(5) ?? "—"} IPR`));
       lines.push(L("MRR",           `${drillResult.mrr_in3_min?.toFixed(4) ?? "—"} in³/min`));
+      if (drillResult.entry_dia != null && drillResult.largest_dia != null && drillResult.entry_dia !== drillResult.largest_dia) {
+        lines.push(L("  SFM basis", `ø${drillResult.largest_dia.toFixed(4)}"  (largest dia)`));
+        lines.push(L("  Feed basis",`ø${drillResult.entry_dia.toFixed(4)}"  (entry/smallest dia)`));
+      }
       lines.push("");
 
       // ── CYCLE ────────────────────────────────────
@@ -4443,6 +4433,10 @@ ${stabSection}
       lines.push(L("SFM",           String(Math.round(reamResult.sfm ?? 0))));
       lines.push(L("Feed Rate",     `${reamResult.ipm?.toFixed(3) ?? "—"} IPM`));
       lines.push(L("Feed / Rev",    `${reamResult.ipr?.toFixed(5) ?? "—"} IPR`));
+      if (reamResult.entry_dia != null && reamResult.largest_dia != null && reamResult.entry_dia !== reamResult.largest_dia) {
+        lines.push(L("  SFM basis", `ø${reamResult.largest_dia.toFixed(4)}"  (largest dia)`));
+        lines.push(L("  Feed basis",`ø${reamResult.entry_dia.toFixed(4)}"  (entry/smallest dia)`));
+      }
       lines.push("");
 
       // ── STOCK ────────────────────────────────────
