@@ -4043,6 +4043,8 @@ ${stabSection}
       ? [...(dpResult?.bulk_tools ?? []), ...(dpResult?.corner_tool ? [dpResult.corner_tool] : [])]
       : [];
 
+    const isDrillingEmail = operation === "drilling";
+
     if (isPocketing && allKitTools.length > 0) {
       lines.push(`TOOL KIT — ${allKitTools.length} tool${allKitTools.length === 1 ? "" : "s"}`);
       lines.push(DIV);
@@ -4072,6 +4074,130 @@ ${stabSection}
         if (t.entry?.type) lines.push(L("  Entry",      String(t.entry.type).replace(/_/g, " ")));
         if (i < allKitTools.length - 1) lines.push("");
       });
+      lines.push("");
+    } else if (isDrillingEmail) {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      const _isStep = form.drill_steps > 0;
+      lines.push(L("Tool Type",    _isStep ? "Solid Carbide Step Drill" : "Solid Carbide Drill"));
+      if (form.tool_series) lines.push(L("Series",     form.tool_series));
+      lines.push(L("Diameter",     `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+      lines.push(L("Flutes",       String(form.flutes || "—")));
+      lines.push(L("Point Angle",  form.drill_point_angle > 0 ? `${form.drill_point_angle}°` : "135° (default)"));
+      if (form.loc > 0)  lines.push(L("Flute Length", `${form.loc.toFixed(4)}"`));
+      const _drillGeoLabel: Record<string, string> = { standard: "Standard (Straight Flute)", med_helix: "Medium Helix", high_helix: "High Helix", parabolic: "Parabolic" };
+      lines.push(L("Flute Geometry", _drillGeoLabel[form.drill_geometry as string] ?? form.drill_geometry));
+      lines.push(L("Coolant Thru", form.drill_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"));
+      if (form.coating)  lines.push(L("Coating",     form.coating));
+      if (_isStep && form.drill_step_diameters?.length > 0) {
+        form.drill_step_diameters.forEach((d: number, i: number) => {
+          const lenStr = form.drill_step_lengths?.[i] != null ? `  × ${form.drill_step_lengths[i].toFixed(3)}" from tip` : "";
+          lines.push(L(`  Step ${i + 1}`,  `Ø${d.toFixed(4)}"${lenStr}`));
+        });
+      }
+      lines.push("");
+    } else if (operation === "reaming") {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      const _isStepR = form.ream_steps > 0;
+      lines.push(L("Tool Type",    _isStepR ? "Solid Carbide Step Reamer" : "Solid Carbide Reamer"));
+      if (form.tool_series) lines.push(L("Series",     form.tool_series));
+      lines.push(L("Cutting Diameter", `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+      const _reamFl = form.flutes > 0 ? form.flutes : reamFlutes(form.tool_dia);
+      lines.push(L("Flutes",       String(_reamFl || "—")));
+      const _shankDia = form.ream_shank_dia > 0 ? form.ream_shank_dia : form.tool_dia;
+      if (_shankDia > 0) lines.push(L("Shank Diameter", `${_shankDia.toFixed(4)}"`));
+      if (form.loc > 0)  lines.push(L("Flute Length", `${form.loc.toFixed(4)}"`));
+      const _leadLabel: Record<string, string> = { standard: "Standard 45°", long_lead: "Long Lead 15–30°", short_lead: "Short Lead 60°+" };
+      lines.push(L("Lead Chamfer", _leadLabel[form.ream_lead_chamfer as string] ?? form.ream_lead_chamfer));
+      lines.push(L("Coolant Thru", form.ream_coolant_fed ? "Yes — coolant-through shank" : "No — standard shank"));
+      if (form.coating)  lines.push(L("Coating",     form.coating));
+      if (_isStepR && form.ream_step_diameters?.length > 0) {
+        form.ream_step_diameters.forEach((d: number, i: number) => {
+          const lenStr = form.ream_step_lengths?.[i] != null ? `  × ${form.ream_step_lengths[i].toFixed(3)}" from tip` : "";
+          lines.push(L(`  Step ${i + 1}`,  `Ø${d.toFixed(4)}"${lenStr}`));
+        });
+      }
+      lines.push("");
+    } else if (operation === "threadmilling") {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      lines.push(L("Tool Type",    "Solid Carbide Thread Mill"));
+      if (form.tool_series) lines.push(L("Series",     form.tool_series));
+      lines.push(L("Cutter Diameter", `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+      lines.push(L("Flutes",       String(form.flutes || "—")));
+      if (form.loc > 0)  lines.push(L("LOC",          `${form.loc.toFixed(4)}"`));
+      lines.push(L("Standard",     form.thread_standard.toUpperCase()));
+      if (form.thread_major_dia > 0) lines.push(L("Major Dia",   `${form.thread_major_dia.toFixed(4)}"`));
+      if (form.thread_standard === "metric") {
+        if (form.thread_pitch_mm) lines.push(L("Pitch",       `${form.thread_pitch_mm} mm`));
+      } else if (form.thread_tpi) {
+        lines.push(L("TPI",         String(form.thread_tpi)));
+      }
+      lines.push(L("Class / Hand",`${form.thread_class} · ${form.thread_hand === "right" ? "RH" : "LH"}`));
+      lines.push(L("Int / Ext",   form.thread_internal ? "Internal" : "External"));
+      lines.push(L("Thread Profiles", String(form.thread_rows)));
+      if (form.thread_neck_length > 0) lines.push(L("Neck Length", `${form.thread_neck_length.toFixed(3)}"`));
+      if (form.coating)  lines.push(L("Coating",     form.coating));
+      lines.push("");
+    } else if (operation === "keyseat") {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      lines.push(L("Tool Type",    "Solid Carbide Keyseat Cutter"));
+      if (form.tool_series) lines.push(L("Series",     form.tool_series));
+      lines.push(L("Cutting Diameter", `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+      if (form.keyseat_arbor_dia > 0) lines.push(L("Arbor / Neck Dia", `${form.keyseat_arbor_dia.toFixed(4)}"`));
+      lines.push(L("Flutes",       String(form.flutes || "—")));
+      if (form.loc > 0)  lines.push(L("LOC (Edge Width)", `${form.loc.toFixed(4)}"`));
+      if (form.lbs > 0)  lines.push(L("LBS",          `${form.lbs.toFixed(4)}"`));
+      lines.push(L("Corner",       cornerLabel));
+      lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
+      if (form.coating)  lines.push(L("Coating",     form.coating));
+      lines.push("");
+    } else if (operation === "dovetail") {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      lines.push(L("Tool Type",    "Solid Carbide Dovetail Cutter"));
+      if (form.tool_series) lines.push(L("Series",     form.tool_series));
+      lines.push(L("Cutting Diameter", `${form.tool_dia?.toFixed(4) ?? "—"}" (head)`));
+      if (form.dovetail_angle > 0) lines.push(L("Included Angle", `${form.dovetail_angle}°`));
+      lines.push(L("Flutes",       String(form.flutes || "—")));
+      if (form.loc > 0)  lines.push(L("LOC",          `${form.loc.toFixed(4)}"`));
+      if (form.lbs > 0)  lines.push(L("LBS",          `${form.lbs.toFixed(4)}"`));
+      lines.push(L("Geometry",     geoLabel[form.geometry] ?? form.geometry));
+      if (form.coating)  lines.push(L("Coating",     form.coating));
+      lines.push("");
+    } else if (operation === "feedmill") {
+      lines.push("TOOL");
+      lines.push(DIV);
+      const _edpNum = form.edp || pdfToolNumber || null;
+      if (_edpNum)       lines.push(L("EDP / CC#",     skuDescription ? `${_edpNum}  —  ${skuDescription}` : _edpNum));
+      lines.push(L("Brand",        "Core Cutter"));
+      lines.push(L("Tool Type",    "Solid Carbide High-Feed Mill"));
+      if (form.tool_series) lines.push(L("Series",     form.tool_series));
+      lines.push(L("Cutting Diameter", `${form.tool_dia?.toFixed(4) ?? "—"}"`));
+      lines.push(L("Flutes",       String(form.flutes || "—")));
+      if (form.loc > 0)  lines.push(L("LOC",          `${form.loc.toFixed(4)}"`));
+      if (form.lbs > 0)  lines.push(L("LBS",          `${form.lbs.toFixed(4)}"`));
+      if (form.lead_angle > 0) lines.push(L("Lead Angle", `${form.lead_angle}°`));
+      if (form.corner_radius > 0) lines.push(L("Corner Radius", `${form.corner_radius.toFixed(4)}"`));
+      else lines.push(L("Corner",  cornerLabel));
+      if (form.coating)  lines.push(L("Coating",     form.coating));
       lines.push("");
     } else {
       lines.push("TOOL");
