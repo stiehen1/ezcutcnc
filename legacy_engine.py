@@ -1598,7 +1598,7 @@ DRILL_IPR_BASE = {
 }
 
 # Point angle modifiers (SFM and IPR)
-DRILL_POINT_ANGLE_FACTOR = {118: 1.00, 130: 1.06, 135: 1.10, 140: 1.13, 145: 1.15}
+DRILL_POINT_ANGLE_FACTOR = {118: 1.00, 120: 1.01, 130: 1.06, 135: 1.10, 140: 1.13, 145: 1.15}
 
 # Flute geometry SFM multiplier — med/high helix improve chip evacuation
 DRILL_GEOMETRY_SFM = {"standard": 1.00, "med_helix": 1.10, "high_helix": 1.18}
@@ -2080,9 +2080,11 @@ def run_drilling(payload: dict) -> dict:
         )
         ipr = min_ipr
 
-    # G-code recommendation
+    # G-code recommendation — step_count biases cycle toward pecking on step drills
+    # (multiple steps cut simultaneously and share one tip-sized flute for chip evacuation).
     cycle, cycle_note, peck, r_plane, peck_schedule = recommend_drill_cycle(
-        feed_dia, depth, mat_group, hrc, pa, coolant, blind, coolant_fed, drill_geometry
+        feed_dia, depth, mat_group, hrc, pa, coolant, blind, coolant_fed, drill_geometry,
+        step_count=len(step_diameters)
     )
 
     # Drill Stability Triangle — three-side balance check

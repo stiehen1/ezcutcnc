@@ -1672,8 +1672,8 @@ export default function Mentor() {
           setDrillMultiDia(true);
         }
         if (e.drill_step_lengths?.length > 0) next.drill_step_lengths = e.drill_step_lengths;
-        if (e.drill_point_angle && [118, 130, 135, 140, 145].includes(Number(e.drill_point_angle))) {
-          next.drill_point_angle = Number(e.drill_point_angle) as 118 | 130 | 135 | 140 | 145;
+        if (e.drill_point_angle && [118, 120, 130, 135, 140, 145].includes(Number(e.drill_point_angle))) {
+          next.drill_point_angle = Number(e.drill_point_angle) as 118 | 120 | 130 | 135 | 140 | 145;
         }
         // drill_flute_length deprecated — LOC (form.loc) is the cut depth for drills
         if (e.ream_step_diameters?.length > 0) {
@@ -2019,7 +2019,7 @@ export default function Mentor() {
     stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment",
 
     // Drilling-specific
-    drill_point_angle: 0 as 0 | 118 | 130 | 135 | 140 | 145,
+    drill_point_angle: 0 as 0 | 118 | 120 | 130 | 135 | 140 | 145,
     drill_flute_length: 0,
     drill_hole_depth: 0,
     drill_blind: false,
@@ -8392,7 +8392,7 @@ ${stabSection}
                 <div className="space-y-1.5">
                   <FieldLabel hint="Point angle as specified on the CC drill print. Auto-filled from PDF upload, or click to set manually.">Point Angle</FieldLabel>
                   <div className="flex gap-2">
-                    {([118, 130, 135, 140, 145] as const).map((pa) => {
+                    {([118, 120, 130, 135, 140, 145] as const).map((pa) => {
                       const isSelected = form.drill_point_angle === pa;
                       return (
                         <button key={pa} type="button"
