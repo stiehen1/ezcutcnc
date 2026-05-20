@@ -5502,23 +5502,43 @@ def run(payload=None):
     _loc_now = float(data.get("loc", 0) or 0)
     _is_hem  = _mode_str in ("hem", "trochoidal")
 
+    # High-flex framing — when no single lever can credibly bring flex to safe,
+    # tell the user to stack fixes instead of expecting one button to solve it.
+    if _defl > _dlim * 2.0:
+        _stab_suggestions.append({
+            "type": "info",
+            "label": f"Flex is {_defl_pct:.0f}% of limit — no single fix will solve this",
+            "detail": "Stack 2–3 of the steps below (e.g. shorter stickout + lower DOC + holder upgrade), or move the job to a stiffer setup.",
+        })
+
     # ── IMMEDIATE / NO-HARDWARE FIXES ─────────────────────────────────────────
 
-    # A) Reduce feed rate — fastest fix; force scales linearly with chip load
-    # Suppressed in HEM/trochoidal — backing off feed tanks MRR and defeats the purpose of the toolpath
+    # A) Reduce feed rate — fastest fix; force scales linearly with chip load.
+    # Capped at 25%: deeper cuts produce silly numbers (e.g. 85% at 6.7× limit) and tank MRR for no real benefit —
+    # at that point DOC/WOC/stickout are the real levers and feed is a trim pass.
+    # Suppressed in HEM/trochoidal — backing off feed tanks MRR and defeats the purpose of the toolpath.
     if _defl > _dlim and not _is_hem:
-        _feed_ratio  = _dlim / _defl
-        _feed_pct    = round((1.0 - _feed_ratio) * 100)
-        _feed_now    = float(state.get("feed", 0.0) or 0.0)
-        _feed_target = round(_feed_now * _feed_ratio, 1) if _feed_now > 0 else 0
+        _feed_ratio_raw = _dlim / _defl
+        _feed_pct_raw   = round((1.0 - _feed_ratio_raw) * 100)
+        _feed_pct       = min(_feed_pct_raw, 25)
+        _feed_ratio     = 1.0 - (_feed_pct / 100.0)
+        _feed_now       = float(state.get("feed", 0.0) or 0.0)
+        _feed_target    = round(_feed_now * _feed_ratio, 1) if _feed_now > 0 else 0
         if _feed_pct >= 5:
             _feed_label = f"Back off feed rate ~{_feed_pct}%"
             if _feed_target > 0:
                 _feed_label += f" — try {_feed_target} IPM"
+            if _feed_pct_raw > _feed_pct:
+                _feed_detail = (
+                    "Quick first-pass trim at the control. Flex is too high for feed alone — "
+                    "pair this with the DOC/WOC/stickout fixes below."
+                )
+            else:
+                _feed_detail = "Cutting force scales directly with feed — easiest adjustment at the control, no hardware needed."
             _imm_suggestions.append({
                 "type": "feed",
                 "label": _feed_label,
-                "detail": "Cutting force scales directly with feed — easiest adjustment at the control, no hardware needed.",
+                "detail": _feed_detail,
             })
 
     # B) Reduce DOC — skip in HEM (tanks MRR); multi-pass reframe when target is too shallow
