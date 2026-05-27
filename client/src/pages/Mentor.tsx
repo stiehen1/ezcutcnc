@@ -3520,11 +3520,10 @@ export default function Mentor() {
     const pctBar = (v: number) => `${Math.min(100, (v / maxDisplay) * 100).toFixed(1)}%`;
     const ticGauge = tic != null && form.mode !== "face" && form.mode !== "slot" ? `
       <div style="margin:8px 0 4px;">
-        <div style="margin-bottom:4px;">
-          <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Tooth Engagement</span>
-          <span style="float:right;font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span>
-        </div>
-        <div style="clear:both;"></div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tr>
+          <td style="text-align:left;vertical-align:middle;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;padding:0;">Tooth Engagement</td>
+          <td style="text-align:right;vertical-align:middle;padding:0;"><span style="display:inline-block;font-size:10px;font-weight:700;color:${ticZoneColor};background:${ticZoneBg};padding:2px 7px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${tic.toFixed(2)} teeth — ${ticZoneLabel}</span></td>
+        </tr></table>
         <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#ef4444 0%,#ef4444 ${pctBar(1.0)},#eab308 ${pctBar(1.0)},#eab308 ${pctBar(1.5)},#22c55e ${pctBar(1.5)},#22c55e ${pctBar(2.5)},#f97316 ${pctBar(2.5)},#f97316 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctBar(tic)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
@@ -3556,11 +3555,10 @@ export default function Mentor() {
     const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
     const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? `
       <div style="margin:8px 0 4px;">
-        <div style="margin-bottom:4px;">
-          <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;">Engagement Angle</span>
-          <span style="float:right;font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span>
-        </div>
-        <div style="clear:both;"></div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tr>
+          <td style="text-align:left;vertical-align:middle;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;padding:0;">Engagement Angle</td>
+          <td style="text-align:right;vertical-align:middle;padding:0;"><span style="display:inline-block;font-size:10px;font-weight:700;color:${printEngZoneColor};background:${printEngZoneBg};padding:2px 7px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${printEngAngleDeg.toFixed(1)}° — ${printEngZoneLabel}</span></td>
+        </tr></table>
         <div style="position:relative;height:14px;border-radius:7px;background:linear-gradient(to right,#22c55e 0%,#22c55e ${pctEng(90)},#eab308 ${pctEng(90)},#eab308 ${pctEng(180)},#f97316 ${pctEng(180)},#f97316 ${pctEng(270)},#ef4444 ${pctEng(270)},#ef4444 100%);-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <div style="position:absolute;top:0;bottom:0;width:3px;background:#111;left:calc(${pctEng(printEngAngleDeg)} - 1px);border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </div>
@@ -3699,10 +3697,10 @@ export default function Mentor() {
 
       return `
       <div style="margin:14px 0;padding:10px 14px;border:2px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
-        <div style="margin-bottom:6px;">
-          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:inline-block;margin-right:6px;">&#9733; Optimized EDP Match for This Setup</span>
-          <span style="font-size:12px;font-weight:700;color:#111;">EDP# ${recSku.edp}</span>
-          ${tags ? `<span style="font-size:10px;color:#555;">&nbsp;·&nbsp;${tags}</span>` : ""}
+        <div style="line-height:1.6;padding-bottom:8px;">
+          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:inline-block;margin-right:6px;vertical-align:middle;">&#9733; Optimized EDP Match for This Setup</span>
+          <span style="font-size:12px;font-weight:700;color:#111;vertical-align:middle;">EDP# ${recSku.edp}</span>
+          ${tags ? `<span style="font-size:10px;color:#555;vertical-align:middle;">&nbsp;·&nbsp;${tags}</span>` : ""}
         </div>
         ${tableHtml}
         ${recSku.geometry === "chipbreaker" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate.</p>` : ""}
