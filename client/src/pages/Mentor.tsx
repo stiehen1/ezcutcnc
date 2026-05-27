@@ -11071,20 +11071,29 @@ ${stabSection}
           <div className="flex items-center justify-between">
             <CardTitle>Recommendation</CardTitle>
             {customer && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => requireEmail("copy")}
-                  className="text-[10px] font-semibold px-2 py-1 rounded border transition-colors leading-tight whitespace-nowrap"
-                  style={camCopied
-                    ? { borderColor: "#22c55e", background: "#14532d", color: "#86efac" }
-                    : { borderColor: "#6366f1", background: "#1e1b4b", color: "#a5b4fc" }}
-                >
-                  {camCopied ? "✓ Copied!" : "📋 Copy Setup Sheet"}
-                </button>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => requireEmail("copy")}
+                    className="text-[10px] font-semibold px-2 py-1 rounded border transition-colors leading-tight whitespace-nowrap"
+                    style={camCopied
+                      ? { borderColor: "#22c55e", background: "#14532d", color: "#86efac" }
+                      : { borderColor: "#6366f1", background: "#1e1b4b", color: "#a5b4fc" }}
+                  >
+                    {camCopied ? "✓ Copied!" : "📋 Copy Setup Sheet"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => requireEmail("print")}
+                    className="text-[10px] font-semibold px-2 py-1 rounded border border-orange-500/60 text-orange-400 hover:bg-orange-500/15 transition-colors leading-tight whitespace-nowrap"
+                  >
+                    Print / Save PDF
+                  </button>
+                </div>
                 {optimalRec && (
                   <label
-                    className="text-[10px] font-medium text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer select-none px-1.5 py-1 rounded border border-zinc-700"
+                    className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer select-none"
                     title="When off, the 'Optimized EDP Match' block is omitted from the PDF — useful if the optimized tool is out of stock."
                   >
                     <input
@@ -11093,16 +11102,9 @@ ${stabSection}
                       onChange={e => setPdfIncludeOptimal(e.target.checked)}
                       className="h-3 w-3 accent-green-600"
                     />
-                    Incl. optimized EDP
+                    Incl. Opt EDP
                   </label>
                 )}
-                <button
-                  type="button"
-                  onClick={() => requireEmail("print")}
-                  className="text-[10px] font-semibold px-2 py-1 rounded border border-orange-500/60 text-orange-400 hover:bg-orange-500/15 transition-colors leading-tight whitespace-nowrap"
-                >
-                  Print / Save PDF
-                </button>
               </div>
             )}
           </div>
