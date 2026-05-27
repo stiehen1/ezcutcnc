@@ -3498,12 +3498,14 @@ export default function Mentor() {
         : `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drill reaches floor — tool drops to depth. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`;
     }
     const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows || xyRadialRows || predrillPlungeRows) ? `
+      <div class="pdf-section">
       <h3>Entry Moves</h3>
       ${preDrillBanner}
       ${emCaution ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:${emCaution === "high_hardness" ? "#450a0a" : "#451a03"};color:${emCaution === "high_hardness" ? "#fca5a5" : "#fcd34d"};">⚠ ${emCaution === "high_hardness" ? `Hard material (≥55 HRC): entry feed reduced to ${emFeedPct}% — do not skip arc lead-in.` : `Medium-hard material: entry feed reduced to ${emFeedPct}% of full feed.`}</p>` : ""}
       <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
         ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}${xyRadialRows}${predrillPlungeRows}
-      </table>` : "";
+      </table>
+      </div>` : "";
 
     const tic = eng?.teeth_in_cut ?? null;
     const ticZone = tic == null ? null : tic < 1.0 ? "low" : tic >= 1.5 && tic <= 2.5 ? "sweet" : tic > 2.5 ? "high" : "ok";
@@ -3575,6 +3577,7 @@ export default function Mentor() {
       </div>` : "";
 
     const engSection = eng ? `
+      <div class="pdf-section">
       <h3>Engineering Data</h3>
       <div class="kpi-grid">
         ${kpiBox("Force (lbf)", eng.force_lbf != null ? eng.force_lbf.toFixed(0) : null)}
@@ -3637,7 +3640,8 @@ export default function Mentor() {
           return `<p style="font-size:9px;color:#166534;background:#f0fdf4;padding:4px 6px;border-radius:4px;margin-top:4px;"><strong>Surface Finish:</strong> Feed capped to <strong>${mil.feed_ipm?.toFixed(2)} IPM</strong> to achieve Ra ≤ ${target} µin. Theoretical Ra: ${raUin.toFixed(1)} µin (${(raUin * 0.0254).toFixed(3)} µm).</p>${raDisclaimer}`;
         }
         return `<p style="font-size:9px;color:#555;margin-top:2px;">Theoretical Ra: <strong>${raUin.toFixed(1)} µin</strong> (${(raUin * 0.0254).toFixed(3)} µm)${target > 0 ? ` — meets ${target} µin target ✓` : ""}.</p>${raDisclaimer}`;
-      })()}` : "";
+      })()}
+      </div>` : "";
 
     const optimalSection = (() => {
       if (!optimalRec) return "";
@@ -3707,6 +3711,7 @@ export default function Mentor() {
     })();
 
     const stabSection = stab ? `
+      <div class="pdf-section">
       <h3>Rigidity & Chatter Audit</h3>
       <p class="verdict ${stab.deflection_pct >= 175 ? "red" : stab.deflection_pct >= 100 ? "yellow" : "green"}">
         ${stab.deflection_pct >= 175 ? "High Chatter Risk" : stab.deflection_pct >= 100 ? "Chatter Risk" : "Setup Looks Stable"}
@@ -3717,7 +3722,8 @@ export default function Mentor() {
           ${stab.suggestions.filter((s: any) => s.type !== "info").map((s: any) =>
             `<li><strong>${s.label}</strong>${s.detail ? ` — ${s.detail}` : ""}${s.suggested_edps?.length ? ` <span class="edp">EDP# ${s.suggested_edps.join(", ")}${s.suggested_cr_note ? ` (${s.suggested_cr_note})` : ""}</span>` : ""}</li>`
           ).join("")}
-        </ol>` : ""}` : "";
+        </ol>` : ""}
+      </div>` : "";
 
     const html = `<!DOCTYPE html>
 <html>
@@ -3741,6 +3747,7 @@ export default function Mentor() {
   .header-contact { display: table-cell !important; vertical-align: middle !important; text-align: right !important; font-size: 10px !important; color: #555 !important; line-height: 1.6 !important; width: 33% !important; }
   h2 { font-size: 13px !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; color: #e55a00 !important; border-bottom: 1px solid #eee !important; padding-bottom: 4px !important; margin: 14px 0 8px !important; }
   h3 { font-size: 11px !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; color: #555 !important; margin: 12px 0 6px !important; }
+  .pdf-section { page-break-inside: avoid; break-inside: avoid; }
   table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 8px !important; }
   .lbl { color: #555 !important; width: 45% !important; padding: 2px 0 !important; }
   .val { font-weight: 600 !important; padding: 2px 0 !important; color: #111 !important; }
@@ -3905,33 +3912,44 @@ ${stabSection}
         while (cur && cur !== iBody) { top += cur.offsetTop; cur = cur.offsetParent as HTMLElement | null; }
         return top;
       };
-      const breakSel = "h2, h3, .kpi-grid, .verdict, .disclaimer, tr, li, p";
-      const boundaries = new Set<number>([0, canvas.height]);
-      (Array.from(iBody.querySelectorAll(breakSel)) as HTMLElement[]).forEach(el => {
-        const top = getDocTop(el) * SCALE;
-        const bot = top + el.offsetHeight * SCALE;
-        if (el.offsetHeight > 2) { boundaries.add(Math.round(top)); boundaries.add(Math.round(bot)); }
+      // Section-level page breaks only. Each h2 starts a major section; .pdf-section
+      // wrappers (Entry Moves, Engineering Data, Rigidity & Chatter) are atomic blocks
+      // within the "Recommended Parameters" h2. Break between these — never inside one.
+      const sectionStarts: number[] = [0];
+      (Array.from(iBody.querySelectorAll("h2, .pdf-section, .disclaimer")) as HTMLElement[]).forEach(el => {
+        const top = Math.round(getDocTop(el) * SCALE);
+        if (top > 0 && el.offsetHeight > 2) sectionStarts.push(top);
       });
-      const sorted = Array.from(boundaries).sort((a, b) => a - b);
+      sectionStarts.push(canvas.height);
+      sectionStarts.sort((a, b) => a - b);
 
-      // Slice canvas at element boundaries — never cut through a block
+      // Slice canvas at section boundaries — pack as many whole sections as fit per page
       let topPx = 0; let first = true;
       while (topPx < canvas.height) {
-        const idealBot = topPx + pageHpx;
-        if (idealBot >= canvas.height) {
-          const h = canvas.height - topPx;
+        const remaining = canvas.height - topPx;
+        if (remaining <= pageHpx) {
+          // Last page — emit whatever's left
           const pc = document.createElement("canvas");
-          pc.width = canvas.width; pc.height = h;
-          pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, h, 0, 0, canvas.width, h);
+          pc.width = canvas.width; pc.height = remaining;
+          pc.getContext("2d")!.drawImage(canvas, 0, topPx, canvas.width, remaining, 0, 0, canvas.width, remaining);
           if (!first) pdf.addPage();
-          pdf.addImage(pc.toDataURL("image/jpeg", 0.95), "JPEG", marginMm, marginMm, printWmm, h / pxPerMm);
+          pdf.addImage(pc.toDataURL("image/jpeg", 0.95), "JPEG", marginMm, marginMm, printWmm, remaining / pxPerMm);
           break;
         }
-        // Best boundary: largest value ≤ idealBot and ≥ 50% down the page
-        let breakPx = Math.round(idealBot);
-        for (let i = sorted.length - 1; i >= 0; i--) {
-          if (sorted[i] <= idealBot && sorted[i] >= topPx + pageHpx * 0.5) { breakPx = sorted[i]; break; }
+
+        // Find the latest section boundary that fits within one page from topPx
+        const idealBot = topPx + pageHpx;
+        let breakPx = -1;
+        for (const s of sectionStarts) {
+          if (s > topPx && s <= idealBot) breakPx = s;
         }
+
+        if (breakPx < 0) {
+          // No section boundary fits — this section is taller than a page.
+          // Fall back to a hard cut at the page height so we keep moving.
+          breakPx = Math.round(idealBot);
+        }
+
         const sliceH = breakPx - topPx;
         const pc = document.createElement("canvas");
         pc.width = canvas.width; pc.height = sliceH;
@@ -4797,7 +4815,7 @@ ${stabSection}
 
   function runGatedAction(action: "copy" | "print" | "pdf" | "stp", stpHref?: string) {
     if (action === "copy") copyCamParams();
-    else if (action === "print") printSummary();
+    else if (action === "print") downloadPDF();
     else if (action === "pdf") downloadPDF();
     else if (action === "stp" && stpHref) window.open(stpHref, "_blank");
   }
@@ -10285,7 +10303,7 @@ ${stabSection}
                   straight:      { key: "straight",      label: "Straight Plunge", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
                   slot_straight: { key: "slot_straight", label: "Straight Entry",  color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
                   xy_radial:     { key: "xy_radial",     label: "Straight Radial", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "From inside the pre-drilled hole, feed straight out to the pocket wall. This breakout move is effectively a slotting cut — feed and SFM should match slotting parameters until the tool clears enough material to begin side-milling. Higher shock than Sweep; use only when there is not enough room for a tangential arc." },
-                  predrill_plunge:{ key: "predrill_plunge", label: "Pre-drill + Plunge", color: "text-green-400 border-green-500/60", recommended: true,        tooltip: "Drill a clearance hole at one end of the slot, then drop the endmill into the hole and feed laterally through the slot. Cleanest entry for closed slots — no shock load, no helix bore needed. Recommended hole diameter: tool dia + 0.010\" clearance." },
+                  predrill_plunge:{ key: "predrill_plunge", label: "Pre-drill + Plunge", color: "text-green-400 border-green-500/60", recommended: false,       tooltip: "Drill a clearance hole, then drop the endmill into the hole at full Z and start cutting. Cleanest entry — no shock load, no helix bore needed. Hole diameter must be ≥15% larger than the endmill (tool dia × 1.15) so the tool drops cleanly without contacting the bore wall." },
                 };
 
                 const renderChip = (o: Opt) => {
@@ -10382,9 +10400,22 @@ ${stabSection}
 
                 // No pre-drill: flat list with the same hide rules as before.
                 const flat: Opt[] = isClosed
-                  ? [opts.ramp, opts.helical, opts.straight]
-                  : [opts.sweep, opts.ramp, opts.helical, opts.straight];
-                return <div className="flex flex-wrap gap-3">{flat.map(renderChip)}</div>;
+                  ? [opts.ramp, opts.helical, opts.straight, opts.predrill_plunge]
+                  : [opts.sweep, opts.ramp, opts.helical, opts.straight, opts.predrill_plunge];
+                const stdToolDia = Number(form.tool_dia) || 0;
+                const stdPredrillDia = stdToolDia > 0 ? stdToolDia * 1.15 : 0;
+                return (
+                  <>
+                    <div className="flex flex-wrap gap-3">{flat.map(renderChip)}</div>
+                    {entryTypes.includes("predrill_plunge") && stdToolDia > 0 && (
+                      <div className="mt-2 text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
+                        <span className="font-semibold">Pre-drill hole:</span>
+                        {" ≥"}{stdPredrillDia.toFixed(3)}{"\""} dia (tool dia × 1.15, ≥15% larger than the endmill).
+                        {" Drop endmill to depth, then begin lateral cut at full feed."}
+                      </div>
+                    )}
+                  </>
+                );
               })()}
             </div>
             </>
