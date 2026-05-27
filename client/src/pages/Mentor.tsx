@@ -3548,7 +3548,7 @@ export default function Mentor() {
 
     const printWocFrac = (form.woc_pct ?? 0) / 100;
     const printEngAngleDeg = printWocFrac > 0
-      ? Math.acos(Math.max(-1, Math.min(1, 1 - 2 * printWocFrac))) * (180 / Math.PI)
+      ? 2 * Math.acos(Math.max(-1, Math.min(1, 1 - 2 * printWocFrac))) * (180 / Math.PI)
       : null;
     const printEngZone = printEngAngleDeg == null ? null
       : printEngAngleDeg < 90 ? "light" : printEngAngleDeg < 180 ? "moderate" : printEngAngleDeg < 270 ? "heavy" : "extreme";

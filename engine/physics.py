@@ -400,9 +400,10 @@ def minimum_chip_thickness(material_group):
 
 
 def engagement_angle(woc, diameter):
-    # Arc from tool entry to exit (radians). For WOC < D/2: arccos(1 - 2ae/D).
-    # Full slot (WOC=D) → π (180°), time-avg teeth = flutes/2. No factor-of-2.
-    return math.acos(max(-1.0, min(1.0, 1 - (2 * woc / diameter))))
+    # Full entry-to-exit arc (radians): 2 × acos(1 - 2·ae/D).
+    # WOC=D/2 (half-slot) → π (180°); WOC=D (full slot) → 2π but is special-cased upstream.
+    # Time-avg teeth = (arc / 2π) × flutes, so half-slot → flutes/2. ✓
+    return 2.0 * math.acos(max(-1.0, min(1.0, 1 - (2 * woc / diameter))))
 
 def _clamp(x, lo, hi):
     return lo if x < lo else hi if x > hi else x
@@ -468,41 +469,47 @@ def _hardness_kc_mult(hrc: float) -> float:
 
 
 def cutting_force_per_tooth(material_group, h_eff, helix, hardness_hrc=0, radial_rake=7):
+    # Kc values halved 2026-05-27 to pair with the corrected engagement_angle()
+    # (which now returns the full entry-to-exit arc, doubling time-avg teeth).
+    # total_force = force_per_tooth × teeth is numerically unchanged from the
+    # prior (half-arc Kc × doubled-Kc) calibration — shop-validated force/HP/
+    # deflection/stability values are preserved. Only displayed teeth_in_cut
+    # and engagement_angle_deg now reflect correct geometry.
     K = {
         # Legacy group keys
-        "Steel": 180000,
-        "Stainless": 200000,
-        "Cast Iron": 160000,
-        "Inconel": 240000,
-        "Titanium": 220000,
-        "Aluminum": 60000,
-        "Non-Ferrous": 70000,
-        "Plastics": 30000,
+        "Steel": 90000,
+        "Stainless": 100000,
+        "Cast Iron": 80000,
+        "Inconel": 120000,
+        "Titanium": 110000,
+        "Aluminum": 30000,
+        "Non-Ferrous": 35000,
+        "Plastics": 15000,
         # ISO subcategory keys
-        "aluminum_wrought": 55000,
-        "aluminum_cast": 65000,
-        "non_ferrous": 70000,
-        "steel_free": 150000,
-        "steel_alloy": 180000,
-        "steel_tool": 210000,
-        "stainless_martensitic": 195000,
-        "stainless_fm":          185000,
-        "stainless_austenitic":  215000,
-        "stainless_ph":          225000,
-        "cast_iron_gray":        140000,
-        "cast_iron_ductile":     160000,
-        "cast_iron_malleable":   150000,
-        "titanium_cp":           190000,
-        "titanium_64":           220000,
-        "titanium":              220000,
-        "hiTemp_fe":             235000,
-        "hiTemp_co":             250000,
-        "inconel_625":           240000,
-        "inconel_718":           265000,
-        "inconel":               250000,
-        "hardened_lt55": 250000,
-        "hardened_gt55": 300000,
-    }.get(material_group, 180000)
+        "aluminum_wrought": 27500,
+        "aluminum_cast": 32500,
+        "non_ferrous": 35000,
+        "steel_free": 75000,
+        "steel_alloy": 90000,
+        "steel_tool": 105000,
+        "stainless_martensitic": 97500,
+        "stainless_fm":          92500,
+        "stainless_austenitic":  107500,
+        "stainless_ph":          112500,
+        "cast_iron_gray":        70000,
+        "cast_iron_ductile":     80000,
+        "cast_iron_malleable":   75000,
+        "titanium_cp":           95000,
+        "titanium_64":           110000,
+        "titanium":              110000,
+        "hiTemp_fe":             117500,
+        "hiTemp_co":             125000,
+        "inconel_625":           120000,
+        "inconel_718":           132500,
+        "inconel":               125000,
+        "hardened_lt55":         125000,
+        "hardened_gt55":         150000,
+    }.get(material_group, 90000)
     K *= _hardness_kc_mult(hardness_hrc)
     # Interpolate rake factor for non-table values
     _rake_ff = RAKE_FORCE_FACTOR.get(radial_rake)

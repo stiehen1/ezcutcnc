@@ -1300,10 +1300,10 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
     if data.get("debug_ball", False):
         print("DEBUG tool_type:", data.get("tool_type"))
     
-    angle = engagement_angle(woc, data["diameter"])
-    # Use actual fractional teeth in cut — do NOT clamp to 1.
-    # At 5% WOC with 5 flutes only 0.36 teeth are in cut; max(1,...) was over-predicting
-    # force by 2.8× and producing false chatter warnings on HEM/light-WOC passes.
+    angle = engagement_angle(woc, data["diameter"])  # full entry-to-exit arc (rad)
+    # Time-avg teeth in cut. Do NOT clamp to 1 — at light WOC fractional teeth
+    # is correct; max(1,...) was over-predicting force 2.8× on HEM/light-WOC.
+    # Kc halved in physics.py to pair with this full-arc formula — net force unchanged.
     teeth = max(0.1, (angle / (2 * math.pi)) * flutes)
 
         # --- Effective diameter for chip thickness (ballnose only) ---
@@ -1884,8 +1884,8 @@ def run_chamfer_mill(payload: dict) -> dict:
             "chatter_index":          0.0,
             # Teeth in cut: derived from actual WOC/D_eff radial engagement fraction.
             # woc = depth × tan(half_angle); woc/D_eff = 0.5 always for CMS (point tip).
-            # engagement_arc = acos(1 - 2 × woc/D_eff); teeth = arc/(2π) × flutes
-            "teeth_in_cut":           round(max(0.1, (math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, _woc_as_pct)))) / (2.0 * math.pi)) * flutes), 2),
+            # engagement_arc = 2 × acos(1 - 2 × woc/D_eff); teeth = arc/(2π) × flutes
+            "teeth_in_cut":           round(max(0.1, (2.0 * math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, _woc_as_pct)))) / (2.0 * math.pi)) * flutes), 2),
             "helix_wrap_deg":         None,
             "engagement_continuous":  None,
             "tool_life_min":          round(tool_life_min, 1),
@@ -3512,8 +3512,8 @@ def run_feedmill(payload: dict) -> dict:
             "deflection_in":         round(deflection, 5),
             "chip_thickness_in":     round(ipt_base, 6),
             "chatter_index":         round(stability_pct / 100.0, 3),
-            "teeth_in_cut":          round(max(0.1, (math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0)))) / (2.0 * math.pi)) * flutes), 2),
-            "engagement_angle_deg":  round(math.degrees(math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0))))), 1),
+            "teeth_in_cut":          round(max(0.1, (2.0 * math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0)))) / (2.0 * math.pi)) * flutes), 2),
+            "engagement_angle_deg":  round(math.degrees(2.0 * math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * min(0.5, woc_pct / 100.0))))), 1),
             "tool_life_min":         round(tool_life_min, 1),
             "force_lbf":             round(total_force, 2),
             "radial_force_lbf":      round(radial_force, 2),
@@ -6031,7 +6031,7 @@ def run(payload=None):
         _tic_doc   = float(state.get("doc", 0) or doc or 0)
 
         _tic_ae  = max(-1.0, min(1.0, 1.0 - 2.0 * _tic_woc / _tic_d)) if _tic_d > 0 else 1.0
-        _tic_ang = math.acos(_tic_ae)                   # radial engagement arc entry→exit (rad)
+        _tic_ang = 2.0 * math.acos(_tic_ae)             # full entry-to-exit arc (rad)
         _engagement_angle_deg = round(math.degrees(_tic_ang), 1)
 
         # Helix wrap angle over DOC
