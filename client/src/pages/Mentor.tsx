@@ -2609,6 +2609,13 @@ export default function Mentor() {
   const [optimalRec, setOptimalRec] = React.useState<any>(null);
   const [optimalLoading, setOptimalLoading] = React.useState(false);
   const [optimalExpanded, setOptimalExpanded] = React.useState(false);
+  const [pdfIncludeOptimal, setPdfIncludeOptimal] = React.useState<boolean>(() => {
+    const v = localStorage.getItem("pdf_include_optimal");
+    return v == null ? true : v === "1";
+  });
+  React.useEffect(() => {
+    localStorage.setItem("pdf_include_optimal", pdfIncludeOptimal ? "1" : "0");
+  }, [pdfIncludeOptimal]);
   const [skuChamferEdgeLength, setSkuChamferEdgeLength] = React.useState<number | null>(null);
 
   // Quote modals — shared customer form, separate open/status per product
@@ -3642,7 +3649,7 @@ export default function Mentor() {
       </div>` : "";
 
     const optimalSection = (() => {
-      if (!optimalRec) return "";
+      if (!optimalRec || !pdfIncludeOptimal) return "";
       const rec = optimalRec;
       const recSku = rec.recommended_sku;
       const recCust = rec.recommended_result?.customer ?? {};
@@ -11075,6 +11082,20 @@ ${stabSection}
                 >
                   {camCopied ? "✓ Copied!" : "📋 Copy Setup Sheet"}
                 </button>
+                {optimalRec && (
+                  <label
+                    className="text-[10px] font-medium text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer select-none px-1.5 py-1 rounded border border-zinc-700"
+                    title="When off, the 'Optimized EDP Match' block is omitted from the PDF — useful if the optimized tool is out of stock."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={pdfIncludeOptimal}
+                      onChange={e => setPdfIncludeOptimal(e.target.checked)}
+                      className="h-3 w-3 accent-green-600"
+                    />
+                    Incl. optimized EDP
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={() => requireEmail("print")}
