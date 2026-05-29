@@ -3723,6 +3723,117 @@ export default function Mentor() {
       </div>`;
     })();
 
+    // ── Depth-of-Cut / Multi-Pass Strategy ──────────────────────────────────
+    // Mirrors the on-screen multi-pass cards (chamfer, keyseat/slot, dovetail) so the
+    // stepdown plan survives the export. Source shapes differ per op — normalize to rows.
+    const multiPassSection = (() => {
+      const fmtPass = (rows: Array<{ label: string; value: string }>) =>
+        rows.map(r =>
+          `<tr><td class="lbl" style="width:55%;">${r.label}</td><td class="val">${r.value}</td></tr>`
+        ).join("");
+
+      // Chamfer — result.multi_pass on chamfer_mill
+      const cmp: any = (result as any)?.multi_pass;
+      if (cmp && form.tool_type === "chamfer_mill") {
+        if (cmp.single_pass_ok) {
+          return `
+            <div class="pdf-section">
+            <h3>Depth-of-Cut Strategy</h3>
+            <p class="verdict green">Single pass OK — depth is within the single-pass limit for this tool/material.</p>
+            </div>`;
+        }
+        const nRough: number = cmp.num_rough_passes;
+        const dRough: number = cmp.rough_depth_per_pass;
+        const rows = [
+          ...Array.from({ length: nRough }, (_, i) => ({
+            label: `Pass ${i + 1} — Roughing`,
+            value: `to ${(dRough * (i + 1)).toFixed(4)}"  (${dRough.toFixed(4)}"/pass)`,
+          })),
+          { label: `Pass ${nRough + 1} — Finish`, value: `to ${cmp.finish_depth_in.toFixed(4)}"  (full depth)` },
+        ];
+        return `
+          <div class="pdf-section">
+          <h3>Multi-Pass Chamfer Strategy</h3>
+          <table style="margin-bottom:6px;">
+            ${row("Total depth", `${cmp.finish_depth_in.toFixed(4)}"`)}
+            ${row("Total passes", String(cmp.num_passes))}
+            ${row("Finish allowance", `${cmp.finish_allowance_in.toFixed(3)}"`)}
+          </table>
+          <table>${fmtPass(rows)}</table>
+          <p style="font-size:9px;color:#555;margin-top:4px;">WOC grows with depth — single-pass on large chamfers risks poor finish. Use helical interpolation (G02/G03) for each pass.</p>
+          </div>`;
+      }
+
+      // Keyseat / slot — result.keyseat.multi_pass
+      const kmp: any = keyseatResult?.multi_pass;
+      if (kmp && kmp.num_passes > 1) {
+        const roughDoc: number = kmp.rough_depth_per_pass_in ?? kmp.depth_per_pass_in;
+        const finishDoc: number = kmp.finish_depth_per_pass_in ?? roughDoc;
+        const finishFeedIpm: number | undefined = kmp.finish_feed_ipm;
+        const finishFeedPct: number = kmp.finish_feed_pct ?? 100;
+        const n: number = kmp.num_passes;
+        const rows = Array.from({ length: n }, (_, i) => {
+          const isFinish = i === n - 1;
+          const feedNote = isFinish && finishFeedIpm && finishFeedPct < 100
+            ? `  ·  ${finishFeedIpm.toFixed(1)} IPM (${100 - finishFeedPct}%↓ feed)`
+            : "";
+          return {
+            label: isFinish ? `Pass ${n} (finish)` : `Pass ${i + 1} (roughing)`,
+            value: `${(isFinish ? finishDoc : roughDoc).toFixed(4)}" DOC${feedNote}`,
+          };
+        });
+        return `
+          <div class="pdf-section">
+          <h3>Pass Strategy</h3>
+          <table style="margin-bottom:6px;">
+            ${row("Total slot depth", `${kmp.final_slot_depth_in.toFixed(4)}"`)}
+            ${row("Total passes", String(n))}
+            ${row("Max safe pass depth", `${kmp.max_safe_doc_in.toFixed(4)}"`)}
+          </table>
+          <table>${fmtPass(rows)}</table>
+          <p style="font-size:9px;color:#555;margin-top:4px;">${kmp.finish_lighter
+            ? `Finish pass is lighter (${finishDoc.toFixed(4)}") for sidewall straightness in this material.`
+            : "Equal DOC across passes — in soft materials a lighter final pass tends to rub; feed is backed off instead."}</p>
+          </div>`;
+      }
+
+      // Dovetail — result.dovetail.multi_pass
+      const dmp: any = dovetailResult?.multi_pass;
+      if (dmp) {
+        const n: number = dmp.num_passes;
+        const d: number = dmp.depth_per_pass_in;
+        const enginePasses: any[] = Array.isArray(dmp.passes) ? dmp.passes : [];
+        const passes = enginePasses.length > 0 ? enginePasses
+          : Array.from({ length: n }, (_, i) => ({ index: i + 1, depth_in: d, cumulative_in: d * (i + 1), is_finish: i === n - 1 }));
+        const rows = passes.map((p: any) => ({
+          label: `Pass ${p.index}${p.is_finish && n > 1 ? " (finish)" : ""}`,
+          value: `${p.depth_in.toFixed(4)}" → cum ${p.cumulative_in.toFixed(4)}"`,
+        }));
+        const preRough = dmp.pre_rough ? `
+          <table style="margin-bottom:6px;">
+            ${row("Step 1 — Pre-Rough Endmill Ø", `${dmp.pre_rough.endmill_dia_in.toFixed(3)}"`)}
+            ${row("Slot Width", `${dmp.pre_rough.slot_width_in.toFixed(4)}"`)}
+            ${row("Stock / Side", `${(dmp.pre_rough.stock_per_side_in * 1000).toFixed(0)} thou`)}
+          </table>
+          <p style="font-size:9px;color:#555;margin:-2px 0 8px;">${dmp.pre_rough.note}</p>` : "";
+        return `
+          <div class="pdf-section">
+          <h3>Multi-Pass Strategy${dmp.aggressive ? " — ⚠ Aggressive DOC" : ""}</h3>
+          ${preRough}
+          <table style="margin-bottom:6px;">
+            ${row("Total depth", `${dmp.final_slot_depth_in.toFixed(4)}"`)}
+            ${row("Passes / Side", String(n))}
+            ${row("Depth / Pass", `${d.toFixed(4)}"`)}
+            ${dmp.head_neck_ratio != null ? row("Head / Neck Ratio", `${dmp.head_neck_ratio.toFixed(2)}×${(dmp.head_neck_ratio >= 1.75) ? " — ⚠ mushroom geometry, pass depth derated" : ""}`) : ""}
+          </table>
+          <table>${fmtPass(rows)}</table>
+          <p style="font-size:9px;color:#555;margin-top:4px;">Climb-mill Side A in ${n} step${n === 1 ? "" : "s"}, retract, then climb-mill Side B the same way. Climb both walls — never reverse direction mid-pass on a dovetail neck.${dmp.aggressive ? ` <strong>⚠ Pass depth exceeds safe limit — consider reducing to ${dmp.max_safe_doc_in.toFixed(4)}" or less.</strong>` : ""}</p>
+          </div>`;
+      }
+
+      return "";
+    })();
+
     const stabSection = stab ? `
       <div class="pdf-section">
       <h3>Rigidity & Chatter Audit</h3>
@@ -3829,6 +3940,7 @@ ${optimalSection}
 ${milSection}
 ${entrySection}
 ${engSection}
+${multiPassSection}
 ${stabSection}
 
 <div class="disclaimer">
@@ -4777,6 +4889,91 @@ ${stabSection}
         cust.notes.forEach((n: string, i: number) => lines.push(`  ${i + 1}. ${n}`));
       }
     }
+
+    // ── DEPTH-OF-CUT / MULTI-PASS STRATEGY ───────────────────────────────────
+    // Mirrors the on-screen stepdown cards (chamfer / keyseat-slot / dovetail).
+    // Source shapes differ per op — emit whichever one is present.
+    (() => {
+      const cmp: any = (result as any)?.multi_pass;
+      if (cmp && form.tool_type === "chamfer_mill") {
+        if (cmp.single_pass_ok) {
+          lines.push("DEPTH-OF-CUT STRATEGY");
+          lines.push(DIV);
+          lines.push("  ✓ Single pass OK — depth is within the single-pass limit for this tool/material.");
+          lines.push("");
+          return;
+        }
+        const nRough: number = cmp.num_rough_passes;
+        const dRough: number = cmp.rough_depth_per_pass;
+        lines.push(`MULTI-PASS CHAMFER STRATEGY  (${cmp.num_passes} passes)`);
+        lines.push(DIV);
+        lines.push(L("Total depth",      `${cmp.finish_depth_in.toFixed(4)}"`));
+        lines.push(L("Finish allowance", `${cmp.finish_allowance_in.toFixed(3)}"`));
+        for (let i = 0; i < nRough; i++) {
+          lines.push(L(`Pass ${i + 1} (roughing)`, `to ${(dRough * (i + 1)).toFixed(4)}"  (${dRough.toFixed(4)}"/pass)`));
+        }
+        lines.push(L(`Pass ${nRough + 1} (finish)`, `to ${cmp.finish_depth_in.toFixed(4)}"  (full depth)`));
+        lines.push("  WOC grows with depth — single-pass on large chamfers risks poor finish. Use helical interpolation (G02/G03) for each pass.");
+        lines.push("");
+        return;
+      }
+
+      const kmp: any = keyseatResult?.multi_pass;
+      if (kmp && kmp.num_passes > 1) {
+        const n: number = kmp.num_passes;
+        const roughDoc: number  = kmp.rough_depth_per_pass_in ?? kmp.depth_per_pass_in;
+        const finishDoc: number = kmp.finish_depth_per_pass_in ?? roughDoc;
+        const finishFeedIpm: number | undefined = kmp.finish_feed_ipm;
+        const finishFeedPct: number = kmp.finish_feed_pct ?? 100;
+        lines.push(`PASS STRATEGY  (${n} passes)`);
+        lines.push(DIV);
+        lines.push(L("Total slot depth",     `${kmp.final_slot_depth_in.toFixed(4)}"`));
+        lines.push(L("Max safe pass depth",  `${kmp.max_safe_doc_in.toFixed(4)}"`));
+        for (let i = 0; i < n; i++) {
+          const isFinish = i === n - 1;
+          const feedNote = isFinish && finishFeedIpm && finishFeedPct < 100
+            ? `  ·  ${finishFeedIpm.toFixed(1)} IPM (${100 - finishFeedPct}%↓ feed)`
+            : "";
+          lines.push(L(isFinish ? `Pass ${n} (finish)` : `Pass ${i + 1} (roughing)`,
+            `${(isFinish ? finishDoc : roughDoc).toFixed(4)}" DOC${feedNote}`));
+        }
+        lines.push(kmp.finish_lighter
+          ? `  Finish pass is lighter (${finishDoc.toFixed(4)}") for sidewall straightness in this material.`
+          : "  Equal DOC across passes — in soft materials a lighter final pass tends to rub; feed is backed off instead.");
+        lines.push("");
+        return;
+      }
+
+      const dmp: any = dovetailResult?.multi_pass;
+      if (dmp) {
+        const n: number = dmp.num_passes;
+        const d: number = dmp.depth_per_pass_in;
+        lines.push(`MULTI-PASS STRATEGY${dmp.aggressive ? "  ⚠ AGGRESSIVE DOC" : ""}  (${n} pass${n === 1 ? "" : "es"}/side)`);
+        lines.push(DIV);
+        if (dmp.pre_rough) {
+          lines.push(L("Step 1 — Pre-Rough Ø", `${dmp.pre_rough.endmill_dia_in.toFixed(3)}" endmill`));
+          lines.push(L("  Slot Width",         `${dmp.pre_rough.slot_width_in.toFixed(4)}"`));
+          lines.push(L("  Stock / Side",       `${(dmp.pre_rough.stock_per_side_in * 1000).toFixed(0)} thou`));
+          if (dmp.pre_rough.note) lines.push(`  ${dmp.pre_rough.note}`);
+        }
+        lines.push(L("Total depth",   `${dmp.final_slot_depth_in.toFixed(4)}"`));
+        lines.push(L("Depth / Pass",  `${d.toFixed(4)}"`));
+        if (dmp.head_neck_ratio != null) {
+          lines.push(L("Head / Neck Ratio", `${dmp.head_neck_ratio.toFixed(2)}×${dmp.head_neck_ratio >= 1.75 ? "  ⚠ mushroom geometry — pass depth derated" : ""}`));
+        }
+        const enginePasses: any[] = Array.isArray(dmp.passes) ? dmp.passes : [];
+        const passes = enginePasses.length > 0 ? enginePasses
+          : Array.from({ length: n }, (_, i) => ({ index: i + 1, depth_in: d, cumulative_in: d * (i + 1), is_finish: i === n - 1 }));
+        passes.forEach((p: any) => {
+          lines.push(L(`Pass ${p.index}${p.is_finish && n > 1 ? " (finish)" : ""}`,
+            `${p.depth_in.toFixed(4)}" → cum ${p.cumulative_in.toFixed(4)}"`));
+        });
+        lines.push(`  Climb-mill Side A in ${n} step${n === 1 ? "" : "s"}, retract, then climb-mill Side B the same way. Never reverse direction mid-pass on a dovetail neck.`);
+        if (dmp.aggressive) lines.push(`  ⚠ Pass depth exceeds safe limit — consider reducing to ${dmp.max_safe_doc_in.toFixed(4)}" or less.`);
+        lines.push("");
+        return;
+      }
+    })();
 
     if (lines.filter(l => l.startsWith("TOOL")).length === 0) return null;
     lines.push("");
