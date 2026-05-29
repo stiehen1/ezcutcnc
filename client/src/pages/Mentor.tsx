@@ -1605,6 +1605,7 @@ export default function Mentor() {
   const [pdfFluteWashText, setPdfFluteWashText] = React.useState<string>("");
   const [pdfOal, setPdfOal] = React.useState<number>(0);
   const [pdfOalText, setPdfOalText] = React.useState<string>("");
+  const [pdfMaterial, setPdfMaterial] = React.useState<string | null>(null);
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
@@ -1803,6 +1804,7 @@ export default function Mentor() {
       setPdfExtracted(true);
       setPdfToolNumber(e.tool_number ?? null);
       setPdfConvertedFromMm(!!e._converted_from_mm);
+      setPdfMaterial(e.cutting_material ?? null);
       const _oal = e.oal > 0 ? e.oal : 0;
       setPdfOal(_oal);
       // Auto-save to Toolbox special tools if user is logged in and CC# was extracted
@@ -1854,6 +1856,11 @@ export default function Mentor() {
       else if (e.variable_helix) toastParts.push("Variable Helix detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Haimer Safe-Lock shank — shrink fit holder set");
+      if (e.cutting_material) {
+        const _matSub = ISO_SUBCATEGORIES.find(s => s.key === e.cutting_material);
+        const _matName = _matSub?.label ?? e.cutting_material;
+        toastParts.push(`Material set to ${_matName}`);
+      }
       // Build list of which fields were populated
       const filledFields: string[] = [];
       if (e.tool_dia > 0) filledFields.push("Tool Dia");
@@ -2905,6 +2912,7 @@ export default function Mentor() {
     setPdfExtracted(false);
     setPdfToolNumber(null);
     setPdfConvertedFromMm(false);
+    setPdfMaterial(null);
     setPdfOal(0);
     setPdfOalText("");
     setPdfFluteWash(0);
@@ -5463,6 +5471,50 @@ ${stabSection}
               {MATERIAL_NOTES[form.material]}
             </p>
           )}
+
+          {/* Print/material mismatch warning — fires when uploaded print specifies a material
+              different from what the user has selected (e.g. tool designed for aluminum but
+              user selected 17-4 PH stainless). */}
+          {pdfExtracted && pdfMaterial && form.material && pdfMaterial !== form.material && (() => {
+            const printSub = ISO_SUBCATEGORIES.find(s => s.key === pdfMaterial);
+            const selectedSub = ISO_SUBCATEGORIES.find(s => s.key === form.material);
+            const printLabel = printSub?.label ?? pdfMaterial;
+            const selectedLabel = selectedSub?.label ?? form.material;
+            const sameIso = printSub && selectedSub && printSub.iso === selectedSub.iso;
+            return (
+              <div className="mt-2 rounded-lg border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-xs leading-snug">
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-400 mt-0.5">⚠</span>
+                  <div className="flex-1 space-y-1">
+                    <div className="text-amber-300 font-semibold">
+                      Material mismatch — tool {pdfToolNumber ? `${pdfToolNumber} ` : ""}is designed for a different workpiece
+                    </div>
+                    <div className="text-amber-200/90">
+                      Print specifies <span className="font-semibold">{printLabel}</span>, but you have <span className="font-semibold">{selectedLabel}</span> selected.
+                      {sameIso
+                        ? " Same ISO group — likely safe but parameters will differ."
+                        : " Different ISO group — feeds, speeds, and tool geometry are not interchangeable. Tool damage or poor finish likely."}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm(p => ({
+                          ...p,
+                          material: pdfMaterial as any,
+                          hardness_value: printSub?.hardness.value ?? p.hardness_value,
+                          hardness_scale: printSub?.hardness.scale ?? p.hardness_scale,
+                        }));
+                        if (printSub) setIsoCategory(printSub.iso);
+                      }}
+                      className="text-amber-300 hover:text-amber-200 underline font-medium"
+                    >
+                      Switch to {printLabel} →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Hole Details — drilling only, shown BEFORE tool geometry so point angle can be recommended */}
           {operation === "drilling" && (<>
@@ -13846,13 +13898,19 @@ ${stabSection}
                   {keyseatResult?.multi_pass && keyseatResult.multi_pass.num_passes > 1 && (() => {
                     const mp = keyseatResult.multi_pass;
                     const n = mp.num_passes;
-                    const d = mp.depth_per_pass_in;
+                    const roughDoc = mp.rough_depth_per_pass_in ?? mp.depth_per_pass_in;
+                    const finishDoc = mp.finish_depth_per_pass_in ?? roughDoc;
+                    const finishFeedIpm = mp.finish_feed_ipm;
+                    const finishFeedPct = mp.finish_feed_pct ?? 100;
+                    const lighterFinish = !!mp.finish_lighter;
                     const total = mp.final_slot_depth_in;
-                    const passes = Array.from({ length: n }, (_, i) => ({
-                      label: n === 1 ? "Pass 1 (single pass)" : i < n - 1 ? `Pass ${i + 1} (roughing)` : `Pass ${n} (finish)`,
-                      doc: d,
-                      cumulative: (i + 1) * d,
-                    }));
+                    const passes = Array.from({ length: n }, (_, i) => {
+                      const isFinish = i === n - 1;
+                      return {
+                        label: isFinish ? `Pass ${n} (finish)` : `Pass ${i + 1} (roughing)`,
+                        doc: isFinish ? finishDoc : roughDoc,
+                      };
+                    });
                     const matLower = form.material.toLowerCase();
                     const reasons: string[] = [];
                     if (keyseatResult.arbor_dia_in && keyseatResult.arbor_dia_in / (form.tool_dia || 1) < 0.5)
@@ -13871,14 +13929,25 @@ ${stabSection}
                           </p>
                         )}
                         <div className="space-y-1">
-                          {passes.map((p, i) => (
-                            <div key={i} className="flex items-center justify-between text-[11px]">
-                              <span className="text-zinc-400">{p.label}</span>
-                              <span className="font-medium text-foreground tabular-nums">{p.doc.toFixed(4)}" DOC</span>
-                            </div>
-                          ))}
+                          {passes.map((p, i) => {
+                            const isFinish = i === n - 1;
+                            return (
+                              <div key={i} className="flex items-center justify-between text-[11px]">
+                                <span className="text-zinc-400">{p.label}</span>
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {p.doc.toFixed(4)}" DOC
+                                  {isFinish && finishFeedIpm && finishFeedPct < 100 && (
+                                    <span className="text-amber-300/90 ml-2">· {finishFeedIpm.toFixed(1)} ipm ({100 - finishFeedPct}%↓ feed)</span>
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                         <p className="text-[11px] text-zinc-500 leading-relaxed">
+                          {lighterFinish
+                            ? <>Finish pass is lighter (<span className="text-foreground font-medium">{finishDoc.toFixed(4)}"</span>) for sidewall straightness in this material. </>
+                            : <>Equal DOC across passes — in {matLower.includes("alum") ? "aluminum" : "soft materials"} a lighter final pass tends to rub; feed is backed off instead. </>}
                           Total slot depth: <span className="text-foreground font-medium">{total.toFixed(4)}"</span>
                           {` · max safe pass depth: `}<span className="text-foreground font-medium">{mp.max_safe_doc_in.toFixed(4)}"</span>
                         </p>
