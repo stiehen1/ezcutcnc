@@ -374,6 +374,11 @@ export const mentorSchemas = {
       multi_pass: z.object({
         num_passes: z.number(),
         depth_per_pass_in: z.number(),
+        rough_depth_per_pass_in: z.number().optional(),
+        finish_depth_per_pass_in: z.number().optional(),
+        finish_feed_ipm: z.number().optional(),
+        finish_feed_pct: z.number().optional(),
+        finish_lighter: z.boolean().optional(),
         final_slot_depth_in: z.number(),
         max_safe_doc_in: z.number(),
         aggressive: z.boolean(),

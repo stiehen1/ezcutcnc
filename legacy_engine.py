@@ -2924,24 +2924,68 @@ def run_keyseat(payload: dict) -> dict:
         notes.append("Staggered-tooth keyseat cutters in aluminum: consider flood coolant or air blast to clear chips from the full-slot cut.")
 
     # Multi-pass strategy
+    # Finish-pass policy (full-slot, staggered-tooth keyseat):
+    #   Aluminum / Cast Iron: equal DOC across all passes; back off finish feed ~10% only
+    #     (a lighter final pass on a full-slot cut in soft material tends to rub, not cut).
+    #   Steel / Stainless / Inconel / Titanium: finish DOC ~60% of rougher DOC AND feed −15%
+    #     (deflection recovery matters; lighter finish improves sidewall straightness).
     multi_pass = None
     if final_slot_depth > 0:
         import math as _math
-        num_passes = max(1, _math.ceil(final_slot_depth / max_safe_doc))
-        depth_per_pass = final_slot_depth / num_passes
+        _soft = mat_group in ("Aluminum", "Cast Iron")
+        if _soft:
+            _finish_doc_ratio = 1.00
+            _finish_feed_ratio = 0.90
+        else:
+            _finish_doc_ratio = 0.60
+            _finish_feed_ratio = 0.85
+        # Size passes so a reduced finish pass still fits under max_safe_doc.
+        # Total = (n-1)*rough + finish_ratio*rough  →  rough = total / (n - 1 + finish_ratio)
+        # Pick smallest n where rough ≤ max_safe_doc.
+        num_passes = 1
+        for _n in range(1, 200):
+            _rough = final_slot_depth / max(1e-9, (_n - 1) + _finish_doc_ratio)
+            if _rough <= max_safe_doc:
+                num_passes = _n
+                break
+        else:
+            num_passes = max(1, _math.ceil(final_slot_depth / max_safe_doc))
+        if num_passes <= 1:
+            rough_depth_per_pass = final_slot_depth
+            finish_depth_per_pass = final_slot_depth
+        else:
+            rough_depth_per_pass = final_slot_depth / ((num_passes - 1) + _finish_doc_ratio)
+            finish_depth_per_pass = rough_depth_per_pass * _finish_doc_ratio
+        finish_feed_ipm = feed_ipm * _finish_feed_ratio
         multi_pass = {
-            "final_slot_depth_in": round(final_slot_depth, 4),
-            "max_safe_doc_in":     round(max_safe_doc, 4),
-            "num_passes":          num_passes,
-            "depth_per_pass_in":   round(depth_per_pass, 4),
-            "aggressive":          doc_in > max_safe_doc,
+            "final_slot_depth_in":      round(final_slot_depth, 4),
+            "max_safe_doc_in":          round(max_safe_doc, 4),
+            "num_passes":               num_passes,
+            "depth_per_pass_in":        round(rough_depth_per_pass, 4),  # back-compat (roughing DOC)
+            "rough_depth_per_pass_in":  round(rough_depth_per_pass, 4),
+            "finish_depth_per_pass_in": round(finish_depth_per_pass, 4),
+            "finish_feed_ipm":          round(finish_feed_ipm, 2),
+            "finish_feed_pct":          round(_finish_feed_ratio * 100.0),
+            "finish_lighter":           not _soft and num_passes > 1,
+            "aggressive":               doc_in > max_safe_doc,
         }
         if num_passes > 1:
-            notes.append(
-                f"Multi-pass strategy recommended: {num_passes} passes of {depth_per_pass:.4f}\" each "
-                f"to reach {final_slot_depth:.4f}\" final slot depth. "
-                f"Max safe pass depth for this tool/material: {max_safe_doc:.4f}\"."
-            )
+            if _soft:
+                notes.append(
+                    f"Multi-pass strategy: {num_passes} passes of {rough_depth_per_pass:.4f}\" each "
+                    f"to reach {final_slot_depth:.4f}\" final slot depth. "
+                    f"On the finish pass, back off feed to {finish_feed_ipm:.1f} ipm (~{int(round((1-_finish_feed_ratio)*100))}% reduction) "
+                    f"for sidewall finish — keep DOC equal; a lighter cut tends to rub in {mat_group.lower()}. "
+                    f"Max safe pass depth for this tool/material: {max_safe_doc:.4f}\"."
+                )
+            else:
+                notes.append(
+                    f"Multi-pass strategy: {num_passes-1} roughing pass{'es' if num_passes-1 != 1 else ''} of "
+                    f"{rough_depth_per_pass:.4f}\" then a lighter finish pass of {finish_depth_per_pass:.4f}\" "
+                    f"at {finish_feed_ipm:.1f} ipm (~{int(round((1-_finish_feed_ratio)*100))}% feed reduction) "
+                    f"to reach {final_slot_depth:.4f}\" final slot depth. "
+                    f"Max safe pass depth for this tool/material: {max_safe_doc:.4f}\"."
+                )
         if doc_in > max_safe_doc * 1.25:
             notes.append(
                 f"⚠ Entered pass depth ({doc_in:.4f}\") exceeds recommended safe limit ({max_safe_doc:.4f}\") "
