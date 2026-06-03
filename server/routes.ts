@@ -2845,8 +2845,9 @@ export async function registerRoutes(
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
 
       if (!smtpUser || !smtpPass) {
-        console.log("[Results Email] Lead captured (SMTP not configured):", email, operation, material);
-        return res.json({ ok: true });
+        console.warn("[Results Email] *** SMTP not configured (SMTP_USER/SMTP_PASS missing) — lead captured but NO email sent:", email, operation, material);
+        // Lead is saved, but be honest that nothing was delivered.
+        return res.json({ ok: true, sent: false, reason: "smtp_not_configured" });
       }
 
       const transporter = nodemailer.createTransport({
@@ -2854,27 +2855,32 @@ export async function registerRoutes(
         auth: { user: smtpUser, pass: smtpPass },
       });
 
-      // Send results to user (including internal staff)
-      await transporter.sendMail({
-        from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
-        to: email,
-        subject: "Your Core Cutter Speeds & Feeds Results",
-        text: [
-          "Here are your machining parameters from the Core Cutter Machining App.",
-          "",
-          results_text ?? "(no results attached)",
-          "",
-          "─────────────────────────────────────",
-          "Questions? Contact us at sales@corecutterusa.com or call us at 207-588-7519",
-          "corecutcnc.com",
-        ].join("\n"),
-      }).catch((e: any) => console.warn("[Results Email] User email failed:", e?.message));
+      // Send results to user (including internal staff). Surface failures to the
+      // caller instead of swallowing them — a silent {ok:true} made a failed send
+      // indistinguishable from a successful one during dev testing.
+      try {
+        await transporter.sendMail({
+          from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
+          to: email,
+          subject: "Your Core Cutter Speeds & Feeds Results",
+          text: [
+            "Here are your machining parameters from the Core Cutter Machining App.",
+            "",
+            results_text ?? "(no results attached)",
+            "",
+            "─────────────────────────────────────",
+            "Questions? Contact us at sales@corecutterusa.com or call us at 207-588-7519",
+            "corecutcnc.com",
+          ].join("\n"),
+        });
+      } catch (mailErr: any) {
+        console.error("[Results Email] *** Send FAILED:", email, "—", mailErr?.message);
+        return res.status(502).json({ ok: false, sent: false, error: "Email delivery failed. Please try again or contact us directly." });
+      }
 
       // Per-query sales notification removed — registration emails handle new user alerts
-      // (also skip for internal staff — they're testing, not leads)
-      if (isStaff) return res.json({ ok: true });
-
-      return res.json({ ok: true });
+      // (isStaff distinction retained for future routing; both paths now confirm delivery)
+      return res.json({ ok: true, sent: true });
     } catch (err: any) {
       console.error("[Results Email]", err?.message);
       return res.status(500).json({ error: "Failed to process request." });

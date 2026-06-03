@@ -73,6 +73,10 @@ export const mentorSchemas = {
     woc_pct: z.number().min(0).default(0.1),
     doc_xd: z.number().min(0).default(1.0),
 
+    // Speed preset — biases recommended SFM within a bounded, per-material envelope
+    // so users can trade speed for tool life (or the reverse). balanced = no change.
+    speed_preset: z.enum(["max_life", "better_life", "balanced", "high_throughput", "max_mrr"]).default("balanced"),
+
     loc: z.number().min(0).default(0.75),
     lbs: z.number().min(0).default(0),
     flute_wash: z.number().min(0).default(0),

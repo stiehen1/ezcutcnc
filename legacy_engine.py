@@ -178,6 +178,50 @@ BASE_SFM = {
     "armor_ar600":    75,   # AR550 / AR600 / Armox 600T — 570–640 HB (~58–63 HRC); extreme hardness, treat as grinding
 }
 
+# ── Speed preset (SFM bias) ───────────────────────────────────────────────
+# Lets the user trade cutting speed for tool life (or the reverse) within a
+# bounded, calibrated envelope instead of typing a raw SFM. The multiplier is
+# applied to the recommended SFM AFTER all other factors (HEM, hardness,
+# coating). "balanced" = 1.00 = the app's existing output — nothing shifts for
+# users who don't touch it.
+#
+# Bias magnitude is keyed by material GROUP, because speed→tool-life
+# sensitivity clusters by family:
+#   - Titanium / Inconel / HRSA: heat-limited, extremely speed-sensitive →
+#     slowing down buys large life gains → widest downward range.
+#   - Stainless / steel / cast iron: Taylor-typical → medium range.
+#   - Aluminum / non-ferrous: usually rpm/chip-evac limited, not heat →
+#     slowing down buys little life → narrow downside, modest upside.
+SPEED_PRESET_ORDER = ["max_life", "better_life", "balanced", "high_throughput", "max_mrr"]
+
+SPEED_PRESET_BIAS = {
+    # group                  max_life  better_life  balanced  high_throughput  max_mrr
+    "Titanium":            {"max_life": 0.55, "better_life": 0.72, "balanced": 1.00, "high_throughput": 1.10, "max_mrr": 1.18},
+    "Inconel":             {"max_life": 0.55, "better_life": 0.72, "balanced": 1.00, "high_throughput": 1.08, "max_mrr": 1.15},
+    "Stainless":           {"max_life": 0.68, "better_life": 0.82, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.22},
+    "Steel":               {"max_life": 0.70, "better_life": 0.84, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.25},
+    "Cast Iron":           {"max_life": 0.72, "better_life": 0.85, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.25},
+    "Aluminum":            {"max_life": 0.80, "better_life": 0.90, "balanced": 1.00, "high_throughput": 1.15, "max_mrr": 1.30},
+    "Non-Ferrous":         {"max_life": 0.80, "better_life": 0.90, "balanced": 1.00, "high_throughput": 1.15, "max_mrr": 1.30},
+    "Abrasive Non-Ferrous":{"max_life": 0.78, "better_life": 0.88, "balanced": 1.00, "high_throughput": 1.10, "max_mrr": 1.18},
+    "Plastics":            {"max_life": 0.80, "better_life": 0.90, "balanced": 1.00, "high_throughput": 1.15, "max_mrr": 1.30},
+}
+# Generic fallback for any group not listed above (incl. hardened/armor, which
+# are abrasion-dominated and intolerant of high speed — kept conservative up).
+_SPEED_PRESET_DEFAULT = {"max_life": 0.65, "better_life": 0.80, "balanced": 1.00, "high_throughput": 1.06, "max_mrr": 1.12}
+
+def speed_preset_factor(preset: str, material_group: str) -> float:
+    """SFM multiplier for the chosen speed preset within the material's group.
+
+    Unknown/blank preset → 1.00 (balanced). Group falls back to a conservative
+    generic table. Result is clamped to a sane band so a bad input can never
+    drive SFM to an unphysical value."""
+    key = (preset or "balanced").strip().lower()
+    if key not in SPEED_PRESET_ORDER:
+        return 1.0
+    tbl = SPEED_PRESET_BIAS.get(material_group, _SPEED_PRESET_DEFAULT)
+    return max(0.50, min(1.35, tbl.get(key, 1.0)))
+
 # Unit power (HP·min/in³) at nominal chip thickness, TiAlN carbide tooling.
 # Hardness correction is applied separately via hardness_kc_mult() in run_milling().
 # Sources: Machinery's Handbook 31, Kennametal/Sandvik cutting data handbooks.
@@ -1987,6 +2031,8 @@ def run_drilling(payload: dict) -> dict:
     # Micro-drill SFM bonus — base table calibrated for ~1/4" drills; micro-drills run hotter SFM.
     # Bonus scales with sfm_dia (the operating dia that drives RPM/heat) — not feed_dia.
     base_sfm *= drill_micro_sfm_bonus(sfm_dia)
+    # Speed preset (user SFM bias) — balanced = 1.00 (no change)
+    base_sfm *= speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM — uses sfm_dia (largest)
     target_rpm = (base_sfm * 3.82) / sfm_dia
@@ -2305,6 +2351,9 @@ def run_reaming(payload: dict) -> dict:
     # Apply lead chamfer multipliers
     base_sfm *= lead_sfm_mult
     ipr_base *= lead_ipr_mult
+
+    # Speed preset (user SFM bias) — balanced = 1.00 (no change)
+    base_sfm *= speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # Final RPM / IPR / IPM
     target_rpm = (base_sfm * 3.82) / sfm_dia
@@ -2863,12 +2912,15 @@ def run_keyseat(payload: dict) -> dict:
     _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
     hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
 
-    # SFM
+    # SFM. sfm_target stays at the rated (un-biased) speed so the tool-life ratio
+    # below still rewards slowing down; the speed preset biases only the RPM we
+    # actually drive (sfm_actual), via _sfm_preset.
     base_sfm   = KEYSEAT_SFM.get(mat, KEYSEAT_SFM.get(mat_group, 150))
     sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    _sfm_preset = sfm_target * speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM
-    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
@@ -3127,12 +3179,14 @@ def run_dovetail(payload: dict) -> dict:
     # RPM based on D (max cutting diameter). Note for user display.
     half_angle_rad = math.radians(dovetail_angle / 2.0)
 
-    # SFM
+    # SFM. sfm_target stays at rated (un-biased) speed for the tool-life ratio;
+    # the speed preset biases only the RPM we drive (sfm_actual).
     base_sfm   = DOVETAIL_SFM.get(mat, DOVETAIL_SFM.get(mat_group, 130))
     sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    _sfm_preset = sfm_target * speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM
-    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
@@ -3393,10 +3447,12 @@ def run_feedmill(payload: dict) -> dict:
     lead_sin   = math.sin(lead_rad)
     lead_ctf   = 1.0 / lead_sin   # programmed FPT multiplier (e.g. 2.92× at 20°)
 
-    # SFM and RPM
+    # SFM and RPM. sfm_target stays at rated (un-biased) speed for the tool-life
+    # ratio; the speed preset biases only the RPM we drive (sfm_actual).
     base_sfm   = FEEDMILL_SFM.get(mat, FEEDMILL_SFM.get(mat_group, 300))
     sfm_target = base_sfm * hardness_sfm_mult(hrc)
-    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    _sfm_preset = sfm_target * speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
+    target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
@@ -3987,6 +4043,12 @@ def run(payload=None):
     # Apply coating SFM multiplier — T-Max +10%, D-Max on ferrous -10%, etc.
     _coating_key = str(data.get("coating") or "").strip()
     base_sfm *= _coating_sfm_factor(_coating_key, material_group)
+
+    # Speed preset (user SFM bias) — applied last so it scales the fully-resolved
+    # recommended SFM. balanced = 1.00 (no change). Tool life recomputes naturally
+    # downstream because sfm_actual now reflects the biased speed.
+    _speed_preset = str(data.get("speed_preset") or "balanced")
+    base_sfm *= speed_preset_factor(_speed_preset, material_group)
 
     # Surfacing: RPM driven by D_eff at contact point, not tool OD
     _sfm_dia = _surf_d_eff if (mode == "surfacing" and _surf_d_eff) else data["diameter"]
@@ -7109,6 +7171,7 @@ def run_thread_mill(payload: dict) -> dict:
         "tsc_low": 1.10, "tsc_high": 1.15,
     }.get(coolant, 1.00)
     target_sfm  = base_sfm * sfm_factor * cool_mult * hardness_sfm_mult(hrc)
+    target_sfm *= speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
     rpm         = min((target_sfm * 3.82) / tool_dia, max_rpm)
     sfm_actual  = (rpm * tool_dia) / 3.82
 

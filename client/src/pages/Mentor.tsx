@@ -2010,6 +2010,9 @@ export default function Mentor() {
     woc_pct: 0,
     doc_xd: 0,
 
+    // Speed preset — biases recommended SFM to trade speed for tool life. balanced = no change.
+    speed_preset: "balanced" as "max_life" | "better_life" | "balanced" | "high_throughput" | "max_mrr",
+
     machine_hp: 15,
     live_tool_connection: "",
     live_tool_hp: 0,
@@ -3344,6 +3347,23 @@ export default function Mentor() {
     }
   };
 
+  // Speed preset stops — bias recommended SFM toward tool life or throughput.
+  // Clicking sets the preset and immediately re-runs so the user sees the new
+  // SFM / tool-life without a separate Re-run click.
+  const SPEED_PRESETS: { key: typeof form.speed_preset; label: string; hint: string }[] = [
+    { key: "max_life",        label: "Max Life",   hint: "Lowest SFM — longest tool life, lowest MRR" },
+    { key: "better_life",     label: "Better",     hint: "Reduced SFM for longer tool life" },
+    { key: "balanced",        label: "Balanced",   hint: "App-recommended SFM (default)" },
+    { key: "high_throughput", label: "Faster",     hint: "Raised SFM for higher MRR" },
+    { key: "max_mrr",         label: "Max MRR",    hint: "Highest SFM — maximum metal removal, shortest tool life" },
+  ];
+  const applySpeedPreset = (preset: typeof form.speed_preset) => {
+    if (preset === form.speed_preset) return;
+    setForm(p => ({ ...p, speed_preset: preset }));
+    // Defer so the re-run reads the updated form (runRef syncs each render).
+    setTimeout(() => { void runRef.current(); }, 0);
+  };
+
   const result: any = mentor.data;
   const customer = result?.customer ?? null;
 
@@ -3642,7 +3662,7 @@ export default function Mentor() {
           <li>No pre-hole? Use helical interpolation entry in CAM — ramp feed typically 40–50% of lateral feed</li>
         </ul>
       </div>` : ""}
-      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.</p>` : ""}
+      ${eng.tool_life_min != null ? `<div style="margin-top:10px;border:1px solid #ccc;border-radius:5px;padding:7px 9px;background:#fafafa;"><div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1;margin-bottom:3px;">Tool Life Prediction</div><p style="font-size:9px;color:#555;margin:0;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.<br/>Spindle-on time in the cut, not hours at the machine — at a typical ~20% spindle duty cycle that's roughly <strong>${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs</strong> of shop time per tool.</p></div>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
         const raUin = mil.ra_actual_uin;
@@ -5009,9 +5029,14 @@ ${stabSection}
           results_text: buildResultsText() ?? undefined,
         }),
       });
-      if (!resp.ok) {
-        const d = await resp.json().catch(() => ({}));
-        setErError((d as any).error ?? "Something went wrong — try again.");
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok || (d as any).sent === false) {
+        setErError(
+          (d as any).error ??
+          ((d as any).reason === "smtp_not_configured"
+            ? "Email isn't configured on this server — your details were saved but no message was sent."
+            : "Something went wrong — try again.")
+        );
         setErStatus("error");
       } else {
         setErStatus("sent");
@@ -10899,10 +10924,36 @@ ${stabSection}
                       ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
                       ["MRR", mil.mrr_in3_min != null ? (mil.mrr_in3_min * feedMult).toFixed(2) : "—"],
                     ].map(([label, val, note]) => (
-                      <div key={label} className="flex flex-col items-center py-2 bg-zinc-800/60">
+                      // Grid cells stretch to the tallest cell (the SFM tile, which holds
+                      // the speed-preset buttons), so justify-center keeps every other
+                      // tile's value vertically centered for a consistent look.
+                      <div key={label} className="flex flex-col items-center justify-center py-2 bg-zinc-800/60">
                         <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
                         <span className={`text-sm font-bold mt-0.5 ${note ? "text-amber-400" : "text-white"}`}>{val}</span>
                         {note && <span className="text-[8px] text-amber-500 leading-tight text-center px-0.5">{note}</span>}
+                        {label === "SFM" && (
+                          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-0.5 px-1">
+                            {SPEED_PRESETS.map(sp => {
+                              const active = form.speed_preset === sp.key;
+                              return (
+                                <button
+                                  key={sp.key}
+                                  type="button"
+                                  title={sp.hint}
+                                  disabled={mentor.isPending}
+                                  onClick={() => applySpeedPreset(sp.key)}
+                                  className={`text-[8px] leading-none px-1.5 py-1 rounded border transition-colors ${
+                                    active
+                                      ? "bg-orange-500/90 border-orange-400 text-white font-semibold"
+                                      : "bg-zinc-700/50 border-zinc-600/60 text-zinc-300 hover:bg-zinc-600/60"
+                                  } disabled:opacity-50`}
+                                >
+                                  {sp.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ));
                   })()}
@@ -13865,8 +13916,12 @@ ${stabSection}
 
               {/* Tool life recommendation */}
               {engineering?.tool_life_min != null && (
-                <div className="text-xs text-muted-foreground px-1">
-                  Estimated tool life: <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min, 0)} min ({fmtNum(engineering.tool_life_min / 60, 1)} hrs)</span> of cutting time (varies with coating, runout, coolant conditions, machine tool condition, and toolholder condition). <span className="italic">This is an estimate only and is not a guarantee from Core Cutter.</span>
+                <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/40 px-3 py-2.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-300/90 mb-1">Tool Life Prediction</div>
+                  <div className="text-xs text-muted-foreground">
+                    Estimated tool life: <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min, 0)} min ({fmtNum(engineering.tool_life_min / 60, 1)} hrs)</span> of cutting time (varies with coating, runout, coolant conditions, machine tool condition, and toolholder condition). <span className="italic">This is an estimate only and is not a guarantee from Core Cutter.</span>
+                    <span className="block mt-0.5 text-muted-foreground/80">This is spindle-on time in the cut — not hours at the machine. At a typical ~20% spindle duty cycle that's roughly <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min / 60 / 0.20, 1)} hrs</span> of shop time per tool.</span>
+                  </div>
                 </div>
               )}
 
@@ -15381,7 +15436,7 @@ ${stabSection}
         <div className="mt-5 rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 flex items-center justify-between gap-2 text-sm text-emerald-300">
           <div className="flex items-center gap-2">
             <span className="text-base">✓</span>
-            <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
+            <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span></span>
           </div>
           <button onClick={() => setErStatus("idle")} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
         </div>
