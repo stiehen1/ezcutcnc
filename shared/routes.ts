@@ -73,6 +73,13 @@ export const mentorSchemas = {
     woc_pct: z.number().min(0).default(0.1),
     doc_xd: z.number().min(0).default(1.0),
 
+    // Speed preset — biases recommended SFM within a bounded, per-material envelope
+    // so users can trade speed for tool life (or the reverse). balanced = no change.
+    speed_preset: z.enum(["max_life", "better_life", "balanced", "high_throughput", "max_mrr"]).default("balanced"),
+    // Manual SFM override — when > 0, used directly (clamped to the safe envelope)
+    // instead of the preset. 0 = use the preset. Engine returns customer.sfm_control.
+    sfm_override: z.number().min(0).default(0),
+
     loc: z.number().min(0).default(0.75),
     lbs: z.number().min(0).default(0),
     flute_wash: z.number().min(0).default(0),
@@ -152,6 +159,13 @@ export const mentorSchemas = {
       rpm: z.number(),
       sfm: z.number().optional().nullable(),
       sfm_target: z.number().optional().nullable(),
+      sfm_control: z.object({
+        mode: z.enum(["preset", "manual"]),
+        clamped: z.boolean(),
+        requested: z.number().nullable(),
+        lo: z.number(),
+        hi: z.number(),
+      }).optional().nullable(),
 
       feed_ipm: z.number(),
       doc_in: z.number(),

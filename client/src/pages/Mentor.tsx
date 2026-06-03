@@ -2010,6 +2010,11 @@ export default function Mentor() {
     woc_pct: 0,
     doc_xd: 0,
 
+    // Speed preset — biases recommended SFM to trade speed for tool life. balanced = no change.
+    speed_preset: "balanced" as "max_life" | "better_life" | "balanced" | "high_throughput" | "max_mrr",
+    // Manual SFM override — when > 0, used directly (clamped to safe band) instead of the preset.
+    sfm_override: 0,
+
     machine_hp: 15,
     live_tool_connection: "",
     live_tool_hp: 0,
@@ -3344,7 +3349,72 @@ export default function Mentor() {
     }
   };
 
-  const result: any = mentor.data;
+  // Speed preset stops — bias recommended SFM toward tool life or throughput.
+  // Clicking sets the preset and immediately re-runs so the user sees the new
+  // SFM / tool-life without a separate Re-run click.
+  const SPEED_PRESETS: { key: typeof form.speed_preset; label: string; hint: string }[] = [
+    { key: "max_life",        label: "Max Life",   hint: "Lowest SFM — longest tool life, lowest MRR" },
+    { key: "better_life",     label: "Better",     hint: "Reduced SFM for longer tool life" },
+    { key: "balanced",        label: "Balanced",   hint: "App-recommended SFM (default)" },
+    { key: "high_throughput", label: "Faster",     hint: "Raised SFM for higher MRR" },
+    { key: "max_mrr",         label: "Max MRR",    hint: "Highest SFM — maximum metal removal, shortest tool life" },
+  ];
+  // Local text state for the manual SFM input so typing doesn't re-run per keystroke.
+  const [sfmOverrideInput, setSfmOverrideInput] = React.useState("");
+  // Re-run trigger for speed changes. Handlers bump this AND update the form;
+  // an effect below fires the calc only AFTER React commits the new form, so the
+  // run always reads the updated speed_preset / sfm_override (no setTimeout race
+  // where the stale form would re-run with the old value).
+  const [speedRerunTick, setSpeedRerunTick] = React.useState(0);
+  const speedRerunArmed = React.useRef(false);
+  const applySpeedPreset = (preset: typeof form.speed_preset) => {
+    // Clicking a preset exits Manual mode: clear the SFM override (and its input
+    // box) so the engine returns to the preset-biased default numbers.
+    if (preset === form.speed_preset && !form.sfm_override) return;
+    setSfmOverrideInput("");
+    setForm(p => ({ ...p, speed_preset: preset, sfm_override: 0 }));
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
+  };
+  const applySfmOverride = () => {
+    const v = parseInt(sfmOverrideInput, 10);  // SFM is a whole number
+    if (!isFinite(v) || v <= 0) {
+      // Empty/invalid → revert to preset mode.
+      if (form.sfm_override) {
+        setForm(p => ({ ...p, sfm_override: 0 }));
+        speedRerunArmed.current = true;
+        setSpeedRerunTick(t => t + 1);
+      }
+      return;
+    }
+    if (v === form.sfm_override) return;
+    setForm(p => ({ ...p, sfm_override: v }));
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
+  };
+  // Fire the re-run after the speed change commits to form state.
+  React.useEffect(() => {
+    if (!speedRerunArmed.current) return;
+    speedRerunArmed.current = false;
+    void runRef.current();
+  }, [speedRerunTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Export-friendly label for the chosen speed preset (fuller than the button
+  // labels). Used in copy/email text and PDF so a biased SFM is explained.
+  const SPEED_PRESET_EXPORT_LABEL: Record<typeof form.speed_preset, string> = {
+    max_life:        "Max Tool Life (reduced SFM)",
+    better_life:     "Better Tool Life (reduced SFM)",
+    balanced:        "Balanced (app-recommended SFM)",
+    high_throughput: "High Throughput (raised SFM)",
+    max_mrr:         "Max MRR (raised SFM)",
+  };
+
+  // React Query v5 resets mutation.data to undefined on every new mutate(), so a
+  // re-run (e.g. clicking a speed preset) would briefly blank the results panel
+  // and flash the empty state. Hold the last successful result and fall back to
+  // it while a re-run is pending, so the panel updates in place without flashing.
+  const lastResultRef = React.useRef<any>(null);
+  if (mentor.data != null) lastResultRef.current = mentor.data;
+  const result: any = mentor.data ?? (mentor.isPending ? lastResultRef.current : null);
   const customer = result?.customer ?? null;
 
   // Auto-cap keyseat pass depth when result flags it as aggressive, then re-run
@@ -3398,6 +3468,11 @@ export default function Mentor() {
       : null;
 
     const milSection = mil ? `
+      ${(mil as any).sfm_control?.mode === "manual"
+        ? `<div style="font-size:9px;color:#0369a1;margin:2px 0 4px 0;font-weight:600;">Speed: Manual — ${Math.round(mil.sfm ?? 0)} SFM set by user (clamped to safe range for this material).</div>`
+        : form.speed_preset && form.speed_preset !== "balanced"
+        ? `<div style="font-size:9px;color:#b45309;margin:2px 0 4px 0;font-weight:600;">Speed Preset: ${SPEED_PRESET_EXPORT_LABEL[form.speed_preset]} — SFM biased from the app's balanced recommendation.</div>`
+        : ""}
       <div class="kpi-grid">
         ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first pass</span>` : "") : null)}
         ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first pass</span>` : "") : null)}
@@ -3642,7 +3717,7 @@ export default function Mentor() {
           <li>No pre-hole? Use helical interpolation entry in CAM — ramp feed typically 40–50% of lateral feed</li>
         </ul>
       </div>` : ""}
-      ${eng.tool_life_min != null ? `<p style="font-size:9px;color:#555;margin-top:10px;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.</p>` : ""}
+      ${eng.tool_life_min != null ? `<div style="margin-top:10px;border:1px solid #ccc;border-radius:5px;padding:7px 9px;background:#fafafa;"><div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1;margin-bottom:3px;">Tool Life Prediction</div><p style="font-size:9px;color:#555;margin:0;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.<br/>Spindle-on time in the cut, not hours at the machine — at a typical ~20% spindle duty cycle that's roughly <strong>${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs</strong> of shop time per tool.</p></div>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
         const raUin = mil.ra_actual_uin;
@@ -4690,6 +4765,9 @@ ${stabSection}
       lines.push("STRATEGY");
       lines.push(DIV);
       lines.push(L("Operation",    modeLabel[form.mode] ?? form.mode));
+      lines.push(L("Speed Preset", cust?.sfm_control?.mode === "manual"
+        ? `Manual — ${Math.round(cust.sfm ?? 0)} SFM (set by user)`
+        : (SPEED_PRESET_EXPORT_LABEL[form.speed_preset] ?? "Balanced (app-recommended SFM)")));
       if (wocIn != null) lines.push(L("WOC (Radial)",  `${wocIn.toFixed(4)}"  (${wocPct.toFixed(1)}% Ø)`));
       if (docIn != null) lines.push(L("DOC (Axial)",   `${docIn.toFixed(4)}"  (${docXd.toFixed(2)}×D)`));
       if (wocPct)        lines.push(L("Optimal Load",  `${wocPct.toFixed(1)}%`));
@@ -4879,6 +4957,19 @@ ${stabSection}
         : "✓ OK — standard flood coolant or air blast";
       lines.push(L("Chip Evacuation", chipEvacRisk));
 
+      // Tool Life Prediction — mirror the on-screen / PDF box. Cutting time, plus
+      // the ~20%-duty wall-clock equivalent so it isn't read as hours-at-machine.
+      if (eng?.tool_life_min != null) {
+        lines.push("");
+        lines.push("TOOL LIFE PREDICTION");
+        lines.push(DIV);
+        lines.push(L("Est. Tool Life", `${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs) of cutting time`));
+        lines.push(`Spindle-on time in the cut — not hours at the machine. At a typical ~20%`);
+        lines.push(`spindle duty cycle that's roughly ${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs of shop time per tool.`);
+        lines.push(`Varies with coating, runout, coolant & machine condition. Estimate only,`);
+        lines.push(`not a guarantee from Core Cutter LLC.`);
+      }
+
       // Engine advisory notes
       if (cust.status && cust.status !== "ok") lines.push(L("Status", cust.status));
       if (cust.risk)    lines.push(L("Risk Flag",   cust.risk));
@@ -5009,9 +5100,14 @@ ${stabSection}
           results_text: buildResultsText() ?? undefined,
         }),
       });
-      if (!resp.ok) {
-        const d = await resp.json().catch(() => ({}));
-        setErError((d as any).error ?? "Something went wrong — try again.");
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok || (d as any).sent === false) {
+        setErError(
+          (d as any).error ??
+          ((d as any).reason === "smtp_not_configured"
+            ? "Email isn't configured on this server — your details were saved but no message was sent."
+            : "Something went wrong — try again.")
+        );
         setErStatus("error");
       } else {
         setErStatus("sent");
@@ -12661,6 +12757,99 @@ ${stabSection}
                     : null;
                   return (
                     <>
+                      {/* SFM — full-width row: value on the left, speed-preset
+                          selector on the right with a tool-life↔throughput arrow.
+                          Shown above RPM since it's the primary speed control. */}
+                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                          {/* Value + manual override */}
+                          <div className="shrink-0 sm:w-40">
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 cursor-default">
+                                      {UL("SFM", "m/min")}
+                                      <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                                        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                        <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                                      </svg>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">Surface Feet per Minute — cutting edge velocity at the tool OD; the primary driver of heat and tool life. Use a preset, or type an exact SFM (clamped to the safe range for this material).</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              {customer.sfm_control?.mode === "manual" && (
+                                <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold">Manual</span>
+                              )}
+                            </div>
+                            <div className="mt-1 text-lg font-bold leading-tight">
+                              {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
+                              {firstSfm != null && (
+                                <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
+                                </span>
+                              )}
+                            </div>
+                            {/* Exact SFM entry — clear the field (or click a preset) to resume presets. */}
+                            <div className="mt-1.5 flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="Set SFM"
+                                value={sfmOverrideInput}
+                                disabled={mentor.isPending}
+                                onChange={e => setSfmOverrideInput(e.target.value.replace(/[^0-9]/g, ""))}
+                                onBlur={applySfmOverride}
+                                onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
+                                className="w-20 text-xs px-1.5 py-1 rounded border border-zinc-600/60 bg-zinc-800/60 text-white placeholder:text-zinc-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+                              />
+                            </div>
+                            {customer.sfm_control?.mode === "manual" && customer.sfm_control?.clamped && (
+                              <div className="mt-1 text-[9px] leading-tight text-amber-400">
+                                ⚠ {customer.sfm_control.requested} SFM is outside the safe range
+                                ({customer.sfm_control.lo}–{customer.sfm_control.hi}) — clamped to {Math.round(customer.sfm ?? 0)}.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Speed preset selector */}
+                          <div className="flex-1 min-w-0 sm:border-l sm:border-zinc-700/50 sm:pl-3">
+                            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-zinc-500 font-medium mb-1">
+                              <span className="text-emerald-400/90">← Tool Life</span>
+                              <span>Speed Preset</span>
+                              <span className="text-orange-400/90">Higher Throughput →</span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-1">
+                              {SPEED_PRESETS.map(sp => {
+                                // In manual mode no preset is active (the typed SFM wins).
+                                const active = !form.sfm_override && form.speed_preset === sp.key;
+                                return (
+                                  <button
+                                    key={sp.key}
+                                    type="button"
+                                    title={sp.hint}
+                                    disabled={mentor.isPending}
+                                    onClick={() => applySpeedPreset(sp.key)}
+                                    className={`text-[10px] leading-tight text-center px-1 py-1.5 rounded-md border font-medium transition-colors ${
+                                      active
+                                        ? "bg-orange-500/90 border-orange-400 text-white"
+                                        : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
+                                    } disabled:opacity-50`}
+                                  >
+                                    {sp.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {form.sfm_override > 0 && (
+                              <div className="mt-1 text-[9px] text-zinc-500 leading-tight">
+                                Manual SFM active — presets paused. Clear the field or click a preset to resume.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                       <Kpi
                         label="RPM"
                         hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting."
@@ -12670,20 +12859,6 @@ ${stabSection}
                             {firstRpm != null && (
                               <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
                                 {fmtInt(firstRpm)} first pass
-                              </span>
-                            )}
-                          </>
-                        }
-                      />
-                      <Kpi
-                        label={UL("SFM", "m/min")}
-                        hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing."
-                        value={
-                          <>
-                            {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
-                            {firstSfm != null && (
-                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
                               </span>
                             )}
                           </>
@@ -13865,8 +14040,12 @@ ${stabSection}
 
               {/* Tool life recommendation */}
               {engineering?.tool_life_min != null && (
-                <div className="text-xs text-muted-foreground px-1">
-                  Estimated tool life: <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min, 0)} min ({fmtNum(engineering.tool_life_min / 60, 1)} hrs)</span> of cutting time (varies with coating, runout, coolant conditions, machine tool condition, and toolholder condition). <span className="italic">This is an estimate only and is not a guarantee from Core Cutter.</span>
+                <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/40 px-3 py-2.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-300/90 mb-1">Tool Life Prediction</div>
+                  <div className="text-xs text-muted-foreground">
+                    Estimated tool life: <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min, 0)} min ({fmtNum(engineering.tool_life_min / 60, 1)} hrs)</span> of cutting time (varies with coating, runout, coolant conditions, machine tool condition, and toolholder condition). <span className="italic">This is an estimate only and is not a guarantee from Core Cutter.</span>
+                    <span className="block mt-0.5 text-muted-foreground/80">This is spindle-on time in the cut — not hours at the machine. At a typical ~20% spindle duty cycle that's roughly <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min / 60 / 0.20, 1)} hrs</span> of shop time per tool.</span>
+                  </div>
                 </div>
               )}
 
@@ -15381,7 +15560,7 @@ ${stabSection}
         <div className="mt-5 rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 flex items-center justify-between gap-2 text-sm text-emerald-300">
           <div className="flex items-center gap-2">
             <span className="text-base">✓</span>
-            <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span>.</span>
+            <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span></span>
           </div>
           <button onClick={() => setErStatus("idle")} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
         </div>

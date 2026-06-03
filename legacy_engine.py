@@ -178,6 +178,116 @@ BASE_SFM = {
     "armor_ar600":    75,   # AR550 / AR600 / Armox 600T — 570–640 HB (~58–63 HRC); extreme hardness, treat as grinding
 }
 
+# ── Speed preset (SFM bias) ───────────────────────────────────────────────
+# Lets the user trade cutting speed for tool life (or the reverse) within a
+# bounded, calibrated envelope instead of typing a raw SFM. The multiplier is
+# applied to the recommended SFM AFTER all other factors (HEM, hardness,
+# coating). "balanced" = 1.00 = the app's existing output — nothing shifts for
+# users who don't touch it.
+#
+# Bias magnitude is keyed by material GROUP, because speed→tool-life
+# sensitivity clusters by family:
+#   - Titanium / Inconel / HRSA: heat-limited, extremely speed-sensitive →
+#     slowing down buys large life gains → widest downward range.
+#   - Stainless / steel / cast iron: Taylor-typical → medium range.
+#   - Aluminum / non-ferrous: usually rpm/chip-evac limited, not heat →
+#     slowing down buys little life → narrow downside, modest upside.
+SPEED_PRESET_ORDER = ["max_life", "better_life", "balanced", "high_throughput", "max_mrr"]
+
+SPEED_PRESET_BIAS = {
+    # group                  max_life  better_life  balanced  high_throughput  max_mrr
+    "Titanium":            {"max_life": 0.55, "better_life": 0.72, "balanced": 1.00, "high_throughput": 1.10, "max_mrr": 1.18},
+    "Inconel":             {"max_life": 0.55, "better_life": 0.72, "balanced": 1.00, "high_throughput": 1.08, "max_mrr": 1.15},
+    "Stainless":           {"max_life": 0.68, "better_life": 0.82, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.22},
+    "Steel":               {"max_life": 0.70, "better_life": 0.84, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.25},
+    "Cast Iron":           {"max_life": 0.72, "better_life": 0.85, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.25},
+    "Aluminum":            {"max_life": 0.80, "better_life": 0.90, "balanced": 1.00, "high_throughput": 1.15, "max_mrr": 1.30},
+    "Non-Ferrous":         {"max_life": 0.80, "better_life": 0.90, "balanced": 1.00, "high_throughput": 1.15, "max_mrr": 1.30},
+    "Abrasive Non-Ferrous":{"max_life": 0.78, "better_life": 0.88, "balanced": 1.00, "high_throughput": 1.10, "max_mrr": 1.18},
+    "Plastics":            {"max_life": 0.80, "better_life": 0.90, "balanced": 1.00, "high_throughput": 1.15, "max_mrr": 1.30},
+}
+# Generic fallback for any group not listed above (incl. hardened/armor, which
+# are abrasion-dominated and intolerant of high speed — kept conservative up).
+_SPEED_PRESET_DEFAULT = {"max_life": 0.65, "better_life": 0.80, "balanced": 1.00, "high_throughput": 1.06, "max_mrr": 1.12}
+
+def speed_preset_factor(preset: str, material_group: str) -> float:
+    """SFM multiplier for the chosen speed preset within the material's group.
+
+    Unknown/blank preset → 1.00 (balanced). Group falls back to a conservative
+    generic table. Result is clamped to a sane band so a bad input can never
+    drive SFM to an unphysical value."""
+    key = (preset or "balanced").strip().lower()
+    if key not in SPEED_PRESET_ORDER:
+        return 1.0
+    tbl = SPEED_PRESET_BIAS.get(material_group, _SPEED_PRESET_DEFAULT)
+    return max(0.50, min(1.35, tbl.get(key, 1.0)))
+
+# Minimum viable SFM by material group — the "Max Life" preset must not drive
+# speed below the point where the edge stops cutting and starts RUBBING, which
+# generates friction heat and SHORTENS life (the opposite of the intent). This
+# matters most for heat-sensitive / work-hardening groups (Ti, HRSA, stainless)
+# where a low balanced baseline × 0.55 could otherwise dip into the rub zone.
+# Groups not listed have no practical low-speed rubbing limit (alu/brass/plastic).
+SPEED_PRESET_MIN_SFM = {
+    "Titanium":  115,   # Ti-6Al-4V: below ~110-120 SFM the edge rubs and heat spikes
+    "Inconel":    75,   # Ni/Co superalloys already run slow; floor keeps off the rub line
+    "Stainless": 120,   # austenitic work-hardens fast if speed drops too low
+    "Steel":     150,
+    "Cast Iron": 160,
+}
+
+def biased_sfm(rated_sfm: float, preset: str, material_group: str) -> float:
+    """Apply the speed preset to a rated SFM, then enforce the per-group minimum
+    so 'Max Life' can't push titanium/HRSA/stainless into the rubbing zone.
+    The floor only applies when slowing down (factor < 1.0) and never raises SFM
+    above the rated value."""
+    factor = speed_preset_factor(preset, material_group)
+    out = rated_sfm * factor
+    if factor < 1.0:
+        floor = SPEED_PRESET_MIN_SFM.get(material_group)
+        if floor is not None:
+            # Don't let the floor exceed the rated speed (e.g. an already-slow job).
+            out = max(out, min(float(floor), rated_sfm))
+    return out
+
+def speed_envelope(rated_sfm: float, material_group: str):
+    """Return (lo, hi) — the safe SFM band a manual override is clamped to.
+    Defined by the speed-preset extremes: lo = the Max Life value (incl. the
+    rubbing floor), hi = the Max MRR value. Keeps manual entry inside the same
+    calibrated range the preset buttons cover."""
+    lo = biased_sfm(rated_sfm, "max_life", material_group)
+    hi = rated_sfm * speed_preset_factor("max_mrr", material_group)
+    if lo > hi:  # degenerate (floor above ceiling for a very slow job) — swap
+        lo, hi = hi, lo
+    return lo, hi
+
+def resolve_sfm(rated_sfm: float, payload: dict, material_group: str):
+    """Resolve the SFM to actually use, honoring a manual override if present.
+
+    Returns (sfm, info) where info is a dict describing what happened:
+      {"mode": "preset"|"manual", "clamped": bool, "requested": float|None,
+       "lo": float, "hi": float}
+    Manual override (payload['sfm_override'] > 0) wins over the preset and is
+    clamped to the safe envelope; a clamp is flagged so the UI can warn."""
+    try:
+        override = float(payload.get("sfm_override", 0) or 0)
+    except (TypeError, ValueError):
+        override = 0.0
+    lo, hi = speed_envelope(rated_sfm, material_group)
+    if override > 0:
+        clamped_val = max(lo, min(hi, override))
+        return clamped_val, {
+            "mode": "manual",
+            "clamped": abs(clamped_val - override) > 0.5,
+            "requested": round(override, 1),
+            "lo": round(lo, 1), "hi": round(hi, 1),
+        }
+    preset = str(payload.get("speed_preset") or "balanced")
+    return biased_sfm(rated_sfm, preset, material_group), {
+        "mode": "preset", "clamped": False, "requested": None,
+        "lo": round(lo, 1), "hi": round(hi, 1),
+    }
+
 # Unit power (HP·min/in³) at nominal chip thickness, TiAlN carbide tooling.
 # Hardness correction is applied separately via hardness_kc_mult() in run_milling().
 # Sources: Machinery's Handbook 31, Kennametal/Sandvik cutting data handbooks.
@@ -1635,7 +1745,9 @@ def run_chamfer_mill(payload: dict) -> dict:
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(mat_group, 300))
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                       "stainless_ph", "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420")
+                       "stainless_ph", "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420",
+                       # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; BASE_SFM already reflects it
+                       "Titanium", "titanium_64", "titanium_cp", "titanium")
     if mat_group not in _no_hrc_penalty and _mat_key not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)
     sfm_target = base_sfm
@@ -1980,13 +2092,17 @@ def run_drilling(payload: dict) -> dict:
     # The base SFM already accounts for their hardness; applying the mult double-counts it.
     _drill_no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                              "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                             "copper_beryllium")
+                             "copper_beryllium",
+                             # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; DRILL_SFM already reflects it
+                             "Titanium", "titanium_64", "titanium_cp", "titanium")
     if mat_group not in _drill_no_hrc_penalty and mat not in _drill_no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(hrc)
     base_sfm *= cool_factor * geo_factor  # PA factor applies to IPR only, not SFM
     # Micro-drill SFM bonus — base table calibrated for ~1/4" drills; micro-drills run hotter SFM.
     # Bonus scales with sfm_dia (the operating dia that drives RPM/heat) — not feed_dia.
     base_sfm *= drill_micro_sfm_bonus(sfm_dia)
+    # Speed preset (user SFM bias) — balanced = 1.00 (no change)
+    base_sfm *= speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM — uses sfm_dia (largest)
     target_rpm = (base_sfm * 3.82) / sfm_dia
@@ -2305,6 +2421,9 @@ def run_reaming(payload: dict) -> dict:
     # Apply lead chamfer multipliers
     base_sfm *= lead_sfm_mult
     ipr_base *= lead_ipr_mult
+
+    # Speed preset (user SFM bias) — balanced = 1.00 (no change)
+    base_sfm *= speed_preset_factor(str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # Final RPM / IPR / IPM
     target_rpm = (base_sfm * 3.82) / sfm_dia
@@ -2863,12 +2982,15 @@ def run_keyseat(payload: dict) -> dict:
     _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
     hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
 
-    # SFM
+    # SFM. sfm_target stays at the rated (un-biased) speed so the tool-life ratio
+    # below still rewards slowing down; the speed preset biases only the RPM we
+    # actually drive (sfm_actual), via _sfm_preset.
     base_sfm   = KEYSEAT_SFM.get(mat, KEYSEAT_SFM.get(mat_group, 150))
     sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    _sfm_preset = biased_sfm(sfm_target, str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM
-    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
@@ -3127,12 +3249,14 @@ def run_dovetail(payload: dict) -> dict:
     # RPM based on D (max cutting diameter). Note for user display.
     half_angle_rad = math.radians(dovetail_angle / 2.0)
 
-    # SFM
+    # SFM. sfm_target stays at rated (un-biased) speed for the tool-life ratio;
+    # the speed preset biases only the RPM we drive (sfm_actual).
     base_sfm   = DOVETAIL_SFM.get(mat, DOVETAIL_SFM.get(mat_group, 130))
     sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    _sfm_preset = biased_sfm(sfm_target, str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM
-    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
@@ -3393,10 +3517,12 @@ def run_feedmill(payload: dict) -> dict:
     lead_sin   = math.sin(lead_rad)
     lead_ctf   = 1.0 / lead_sin   # programmed FPT multiplier (e.g. 2.92× at 20°)
 
-    # SFM and RPM
+    # SFM and RPM. sfm_target stays at rated (un-biased) speed for the tool-life
+    # ratio; the speed preset biases only the RPM we drive (sfm_actual).
     base_sfm   = FEEDMILL_SFM.get(mat, FEEDMILL_SFM.get(mat_group, 300))
     sfm_target = base_sfm * hardness_sfm_mult(hrc)
-    target_rpm = (sfm_target * 12.0) / (math.pi * D)
+    _sfm_preset = biased_sfm(sfm_target, str(payload.get("speed_preset") or "balanced"), mat_group)
+    target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
@@ -3979,7 +4105,9 @@ def run(payload=None):
                         "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
                         # PH/duplex stainless: SFM already calibrated for their hardness range — don't double-penalize
                         "stainless_ph", "stainless_duplex", "stainless_superduplex",
-                        "stainless_440c", "stainless_420")
+                        "stainless_440c", "stainless_420",
+                        # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; BASE_SFM already reflects it
+                        "Titanium", "titanium_64", "titanium_cp", "titanium")
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)
@@ -3987,6 +4115,12 @@ def run(payload=None):
     # Apply coating SFM multiplier — T-Max +10%, D-Max on ferrous -10%, etc.
     _coating_key = str(data.get("coating") or "").strip()
     base_sfm *= _coating_sfm_factor(_coating_key, material_group)
+
+    # Speed control — applied last so it scales the fully-resolved recommended
+    # SFM. A manual sfm_override (if > 0) wins and is clamped to the safe
+    # envelope; otherwise the speed preset biases it (balanced = no change).
+    # Tool life recomputes naturally downstream because sfm_actual reflects this.
+    base_sfm, _sfm_info = resolve_sfm(base_sfm, data, material_group)
 
     # Surfacing: RPM driven by D_eff at contact point, not tool OD
     _sfm_dia = _surf_d_eff if (mode == "surfacing" and _surf_d_eff) else data["diameter"]
@@ -6868,6 +7002,7 @@ def run(payload=None):
             "rpm": rpm,
             "sfm": sfm_actual,
             "sfm_target": base_sfm,
+            "sfm_control": _sfm_info,  # {mode, clamped, requested, lo, hi} for UI
             "feed_ipm": feed_ipm,
             "doc_in": doc,
             "woc_in": woc,
@@ -7109,6 +7244,7 @@ def run_thread_mill(payload: dict) -> dict:
         "tsc_low": 1.10, "tsc_high": 1.15,
     }.get(coolant, 1.00)
     target_sfm  = base_sfm * sfm_factor * cool_mult * hardness_sfm_mult(hrc)
+    target_sfm  = biased_sfm(target_sfm, str(payload.get("speed_preset") or "balanced"), mat_group)
     rpm         = min((target_sfm * 3.82) / tool_dia, max_rpm)
     sfm_actual  = (rpm * tool_dia) / 3.82
 
