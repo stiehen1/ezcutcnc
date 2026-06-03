@@ -3373,7 +3373,13 @@ export default function Mentor() {
     max_mrr:         "Max MRR (raised SFM)",
   };
 
-  const result: any = mentor.data;
+  // React Query v5 resets mutation.data to undefined on every new mutate(), so a
+  // re-run (e.g. clicking a speed preset) would briefly blank the results panel
+  // and flash the empty state. Hold the last successful result and fall back to
+  // it while a re-run is pending, so the panel updates in place without flashing.
+  const lastResultRef = React.useRef<any>(null);
+  if (mentor.data != null) lastResultRef.current = mentor.data;
+  const result: any = mentor.data ?? (mentor.isPending ? lastResultRef.current : null);
   const customer = result?.customer ?? null;
 
   // Auto-cap keyseat pass depth when result flags it as aggressive, then re-run
