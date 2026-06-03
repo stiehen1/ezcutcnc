@@ -12712,6 +12712,70 @@ ${stabSection}
                     : null;
                   return (
                     <>
+                      {/* SFM — full-width row: value on the left, speed-preset
+                          selector on the right with a tool-life↔throughput arrow.
+                          Shown above RPM since it's the primary speed control. */}
+                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                          {/* Value */}
+                          <div className="shrink-0 sm:w-32">
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 cursor-default">
+                                      {UL("SFM", "m/min")}
+                                      <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                                        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                        <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                                      </svg>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">Surface Feet per Minute — cutting edge velocity at the tool OD; the primary driver of heat and tool life. Use the preset to trade speed for tool life (or the reverse).</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <div className="mt-1 text-lg font-bold leading-tight">
+                              {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
+                              {firstSfm != null && (
+                                <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Speed preset selector */}
+                          <div className="flex-1 min-w-0 sm:border-l sm:border-zinc-700/50 sm:pl-3">
+                            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-zinc-500 font-medium mb-1">
+                              <span className="text-emerald-400/90">← Tool Life</span>
+                              <span>Speed Preset</span>
+                              <span className="text-orange-400/90">Higher Throughput →</span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-1">
+                              {SPEED_PRESETS.map(sp => {
+                                const active = form.speed_preset === sp.key;
+                                return (
+                                  <button
+                                    key={sp.key}
+                                    type="button"
+                                    title={sp.hint}
+                                    disabled={mentor.isPending}
+                                    onClick={() => applySpeedPreset(sp.key)}
+                                    className={`text-[10px] leading-tight text-center px-1 py-1.5 rounded-md border font-medium transition-colors ${
+                                      active
+                                        ? "bg-orange-500/90 border-orange-400 text-white"
+                                        : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
+                                    } disabled:opacity-50`}
+                                  >
+                                    {sp.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <Kpi
                         label="RPM"
                         hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting."
@@ -12723,48 +12787,6 @@ ${stabSection}
                                 {fmtInt(firstRpm)} first pass
                               </span>
                             )}
-                          </>
-                        }
-                      />
-                      <Kpi
-                        label={UL("SFM", "m/min")}
-                        hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing. Use the preset buttons to trade speed for tool life (or the reverse)."
-                        value={
-                          <>
-                            {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
-                            {firstSfm != null && (
-                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
-                              </span>
-                            )}
-                            <span className="block mt-2 pt-2 border-t border-zinc-700/50">
-                              <span className="flex items-center justify-between text-[8px] uppercase tracking-wider text-zinc-500 font-medium mb-1 px-0.5">
-                                <span>Tool Life</span>
-                                <span>Speed Preset</span>
-                                <span>Max MRR</span>
-                              </span>
-                              <span className="grid grid-cols-5 gap-1">
-                                {SPEED_PRESETS.map(sp => {
-                                  const active = form.speed_preset === sp.key;
-                                  return (
-                                    <button
-                                      key={sp.key}
-                                      type="button"
-                                      title={sp.hint}
-                                      disabled={mentor.isPending}
-                                      onClick={() => applySpeedPreset(sp.key)}
-                                      className={`text-[8px] leading-tight text-center px-0.5 py-1 rounded border font-normal transition-colors ${
-                                        active
-                                          ? "bg-orange-500/90 border-orange-400 text-white font-semibold"
-                                          : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
-                                      } disabled:opacity-50`}
-                                    >
-                                      {sp.label}
-                                    </button>
-                                  );
-                                })}
-                              </span>
-                            </span>
                           </>
                         }
                       />
