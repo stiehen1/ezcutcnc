@@ -12737,26 +12737,33 @@ ${stabSection}
                                 {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
                               </span>
                             )}
-                            <span className="block mt-1.5 flex flex-wrap items-center gap-0.5">
-                              {SPEED_PRESETS.map(sp => {
-                                const active = form.speed_preset === sp.key;
-                                return (
-                                  <button
-                                    key={sp.key}
-                                    type="button"
-                                    title={sp.hint}
-                                    disabled={mentor.isPending}
-                                    onClick={() => applySpeedPreset(sp.key)}
-                                    className={`text-[8px] leading-none px-1.5 py-1 rounded border font-normal transition-colors ${
-                                      active
-                                        ? "bg-orange-500/90 border-orange-400 text-white font-semibold"
-                                        : "bg-zinc-700/50 border-zinc-600/60 text-zinc-300 hover:bg-zinc-600/60"
-                                    } disabled:opacity-50`}
-                                  >
-                                    {sp.label}
-                                  </button>
-                                );
-                              })}
+                            <span className="block mt-2 pt-2 border-t border-zinc-700/50">
+                              <span className="flex items-center justify-between text-[8px] uppercase tracking-wider text-zinc-500 font-medium mb-1 px-0.5">
+                                <span>Tool Life</span>
+                                <span>Speed Preset</span>
+                                <span>Max MRR</span>
+                              </span>
+                              <span className="grid grid-cols-5 gap-1">
+                                {SPEED_PRESETS.map(sp => {
+                                  const active = form.speed_preset === sp.key;
+                                  return (
+                                    <button
+                                      key={sp.key}
+                                      type="button"
+                                      title={sp.hint}
+                                      disabled={mentor.isPending}
+                                      onClick={() => applySpeedPreset(sp.key)}
+                                      className={`text-[8px] leading-tight text-center px-0.5 py-1 rounded border font-normal transition-colors ${
+                                        active
+                                          ? "bg-orange-500/90 border-orange-400 text-white font-semibold"
+                                          : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
+                                      } disabled:opacity-50`}
+                                    >
+                                      {sp.label}
+                                    </button>
+                                  );
+                                })}
+                              </span>
                             </span>
                           </>
                         }
