@@ -4378,6 +4378,64 @@ export async function registerRoutes(
     res.json(r.rows[0]);
   });
 
+  // Spelling + grammar check for announcement text (admin preview, before publish)
+  app.post("/api/admin/announcements/check", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { headline, subheadline, bullets } = req.body;
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: "Grammar check not configured — contact support" });
+
+    // Build a stable, indexed list of fields so we can map corrections back to inputs
+    const fields: { id: string; label: string; text: string }[] = [];
+    if (typeof headline === "string" && headline.trim()) fields.push({ id: "headline", label: "Headline", text: headline });
+    if (typeof subheadline === "string" && subheadline.trim()) fields.push({ id: "subheadline", label: "Subheadline", text: subheadline });
+    (Array.isArray(bullets) ? bullets : []).forEach((b: unknown, i: number) => {
+      if (typeof b === "string" && b.trim()) fields.push({ id: `bullet:${i}`, label: `Bullet ${i + 1}`, text: b });
+    });
+    if (!fields.length) return res.json({ fields: [] });
+
+    try {
+      const client = new Anthropic({ apiKey });
+      const prompt = `You are a copy editor for short product-announcement UI text. For each field below, return a corrected version fixing spelling and grammar ONLY. Do NOT rewrite for style, change meaning, add/remove content, or alter intentional product names, capitalization, or punctuation choices beyond what grammar requires (e.g. "CORECutCNC", "SFM" stay as-is). Preserve the original tone and any exclamation marks.
+
+Return ONLY a JSON object of this exact shape, no prose:
+{"fields":[{"id":"<id>","corrected":"<corrected text>","changed":<true|false>}]}
+
+Fields:
+${JSON.stringify(fields.map(f => ({ id: f.id, text: f.text })), null, 2)}`;
+
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = response.content.find(c => c.type === "text")?.text ?? "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+      const byId: Record<string, { corrected: string; changed: boolean }> = {};
+      for (const f of parsed.fields ?? []) byId[f.id] = { corrected: String(f.corrected ?? ""), changed: !!f.changed };
+
+      // Re-join with original text + labels so the client can render side-by-side
+      const result = fields.map(f => {
+        const c = byId[f.id];
+        const corrected = c?.corrected ?? f.text;
+        return {
+          id: f.id,
+          label: f.label,
+          original: f.text,
+          corrected,
+          changed: !!c?.changed && corrected.trim() !== f.text.trim(),
+        };
+      });
+      res.json({ fields: result });
+    } catch (err: any) {
+      console.warn("[Announcement check]", err?.message ?? err);
+      res.status(502).json({ error: "Grammar check failed — try again" });
+    }
+  });
+
   app.post("/api/admin/announcements/:id/deactivate", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     const { pool } = await import("./db");
