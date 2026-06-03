@@ -12791,7 +12791,7 @@ ${stabSection}
                                 </span>
                               )}
                             </div>
-                            {/* Exact SFM entry */}
+                            {/* Exact SFM entry — clear the field (or click a preset) to resume presets. */}
                             <div className="mt-1.5 flex items-center gap-1">
                               <input
                                 type="text"
@@ -12804,15 +12804,6 @@ ${stabSection}
                                 onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
                                 className="w-20 text-xs px-1.5 py-1 rounded border border-zinc-600/60 bg-zinc-800/60 text-white placeholder:text-zinc-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
                               />
-                              {form.sfm_override > 0 && (
-                                <button
-                                  type="button"
-                                  title="Clear manual SFM and return to preset"
-                                  disabled={mentor.isPending}
-                                  onClick={() => { setSfmOverrideInput(""); applySpeedPreset(form.speed_preset); }}
-                                  className="text-[10px] px-1.5 py-1 rounded border border-zinc-600/60 bg-zinc-700/40 text-zinc-300 hover:bg-zinc-600/60 hover:text-white disabled:opacity-50"
-                                >Auto</button>
-                              )}
                             </div>
                             {customer.sfm_control?.mode === "manual" && customer.sfm_control?.clamped && (
                               <div className="mt-1 text-[9px] leading-tight text-amber-400">
@@ -12853,7 +12844,7 @@ ${stabSection}
                             </div>
                             {form.sfm_override > 0 && (
                               <div className="mt-1 text-[9px] text-zinc-500 leading-tight">
-                                Manual SFM active — presets paused. Click a preset or “Auto” to resume.
+                                Manual SFM active — presets paused. Clear the field or click a preset to resume.
                               </div>
                             )}
                           </div>
