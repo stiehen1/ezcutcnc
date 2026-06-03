@@ -3363,6 +3363,15 @@ export default function Mentor() {
     // Defer so the re-run reads the updated form (runRef syncs each render).
     setTimeout(() => { void runRef.current(); }, 0);
   };
+  // Export-friendly label for the chosen speed preset (fuller than the button
+  // labels). Used in copy/email text and PDF so a biased SFM is explained.
+  const SPEED_PRESET_EXPORT_LABEL: Record<typeof form.speed_preset, string> = {
+    max_life:        "Max Tool Life (reduced SFM)",
+    better_life:     "Better Tool Life (reduced SFM)",
+    balanced:        "Balanced (app-recommended SFM)",
+    high_throughput: "High Throughput (raised SFM)",
+    max_mrr:         "Max MRR (raised SFM)",
+  };
 
   const result: any = mentor.data;
   const customer = result?.customer ?? null;
@@ -3418,6 +3427,9 @@ export default function Mentor() {
       : null;
 
     const milSection = mil ? `
+      ${form.speed_preset && form.speed_preset !== "balanced"
+        ? `<div style="font-size:9px;color:#b45309;margin:2px 0 4px 0;font-weight:600;">Speed Preset: ${SPEED_PRESET_EXPORT_LABEL[form.speed_preset]} — SFM biased from the app's balanced recommendation.</div>`
+        : ""}
       <div class="kpi-grid">
         ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first pass</span>` : "") : null)}
         ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first pass</span>` : "") : null)}
@@ -4710,6 +4722,7 @@ ${stabSection}
       lines.push("STRATEGY");
       lines.push(DIV);
       lines.push(L("Operation",    modeLabel[form.mode] ?? form.mode));
+      lines.push(L("Speed Preset", SPEED_PRESET_EXPORT_LABEL[form.speed_preset] ?? "Balanced (app-recommended SFM)"));
       if (wocIn != null) lines.push(L("WOC (Radial)",  `${wocIn.toFixed(4)}"  (${wocPct.toFixed(1)}% Ø)`));
       if (docIn != null) lines.push(L("DOC (Axial)",   `${docIn.toFixed(4)}"  (${docXd.toFixed(2)}×D)`));
       if (wocPct)        lines.push(L("Optimal Load",  `${wocPct.toFixed(1)}%`));
