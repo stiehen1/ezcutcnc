@@ -250,6 +250,44 @@ def biased_sfm(rated_sfm: float, preset: str, material_group: str) -> float:
             out = max(out, min(float(floor), rated_sfm))
     return out
 
+def speed_envelope(rated_sfm: float, material_group: str):
+    """Return (lo, hi) — the safe SFM band a manual override is clamped to.
+    Defined by the speed-preset extremes: lo = the Max Life value (incl. the
+    rubbing floor), hi = the Max MRR value. Keeps manual entry inside the same
+    calibrated range the preset buttons cover."""
+    lo = biased_sfm(rated_sfm, "max_life", material_group)
+    hi = rated_sfm * speed_preset_factor("max_mrr", material_group)
+    if lo > hi:  # degenerate (floor above ceiling for a very slow job) — swap
+        lo, hi = hi, lo
+    return lo, hi
+
+def resolve_sfm(rated_sfm: float, payload: dict, material_group: str):
+    """Resolve the SFM to actually use, honoring a manual override if present.
+
+    Returns (sfm, info) where info is a dict describing what happened:
+      {"mode": "preset"|"manual", "clamped": bool, "requested": float|None,
+       "lo": float, "hi": float}
+    Manual override (payload['sfm_override'] > 0) wins over the preset and is
+    clamped to the safe envelope; a clamp is flagged so the UI can warn."""
+    try:
+        override = float(payload.get("sfm_override", 0) or 0)
+    except (TypeError, ValueError):
+        override = 0.0
+    lo, hi = speed_envelope(rated_sfm, material_group)
+    if override > 0:
+        clamped_val = max(lo, min(hi, override))
+        return clamped_val, {
+            "mode": "manual",
+            "clamped": abs(clamped_val - override) > 0.5,
+            "requested": round(override, 1),
+            "lo": round(lo, 1), "hi": round(hi, 1),
+        }
+    preset = str(payload.get("speed_preset") or "balanced")
+    return biased_sfm(rated_sfm, preset, material_group), {
+        "mode": "preset", "clamped": False, "requested": None,
+        "lo": round(lo, 1), "hi": round(hi, 1),
+    }
+
 # Unit power (HP·min/in³) at nominal chip thickness, TiAlN carbide tooling.
 # Hardness correction is applied separately via hardness_kc_mult() in run_milling().
 # Sources: Machinery's Handbook 31, Kennametal/Sandvik cutting data handbooks.
@@ -4078,11 +4116,11 @@ def run(payload=None):
     _coating_key = str(data.get("coating") or "").strip()
     base_sfm *= _coating_sfm_factor(_coating_key, material_group)
 
-    # Speed preset (user SFM bias) — applied last so it scales the fully-resolved
-    # recommended SFM. balanced = 1.00 (no change). Tool life recomputes naturally
-    # downstream because sfm_actual now reflects the biased speed.
-    _speed_preset = str(data.get("speed_preset") or "balanced")
-    base_sfm = biased_sfm(base_sfm, _speed_preset, material_group)
+    # Speed control — applied last so it scales the fully-resolved recommended
+    # SFM. A manual sfm_override (if > 0) wins and is clamped to the safe
+    # envelope; otherwise the speed preset biases it (balanced = no change).
+    # Tool life recomputes naturally downstream because sfm_actual reflects this.
+    base_sfm, _sfm_info = resolve_sfm(base_sfm, data, material_group)
 
     # Surfacing: RPM driven by D_eff at contact point, not tool OD
     _sfm_dia = _surf_d_eff if (mode == "surfacing" and _surf_d_eff) else data["diameter"]
@@ -6964,6 +7002,7 @@ def run(payload=None):
             "rpm": rpm,
             "sfm": sfm_actual,
             "sfm_target": base_sfm,
+            "sfm_control": _sfm_info,  # {mode, clamped, requested, lo, hi} for UI
             "feed_ipm": feed_ipm,
             "doc_in": doc,
             "woc_in": woc,

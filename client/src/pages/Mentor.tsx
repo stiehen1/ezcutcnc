@@ -2012,6 +2012,8 @@ export default function Mentor() {
 
     // Speed preset — biases recommended SFM to trade speed for tool life. balanced = no change.
     speed_preset: "balanced" as "max_life" | "better_life" | "balanced" | "high_throughput" | "max_mrr",
+    // Manual SFM override — when > 0, used directly (clamped to safe band) instead of the preset.
+    sfm_override: 0,
 
     machine_hp: 15,
     live_tool_connection: "",
@@ -3357,10 +3359,29 @@ export default function Mentor() {
     { key: "high_throughput", label: "Faster",     hint: "Raised SFM for higher MRR" },
     { key: "max_mrr",         label: "Max MRR",    hint: "Highest SFM — maximum metal removal, shortest tool life" },
   ];
+  // Local text state for the manual SFM input so typing doesn't re-run per keystroke.
+  const [sfmOverrideInput, setSfmOverrideInput] = React.useState("");
   const applySpeedPreset = (preset: typeof form.speed_preset) => {
-    if (preset === form.speed_preset) return;
-    setForm(p => ({ ...p, speed_preset: preset }));
+    // Clicking a preset exits Manual mode: clear the SFM override (and its input
+    // box) so the engine returns to the preset-biased default numbers.
+    if (preset === form.speed_preset && !form.sfm_override) return;
+    setSfmOverrideInput("");
+    setForm(p => ({ ...p, speed_preset: preset, sfm_override: 0 }));
     // Defer so the re-run reads the updated form (runRef syncs each render).
+    setTimeout(() => { void runRef.current(); }, 0);
+  };
+  const applySfmOverride = () => {
+    const v = parseInt(sfmOverrideInput, 10);  // SFM is a whole number
+    if (!isFinite(v) || v <= 0) {
+      // Empty/invalid → revert to preset mode.
+      if (form.sfm_override) {
+        setForm(p => ({ ...p, sfm_override: 0 }));
+        setTimeout(() => { void runRef.current(); }, 0);
+      }
+      return;
+    }
+    if (v === form.sfm_override) return;
+    setForm(p => ({ ...p, sfm_override: v }));
     setTimeout(() => { void runRef.current(); }, 0);
   };
   // Export-friendly label for the chosen speed preset (fuller than the button
@@ -3433,7 +3454,9 @@ export default function Mentor() {
       : null;
 
     const milSection = mil ? `
-      ${form.speed_preset && form.speed_preset !== "balanced"
+      ${(mil as any).sfm_control?.mode === "manual"
+        ? `<div style="font-size:9px;color:#0369a1;margin:2px 0 4px 0;font-weight:600;">Speed: Manual — ${Math.round(mil.sfm ?? 0)} SFM set by user (clamped to safe range for this material).</div>`
+        : form.speed_preset && form.speed_preset !== "balanced"
         ? `<div style="font-size:9px;color:#b45309;margin:2px 0 4px 0;font-weight:600;">Speed Preset: ${SPEED_PRESET_EXPORT_LABEL[form.speed_preset]} — SFM biased from the app's balanced recommendation.</div>`
         : ""}
       <div class="kpi-grid">
@@ -4728,7 +4751,9 @@ ${stabSection}
       lines.push("STRATEGY");
       lines.push(DIV);
       lines.push(L("Operation",    modeLabel[form.mode] ?? form.mode));
-      lines.push(L("Speed Preset", SPEED_PRESET_EXPORT_LABEL[form.speed_preset] ?? "Balanced (app-recommended SFM)"));
+      lines.push(L("Speed Preset", cust?.sfm_control?.mode === "manual"
+        ? `Manual — ${Math.round(cust.sfm ?? 0)} SFM (set by user)`
+        : (SPEED_PRESET_EXPORT_LABEL[form.speed_preset] ?? "Balanced (app-recommended SFM)")));
       if (wocIn != null) lines.push(L("WOC (Radial)",  `${wocIn.toFixed(4)}"  (${wocPct.toFixed(1)}% Ø)`));
       if (docIn != null) lines.push(L("DOC (Axial)",   `${docIn.toFixed(4)}"  (${docXd.toFixed(2)}×D)`));
       if (wocPct)        lines.push(L("Optimal Load",  `${wocPct.toFixed(1)}%`));
@@ -12723,8 +12748,8 @@ ${stabSection}
                           Shown above RPM since it's the primary speed control. */}
                       <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                          {/* Value */}
-                          <div className="shrink-0 sm:w-32">
+                          {/* Value + manual override */}
+                          <div className="shrink-0 sm:w-40">
                             <div className="text-xs text-muted-foreground flex items-center gap-1">
                               <TooltipProvider delayDuration={200}>
                                 <Tooltip>
@@ -12737,9 +12762,12 @@ ${stabSection}
                                       </svg>
                                     </span>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-56 text-xs">Surface Feet per Minute — cutting edge velocity at the tool OD; the primary driver of heat and tool life. Use the preset to trade speed for tool life (or the reverse).</TooltipContent>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">Surface Feet per Minute — cutting edge velocity at the tool OD; the primary driver of heat and tool life. Use a preset, or type an exact SFM (clamped to the safe range for this material).</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
+                              {customer.sfm_control?.mode === "manual" && (
+                                <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold">Manual</span>
+                              )}
                             </div>
                             <div className="mt-1 text-lg font-bold leading-tight">
                               {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
@@ -12749,6 +12777,35 @@ ${stabSection}
                                 </span>
                               )}
                             </div>
+                            {/* Exact SFM entry */}
+                            <div className="mt-1.5 flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="Set SFM"
+                                value={sfmOverrideInput}
+                                disabled={mentor.isPending}
+                                onChange={e => setSfmOverrideInput(e.target.value.replace(/[^0-9]/g, ""))}
+                                onBlur={applySfmOverride}
+                                onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
+                                className="w-20 text-xs px-1.5 py-1 rounded border border-zinc-600/60 bg-zinc-800/60 text-white placeholder:text-zinc-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+                              />
+                              {form.sfm_override > 0 && (
+                                <button
+                                  type="button"
+                                  title="Clear manual SFM and return to preset"
+                                  disabled={mentor.isPending}
+                                  onClick={() => { setSfmOverrideInput(""); applySpeedPreset(form.speed_preset); }}
+                                  className="text-[10px] px-1.5 py-1 rounded border border-zinc-600/60 bg-zinc-700/40 text-zinc-300 hover:bg-zinc-600/60 hover:text-white disabled:opacity-50"
+                                >Auto</button>
+                              )}
+                            </div>
+                            {customer.sfm_control?.mode === "manual" && customer.sfm_control?.clamped && (
+                              <div className="mt-1 text-[9px] leading-tight text-amber-400">
+                                ⚠ {customer.sfm_control.requested} SFM is outside the safe range
+                                ({customer.sfm_control.lo}–{customer.sfm_control.hi}) — clamped to {Math.round(customer.sfm ?? 0)}.
+                              </div>
+                            )}
                           </div>
 
                           {/* Speed preset selector */}
@@ -12760,7 +12817,8 @@ ${stabSection}
                             </div>
                             <div className="grid grid-cols-5 gap-1">
                               {SPEED_PRESETS.map(sp => {
-                                const active = form.speed_preset === sp.key;
+                                // In manual mode no preset is active (the typed SFM wins).
+                                const active = !form.sfm_override && form.speed_preset === sp.key;
                                 return (
                                   <button
                                     key={sp.key}
@@ -12779,6 +12837,11 @@ ${stabSection}
                                 );
                               })}
                             </div>
+                            {form.sfm_override > 0 && (
+                              <div className="mt-1 text-[9px] text-zinc-500 leading-tight">
+                                Manual SFM active — presets paused. Click a preset or “Auto” to resume.
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
