@@ -90,6 +90,11 @@ export default function Admin() {
   const [annSaving, setAnnSaving] = React.useState(false);
   const [annMsg, setAnnMsg] = React.useState("");
   const [previewMode, setPreviewMode] = React.useState(false);
+  const [annChecking, setAnnChecking] = React.useState(false);
+  type AnnSuggestion = { id: string; label: string; original: string; corrected: string; changed: boolean };
+  const [annSuggestions, setAnnSuggestions] = React.useState<AnnSuggestion[] | null>(null);
+  // True once the user has been shown fixes for the current text, so Publish lets them override.
+  const [annReviewed, setAnnReviewed] = React.useState(false);
 
   // Access form state
   const [newEmail, setNewEmail] = React.useState("");
@@ -153,8 +158,70 @@ export default function Admin() {
     if (r.ok) setAnnouncements(await r.json());
   }
 
+  // Calls the check endpoint. Returns the suggestions, or null if the check itself errored.
+  async function runCheck(): Promise<AnnSuggestion[] | null> {
+    const r = await fetch(`/api/admin/announcements/check?token=${encodeURIComponent(token())}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ headline: annHeadline, subheadline: annSubheadline, bullets: annBullets }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return (d.fields || []) as AnnSuggestion[];
+  }
+
+  async function checkAnnouncement() {
+    if (!annHeadline.trim() && !annBullets.some(b => b.trim())) { setAnnMsg("Add some text to check first."); return; }
+    setAnnChecking(true);
+    setAnnSuggestions(null);
+    try {
+      const sugg = await runCheck();
+      if (sugg) {
+        setAnnSuggestions(sugg);
+        setAnnReviewed(true);
+        if (!sugg.some(s => s.changed)) { setAnnMsg("No spelling or grammar issues found. ✓"); setTimeout(() => setAnnMsg(""), 4000); }
+      } else {
+        setAnnMsg("Check failed.");
+      }
+    } finally {
+      setAnnChecking(false);
+    }
+  }
+
+  function applySuggestion(s: AnnSuggestion) {
+    if (s.id === "headline") setAnnHeadline(s.corrected);
+    else if (s.id === "subheadline") setAnnSubheadline(s.corrected);
+    else if (s.id.startsWith("bullet:")) {
+      const idx = parseInt(s.id.split(":")[1], 10);
+      setAnnBullets(prev => prev.map((b, i) => (i === idx ? s.corrected : b)));
+    }
+    setAnnSuggestions(prev => (prev ? prev.filter(x => x.id !== s.id) : prev));
+  }
+
+  function applyAllSuggestions() {
+    (annSuggestions || []).filter(s => s.changed).forEach(applySuggestion);
+    setAnnSuggestions(null);
+  }
+
   async function publishAnnouncement() {
     if (!annVersion.trim() || !annHeadline.trim()) { setAnnMsg("Version and headline are required."); return; }
+
+    // Auto-check before publishing — unless the user already reviewed fixes for this text
+    // and chose to publish anyway. If the check API errors, we don't block publishing.
+    if (!annReviewed) {
+      setAnnChecking(true);
+      const sugg = await runCheck();
+      setAnnChecking(false);
+      if (sugg && sugg.some(s => s.changed)) {
+        setAnnSuggestions(sugg);
+        setAnnReviewed(true);
+        setAnnMsg("Found possible fixes — review below, then click Publish again to publish anyway.");
+        return;
+      }
+      // No issues (or check unavailable) → fall through and publish
+      setAnnReviewed(true);
+    }
+
     const bullets = annBullets.filter(b => b.trim());
     setAnnSaving(true);
     const r = await fetch(`/api/admin/announcements?token=${encodeURIComponent(token())}`, {
@@ -165,6 +232,8 @@ export default function Admin() {
     setAnnSaving(false);
     if (r.ok) {
       setAnnMsg("Published! Users will see this on their next visit.");
+      setAnnSuggestions(null);
+      setAnnReviewed(false);
       setTimeout(() => setAnnMsg(""), 4000);
       loadAnnouncements();
     } else {
@@ -769,9 +838,10 @@ export default function Admin() {
                   <label className="block text-xs text-zinc-400 mb-1">Headline</label>
                   <input
                     type="text"
+                    spellCheck
                     placeholder="e.g. Team Connect is here!"
                     value={annHeadline}
-                    onChange={e => setAnnHeadline(e.target.value)}
+                    onChange={e => { setAnnHeadline(e.target.value); setAnnReviewed(false); }}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
                   />
                 </div>
@@ -779,9 +849,10 @@ export default function Admin() {
                   <label className="block text-xs text-zinc-400 mb-1">Subheadline</label>
                   <input
                     type="text"
+                    spellCheck
                     placeholder="Optional subtitle shown below headline"
                     value={annSubheadline}
-                    onChange={e => setAnnSubheadline(e.target.value)}
+                    onChange={e => { setAnnSubheadline(e.target.value); setAnnReviewed(false); }}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
                   />
                 </div>
@@ -792,12 +863,14 @@ export default function Admin() {
                       <div key={idx} className="flex gap-2 items-center">
                         <input
                           type="text"
+                          spellCheck
                           placeholder="Feature bullet point…"
                           value={b}
                           onChange={e => {
                             const next = [...annBullets];
                             next[idx] = e.target.value;
                             setAnnBullets(next);
+                            setAnnReviewed(false);
                           }}
                           className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
                         />
@@ -830,13 +903,53 @@ export default function Admin() {
                   {previewMode ? "Hide preview" : "Preview modal →"}
                 </button>
                 <button
+                  onClick={checkAnnouncement}
+                  disabled={annChecking}
+                  className="text-xs text-amber-300 hover:text-amber-200 border border-amber-600/50 rounded-lg px-3 py-1.5 disabled:opacity-40 transition-colors"
+                >
+                  {annChecking ? "Checking…" : "Check spelling & grammar"}
+                </button>
+                <button
                   onClick={publishAnnouncement}
-                  disabled={annSaving}
+                  disabled={annSaving || annChecking}
                   className="bg-rose-700 hover:bg-rose-600 text-white rounded-lg px-4 py-1.5 text-xs font-semibold disabled:opacity-40 transition-colors"
                 >
-                  {annSaving ? "Publishing…" : "Publish Announcement"}
+                  {annSaving ? "Publishing…"
+                    : annChecking ? "Checking…"
+                    : annReviewed && annSuggestions && annSuggestions.some(s => s.changed) ? "Publish anyway"
+                    : "Publish Announcement"}
                 </button>
               </div>
+
+              {/* Spelling & grammar suggestions */}
+              {annSuggestions && annSuggestions.some(s => s.changed) && (
+                <div className="border border-amber-600/40 rounded-xl bg-amber-950/20 px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-amber-300">Suggested fixes</div>
+                    <button
+                      onClick={applyAllSuggestions}
+                      className="text-[11px] font-semibold text-amber-200 hover:text-white border border-amber-500/50 rounded-md px-2 py-1 transition-colors"
+                    >
+                      Apply all
+                    </button>
+                  </div>
+                  {annSuggestions.filter(s => s.changed).map(s => (
+                    <div key={s.id} className="text-xs space-y-1 border-t border-amber-700/20 pt-2 first:border-t-0 first:pt-0">
+                      <div className="text-[10px] uppercase tracking-wide text-amber-500/80 font-bold">{s.label}</div>
+                      <div className="text-zinc-500 line-through">{s.original}</div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-green-300 flex-1">{s.corrected}</span>
+                        <button
+                          onClick={() => applySuggestion(s)}
+                          className="shrink-0 text-[11px] text-amber-200 hover:text-white border border-amber-500/40 rounded px-2 py-0.5 transition-colors"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {annMsg && (
                 <div className={`text-xs rounded-lg px-3 py-2 ${annMsg.startsWith("Published") ? "bg-green-900/40 border border-green-600/40 text-green-300" : "bg-red-900/40 border border-red-600/40 text-red-300"}`}>
