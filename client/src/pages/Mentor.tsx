@@ -3361,14 +3361,20 @@ export default function Mentor() {
   ];
   // Local text state for the manual SFM input so typing doesn't re-run per keystroke.
   const [sfmOverrideInput, setSfmOverrideInput] = React.useState("");
+  // Re-run trigger for speed changes. Handlers bump this AND update the form;
+  // an effect below fires the calc only AFTER React commits the new form, so the
+  // run always reads the updated speed_preset / sfm_override (no setTimeout race
+  // where the stale form would re-run with the old value).
+  const [speedRerunTick, setSpeedRerunTick] = React.useState(0);
+  const speedRerunArmed = React.useRef(false);
   const applySpeedPreset = (preset: typeof form.speed_preset) => {
     // Clicking a preset exits Manual mode: clear the SFM override (and its input
     // box) so the engine returns to the preset-biased default numbers.
     if (preset === form.speed_preset && !form.sfm_override) return;
     setSfmOverrideInput("");
     setForm(p => ({ ...p, speed_preset: preset, sfm_override: 0 }));
-    // Defer so the re-run reads the updated form (runRef syncs each render).
-    setTimeout(() => { void runRef.current(); }, 0);
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
   };
   const applySfmOverride = () => {
     const v = parseInt(sfmOverrideInput, 10);  // SFM is a whole number
@@ -3376,14 +3382,22 @@ export default function Mentor() {
       // Empty/invalid → revert to preset mode.
       if (form.sfm_override) {
         setForm(p => ({ ...p, sfm_override: 0 }));
-        setTimeout(() => { void runRef.current(); }, 0);
+        speedRerunArmed.current = true;
+        setSpeedRerunTick(t => t + 1);
       }
       return;
     }
     if (v === form.sfm_override) return;
     setForm(p => ({ ...p, sfm_override: v }));
-    setTimeout(() => { void runRef.current(); }, 0);
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
   };
+  // Fire the re-run after the speed change commits to form state.
+  React.useEffect(() => {
+    if (!speedRerunArmed.current) return;
+    speedRerunArmed.current = false;
+    void runRef.current();
+  }, [speedRerunTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // Export-friendly label for the chosen speed preset (fuller than the button
   // labels). Used in copy/email text and PDF so a biased SFM is explained.
   const SPEED_PRESET_EXPORT_LABEL: Record<typeof form.speed_preset, string> = {
