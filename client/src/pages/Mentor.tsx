@@ -4899,6 +4899,19 @@ ${stabSection}
         : "✓ OK — standard flood coolant or air blast";
       lines.push(L("Chip Evacuation", chipEvacRisk));
 
+      // Tool Life Prediction — mirror the on-screen / PDF box. Cutting time, plus
+      // the ~20%-duty wall-clock equivalent so it isn't read as hours-at-machine.
+      if (eng?.tool_life_min != null) {
+        lines.push("");
+        lines.push("TOOL LIFE PREDICTION");
+        lines.push(DIV);
+        lines.push(L("Est. Tool Life", `${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs) of cutting time`));
+        lines.push(`Spindle-on time in the cut — not hours at the machine. At a typical ~20%`);
+        lines.push(`spindle duty cycle that's roughly ${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs of shop time per tool.`);
+        lines.push(`Varies with coating, runout, coolant & machine condition. Estimate only,`);
+        lines.push(`not a guarantee from Core Cutter LLC.`);
+      }
+
       // Engine advisory notes
       if (cust.status && cust.status !== "ok") lines.push(L("Status", cust.status));
       if (cust.risk)    lines.push(L("Risk Flag",   cust.risk));
