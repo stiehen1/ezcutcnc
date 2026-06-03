@@ -10950,36 +10950,10 @@ ${stabSection}
                       ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
                       ["MRR", mil.mrr_in3_min != null ? (mil.mrr_in3_min * feedMult).toFixed(2) : "—"],
                     ].map(([label, val, note]) => (
-                      // Grid cells stretch to the tallest cell (the SFM tile, which holds
-                      // the speed-preset buttons), so justify-center keeps every other
-                      // tile's value vertically centered for a consistent look.
-                      <div key={label} className="flex flex-col items-center justify-center py-2 bg-zinc-800/60">
+                      <div key={label} className="flex flex-col items-center py-2 bg-zinc-800/60">
                         <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
                         <span className={`text-sm font-bold mt-0.5 ${note ? "text-amber-400" : "text-white"}`}>{val}</span>
                         {note && <span className="text-[8px] text-amber-500 leading-tight text-center px-0.5">{note}</span>}
-                        {label === "SFM" && (
-                          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-0.5 px-1">
-                            {SPEED_PRESETS.map(sp => {
-                              const active = form.speed_preset === sp.key;
-                              return (
-                                <button
-                                  key={sp.key}
-                                  type="button"
-                                  title={sp.hint}
-                                  disabled={mentor.isPending}
-                                  onClick={() => applySpeedPreset(sp.key)}
-                                  className={`text-[8px] leading-none px-1.5 py-1 rounded border transition-colors ${
-                                    active
-                                      ? "bg-orange-500/90 border-orange-400 text-white font-semibold"
-                                      : "bg-zinc-700/50 border-zinc-600/60 text-zinc-300 hover:bg-zinc-600/60"
-                                  } disabled:opacity-50`}
-                                >
-                                  {sp.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     ));
                   })()}
@@ -12754,7 +12728,7 @@ ${stabSection}
                       />
                       <Kpi
                         label={UL("SFM", "m/min")}
-                        hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing."
+                        hint="Surface Feet per Minute — the cutting edge velocity at the tool OD. The primary driver of heat generation and tool life. Too high for the material causes rapid edge wear; too low causes rubbing. Use the preset buttons to trade speed for tool life (or the reverse)."
                         value={
                           <>
                             {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
@@ -12763,6 +12737,27 @@ ${stabSection}
                                 {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
                               </span>
                             )}
+                            <span className="block mt-1.5 flex flex-wrap items-center gap-0.5">
+                              {SPEED_PRESETS.map(sp => {
+                                const active = form.speed_preset === sp.key;
+                                return (
+                                  <button
+                                    key={sp.key}
+                                    type="button"
+                                    title={sp.hint}
+                                    disabled={mentor.isPending}
+                                    onClick={() => applySpeedPreset(sp.key)}
+                                    className={`text-[8px] leading-none px-1.5 py-1 rounded border font-normal transition-colors ${
+                                      active
+                                        ? "bg-orange-500/90 border-orange-400 text-white font-semibold"
+                                        : "bg-zinc-700/50 border-zinc-600/60 text-zinc-300 hover:bg-zinc-600/60"
+                                    } disabled:opacity-50`}
+                                  >
+                                    {sp.label}
+                                  </button>
+                                );
+                              })}
+                            </span>
                           </>
                         }
                       />
