@@ -1467,7 +1467,12 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
         h_eff = effective_chip_thickness(data, material_group, ipt, woc, diam_eff, doc)
 
     # ---- Cutting force (must scale with DOC) ----
-    h_eff = effective_chip_thickness(data, material_group, ipt, woc, diam_eff, doc)
+    # Force-path chip thickness uses the UN-HEM-boosted feed: the HEM_IPT_MULT is
+    # a programming boost for MRR, not the instantaneous chip each tooth bites.
+    # Dividing it out keeps force/deflection physical (light radial arc → low
+    # engagement force) while MRR/HP stay tied to the real boosted feed.
+    _ipt_force = ipt / float(data.get("_hem_force_decouple", 1.0) or 1.0)
+    h_eff = effective_chip_thickness(data, material_group, _ipt_force, woc, diam_eff, doc)
 
     # Ballnose center-contact ratio (geometry advisory input)
     center_contact_ratio = None
@@ -4250,10 +4255,19 @@ def run(payload=None):
     else:
         chip_factor = chip_thinning_factor(data["woc_pct"], data["diameter"])
     ipt *= chip_factor
-    # HEM/trochoidal programmed chip load boost (on top of chip thinning)
+    # HEM/trochoidal programmed chip load boost (on top of chip thinning).
+    # This boost is a PROGRAMMING decision (run a heavier feed because the light
+    # radial arc tolerates it) — it raises MRR/HP honestly, but the instantaneous
+    # chip each tooth actually bites for FORCE/DEFLECTION should NOT carry the full
+    # boost (the thin radial slice keeps engagement force low — that's the whole
+    # point of HEM). We store the multiplier so calc_state can divide it back out
+    # of the force-path chip thickness, decoupling force/deflection from the feed
+    # boost while MRR/HP stay tied to the real (boosted) feed.
+    data["_hem_force_decouple"] = 1.0
     if data["mode"] in ("hem", "trochoidal"):
         _hem_ipt_mult = HEM_IPT_MULT.get(_mat_key, HEM_IPT_MULT.get(material_group, 2.0))
         ipt *= _hem_ipt_mult
+        data["_hem_force_decouple"] = _hem_ipt_mult
 
     # Slotting feed pull-back: in clean non-ferrous past 1.0×D the chip load is
     # derated by (1.0 / doc_xd) so MRR holds at the 1×D rate (factor set to 1.0
