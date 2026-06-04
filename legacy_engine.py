@@ -568,18 +568,22 @@ SPINDLE_TORQUE_CAPACITY = {
     "BMT65":  550,
 }
 
-# Holder runout correction: factor applied to IPT (1.0 = no correction needed)
-# Lower runout → higher effective chip load per tooth → we can use more of the rated IPT
+# Holder runout correction: factor applied to IPT (1.0 = full rated chip load).
+# Lower runout → all flutes share the cut → more of the rated chip load is usable;
+# higher runout → one flute bites deepest → back off fpt to protect it. The best
+# interfaces (shrink fit / Capto) are rewarded ABOVE 1.0 — a chip-load bonus over
+# the calibrated IPT_FRAC baseline for their near-zero runout. Spread widened
+# 2026-06-04: ER 0.85 → shrink fit/Capto 1.08 (was 0.90 → 1.00).
 HOLDER_RUNOUT_FACTOR = {
-    "shrink_fit": 1.00,   # <1 µm TIR
-    "hydraulic": 0.97,    # 1–2 µm TIR
-    "capto": 1.00,        # integral shank
-    "hp_collet": 0.97,    # SK/FX-style: ~1–2 µm TIR — matches hydraulic, far better than ER
-    "milling_chuck": 0.95,
-    "er_collet":       0.90,  # 3–5 µm TIR
-    "weldon":          0.92,  # set screw can introduce minor runout
-    "press_fit":       0.99,  # lobed interface — near shrink fit
-    "shell_mill_arbor":0.95,  # face contact good but drive key clearance introduces minor runout
+    "shrink_fit": 1.08,   # <1 µm TIR — best interface, chip-load bonus
+    "capto": 1.08,        # integral shank — best interface, chip-load bonus
+    "press_fit":       1.05,  # lobed interface — near shrink fit
+    "hydraulic": 1.00,    # 1–2 µm TIR
+    "hp_collet": 1.00,    # SK/FX-style: ~1–2 µm TIR — matches hydraulic, far better than ER
+    "milling_chuck": 0.96,
+    "shell_mill_arbor":0.96,  # face contact good but drive key clearance introduces minor runout
+    "weldon":          0.90,  # set screw can introduce minor runout
+    "er_collet":       0.85,  # 3–5 µm TIR — highest runout of common holders, most conservative
 }
 
 # Geometry Kc factor — net effective cutting force relative to standard geometry
