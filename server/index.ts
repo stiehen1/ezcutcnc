@@ -64,17 +64,31 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // A client that aborts mid-upload (e.g. the PDF extract POST hitting its
+    // AbortSignal.timeout) surfaces here as "Request aborted". The socket is
+    // already gone, so trying to write a JSON response throws again and can
+    // take the process down. Log it lightly and bail — there's no client to
+    // answer to.
+    if (err?.message === "Request aborted" || err?.code === "ECONNABORTED" || (req as any).aborted) {
+      console.warn(`[abort] ${req.method} ${req.path} — client aborted before response`);
+      return;
+    }
+
     console.error("Internal Server Error:", err);
 
-    if (res.headersSent) {
+    if (res.headersSent || !res.writable) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    try {
+      return res.status(status).json({ message });
+    } catch {
+      // socket already closed — nothing to send
+    }
   });
 
   // importantly only setup vite in development and after
@@ -92,6 +106,24 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+
+  // Graceful shutdown: when Replit recycles the container (SIGTERM), stop
+  // accepting new connections but let in-flight requests finish instead of
+  // hard-killing them mid-upload. Prevents "Request aborted" churn on restart.
+  let shuttingDown = false;
+  const shutdown = (sig: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`received ${sig} — draining connections`, "shutdown");
+    httpServer.close(() => {
+      log("closed — exiting", "shutdown");
+      process.exit(0);
+    });
+    // Hard cap so we never hang the platform's restart.
+    setTimeout(() => process.exit(0), 10_000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
   httpServer.listen(
     {
