@@ -4650,23 +4650,43 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       // a 2nd attempt would never finish — it only guarantees a client-side timeout.
       // Server 85s < client 95s, so the client always outlives the server attempt and we
       // surface a real error response instead of a bare abort.
-      const response = await client.messages.create(
-        {
-          model: "claude-sonnet-4-6",
-          max_tokens: 2048,
-          messages: [{
-            role: "user",
-            content: [
-              fileBlock,
-              {
-                type: "text",
-                text: EXTRACTION_PROMPT,
-              },
-            ],
-          }],
-        },
-        { timeout: 85_000, maxRetries: 0 },
-      );
+      const _t0 = Date.now();
+      console.log(`[extract] calling Anthropic model=claude-sonnet-4-6 fileBytes=${req.file.size} isImage=${isImage}`);
+      let response;
+      try {
+        response = await client.messages.create(
+          {
+            model: "claude-sonnet-4-6",
+            max_tokens: 2048,
+            messages: [{
+              role: "user",
+              content: [
+                fileBlock,
+                {
+                  type: "text",
+                  text: EXTRACTION_PROMPT,
+                },
+              ],
+            }],
+          },
+          { timeout: 85_000, maxRetries: 0 },
+        );
+      } catch (apiErr: any) {
+        const ms = Date.now() - _t0;
+        // Surface the REAL failure class so prod logs/clients show cause, not "timed out".
+        console.error(`[extract] Anthropic call FAILED after ${ms}ms`, {
+          name: apiErr?.name,
+          status: apiErr?.status,
+          type: apiErr?.error?.type ?? apiErr?.error?.error?.type,
+          message: apiErr?.message,
+        });
+        const status = apiErr?.status ?? 502;
+        return res.status(status === 401 || status === 403 ? 503 : 502).json({
+          error: "Print extraction failed — please enter dimensions manually",
+          detail: `${apiErr?.name ?? "Error"}${apiErr?.status ? ` ${apiErr.status}` : ""}: ${apiErr?.message ?? "unknown"}`,
+        });
+      }
+      console.log(`[extract] Anthropic call OK in ${Date.now() - _t0}ms`);
 
       const text = response.content.find(c => c.type === "text")?.text ?? "";
 
