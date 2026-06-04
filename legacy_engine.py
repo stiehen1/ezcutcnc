@@ -3934,7 +3934,24 @@ def run(payload=None):
         data.setdefault("_lt_damping",  1.0)
         data.setdefault("_lt_class",    None)
 
-    data.setdefault("stickout", float(payload.get("stickout", 2.0)))
+    # Default stickout: when the user/payload didn't supply one, derive it from
+    # the tool geometry instead of a flat 2.0" — LOC + flute_wash + 0.33×D keeps
+    # the flutes clear of the holder without overstating reach (a blanket 2.0"
+    # made short-LOC tools look far less rigid than they run). Falls back to 2.0"
+    # only when LOC is unknown (no SKU selected). Matches the min-stickout floor
+    # formula (which uses a tighter 0.15×D clearance as the hard minimum).
+    _payload_so = payload.get("stickout", None)
+    if _payload_so is not None and float(_payload_so or 0) > 0:
+        data.setdefault("stickout", float(_payload_so))
+    else:
+        _loc_so = float(data.get("loc", payload.get("loc", 0)) or 0)
+        _wash_so = float(data.get("flute_wash", payload.get("flute_wash", 0)) or 0)
+        _dia_so = float(data.get("diameter", payload.get("tool_dia", 0.5)) or 0.5)
+        if _loc_so > 0:
+            _default_so = _loc_so + _wash_so + 0.33 * _dia_so
+        else:
+            _default_so = 2.0
+        data.setdefault("stickout", round(_default_so, 4))
     data["part_stickout"] = float(payload.get("part_stickout", 0) or 0)
     data.setdefault("coolant", payload.get("coolant", "flood"))
     data.setdefault("geometry", payload.get("geometry", "standard"))
