@@ -5666,7 +5666,11 @@ def run(payload=None):
         feed_limiter_hint = "Headroom available — parameters within limits"
     # --- end limiter ---
 
-    _ipt_base = float(IPT_FRAC.get(material_group, IPT_FRAC.get(_mat_key, 0.005))) * float(data.get("diameter", 0.5) or 0.5)
+    # Specific material key FIRST, then legacy group fallback — matches the
+    # base_sfm / actual-ipt lookup order (~line 4169). Checking the group first
+    # bypassed every shop-calibrated per-material IPT_FRAC value (e.g. aluminum
+    # showed the legacy 0.012 group default instead of aluminum_wrought 0.009).
+    _ipt_base = float(IPT_FRAC.get(_mat_key, IPT_FRAC.get(material_group, 0.005))) * float(data.get("diameter", 0.5) or 0.5)
     _woc_pct_out = float(data.get("woc_pct", 50) or 50)
     _chip_thinning_active = _woc_pct_out < 50.0 and float(ipt) > _ipt_base * 1.01
 
