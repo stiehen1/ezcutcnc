@@ -4838,14 +4838,10 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       return res.status(403).json({ error: "This account has been suspended. Contact sales@corecutterusa.com for assistance." });
     }
 
-    // 3. Allowlist — only enforced when the list has at least one entry
-    const { rows: [{ count: allowCount }] } = await pool.query(`SELECT COUNT(*) FROM allowed_emails`);
-    if (Number(allowCount) > 0) {
-      const allowed = await pool.query(`SELECT 1 FROM allowed_emails WHERE email = $1`, [emailLower]);
-      if (allowed.rows.length === 0) {
-        return res.status(403).json({ error: "Access to CoreCutCNC is by invitation only. Contact sales@corecutterusa.com to request access." });
-      }
-    }
+    // NOTE: Open access — no invitation/allowlist gate. Once a user registers
+    // they may use the Toolbox freely. Blocklist (#1) and per-user block (#2)
+    // remain as the only access controls. (allowed_emails gate removed
+    // 2026-06-04 — a single stray row had silently locked out all 45 users.)
     // ──────────────────────────────────────────────────────────────────────
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -4955,14 +4951,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       return res.status(403).json({ error: "Account suspended" });
     }
 
-    // Allowlist check
-    const { rows: [{ count: allowCount }] } = await pool.query(`SELECT COUNT(*) FROM allowed_emails`);
-    if (Number(allowCount) > 0) {
-      const allowed = await pool.query(`SELECT 1 FROM allowed_emails WHERE email = $1`, [emailLower]);
-      if (allowed.rows.length === 0) {
-        return res.status(403).json({ error: "Access by invitation only" });
-      }
-    }
+    // NOTE: Open access — invitation/allowlist gate removed 2026-06-04.
+    // Registered users may use the Toolbox freely; only the blocklist and
+    // per-user block above gate access.
 
     // Create or return existing session (no OTP required — user already verified via welcome modal)
     const token = crypto.randomBytes(24).toString("hex");
