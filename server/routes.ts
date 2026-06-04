@@ -4765,6 +4765,19 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         if (extracted.variable_helix !== true) extracted.variable_helix = true;
       }
 
+      // Uncoated + no stated material → N1 Non-Ferrous. An uncoated tool with no
+      // workpiece material called out is almost always an aluminum/non-ferrous
+      // cutter (TiAlN-style coatings stick to aluminum, so aluminum tools ship
+      // uncoated or DLC). Default to aluminum_wrought, the general N1 bucket.
+      const _matMissing = !extracted.cutting_material ||
+        (typeof extracted.cutting_material === "string" && extracted.cutting_material.trim() === "");
+      const _coatStr = typeof extracted.coating === "string" ? extracted.coating.toLowerCase() : "";
+      const _isUncoated = _coatStr.includes("uncoat") || _coatStr === "none" || _coatStr === "bright";
+      if (_matMissing && _isUncoated) {
+        console.log("[extract] no material + uncoated → defaulting cutting_material=aluminum_wrought (N1)");
+        extracted.cutting_material = "aluminum_wrought";
+      }
+
       // Step drill/reamer collapse — engine only needs entry dia (smallest, feed basis)
       // and largest dia (SFM basis). Intermediate steps don't affect SFM/RPM/IPR.
       // Peck advice falls back to depth / feed_dia (worst-case) when step_lengths is empty.
