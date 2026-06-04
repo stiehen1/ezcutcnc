@@ -4606,10 +4606,18 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "tool_series": <string or null — look in the NOTES section for a series callout like "QTR3-STYLE", "QTR3-RN", "QTR3". Return "QTR3-RN" if noted, "QTR3" if "QTR3-STYLE" or "QTR3" is noted, null otherwise.>
 }`;
 
-  app.post("/api/tool-geometry/extract", upload.single("pdf"), async (req, res) => {
+  // NOTE: This route takes a JSON body { filename, mime, data(base64) }, NOT
+  // multipart/form-data. The Replit edge proxy was hanging on multipart upload
+  // bodies (headers forwarded, body never reaching the container → multer waited
+  // forever, route never ran, client aborted after ~95s). JSON bodies forward
+  // fine through the edge, so the client base64-encodes the file and posts JSON.
+  app.post("/api/tool-geometry/extract", async (req, res) => {
     try {
-      console.log("PDF extract route hit, file:", req.file?.originalname, "size:", req.file?.size);
-      if (!req.file) {
+      const { filename, mime, data } = (req.body ?? {}) as {
+        filename?: string; mime?: string; data?: string;
+      };
+      console.log("PDF extract route hit, file:", filename, "b64len:", data?.length ?? 0);
+      if (!data || typeof data !== "string") {
         return res.status(400).json({ error: "No file uploaded" });
       }
 
@@ -4620,8 +4628,9 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       }
 
       const client = new Anthropic({ apiKey });
-      const fileBase64 = req.file.buffer.toString("base64");
-      const mimeType = req.file.mimetype;
+      // Strip any data-URL prefix (e.g. "data:application/pdf;base64,") if present.
+      const fileBase64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+      const mimeType = mime || "application/pdf";
       const isImage = mimeType.startsWith("image/");
 
       // Build content block — PDF uses document type, images use image type
@@ -4651,7 +4660,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       // Server 85s < client 95s, so the client always outlives the server attempt and we
       // surface a real error response instead of a bare abort.
       const _t0 = Date.now();
-      console.log(`[extract] calling Anthropic model=claude-sonnet-4-6 fileBytes=${req.file.size} isImage=${isImage}`);
+      console.log(`[extract] calling Anthropic model=claude-sonnet-4-6 b64len=${fileBase64.length} isImage=${isImage}`);
       let response;
       try {
         response = await client.messages.create(

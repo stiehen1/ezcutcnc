@@ -1612,15 +1612,27 @@ export default function Mentor() {
     setPdfExtracted(false);
     setPdfOal(0);
     try {
-      const formData = new FormData();
-      formData.append("pdf", file);
-      // Bound the request so a slow/dropped connection (e.g. behind the prod autoscale
-      // proxy) surfaces a clean error instead of spinning forever. 95s > the 85s server
-      // cap, so the client always outlives the server attempt and we get a real error
-      // response (with a message) rather than a bare abort on a slow/dense print.
+      // Send the file as base64 in a JSON body, NOT multipart/form-data. The
+      // Replit edge proxy hangs on multipart upload bodies (never forwards them
+      // to the container), so the request would sit pending until it aborted.
+      // JSON bodies forward fine, so we base64-encode the file and post JSON.
+      const fileB64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          // result is a data URL: "data:<mime>;base64,<data>" — keep just the data.
+          resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      // Bound the request so a slow/dropped connection surfaces a clean error
+      // instead of spinning forever. 95s > the 85s server cap, so the client
+      // always outlives the server attempt and we get a real error response.
       const res = await fetch("/api/tool-geometry/extract", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, mime: file.type, data: fileB64 }),
         signal: AbortSignal.timeout(95_000),
       });
       if (!res.ok) {
