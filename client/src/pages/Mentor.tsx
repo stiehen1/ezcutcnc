@@ -2967,7 +2967,11 @@ export default function Mentor() {
 
   function resetAll() {
     setForm(INITIAL_FORM);
-    setIsoCategory("P");
+    // Reset to the true initial blank state (matches the useState default), NOT
+    // "P" — forcing "P" left the Steel category chip highlighted after Clear, so
+    // a steel selection looked like it never cleared. "" returns the material
+    // picker to fully unselected.
+    setIsoCategory("");
     setOperation("milling");
     setWocPreset(null);
     setDocPreset(null);
