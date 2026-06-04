@@ -1614,9 +1614,12 @@ export default function Mentor() {
     try {
       const formData = new FormData();
       formData.append("pdf", file);
+      // Bound the request so a slow/dropped connection (e.g. behind the prod autoscale
+      // proxy) surfaces a clean error instead of spinning forever. 75s > the 60s server cap.
       const res = await fetch("/api/tool-geometry/extract", {
         method: "POST",
         body: formData,
+        signal: AbortSignal.timeout(75_000),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -1883,10 +1886,18 @@ export default function Mentor() {
         ? `${filledFields.length} field${filledFields.length > 1 ? "s" : ""} pre-filled: ${filledFields.join(", ")}.`
         : "No fields could be read.";
       toast({ title: "Print uploaded — please verify all dimensions", description: (toastParts.length ? toastParts.join(" · ") + ". " : "") + fieldSummary + " Verify each one matches your print before running.", duration: 10000 });
-    } catch {
-      toast({ title: "Upload failed", description: "Please enter dimensions manually", variant: "destructive" });
+    } catch (err: any) {
+      const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+      toast({
+        title: timedOut ? "Print read timed out" : "Upload failed",
+        description: timedOut
+          ? "The print took too long to read — try again, or enter dimensions manually."
+          : "Please enter dimensions manually",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfUploading(false);
     }
-    setPdfUploading(false);
   };
   const metric = units === "metric";
 

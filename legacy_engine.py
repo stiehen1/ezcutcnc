@@ -2137,6 +2137,35 @@ def run_drilling(payload: dict) -> dict:
             f"Do not force feed; let the drill lead."
         )
 
+    # Entry-step slenderness derate — the diameter ratio above ignores HOW LONG the thin
+    # entry step is. Thrust on the tip is a transverse/buckling load on an unsupported
+    # column of length L (tip to first larger step) and diameter feed_dia. Bending stress
+    # ∝ thrust × L while section modulus ∝ d³, so the weakness scales with slenderness L/d.
+    # A long thin entry step is far weaker than a stubby one of the same diameter.
+    # step_lengths[0] = length from tip to the first larger step (the unsupported entry column).
+    _raw_step_lengths_sl = payload.get("drill_step_lengths") or []
+    _step_lengths_sl = [float(l) for l in _raw_step_lengths_sl if l and float(l) > 0]
+    entry_slenderness = 0.0
+    if step_diameters and _step_lengths_sl and feed_dia > 0:
+        entry_len = _step_lengths_sl[0]            # tip → first larger step
+        entry_slenderness = entry_len / feed_dia   # L/d of the entry column
+    # Derate ramps in past L/d = 3 (danger zone) and saturates at a 40% cut by L/d = 8.
+    # Below 3 the entry step is stubby enough that the dia-ratio derate already covers it.
+    if entry_slenderness > 3.0:
+        # linear ramp: 0% at L/d=3 → 40% at L/d=8, clamped
+        slender_cut = min(0.40, 0.40 * (entry_slenderness - 3.0) / 5.0)
+        ipr_base *= (1.0 - slender_cut)
+        _sl_msg = (
+            f"Slender entry step: the {feed_dia:.4f}\" tip runs {entry_slenderness:.1f}×D "
+            f"({_step_lengths_sl[0]:.3f}\") unsupported before the first step. "
+            f"Feed derated {slender_cut * 100:.0f}% for bending — peck shallow and pilot if you can."
+        )
+        # Surface the more severe of the two step warnings; append if both present.
+        if step_fragility_warning:
+            step_fragility_warning = step_fragility_warning + " " + _sl_msg
+        else:
+            step_fragility_warning = _sl_msg
+
     ipr = max(0.0005, ipr_base)
 
     # Feed — IPM at entry dia chip load, RPM from largest dia
