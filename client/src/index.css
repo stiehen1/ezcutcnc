@@ -159,3 +159,21 @@ pre[class*="language-"] {
 .token.variable {
   color: #ffa657;
 }
+
+/* Barber-pole animated stripes for the Run button while calculating */
+@keyframes barber-pole {
+  from { background-position: 0 0; }
+  to   { background-position: 40px 0; }
+}
+
+.barber-pole {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #39ff14 0,
+    #39ff14 12px,
+    #2ad000 12px,
+    #2ad000 24px
+  );
+  background-size: 40px 40px;
+  animation: barber-pole 0.6s linear infinite;
+}

@@ -10821,7 +10821,11 @@ ${stabSection}
           )}
           <div className="flex gap-2">
             <Button
-              className="w-full transition-all"
+              className={`w-full transition-all text-black font-semibold ${
+                (mentor.isPending || dpLoading)
+                  ? "barber-pole"
+                  : "bg-[#39ff14] hover:bg-[#5cff45]"
+              }`}
               onClick={run}
               disabled={
                 form.mode === "deep_pocket"
