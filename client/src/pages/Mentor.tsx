@@ -13534,7 +13534,18 @@ ${stabSection}
                         }
                       />;
                     })()}
-                    <Kpi label="Chatter" hint="Chatter index — a relative indicator combining deflection, RPM, and workholding compliance. Lower is better. This is an internal diagnostic value; use the Rigidity & Chatter Audit section for actionable guidance." value={fmtNum(engineering?.chatter_index, 3)} />
+                    <Kpi
+                      label="Chatter Risk"
+                      hint="Relative chatter-risk rating from the stability model (tool deflection vs. limit, plus RPM and workholding rigidity). This is a RATING, not a measurement — it does not represent the height/depth of chatter marks or any dimension on the part. Low / Medium / High mirrors the Stability Check thresholds. The real measurable value is Deflection (in)."
+                      value={(() => {
+                        const dp = stability?.deflection_pct;
+                        if (dp == null) return "—";
+                        const band = dp >= 175 ? { t: "High", c: "text-red-400" }
+                                   : dp >= 100 ? { t: "Medium", c: "text-amber-400" }
+                                   : { t: "Low", c: "text-emerald-400" };
+                        return <span className={band.c}>{band.t}</span>;
+                      })()}
+                    />
                   </div>
                 </>
               ) : null}
