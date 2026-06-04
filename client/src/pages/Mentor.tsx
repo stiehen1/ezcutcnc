@@ -3113,29 +3113,30 @@ export default function Mentor() {
         setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
         return;
       }
-      // Slotting DOC ceiling — geometry × material matrix (matches the engine):
-      //            standard   chipbreaker/VRX
-      //   non-ferrous  1.0×D      1.35×D     (aluminum/brass/copper, clean)
-      //   ferrous      0.75×D     1.0×D      (steel/stainless/tough/abrasive-NF)
-      // Above 1.0×D in non-ferrous the engine pulls feed back to hold MRR at 1×D.
+      // Slotting DOC ceiling — flute count × geometry × material. Mirrors the
+      // engine's slot_doc_ceiling and the validated DOC preset HIGH values.
       const _cleanNonFerrous = (() => {
         const k = String(form.material || "").toLowerCase();
         return k.startsWith("aluminum") || k === "brass" || k === "copper" || k === "non_ferrous" || k === "non-ferrous";
       })();
+      const _isTi = isoCategory === "S";
       const _isCbGeom = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
-      const _slotMaxXd = _cleanNonFerrous ? (_isCbGeom ? 1.35 : 1.0) : (_isCbGeom ? 1.0 : 0.75);
-      if (fl === 5 && form.doc_xd > 0.5) {
-        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool.`]);
-        return;
-      }
-      if (fl <= 4 && form.doc_xd > _slotMaxXd) {
-        const _hint = _cleanNonFerrous
-          ? (_isCbGeom
-              ? `Non-ferrous chipbreaker slotting DOC ceiling is 1.35×D.`
-              : `Non-ferrous standard slotting DOC ceiling is 1.0×D — a chipbreaker tool runs up to 1.35×D.`)
-          : (_isCbGeom
-              ? `Ferrous chipbreaker slotting DOC ceiling is 1.0×D.`
-              : `Ferrous standard slotting DOC ceiling is 0.75×D — a chipbreaker tool runs up to 1.0×D.`);
+      const _slotCeiling = (() => {
+        if (fl >= 6) return 0.15;
+        if (fl === 5) return _isTi ? 0.4 : 0.5;
+        if (_cleanNonFerrous) {
+          if (fl <= 2) return 1.35;
+          return _isCbGeom ? 1.35 : 1.0;            // 3-4 fl: CB 1.35, std 1.0
+        }
+        if (_isTi) return _isCbGeom ? 1.0 : 0.75;   // titanium
+        if (fl === 4) return _isCbGeom ? 1.25 : 1.0; // steel 4-fl: CB 1.25, std 1.0
+        return 1.25;                                 // steel 3-fl/other
+      })();
+      if (form.doc_xd > _slotCeiling) {
+        const _cbCeiling = _cleanNonFerrous ? 1.35 : (_isTi ? 1.0 : 1.25);
+        const _hint = _isCbGeom || _slotCeiling >= _cbCeiling
+          ? `Slotting DOC ceiling for this tool is ${_slotCeiling}×D.`
+          : `Slotting DOC ceiling for this tool is ${_slotCeiling}×D — a chipbreaker tool runs up to ${_cbCeiling}×D.`;
         setRunWarnings([`${_hint} Reduce axial depth or change geometry.`]);
         return;
       }
