@@ -13,16 +13,24 @@ declare module "http" {
   }
 }
 
-app.use(
-  express.json({
-    limit: "10mb",
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
+// Body parsers must NOT touch multipart/form-data — that's multer's job.
+// The express.json verify hook buffers the whole request stream; if it runs
+// on a file upload it can leave the stream half-consumed so multer waits
+// forever for a body that's already drained, the route never fires, and the
+// client aborts after its timeout. Skip multipart so multer gets a clean stream.
+const isMultipart = (req: Request) =>
+  (req.headers["content-type"] || "").includes("multipart/form-data");
 
-app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+const jsonParser = express.json({
+  limit: "10mb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+const urlencodedParser = express.urlencoded({ extended: false, limit: "10mb" });
+
+app.use((req, res, next) => (isMultipart(req) ? next() : jsonParser(req, res, next)));
+app.use((req, res, next) => (isMultipart(req) ? next() : urlencodedParser(req, res, next)));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
