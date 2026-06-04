@@ -763,6 +763,25 @@ SERIES_RADIAL_RAKE: dict[str, int] = {
     "VXR5":   0,
 }
 
+# Slotting DOC ceilings (full-slot, WOC ≥ 90%), keyed on geometry × material.
+# A chipbreaker/VRX segments the chip so it clears a deep slot without packing —
+# that chip-evacuation help is what earns the extra depth. Above 1.0×D the feed
+# is auto-derated by (1.0/doc_xd) to hold MRR flat at the 1×D rate.
+#               standard   chipbreaker/VRX
+#   non-ferrous   1.0×D        1.35×D       (aluminum/brass/copper, clean)
+#   ferrous       0.75×D       1.0×D        (steel/stainless/tough/abrasive-NF)
+SLOT_DOC_CEILING = {
+    # (clean_non_ferrous, segmented_chip): max_doc_xd
+    (True,  True):  1.35,
+    (True,  False): 1.00,
+    (False, True):  1.00,
+    (False, False): 0.75,
+}
+
+def slot_doc_ceiling(clean_non_ferrous: bool, segmented_chip: bool) -> float:
+    """Max slotting DOC (×D) for a geometry/material combination."""
+    return SLOT_DOC_CEILING[(bool(clean_non_ferrous), bool(segmented_chip))]
+
 # Chip-clearance WOC limits by flute count.
 # Tuple: (max_slot_doc_xd, max_side_woc_pct)
 #   max_slot_doc_xd  — max DOC as ×D when WOC ≥ 90% (full slot); None = no slotting
@@ -3842,6 +3861,40 @@ def run(payload=None):
             if _slot_doc_cap is not None and float(data.get("doc_xd", 1.0)) > _slot_doc_cap:
                 data["doc_xd"] = _slot_doc_cap
 
+    # ── Slotting DOC ceiling + feed pull-back ─────────────────────────────────
+    # Cap is keyed on GEOMETRY × MATERIAL (a chipbreaker/VRX segments the chip so
+    # it clears a deep slot without packing — that's what earns the extra depth):
+    #               standard   chipbreaker/VRX
+    #   non-ferrous   1.0×D        1.35×D
+    #   ferrous       0.75×D       1.0×D
+    # Clean non-ferrous = aluminum/brass/copper (abrasive NF is treated ferrous).
+    # Feed pull-back fires ONLY above 1.0×D: chip load is derated by (1.0/doc_xd)
+    # so MRR holds at the 1×D rate — the deeper cut buys fewer passes, not more
+    # MRR. Stored on data["_slot_feed_derate"], applied to ipt in the calc.
+    data["_slot_feed_derate"] = 1.0
+    if mode == "slot":
+        _grp_slot = get_material_group(data.get("material", ""))
+        _clean_nf = _grp_slot in ("Aluminum", "Non-Ferrous")
+        _geom_slot = str(data.get("geometry", "standard") or "standard").lower()
+        _seg_chip = _geom_slot in ("chipbreaker", "truncated_rougher")
+        _slot_ceiling = slot_doc_ceiling(_clean_nf, _seg_chip)
+        # Flute-count chip-clearance reduction (applies ON TOP of the matrix, but
+        # only for high flute counts — the matrix governs 2–4 flute):
+        #   5-flute → 0.5×D cap (even a 5-fl VXR is chip-clearance limited)
+        #   6+ flute → 0.15×D max (light cleanup slot only; not for real slotting)
+        _flutes_slot = int(data.get("flutes", 4) or 4)
+        if _flutes_slot == 5:
+            _slot_ceiling = min(_slot_ceiling, 0.5)
+        elif _flutes_slot >= 6:
+            _slot_ceiling = 0.15
+        _doc_xd_cur = float(data.get("doc_xd", 1.0) or 1.0)
+        if _doc_xd_cur > _slot_ceiling:
+            _doc_xd_cur = _slot_ceiling
+            data["doc_xd"] = _slot_ceiling
+        # Feed pull-back above 1.0×D (holds MRR at the 1×D rate)
+        if _doc_xd_cur > 1.0:
+            data["_slot_feed_derate"] = 1.0 / _doc_xd_cur
+
     _spindle_drive = str(payload.get("spindle_drive", "belt") or "belt").lower()
     _drive_eff = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     data.setdefault("machine_hp", float(payload.get("machine_hp", 10.0)) * _drive_eff)
@@ -4197,6 +4250,15 @@ def run(payload=None):
     if data["mode"] in ("hem", "trochoidal"):
         _hem_ipt_mult = HEM_IPT_MULT.get(_mat_key, HEM_IPT_MULT.get(material_group, 2.0))
         ipt *= _hem_ipt_mult
+
+    # Slotting feed pull-back: in clean non-ferrous past 1.0×D the chip load is
+    # derated by (1.0 / doc_xd) so MRR holds at the 1×D rate (factor set to 1.0
+    # for all other modes/materials in data prep, so this is a no-op there).
+    # Baked into ipt here — before the optimizer and micro-tool limiter — so the
+    # whole feasibility search operates in derated space and won't re-inflate.
+    _slot_derate = float(data.get("_slot_feed_derate", 1.0) or 1.0)
+    if _slot_derate < 1.0:
+        ipt *= _slot_derate
 
     # ── Micro-tool feed limiter (replaces crude IPM caps) ─────────────────────
     # For D < 1/8" (and 1/8" finish/profile/slot), cap chip-thinning-adjusted
@@ -6267,54 +6329,66 @@ def run(payload=None):
     _fl_cc     = int(data.get("flutes", 4) or 4)
     _woc_pct_cc = float(data.get("woc_pct", 0) or 0)
     _doc_xd_cc  = float(data.get("doc_xd", 1.0) or 1.0)
-    _max_slot_xd, _max_side_woc = flute_woc_limits(_fl_cc)
-    # Non-ferrous slotting boost: aluminum/brass/copper (non-abrasive) produce
-    # clean chips with excellent evacuation under flood/air blast — 1.5×D slotting
-    # is realistic. Excludes "Abrasive Non-Ferrous" (manganese bronze, silicon
-    # bronze, copper beryllium) which behave like cast iron and need the
-    # standard 1.0×D limit.
+    _flute_slot_xd, _max_side_woc = flute_woc_limits(_fl_cc)
+    # Slotting DOC ceiling — geometry × material matrix (see slot_doc_ceiling /
+    # SLOT_DOC_CEILING), capped by the flute-count chip-clearance limit (5-fl →
+    # 0.5×D, 6+ fl → not suitable). A chipbreaker/VRX earns the deeper cut via
+    # chip segmentation; above 1.0×D the feed is pulled back to hold MRR at the
+    # 1×D rate. Abrasive non-ferrous (Mn/Si bronze, Cu-Be) is treated as ferrous.
     _mat_group_cc = (material_group or "").lower()
     _is_nonferrous_clean = _mat_group_cc in ("aluminum", "non-ferrous", "non_ferrous", "brass", "copper")
-    if _is_nonferrous_clean and _max_slot_xd is not None:
-        _max_slot_xd = max(_max_slot_xd, 1.5)
-    # Chipbreaker / truncated rougher slotting boost: segmented chips evacuate
-    # far more readily than a smooth flute under deep DOC — give these tools
-    # an extra 0.5×D headroom (capped at 1.5×D total) before the chip-packing
-    # warning fires. Standard geometry tools stay at the conservative limit.
     _geom_cc = str(data.get("geometry", "standard") or "standard").lower()
-    _is_cb_geom = _geom_cc in ("chipbreaker", "truncated_rougher")
-    if _is_cb_geom and _max_slot_xd is not None:
-        _max_slot_xd = min(1.5, _max_slot_xd + 0.5)
+    _seg_chip_cc = _geom_cc in ("chipbreaker", "truncated_rougher")
+    if _fl_cc >= 6:
+        _max_slot_xd = 0.15   # 6+ flute: light cleanup slot only
+    else:
+        _max_slot_xd = slot_doc_ceiling(_is_nonferrous_clean, _seg_chip_cc)
+        if _fl_cc == 5:
+            _max_slot_xd = min(_max_slot_xd, 0.5)   # 5-fl chip-clearance reduction
 
     if (data.get("mode") or "").lower() in ("face", "circ_interp"):
         pass  # face: high WOC is intentional stepover; circ_interp: WOC = radial wall, not chip-clearance concern
     elif _woc_pct_cc >= 90.0:
         # Slotting check
-        if _max_slot_xd is None:
+        if _fl_cc >= 6:
+            # 6+ flute: light cleanup slot only (0.15×D); not for real slotting.
             _cc_notes.append(
-                f"⚠ {_fl_cc}-flute tools are not suitable for slotting — insufficient chip clearance. "
-                f"Max recommended WOC is {_max_side_woc:.0f}% for side milling. "
+                f"⚠ {_fl_cc}-flute tools are not suited to slotting — insufficient chip clearance. "
+                f"Limited to a light cleanup slot at ≤{_max_slot_xd:.2f}×D DOC. "
                 f"For full-slot work use 4-flute or fewer."
             )
             _cc_risk = "warning"
         elif _doc_xd_cc > _max_slot_xd:
             _cc_notes.append(
-                f"⚠ {_fl_cc}-flute slotting: DOC {_doc_xd_cc:.2f}×D exceeds chip-clearance limit. "
-                f"Max recommended DOC for {_fl_cc}-flute slotting is {_max_slot_xd:.1f}×D."
+                f"⚠ {_fl_cc}-flute slotting: DOC {_doc_xd_cc:.2f}×D exceeds the slotting limit. "
+                f"Max recommended slot DOC is {_max_slot_xd:.2f}×D"
+                + (" for clean non-ferrous" if _is_nonferrous_clean else "")
+                + "."
             )
             _cc_risk = "caution"
-        # Positive upgrade path: deep slotting on standard geometry — suggest
-        # a chipbreaker version. Fires at 0.75×D for ferrous (steel/stainless/
-        # cast iron/titanium) and 1.0×D for aluminum/non-ferrous (since clean
-        # non-ferrous can already hit 1.5×D on standard geometry).
+        # Deep-slot FYI: past 1.0×D the feed is pulled back to hold MRR flat at
+        # the 1×D value — the extra depth means fewer passes, not more MRR.
+        elif _doc_xd_cc > 1.0:
+            _cc_notes.append(
+                f"ℹ Slotting at {_doc_xd_cc:.2f}×D — feed pulled back to ~{(1.0/_doc_xd_cc)*100:.0f}% "
+                f"to hold MRR at the 1×D rate. Deeper slot = fewer passes, same cutting load."
+            )
+            if _cc_risk is None:
+                _cc_risk = "info"
+        # Positive upgrade path: on standard geometry the slot DOC cap is lower
+        # (0.75×D ferrous, 1.0×D non-ferrous). A chipbreaker/VRX segments the chip
+        # so it clears a deep slot without packing — earning a higher cap (1.0×D
+        # ferrous, 1.35×D non-ferrous) plus ~20% lower cutting force. Suggest it
+        # once the standard cut is at/near its ceiling.
         elif (_geom_cc == "standard"):
-            _deep_threshold = 1.0 if _is_nonferrous_clean else 0.75
-            if _doc_xd_cc >= _deep_threshold:
-                _cb_max_xd = min(1.5, _max_slot_xd + 0.5)
+            _std_ceiling = slot_doc_ceiling(_is_nonferrous_clean, False)
+            _cb_ceiling  = min(slot_doc_ceiling(_is_nonferrous_clean, True),
+                               _flute_slot_xd if _flute_slot_xd is not None else 99.0)
+            if _doc_xd_cc >= _std_ceiling - 0.001 and _cb_ceiling > _std_ceiling:
                 _cc_notes.append(
-                    f"💡 Deep slot at {_doc_xd_cc:.2f}×D — a chipbreaker version of this tool would let you "
-                    f"safely run up to {_cb_max_xd:.1f}×D DOC and 10–20% higher feed at the same SFM. "
-                    f"Segmented chips evacuate cleanly in deep slots, reducing chip packing and load spikes."
+                    f"💡 Slotting at {_doc_xd_cc:.2f}×D — at the {_std_ceiling:.2f}×D limit for standard "
+                    f"geometry. A chipbreaker version segments the chip for cleaner evacuation, ~20% lower "
+                    f"cutting force, and a deeper {_cb_ceiling:.2f}×D slot DOC at the same SFM."
                 )
                 if _cc_risk is None:
                     _cc_risk = "info"
