@@ -14445,8 +14445,20 @@ ${stabSection}
                       return (
                         <div className="mt-2 pt-2 border-t border-emerald-500/20">
                           <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold">Chipbreaker options:</span>{" "}
-                          <span className="font-mono text-emerald-200">
-                            {cb.suggested_edps.slice(0, 3).join(", ")}
+                          <span className="inline-flex items-center gap-x-2 gap-y-1 flex-wrap">
+                            {cb.suggested_edps.slice(0, 3).map((edp: string) => (
+                              <button key={edp} type="button"
+                                className="font-mono font-semibold text-emerald-300 underline underline-offset-2 hover:text-emerald-100 transition-colors cursor-pointer"
+                                onClick={async () => {
+                                  try {
+                                    const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
+                                    const data: SkuRecord[] = await r.json();
+                                    const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
+                                    if (match) { applySkuToForm(match, { preserveCutParams: true }); setTimeout(() => runRef.current(), 100); }
+                                  } catch {}
+                                }}
+                              >{edp}</button>
+                            ))}
                           </span>
                           {cb.suggested_series && (
                             <span className="text-[11px] text-emerald-400/70 ml-2">({cb.suggested_series})</span>
