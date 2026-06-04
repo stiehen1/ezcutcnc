@@ -2306,10 +2306,17 @@ export default function Mentor() {
   }
 
   // Derive dynamic presets for the current mode/material/flutes
-  function getDynamicPresets(mode: string, iso: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard"): {
+  function getDynamicPresets(mode: string, isoRaw: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard"): {
     woc: { low: number; med: number; high: number };
     doc: { low: number; med: number; high: number };
   } {
+    // Material system uses N1 (clean non-ferrous: aluminum/brass/copper) and N2
+    // (abrasive non-ferrous: Mn/Si bronze, Cu-Be — tooled like steel). The preset
+    // logic below was written against a single "N"; map N1 → "N" so clean
+    // non-ferrous gets its aluminum presets, and leave N2 to fall through to the
+    // ferrous branches (matching its P-Max/steel tooling). Without this, aluminum
+    // (N1) silently got ferrous slot/HEM presets.
+    const iso = isoRaw === "N1" ? "N" : isoRaw;
     if (mode === "hem" || mode === "trochoidal") {
       // WOC three-point targets by ISO category (shop-validated HEM ranges)
       const { wocMed: alWocMed } = getHemMed(iso, flutes); // aluminum keeps per-flute table
@@ -2383,9 +2390,9 @@ export default function Mentor() {
       // Aluminum slotting DOC by flute count and helix
       // 2-fl (45° helix): aggressive chip lift → deeper; 3-fl std (37°): more conservative; 3-fl CB: recovers depth via chip control
       slot: iso === "N" && flutes <= 2
-        ? { low: 0.75, med: 1.0,   high: 1.25 }   // 2-fl / 45° helix — evacuation king
+        ? { low: 0.75, med: 1.0,   high: 1.35 }   // 2-fl alum / 45° helix — evacuation king, earns 1.35×D (feed derates >1.0×D to hold MRR)
         : iso === "N" && flutes === 3 && geometry === "chipbreaker"
-        ? { low: 0.75, med: 0.875, high: 1.0  }   // 3-fl CB — chip control recovers depth
+        ? { low: 0.75, med: 1.0,   high: 1.35 }   // 3-fl alum CB — chip control earns 1.35×D (feed derates >1.0×D to hold MRR)
         : iso === "N" && flutes === 3
         ? { low: 0.5,  med: 0.75,  high: 1.0  }   // 3-fl std / 37° helix — slightly conservative
         // Ferrous & titanium slotting DOC by series/flute/geometry
@@ -3106,25 +3113,29 @@ export default function Mentor() {
         setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
         return;
       }
-      // Slotting DOC ceiling — material- and geometry-aware:
-      //   Standard geometry: 1.0×D (1.5×D for clean non-ferrous since chip evacuation is excellent)
-      //   Chipbreaker / Truncated Rougher: 1.5×D (segmented chips evacuate even in deep slots)
+      // Slotting DOC ceiling — geometry × material matrix (matches the engine):
+      //            standard   chipbreaker/VRX
+      //   non-ferrous  1.0×D      1.35×D     (aluminum/brass/copper, clean)
+      //   ferrous      0.75×D     1.0×D      (steel/stainless/tough/abrasive-NF)
+      // Above 1.0×D in non-ferrous the engine pulls feed back to hold MRR at 1×D.
       const _cleanNonFerrous = (() => {
         const k = String(form.material || "").toLowerCase();
-        return k.startsWith("aluminum") || k === "brass" || k === "copper" || k === "non_ferrous" || k === "non-ferrous" || k.startsWith("plastic");
+        return k.startsWith("aluminum") || k === "brass" || k === "copper" || k === "non_ferrous" || k === "non-ferrous";
       })();
       const _isCbGeom = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
-      const _slotMaxXd = (_isCbGeom || _cleanNonFerrous) ? 1.5 : 1.0;
+      const _slotMaxXd = _cleanNonFerrous ? (_isCbGeom ? 1.35 : 1.0) : (_isCbGeom ? 1.0 : 0.75);
       if (fl === 5 && form.doc_xd > 0.5) {
-        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool for ${_slotMaxXd}×D DOC.`]);
+        setRunWarnings([`5-flute slotting is limited to 0.5×D DOC maximum for chip clearance. Reduce axial depth or use a 2–4 flute tool.`]);
         return;
       }
       if (fl <= 4 && form.doc_xd > _slotMaxXd) {
-        const _hint = _isCbGeom
-          ? `Chipbreaker slotting DOC ceiling is 1.5×D.`
-          : _cleanNonFerrous
-            ? `Non-ferrous slotting DOC ceiling is 1.5×D.`
-            : `Slotting DOC is limited to 1×D for steel/stainless/cast iron — switch to a chipbreaker geometry to safely run up to 1.5×D.`;
+        const _hint = _cleanNonFerrous
+          ? (_isCbGeom
+              ? `Non-ferrous chipbreaker slotting DOC ceiling is 1.35×D.`
+              : `Non-ferrous standard slotting DOC ceiling is 1.0×D — a chipbreaker tool runs up to 1.35×D.`)
+          : (_isCbGeom
+              ? `Ferrous chipbreaker slotting DOC ceiling is 1.0×D.`
+              : `Ferrous standard slotting DOC ceiling is 0.75×D — a chipbreaker tool runs up to 1.0×D.`);
         setRunWarnings([`${_hint} Reduce axial depth or change geometry.`]);
         return;
       }
@@ -3325,6 +3336,20 @@ export default function Mentor() {
       return;
     }
 
+    // Robust stickout for the payload: trust an explicit form.stickout, otherwise
+    // compute the geometry default (matches the engine + applySkuToForm) so a stale
+    // form.stickout from a SKU-apply state race can't send a too-long reach.
+    const stickoutForPayload = (): number => {
+      if (form.stickout > 0) return form.stickout;
+      const _dia = form.tool_dia || 0;
+      const _loc = form.loc || 0;
+      const _fw  = form.flute_wash || 0;
+      const _lbs = form.lbs || 0;
+      if (_lbs > 0 && _dia > 0) return Math.ceil((_lbs + 0.7 * _dia) * 200) / 200;       // necked
+      if (_loc > 0 && _dia > 0) return Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200; // standard
+      return form.loc > 0 ? form.loc * 1.25 : 2.0;                                         // last resort
+    };
+
     try {
       // Chamfer: form stores face width (as on print); engine expects axial depth
       const chamferAxial = form.tool_type === "chamfer_mill" && form.chamfer_angle > 0 && form.chamfer_depth > 0
@@ -3335,7 +3360,10 @@ export default function Mentor() {
         chamfer_depth: chamferAxial,
         operation: (["milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"].includes(operation) ? operation : "milling") as any,
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
-        stickout: form.stickout || form.loc * 1.25,
+        // Stickout fallback matches the engine's default (LOC + flute_wash + 0.33×D),
+        // NOT loc×1.25 — guards against a stale form.stickout (SKU-apply state race)
+        // sending a too-long reach that inflates deflection. LBS/necked: lbs + 0.7×D.
+        stickout: stickoutForPayload(),
         machine_id: activeMachineId ?? undefined,
         // center_cutting is null when SKU hasn't specified it — drop the key so Zod's default(true) applies
         center_cutting: (form as any).center_cutting ?? undefined,
@@ -3353,7 +3381,7 @@ export default function Mentor() {
           const optPayload = {
             ...form,
             flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
-            stickout: form.stickout || form.loc * 1.25,
+            stickout: stickoutForPayload(),
           };
           const r = await fetch("/api/optimal-tool", {
             method: "POST",
