@@ -4645,7 +4645,11 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
       // Bound the call so it can't hang behind the autoscale proxy. The SDK default
       // request timeout is 10 min — far longer than the proxy will hold the connection,
-      // so a slow call would leave the client spinning forever. Cap at 60s + one retry.
+      // so a slow call would leave the client spinning forever. One clean attempt with
+      // generous headroom: a retry can't help here because the client aborts at 95s, so
+      // a 2nd attempt would never finish — it only guarantees a client-side timeout.
+      // Server 85s < client 95s, so the client always outlives the server attempt and we
+      // surface a real error response instead of a bare abort.
       const response = await client.messages.create(
         {
           model: "claude-sonnet-4-6",
@@ -4661,7 +4665,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             ],
           }],
         },
-        { timeout: 60_000, maxRetries: 1 },
+        { timeout: 85_000, maxRetries: 0 },
       );
 
       const text = response.content.find(c => c.type === "text")?.text ?? "";

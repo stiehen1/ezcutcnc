@@ -1615,11 +1615,13 @@ export default function Mentor() {
       const formData = new FormData();
       formData.append("pdf", file);
       // Bound the request so a slow/dropped connection (e.g. behind the prod autoscale
-      // proxy) surfaces a clean error instead of spinning forever. 75s > the 60s server cap.
+      // proxy) surfaces a clean error instead of spinning forever. 95s > the 85s server
+      // cap, so the client always outlives the server attempt and we get a real error
+      // response (with a message) rather than a bare abort on a slow/dense print.
       const res = await fetch("/api/tool-geometry/extract", {
         method: "POST",
         body: formData,
-        signal: AbortSignal.timeout(75_000),
+        signal: AbortSignal.timeout(95_000),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
