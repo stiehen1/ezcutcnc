@@ -4643,20 +4643,26 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             },
           };
 
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
-        messages: [{
-          role: "user",
-          content: [
-            fileBlock,
-            {
-              type: "text",
-              text: EXTRACTION_PROMPT,
-            },
-          ],
-        }],
-      });
+      // Bound the call so it can't hang behind the autoscale proxy. The SDK default
+      // request timeout is 10 min — far longer than the proxy will hold the connection,
+      // so a slow call would leave the client spinning forever. Cap at 60s + one retry.
+      const response = await client.messages.create(
+        {
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          messages: [{
+            role: "user",
+            content: [
+              fileBlock,
+              {
+                type: "text",
+                text: EXTRACTION_PROMPT,
+              },
+            ],
+          }],
+        },
+        { timeout: 60_000, maxRetries: 1 },
+      );
 
       const text = response.content.find(c => c.type === "text")?.text ?? "";
 
