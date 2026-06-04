@@ -12864,7 +12864,7 @@ ${stabSection}
                                     title={sp.hint}
                                     disabled={mentor.isPending}
                                     onClick={() => applySpeedPreset(sp.key)}
-                                    className={`text-[10px] leading-tight text-center px-1 py-1.5 rounded-md border font-medium transition-colors ${
+                                    className={`min-w-0 text-[10px] leading-tight text-center px-0.5 py-1.5 rounded-md border font-medium transition-colors ${
                                       active
                                         ? "bg-orange-500/90 border-orange-400 text-white"
                                         : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
