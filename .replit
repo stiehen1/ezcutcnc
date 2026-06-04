@@ -13,8 +13,13 @@ externalPort = 80
 [env]
 PORT = "5000"
 
+# Reserved VM (always-on), not autoscale: PDF→Claude extraction holds one
+# connection open for several seconds. Autoscale was SIGTERM-killing the
+# process mid-request (container recycle / scale-to-zero), dropping the
+# connection so the client showed "Print read timed out" regardless of
+# file size or timeout values. Reserved VM has no per-request kill.
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "gce"
 run = ["node", "./dist/index.cjs"]
 build = ["npm", "run", "build"]
 
