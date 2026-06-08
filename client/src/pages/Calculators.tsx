@@ -1580,6 +1580,21 @@ const STOCK_CONDITIONS: StockCondition[] = [
     ],
   },
   {
+    key: "cold_worked",
+    label: "Cold-Worked / Burnished",
+    oneLiner: "Work-hardened skin from cold-forming or a prior dull pass. Mild in steel, severe in stainless.",
+    whatItIs: "A surface hardened by plastic deformation rather than heat — cold drawing, spinning, deep rolling, shot peening, or simply a previous pass made with a rubbing/dull tool. The hardening is shallow but real.",
+    surface: "Looks like normal billet or a machined face. Cold-drawn bar has a bright, smooth skin; peened surfaces look matte/dimpled.",
+    hardness: "Carbon/alloy steel: skin a few points harder than core. Austenitic stainless (304/316) and superalloys: surface can be 1.5–2× core hardness — work-hardening is their defining trait.",
+    toolImpact: "Mild abrasion and a tendency to glaze if you rub. The real risk is feedback: a light/slow cut rubs, which work-hardens the skin further ahead of the edge, which makes the next pass worse. Maintain chip thickness, don't dwell.",
+    feedAdjust: "Through cold-worked skin: 75–85% SFM, 90% IPT — but KEEP FPT up to stay above minimum chip thickness. Once into virgin core: 100% baseline.",
+    watchOuts: [
+      "Stainless and Inconel: never reduce feed to 'baby' a cut on a work-hardened surface — that's exactly how you glaze and stall.",
+      "If a previous tool dulled and rubbed the surface, the next tool sees a hardened skin even on 'soft' material — start fresh-edged and cut through it decisively.",
+      "Shot-peened surfaces are intentionally hardened for fatigue life — confirm the print doesn't require the peened layer to remain before you machine it off.",
+    ],
+  },
+  {
     key: "annealed",
     label: "Annealed / Spheroidized",
     oneLiner: "As soft as the alloy gets. Gummy in stainless and high-carbon; great in tool steels.",
