@@ -2224,9 +2224,13 @@ export async function registerRoutes(
       const isHem = strat === "hem";
 
       const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
+      // Traditional full-width slotting wants the LARGEST tool that fits the slot —
+      // fewest side passes, most rigid. Laddering all the way down to tiny tools just
+      // surfaces many-side-pass / many-Z-step suggestions nobody wants, so cap to the
+      // largest 2 diameters ≤ width. HEM stays in its 0.40–0.70× window (tool < slot).
       const candidates = isHem
         ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.70 + 1e-6)
-        : STD_DIAS.filter(d => d <= width + 1e-4);
+        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-2);
       if (!candidates.length) return res.json({ chips: [] });
 
       // Strategy-aware flute filter (mirrors optimal-tool scorer).
@@ -2255,6 +2259,9 @@ export async function registerRoutes(
       // Computed per row in SQL since it depends on each candidate's series.
       const chips: any[] = [];
       for (const dia of candidates) {
+        // Pull the top-scored candidates at this diameter, then surface up to TWO
+        // chips with DISTINCT flute counts (e.g. the 5fl chipbreaker AND a 6fl) so
+        // the user sees the flute-count choice at the same Ø, not just one tool.
         const q = await pool.query(
           `SELECT s.edp, s.flutes, s.geometry, s.coating, s.corner_condition, s.loc_in, s.lbs_in, s.series,
                   (CASE WHEN LOWER(COALESCE(s.geometry,'standard')) = 'chipbreaker' THEN 3
@@ -2278,10 +2285,36 @@ export async function registerRoutes(
              AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
              ${fluteClause} ${matClause}
            ORDER BY ${reachRank} score DESC, s.loc_in ASC NULLS LAST
-           LIMIT 1`
+           LIMIT 12`
         );
-        if (q.rows.length) {
-          const r = q.rows[0];
+        // HEM/trochoidal sells deep one-pass DOC ("run the tool's full LOC"), so a
+        // short-LOC tool that needs 3-4 axial Z-levels to clear the slot contradicts
+        // the whole strategy. Drop HEM candidates that can't reach the depth in ≤2
+        // Z-steps, and rank fewest Z-steps (deepest reach) first. Slot depth is cut
+        // by the FLUTES, so reach = LOC only — LBS (non-fluted body below the shank)
+        // is clearance, not cutting length. Traditional plowing is unaffected.
+        const zStepsFor = (r: any) => {
+          const reach = Number(r.loc_in) || 0;
+          if (!(depth > 0) || !(reach > 0)) return 1;
+          return Math.ceil((depth - 1e-4) / reach);
+        };
+        let rows = q.rows;
+        if (isHem && depth > 0) {
+          const reachable = rows.filter(r => zStepsFor(r) <= 2);
+          // If nothing reaches in ≤2 passes at this Ø, suppress the Ø rather than
+          // suggest a 4-Z-step tool (the chip filter on the client hides empty Ø).
+          rows = reachable.sort((a, b) => zStepsFor(a) - zStepsFor(b) || Number(b.score) - Number(a.score));
+        }
+        // Best overall, then the best with a DIFFERENT flute+geometry signature
+        // (top-2-per-Ø). A 5fl chipbreaker and a 5fl standard are different tools —
+        // so are 6fl CB vs 6fl standard — so dedupe on flutes+geometry, not flutes.
+        const sig = (r: any) => `${r.flutes}|${String(r.geometry ?? "standard").toLowerCase()}`;
+        const picks: any[] = [];
+        for (const r of rows) {
+          if (picks.length === 0) { picks.push(r); continue; }
+          if (picks.length === 1 && sig(r) !== sig(picks[0])) { picks.push(r); break; }
+        }
+        for (const r of picks) {
           chips.push({
             dia,
             edp: r.edp,

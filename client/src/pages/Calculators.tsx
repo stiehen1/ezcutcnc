@@ -1550,6 +1550,21 @@ const STOCK_CONDITIONS: StockCondition[] = [
     ],
   },
   {
+    key: "flame_cut",
+    label: "Flame / Plasma Cut Edge",
+    oneLiner: "Burned plate edge re-hardens as it cools — a hard rim hiding on every blank cut from plate.",
+    whatItIs: "Plate parts cut to shape with oxy-fuel, plasma, or laser. The cut edge melts and re-solidifies, then self-quenches in the surrounding cold plate, leaving a recast layer plus a heat-affected zone harder than the parent metal.",
+    surface: "Slag/dross on the underside, a visible heat-tint band, and a slightly rounded or beveled cut face. Tolerance on the cut edge is loose (±0.030\" or worse).",
+    hardness: "Recast rim 0.030–0.060\" deep, often 50–55 HRC in alloy steels (more in higher-carbon grades). Parent plate underneath is whatever it was.",
+    toolImpact: "First cut into the burned edge behaves like machining hardened steel — abrasive and chip-prone. Honed-edge tough coated carbide. Skim the rim off in one pass, then the tool sees clean parent metal.",
+    feedAdjust: "Through the burned rim: 40–50% SFM, 60–70% IPT, light DOC. Once into parent plate: 100% baseline for the alloy.",
+    watchOuts: [
+      "Slag on the underside is harder than the rim — clean it off or your first pass eats an edge on the bottom corner.",
+      "Plasma/laser HAZ is shallower than oxy-fuel; thick-plate oxy-fuel burns the deepest, hardest rim.",
+      "If the print allows, leave machining stock on the flame-cut profile so your skim pass clears the whole HAZ in one shot.",
+    ],
+  },
+  {
     key: "nitrided",
     label: "Nitrided",
     oneLiner: "Thin, glass-hard skin (~70 HRC, ~0.010\" deep). Almost always ground, not milled.",
@@ -1562,6 +1577,21 @@ const STOCK_CONDITIONS: StockCondition[] = [
       "Don't try to bury a regular endmill in nitrided skin — you'll break it.",
       "If you must mill features that break the nitride, do them BEFORE nitriding when possible.",
       "EDM is unaffected by nitride hardness — often the path of least resistance.",
+    ],
+  },
+  {
+    key: "cold_worked",
+    label: "Cold-Worked / Burnished",
+    oneLiner: "Work-hardened skin from cold-forming or a prior dull pass. Mild in steel, severe in stainless.",
+    whatItIs: "A surface hardened by plastic deformation rather than heat — cold drawing, spinning, deep rolling, shot peening, or simply a previous pass made with a rubbing/dull tool. The hardening is shallow but real.",
+    surface: "Looks like normal billet or a machined face. Cold-drawn bar has a bright, smooth skin; peened surfaces look matte/dimpled.",
+    hardness: "Carbon/alloy steel: skin a few points harder than core. Austenitic stainless (304/316) and superalloys: surface can be 1.5–2× core hardness — work-hardening is their defining trait.",
+    toolImpact: "Mild abrasion and a tendency to glaze if you rub. The real risk is feedback: a light/slow cut rubs, which work-hardens the skin further ahead of the edge, which makes the next pass worse. Maintain chip thickness, don't dwell.",
+    feedAdjust: "Through cold-worked skin: 75–85% SFM, 90% IPT — but KEEP FPT up to stay above minimum chip thickness. Once into virgin core: 100% baseline.",
+    watchOuts: [
+      "Stainless and Inconel: never reduce feed to 'baby' a cut on a work-hardened surface — that's exactly how you glaze and stall.",
+      "If a previous tool dulled and rubbed the surface, the next tool sees a hardened skin even on 'soft' material — start fresh-edged and cut through it decisively.",
+      "Shot-peened surfaces are intentionally hardened for fatigue life — confirm the print doesn't require the peened layer to remain before you machine it off.",
     ],
   },
   {

@@ -101,15 +101,19 @@ function fmtCorner(c: string | number | null) {
 }
 
 // ── Tooltip hint ─────────────────────────────────────────────────────────────
+// Radix Tooltip is hover/focus-only — it never opens on a touch tap (phones have
+// no hover). Controlling `open` and toggling it on tap restores the ⓘ on mobile
+// while onOpenChange keeps hover working on desktop.
 function Hint({ text, diagram }: { text: React.ReactNode; diagram?: React.ReactNode }) {
+  const [open, setOpen] = React.useState(false);
   return (
     <TooltipProvider delayDuration={200}>
-      <Tooltip>
+      <Tooltip open={open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>
           <button
             type="button"
-            onClick={e => e.preventDefault()}
-            className="inline-flex items-center justify-center cursor-help text-muted-foreground hover:text-foreground transition-colors text-[11px] leading-none p-0.5 -m-0.5 rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-ring pointer-events-auto"
+            onClick={e => { e.preventDefault(); setOpen(o => !o); }}
+            className="inline-flex items-center justify-center cursor-pointer text-muted-foreground hover:text-foreground transition-colors text-[11px] leading-none p-0.5 -m-0.5 rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-ring pointer-events-auto"
             aria-label="More info"
           >ⓘ</button>
         </TooltipTrigger>

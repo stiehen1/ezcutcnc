@@ -110,12 +110,23 @@ function SpeeederDetails({ form, setForm }: {
   );
 }
 
+// Tap-to-toggle hint. Radix Tooltip is hover/focus-only — it never opens on a
+// touch tap (phones have no hover), so the ⓘ dots were dead on mobile. Making
+// the tooltip controlled and toggling `open` on tap restores them, while
+// onOpenChange keeps hover working on desktop.
+function useTapTooltip() {
+  const [open, setOpen] = React.useState(false);
+  const tap = (e: React.MouseEvent) => { e.preventDefault(); setOpen((o) => !o); };
+  return { open, onOpenChange: setOpen, tap };
+}
+
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React.ReactNode }) {
+  const t = useTapTooltip();
   return (
     <TooltipProvider delayDuration={200}>
-      <Tooltip>
+      <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
         <TooltipTrigger asChild>
-          <Label className="flex items-center gap-1 cursor-default w-fit text-xs">
+          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-xs">
             {children}
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
           </Label>
@@ -129,11 +140,12 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React
 }
 
 function RoiLabel({ children, hint, required }: { children: React.ReactNode; hint: string; required?: boolean }) {
+  const t = useTapTooltip();
   return (
     <TooltipProvider delayDuration={200}>
-      <Tooltip>
+      <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
         <TooltipTrigger asChild>
-          <Label className="flex items-center gap-1 cursor-default w-fit text-[10px] text-zinc-500">
+          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-[10px] text-zinc-500">
             {children}
             {required && <span className="text-red-400 text-[10px]">*</span>}
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
@@ -156,14 +168,15 @@ function Kpi({
   value: React.ReactNode;
   hint?: string;
 }) {
+  const t = useTapTooltip();
   return (
     <div className="rounded-2xl border p-3">
       <div className="text-xs text-muted-foreground flex items-center gap-1">
         {hint ? (
           <TooltipProvider delayDuration={200}>
-            <Tooltip>
+            <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
               <TooltipTrigger asChild>
-                <span className="flex items-center gap-1 cursor-default">
+                <span onClick={t.tap} className="flex items-center gap-1 cursor-pointer">
                   {label}
                   <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
                     <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
@@ -580,6 +593,9 @@ const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.62
 //     N side passes = ceil((width − dia) / sideStepover), sideStepover ≈ 0.5×dia.
 //   HEM: smaller dias (~0.4–0.7× width), multi-flute, labeled "deep".
 type DiaChip = { dia: number; label: string; sub: string };
+// One stocked EDP candidate at a given slot diameter (server returns up to 2 per Ø,
+// distinct by flute count + geometry — e.g. 5fl CB vs 5fl std vs 6fl).
+type SlotDiaEdp = { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null };
 function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
   if (!(slotWidth > 0)) return [];
   if (strategy === "hem") {
@@ -590,7 +606,7 @@ function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaCh
     return list.slice().reverse().map(d => ({
       dia: d,
       label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
-      sub: `${(slotWidth / d >= 1.43 ? "high flute · deep" : "tight — loops cramped")}`,
+      sub: `${(slotWidth / d >= 1.43 ? "deep" : "tight — loops cramped")}`,
     }));
   }
   // Traditional: all stocked dias ≤ width, ranked by fewest side passes (largest first).
@@ -613,7 +629,7 @@ function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaCh
 // Steady-state SFM/IPT is unchanged once the tool is past the skin.
 // Multipliers apply to the first pass that breaks the scale/skin.
 // ─────────────────────────────────────────────────────────────────
-type StockConditionKey = "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment";
+type StockConditionKey = "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "flame_cut" | "nitrided" | "cold_worked" | "weldment";
 
 const STOCK_CONDITION_INFO: Record<StockConditionKey, {
   label: string;
@@ -671,6 +687,30 @@ const STOCK_CONDITION_INFO: Record<StockConditionKey, {
     note: "Case-hardened skin is 58–64 HRC. Plan to skim the case in ONE pass at heavily-reduced parameters, OR stay fully below it. NEVER run a pass along the case-core boundary — chatter and edge chipping.",
     tooltip: "Carburized / case-hardened steel with 58–64 HRC skin over softer core. Through the case: ~40% SFM, 60% IPT, light DOC. Consider grinding for finish passes through hardened case.",
   },
+  flame_cut: {
+    label: "Flame/Plasma Cut",
+    short: "Flame/Plasma-Cut Edge",
+    sfmMult: 0.45,
+    iptMult: 0.65,
+    note: "Flame/plasma/laser-cut edges re-harden as they cool — a 0.030–0.060\" rim can hit 50–55 HRC, harder than the parent plate. Skim the burned edge off in ONE pass at reduced SFM/IPT, then return to steady-state numbers once into clean parent metal.",
+    tooltip: "Thermally-cut plate edge (oxy-fuel, plasma, laser). Self-quenched rim ~50–55 HRC, ~0.03–0.06\" deep. Skim pass: ~45% SFM, 65% IPT to get past the recast/HAZ. Honed-edge tools — sharp edges chip on the hard rim.",
+  },
+  nitrided: {
+    label: "Nitrided",
+    short: "Nitrided / Hard-Coated",
+    sfmMult: 0.30,
+    iptMult: 0.55,
+    note: "Nitrided (and hard-anodized / hard-chrome) surfaces have a thin but glass-hard skin (~65–70 HRC compound layer, ~0.005–0.015\" deep). Conventional carbide struggles — most shops GRIND or EDM through it. If you must mill: very light DOC, sharp/honed CBN or fine-grain coated carbide, expect short tool life.",
+    tooltip: "Nitrided steel / hard-anodized alloy / hard-chrome plate. Compound layer ~65–70 HRC over a tapering diffusion zone. Skim pass: ~30% SFM, 55% IPT, DOC <0.005\". Strongly consider grinding instead.",
+  },
+  cold_worked: {
+    label: "Cold-Worked",
+    short: "Cold-Worked / Burnished",
+    sfmMult: 0.80,
+    iptMult: 0.90,
+    note: "Cold-drawn, spun, shot-peened, or previously-burnished surfaces carry a work-hardened skin — mild in carbon steel, severe in austenitic stainless and superalloys (which can double surface hardness). Maintain chip thickness and don't dwell; rubbing work-hardens it further ahead of the edge.",
+    tooltip: "Work-hardened skin from cold drawing, spinning, peening, or a prior dull-tool pass. Light derate: ~80% SFM, 90% IPT. Keep FPT up — rubbing makes it worse. Stainless/superalloys hardest hit.",
+  },
   weldment: {
     label: "Weldment",
     short: "Weldment / HAZ",
@@ -682,19 +722,19 @@ const STOCK_CONDITION_INFO: Record<StockConditionKey, {
 };
 
 const STOCK_CONDITION_ORDER: StockConditionKey[] = [
-  "billet_cf", "hot_rolled", "forged", "cast_sand", "cast_invest", "case_hard", "weldment",
+  "billet_cf", "hot_rolled", "forged", "cast_sand", "cast_invest", "case_hard", "flame_cut", "nitrided", "cold_worked", "weldment",
 ];
 
 // Applicability per ISO group — dimmed when not in the set.
 // Empty / missing ISO => show everything (no narrowing yet).
 const STOCK_APPLICABILITY: Record<string, ReadonlySet<StockConditionKey>> = {
-  N1: new Set(["billet_cf", "cast_sand", "weldment"]),                                           // Aluminum / Cu / brass — billet + sand cast (356/380). Forging rare; welded fixtures common.
-  N2: new Set(["billet_cf", "cast_sand", "weldment"]),                                           // Abrasive non-ferrous (silicon bronze, Mn bronze, beryllium copper).
-  P:  new Set(["billet_cf", "hot_rolled", "forged", "case_hard", "weldment"]),                   // Steel — everything except castings is common.
-  M:  new Set(["billet_cf", "hot_rolled", "forged", "cast_invest", "weldment"]),                 // Stainless — investment casting common, sand casting rare.
+  N1: new Set(["billet_cf", "cast_sand", "cold_worked", "weldment"]),                             // Aluminum / Cu / brass — billet + sand cast (356/380). Cold-drawn/spun parts common; welded fixtures common.
+  N2: new Set(["billet_cf", "cast_sand", "cold_worked", "weldment"]),                             // Abrasive non-ferrous (silicon bronze, Mn bronze, beryllium copper).
+  P:  new Set(["billet_cf", "hot_rolled", "forged", "case_hard", "flame_cut", "nitrided", "cold_worked", "weldment"]),  // Steel — everything except castings is common. Plate parts often start as flame/plasma-cut blanks.
+  M:  new Set(["billet_cf", "hot_rolled", "forged", "cast_invest", "flame_cut", "nitrided", "cold_worked", "weldment"]),  // Stainless — investment casting common, sand casting rare. Plasma-cut plate routine; work-hardens aggressively.
   K:  new Set(["cast_sand", "cast_invest", "weldment"]),                                         // Cast iron — always cast; weld repairs are routine.
-  S:  new Set(["billet_cf", "forged", "cast_invest", "weldment"]),                               // Superalloys — investment castings (turbine blades) very common.
-  H:  new Set(["billet_cf", "forged", "case_hard", "weldment"]),                                 // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common.
+  S:  new Set(["billet_cf", "forged", "cast_invest", "cold_worked", "weldment"]),                 // Superalloys — investment castings (turbine blades) very common; work-harden severely.
+  H:  new Set(["billet_cf", "forged", "case_hard", "flame_cut", "nitrided", "weldment"]),         // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common. Flame-cut/nitrided tool-steel blanks happen.
   O:  new Set(["billet_cf"]),                                                                    // Plastics / composites — extruded / molded stock only; no welding.
 };
 
@@ -2198,7 +2238,7 @@ export default function Mentor() {
 
     hardness_value: ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.value ?? 0,
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
-    stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment",
+    stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "flame_cut" | "nitrided" | "cold_worked" | "weldment",
 
     // Drilling-specific
     drill_point_angle: 0 as 0 | 118 | 120 | 130 | 135 | 140 | 145,
@@ -2280,8 +2320,13 @@ export default function Mentor() {
         });
         if (!r.ok) { setSlotDiaEdps({}); return; }
         const data = await r.json();
-        const map: Record<string, { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null }> = {};
-        for (const c of (data.chips ?? [])) map[Number(c.dia).toFixed(4)] = { edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null };
+        // Server now returns up to 2 EDPs per Ø (distinct flute counts). Group them
+        // into a list per diameter so the UI can show both as separate chips.
+        const map: Record<string, SlotDiaEdp[]> = {};
+        for (const c of (data.chips ?? [])) {
+          const key = Number(c.dia).toFixed(4);
+          (map[key] ??= []).push({ edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null });
+        }
         setSlotDiaEdps(map);
       } catch { /* aborted or failed — chips fall back to Ø + pass count */ }
     }, 350);
@@ -2846,7 +2891,7 @@ export default function Mentor() {
   // Slotting diameter chips: best stocked EDP per candidate Ø (keyed by dia string).
   // Populated only once a material is selected (before that, chips show Ø + pass count
   // only — the EDP can't be trusted without knowing the material). See /api/slot-dia-tools.
-  const [slotDiaEdps, setSlotDiaEdps] = React.useState<Record<string, { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null }>>({});
+  const [slotDiaEdps, setSlotDiaEdps] = React.useState<Record<string, SlotDiaEdp[]>>({});
   const [pdfIncludeOptimal, setPdfIncludeOptimal] = React.useState<boolean>(() => {
     const v = localStorage.getItem("pdf_include_optimal");
     return v == null ? true : v === "1";
@@ -2918,6 +2963,9 @@ export default function Mentor() {
 
   const [formDirty, setFormDirty] = React.useState(false);
   const [runWarnings, setRunWarnings] = React.useState<string[]>([]);
+  // true = warnings are a hard "can't run" block (bad settings); false = just missing
+  // required fields ("please fill in"). Drives the header copy on the warning box.
+  const [runBlocked, setRunBlocked] = React.useState(false);
   // Snapshot of form at the moment of the last successful run; dirty = current form !== snapshot
   const lastRunFormRef = React.useRef<string>("");
 
@@ -3069,27 +3117,47 @@ export default function Mentor() {
       const _carryDepth = form.tool_type === "chamfer_mill" && _priorDepth > 0 && _priorDepth <= _maxDepth;
       setChamferDepthText(_carryDepth ? _priorDepth.toFixed(4) : "");
     }
-    // In slot mode, pre-fill WOC=100% and DOC=med immediately on SKU select
+    // In slot mode, pre-fill WOC/DOC immediately on SKU select. Traditional slotting
+    // is a full-width plow (WOC = 100% = tool dia). HEM/trochoidal slotting runs a
+    // LIGHT radial bite (the tool is narrower than the slot) with deep DOC — so it
+    // must NOT inherit the 100% WOC, or HEM shows a full-width slot it isn't cutting.
     const _isSlotMode = (form.mode as string) === "slot";
+    const _isHemSlot = _isSlotMode && form.slot_strategy === "hem";
     const _slotDia = Number(sku.cutting_diameter_in);
+    let _slotWocPct = 100;
+    let _slotDocXd = 0;
     if (_isSlotMode) {
-      const _slotPresets = getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
-      const _slotDocLow = _slotPresets.doc.low;
-      setWocText(_slotDia.toFixed(4));
-      setWocPreset("med");
-      setDocText((_slotDocLow * _slotDia).toFixed(3));
-      setDocPreset("low");
+      if (_isHemSlot) {
+        const _hp = getDynamicPresets("trochoidal", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
+        _slotWocPct = _hp.woc.med;
+        // Deep DOC per Z-level, capped by flute length and the actual slot depth.
+        const _deepXd = _hp.doc.high;
+        const _locXd = Number(sku.loc_in) > 0 ? Number(sku.loc_in) / _slotDia : _deepXd;
+        const _depthXd = (Number(form.final_slot_depth) || 0) > 0 ? (Number(form.final_slot_depth) / _slotDia) : _deepXd;
+        _slotDocXd = Math.min(_deepXd, _locXd, _depthXd);
+        setWocText(((_slotWocPct / 100) * _slotDia).toFixed(4));
+        setWocPreset("med");
+        setDocText((_slotDocXd * _slotDia).toFixed(3));
+        setDocPreset(Math.abs(_slotDocXd - _deepXd) < 1e-6 ? "high" : null);
+      } else {
+        const _slotPresets = getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
+        _slotDocXd = _slotPresets.doc.low;
+        setWocText(_slotDia.toFixed(4));
+        setWocPreset("med");
+        setDocText((_slotDocXd * _slotDia).toFixed(3));
+        setDocPreset("low");
+      }
     }
     setForm((p) => ({
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: _slotDia,
-      // Slot mode: pre-fill WOC/DOC (low = conservative default).
+      // Slot mode: pre-fill WOC/DOC. Traditional = 100% (full-width plow); HEM =
+      // light trochoidal WOC + deep DOC (computed above into _slotWocPct/_slotDocXd).
       // preserveCutParams (tool swap): carry prior DOC ×D, set WOC to optimal for new flutes.
       // Otherwise leave blank.
-      woc_pct: _isSlotMode ? 100 : (_preserve && _preserveOpt ? _preserveOpt.wocPct : 0),
-      doc_xd: _isSlotMode
-        ? getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard").doc.low
+      woc_pct: _isSlotMode ? _slotWocPct : (_preserve && _preserveOpt ? _preserveOpt.wocPct : 0),
+      doc_xd: _isSlotMode ? _slotDocXd
         : (_preserve && _preservedDocXd > 0 ? _preservedDocXd : 0),
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
@@ -3261,6 +3329,7 @@ export default function Mentor() {
   React.useEffect(() => { runRef.current = run; });
 
   const run = async () => {
+    setRunBlocked(false);   // reset; set true only on a hard "can't run" block below
     // Must have an EDP or CC print PDF (not required for deep pocket — tools are selected by the sequencer)
     if (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted) {
       setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);
@@ -3309,19 +3378,28 @@ export default function Mentor() {
     if (operation === "drilling" && !(form.drill_hole_depth > 0) && !(drillMultiDia && pdfExtracted)) missing.push("Hole Depth");
     if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0) && !(reamMultiDia && pdfExtracted)) missing.push("Pre-Drill / Existing Hole Diameter");
     if (missing.length > 0) {
+      setRunBlocked(false);   // missing required fields — "please fill in"
       setRunWarnings(missing);
       return;
     }
 
     // Slotting safety block — chip packing risk with too many flutes
-    if ((operation === "milling" || operation === "feedmilling") && form.mode === "slot") {
+    // Full-width (traditional) slotting gates — chip-clearance limits that come from
+    // the tool plowing the whole slot. These do NOT apply to HEM/trochoidal slotting,
+    // whose light radial bite clears chips fine and actually rewards high flute counts
+    // and deep DOC — so scope this entire block to the traditional strategy.
+    if ((operation === "milling" || operation === "feedmilling") && form.mode === "slot"
+        && (form.slot_strategy ?? "traditional") !== "hem") {
       const fl = form.flutes;
       const isHardened50Plus =
         form.material === "hardened_gt55" ||
         (form.hardness_scale === "hrc" && form.hardness_value >= 50);
-      // Flute count limits for traditional slotting
+      // 6+ flute tools can't evacuate a full-slot chip — block the run outright
+      // (no running parameters) rather than hand over feeds that will pack and snap
+      // the tool. HEM slotting is exempt (handled by the strategy gate above).
       if (fl >= 6) {
-        setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
+        setRunBlocked(true);
+        setRunWarnings([`Select a lower number of flutes for traditional slotting — need ≤5 flutes. This ${fl}-flute tool can't evacuate a full-slot chip; it will pack and break. Use a 2–5 flute tool, or switch to an HEM / trochoidal toolpath (where a high flute count is an advantage).`]);
         return;
       }
       // Slotting DOC ceiling — flute count × geometry × material. Mirrors the
@@ -3356,6 +3434,7 @@ export default function Mentor() {
         // flutes, less DOC, or an HEM toolpath helps. Below 5 flutes the ceiling
         // IS geometry-driven, so a chipbreaker tool can earn the deeper _cbCeiling.
         if (fl >= 5) {
+          setRunBlocked(true);
           setRunWarnings([`Slotting DOC ceiling for this ${fl}-flute tool is ${_slotCeiling}×D — a chip-clearance limit set by flute count, not geometry. Reduce axial depth or use a 4-flute (or fewer) tool to run deeper.${_hemHint}`]);
           return;
         }
@@ -3363,16 +3442,19 @@ export default function Mentor() {
         const _hint = _isCbGeom || _slotCeiling >= _cbCeiling
           ? `Slotting DOC ceiling for this tool is ${_slotCeiling}×D.`
           : `Slotting DOC ceiling for this tool is ${_slotCeiling}×D — a chipbreaker tool runs up to ${_cbCeiling}×D.`;
+        setRunBlocked(true);
         setRunWarnings([`${_hint} Reduce axial depth or change geometry.${_hemHint}`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
       if (isHardened50Plus && fl > 0) {
         if (fl === 5 && form.doc_xd > 0.10) {
+          setRunBlocked(true);
           setRunWarnings([`5-flute slotting in hardened material (≥50 HRC) is limited to 10% DOC (0.10×D) maximum. Reduce axial depth or switch to a 4-flute tool at 15% DOC max.`]);
           return;
         }
         if (fl <= 4 && form.doc_xd > 0.15) {
+          setRunBlocked(true);
           setRunWarnings([`Slotting in hardened material (≥50 HRC) is limited to 15% DOC (0.15×D) maximum with a 4-flute tool. Reduce axial depth.`]);
           return;
         }
@@ -3761,9 +3843,9 @@ export default function Mentor() {
         ? `<div style="font-size:9px;color:#b45309;margin:2px 0 4px 0;font-weight:600;">Speed Preset: ${SPEED_PRESET_EXPORT_LABEL[form.speed_preset]} — SFM biased from the app's balanced recommendation.</div>`
         : ""}
       <div class="kpi-grid">
-        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first pass</span>` : "") : null)}
-        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first pass</span>` : "") : null)}
-        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first pass</span>` : "") : null)}
+        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first skim pass</span>` : "") : null)}
+        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first skim pass</span>` : "") : null)}
+        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first skim pass</span>` : "") : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox(form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
         ${form.tool_type !== "chamfer_mill" && mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
@@ -5969,39 +6051,53 @@ ${stabSection}
             </div>
 
             <TooltipProvider delayDuration={200}>
-              <div className="mt-2 flex items-center gap-1 flex-nowrap overflow-x-auto">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 shrink-0 mr-1">Stock</span>
-                {STOCK_CONDITION_ORDER.map((k) => {
-                  const info = STOCK_CONDITION_INFO[k];
-                  const active = form.stock_condition === k;
-                  const applicable = !isoCategory || (STOCK_APPLICABILITY[isoCategory]?.has(k) ?? true);
+              <div className="mt-2 rounded-md border border-orange-500/30 bg-orange-500/[0.06] px-2 py-1.5">
+                <div className="text-[9px] font-bold uppercase tracking-widest text-orange-400/90 mb-1">Stock Condition</div>
+                <div className="flex flex-wrap gap-1">
+                  {STOCK_CONDITION_ORDER.map((k) => {
+                    const info = STOCK_CONDITION_INFO[k];
+                    const active = form.stock_condition === k;
+                    const applicable = !isoCategory || (STOCK_APPLICABILITY[isoCategory]?.has(k) ?? true);
+                    return (
+                      <Tooltip key={k}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setForm((p) => ({ ...p, stock_condition: k }))}
+                            className="rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-all whitespace-nowrap"
+                            style={{
+                              background: active ? "#f97316" : "transparent",
+                              borderColor: active ? "#f97316" : "#52525b",
+                              color: active ? "#fff" : "#a1a1aa",
+                              opacity: applicable || active ? 1 : 0.35,
+                            }}
+                          >
+                            {info.label}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">
+                          <p className="font-semibold mb-1">{info.short}</p>
+                          <p>{info.tooltip}</p>
+                          {!applicable && isoCategory && (
+                            <p className="mt-1 text-amber-300/90 text-[10px]">Uncommon for {isoCategory} materials — still selectable.</p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+                {/* Selected-condition guidance, always visible (mobile-reachable —
+                    tooltips are hover-only, but tapping a chip selects it, so this
+                    line surfaces the same info without needing hover). */}
+                {(() => {
+                  const sel = STOCK_CONDITION_INFO[form.stock_condition];
+                  if (!sel || !sel.tooltip || form.stock_condition === "billet_cf") return null;
                   return (
-                    <Tooltip key={k}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setForm((p) => ({ ...p, stock_condition: k }))}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold border transition-all whitespace-nowrap shrink-0"
-                          style={{
-                            background: active ? "#f97316" : "transparent",
-                            borderColor: active ? "#f97316" : "#52525b",
-                            color: active ? "#fff" : "#a1a1aa",
-                            opacity: applicable || active ? 1 : 0.35,
-                          }}
-                        >
-                          {info.label}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-72 text-xs">
-                        <p className="font-semibold mb-1">{info.short}</p>
-                        <p>{info.tooltip}</p>
-                        {!applicable && isoCategory && (
-                          <p className="mt-1 text-amber-300/90 text-[10px]">Uncommon for {isoCategory} materials — still selectable.</p>
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
+                    <p className="mt-1.5 text-[10px] leading-snug text-orange-200/80 border-t border-orange-500/20 pt-1.5">
+                      <span className="font-semibold text-orange-300/90">{sel.short}:</span> {sel.tooltip}
+                    </p>
                   );
-                })}
+                })()}
               </div>
             </TooltipProvider>
 
@@ -8592,12 +8688,43 @@ ${stabSection}
                 const slotW = Number(form.slot_width_in) || 0;
                 const strat = (form.slot_strategy ?? "traditional") as "traditional" | "hem";
                 const haveMat = !!form.material;
-                let chips = slotDiaChips(strat, slotW);
-                // Once a material is selected, the EDP lookup has run — hide candidate
-                // diameters with no stocked tool (every chip should be actionable).
-                if (haveMat) chips = chips.filter(c => slotDiaEdps[c.dia.toFixed(4)]);
-                if (!chips.length) return null;
+                const diaChips = slotDiaChips(strat, slotW);
+                // Expand each candidate diameter into render items. With a material
+                // selected, one item per stocked EDP variant (1-2 per Ø — distinct
+                // flute+geometry). Without a material, a single bare-Ø item.
+                type Item = { dia: number; label: string; sub: string; edp?: SlotDiaEdp };
+                const items: Item[] = [];
+                for (const c of diaChips) {
+                  const variants = slotDiaEdps[c.dia.toFixed(4)];
+                  if (haveMat) {
+                    // Hide diameters with no stocked tool (every chip should be actionable).
+                    for (const v of (variants ?? [])) items.push({ dia: c.dia, label: c.label, sub: c.sub, edp: v });
+                  } else {
+                    items.push({ dia: c.dia, label: c.label, sub: c.sub });
+                  }
+                }
+                if (!items.length) return null;
                 const curDia = Number(form.tool_dia) || 0;
+                // Seed WOC/DOC for the active strategy at a given dia/LOC. Shared by the
+                // bare-Ø path and the EDP path so loading a stocked tool ALSO sets a
+                // sensible light HEM WOC + deep (LOC/slot-capped) DOC — not 100% WOC.
+                const seedCutParams = (dia: number, locIn: number) => {
+                  const fp = getDynamicPresets(strat === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, locIn || form.loc, form.tool_series ?? "", form.geometry ?? "standard");
+                  if (strat === "hem") {
+                    setWocText(((fp.woc.med / 100) * dia).toFixed(4)); setWocPreset("med");
+                    const deepIn = fp.doc.high * dia;
+                    const loc = locIn > 0 ? locIn : (form.loc > 0 ? form.loc : deepIn);
+                    const slotDepth = Number(form.final_slot_depth) || 0;
+                    // DOC per Z-level = deep preset, capped by flute length AND by the
+                    // actual slot depth (no point cutting deeper than the slot).
+                    let seatIn = Math.min(deepIn, loc);
+                    if (slotDepth > 0) seatIn = Math.min(seatIn, slotDepth);
+                    setDocText(seatIn.toFixed(3)); setDocPreset(Math.abs(seatIn - deepIn) < 1e-6 ? "high" : null);
+                  } else {
+                    setWocText(dia.toFixed(4)); setWocPreset(null);
+                    setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
+                  }
+                };
                 return (
                   <div className="mt-2.5">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
@@ -8606,49 +8733,49 @@ ${stabSection}
                         : (strat === "hem" ? "Suggested tool Ø (trochoidal)" : "Suggested tool Ø — tap to set")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {chips.map(chip => {
-                        const sel = Math.abs(chip.dia - curDia) < 0.001;
-                        const hit = slotDiaEdps[chip.dia.toFixed(4)];
+                      {items.map((item, idx) => {
+                        const hit = item.edp;
+                        const sel = Math.abs(item.dia - curDia) < 0.001 && (!hit || edpText.trim().toLowerCase() === hit.edp.toLowerCase());
                         const geomTag = hit?.geometry === "chipbreaker" ? " CB" : hit?.geometry === "truncated_rougher" ? " VXR" : "";
                         // Reach tag: if the stocked tool's LOC can't cover the slot depth
                         // in one pass, say how many axial steps it needs (not a blocker —
                         // stability advisor handles the deeper/longer-reach derate).
                         const slotDepthIn = Number(form.final_slot_depth) || 0;
-                        const zSteps = (hit?.loc_in && slotDepthIn > hit.loc_in + 1e-4)
-                          ? Math.ceil(slotDepthIn / hit.loc_in) : 0;
+                        // loc_in arrives from Postgres NUMERIC as a STRING — coerce before math.
+                        const locNum = Number(hit?.loc_in) || 0;
+                        const zSteps = (locNum > 0 && slotDepthIn > locNum + 1e-4)
+                          ? Math.ceil(slotDepthIn / locNum) : 0;
                         return (
                           <button
-                            key={chip.dia}
+                            key={hit ? `${item.dia}-${hit.edp}` : item.dia}
                             type="button"
-                            title={hit ? `Load EDP ${hit.edp} (${chip.dia}", ${hit.flutes}fl)` : `Set tool diameter to ${chip.dia}"`}
-                            onClick={() => {
-                              const dia = chip.dia;
-                              // If we have a real stocked EDP, load that tool outright so the
-                              // calculator runs with it. Otherwise just set the diameter.
+                            title={hit ? `Load EDP ${hit.edp} (${item.dia}", ${hit.flutes}fl)` : `Set tool diameter to ${item.dia}"`}
+                            onClick={async () => {
+                              const dia = item.dia;
+                              // If we have a real stocked EDP, load that tool, THEN seed the
+                              // strategy's WOC/DOC (applyEdp preserves cut params, so we must
+                              // set them ourselves). Otherwise just set the diameter + seed.
                               if (hit?.edp) {
-                                applyEdpByLookup(hit.edp);
+                                // applySkuToForm (via applyEdp) now seeds slot WOC/DOC
+                                // correctly per strategy — light HEM bite, not 100% —
+                                // so no separate seed needed here.
+                                await applyEdpByLookup(hit.edp);
                                 return;
                               }
                               setForm(p => ({ ...p, tool_dia: dia }));
                               setToolDiaText(dia.toFixed(4));
-                              // Recompute WOC/DOC text for the new dia under the active strategy.
-                              const fp = getDynamicPresets(strat === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
-                              if (strat === "hem") {
-                                setWocText(((fp.woc.med / 100) * dia).toFixed(4)); setWocPreset("med");
-                                const deepIn = fp.doc.high * dia; const locIn = form.loc > 0 ? form.loc : deepIn; const seatIn = Math.min(deepIn, locIn);
-                                setDocText(seatIn.toFixed(3)); setDocPreset(seatIn < deepIn - 1e-6 ? null : "high");
-                              } else {
-                                setWocText(dia.toFixed(4)); setWocPreset(null);
-                                setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
-                              }
+                              seedCutParams(dia, 0);
                             }}
                             className={`rounded border px-2 py-1 text-[11px] leading-tight text-left transition-colors ${sel ? "border-indigo-400 bg-indigo-500/20 text-indigo-200" : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-indigo-400/60"}`}
                           >
-                            <span className="font-semibold">{chip.label}</span>
-                            <span className="opacity-70"> · {chip.sub}</span>
+                            <span className="font-semibold">{item.label}</span>
+                            <span className="opacity-70"> · {item.sub}</span>
                             {hit && (
                               <span className="block text-[10px] text-orange-400 font-medium">
                                 EDP {hit.edp} · {hit.flutes}fl{geomTag}
+                                {locNum > 0 && (
+                                  <span className="text-zinc-400"> · LOC {locNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
+                                )}
                                 {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
                               </span>
                             )}
@@ -8696,6 +8823,25 @@ ${stabSection}
                   </div>
                 );
               })()}
+
+              {/* High-flute slotting warning — fires the MOMENT a 6+ flute tool is
+                  loaded in TRADITIONAL (full-width) slotting, before any Run. 6+ flute
+                  tools lack the gullet volume to evacuate a full-slot chip → packing,
+                  recutting, fast failure. (HEM's light bite is fine with high flute
+                  counts, so this is traditional-only. 5fl is allowed but DOC-capped to
+                  ½×D, handled by the engine — not a hard warning.) */}
+              {(form.slot_strategy ?? "traditional") !== "hem"
+                && Number(form.tool_dia) > 0
+                && Number(form.flutes) >= 6 && (
+                <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-300">
+                  <span className="font-semibold">⚠ Select a lower number of flutes for traditional slotting (≤5).</span>{" "}
+                  A {form.flutes}-flute cutter doesn't have the gullet volume to clear chips in a
+                  full-width slot — they pack and recut, which breaks the tool with little warning.
+                  Traditional slotting won't run with this tool. Use <span className="font-semibold">4-flute
+                  (or 5-flute to ≈½×D depth)</span>, or switch to <span className="font-semibold">HEM / Trochoidal</span> above,
+                  where a high flute count is an advantage.
+                </div>
+              )}
 
               {/* Chipbreaker advantage — helps in BOTH strategies. The mechanism differs:
                   Traditional full-slot → segments the chip so a deep slot doesn't pack;
@@ -11479,7 +11625,11 @@ ${stabSection}
 
           {runWarnings.length > 0 && (
             <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
-              <p className="font-semibold mb-1">Please fill in the following before running:</p>
+              <p className="font-semibold mb-1">
+                {runBlocked
+                  ? "Can't run with these settings:"
+                  : "Please fill in the following before running:"}
+              </p>
               <ul className="list-disc list-inside space-y-0.5">
                 {runWarnings.map(w => <li key={w}>{w}</li>)}
               </ul>
@@ -13448,7 +13598,7 @@ ${stabSection}
                               {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
                               {firstSfm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
+                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first skim pass
                                 </span>
                               )}
                             </div>
@@ -13519,7 +13669,7 @@ ${stabSection}
                             {fmtInt(customer.rpm)}
                             {firstRpm != null && (
                               <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {fmtInt(firstRpm)} first pass
+                                {fmtInt(firstRpm)} first skim pass
                               </span>
                             )}
                           </>
@@ -13543,7 +13693,7 @@ ${stabSection}
                               ) : null}
                               {firstIpm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(firstIpm, 25.4, metric ? 1 : 2)} first pass
+                                  {UC(firstIpm, 25.4, metric ? 1 : 2)} first skim pass
                                 </span>
                               )}
                             </span>
