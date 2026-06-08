@@ -462,8 +462,151 @@ const MILLING_MODE_TIPS: Record<string, Array<{ title: string; body: string }>> 
     { title: "Stub and standard tools handle the upper bands best — don't over-reach.", body: "Using a long-reach RN tool for the full depth when a short tool can cover the top 60% of the pocket is wasteful and introduces unnecessary vibration in the easy zone. Let the stub or standard tool do what it's good at — short, stiff, aggressive. Save the long-reach tool for where it's actually needed." },
     { title: "Chip evacuation is critical in deep pockets — air blast or TSC mandatory.", body: "Re-cut chips in a deep pocket are abrasive. At 3×D depth, chips have nowhere to go unless you actively move them. Use TSC or directed air blast. For aluminum: air blast into the pocket from above works well. For steel/stainless: TSC prevents chip welding on the neck near the workpiece. Program a periodic Z-retract to clear chips if doing long passes." },
   ],
+  slot_hem: [
+    { title: "HEM slotting cuts a slot wider than the tool — pick the tool to the slot, not the slot to the tool.", body: "Use a cutter roughly 60–70% of the finished slot width. That leaves clean wall room for the trochoidal loops and a finishing allowance on each side. Too close to slot width (tool > ~85% of width) and the loops have nowhere to go — it becomes a full-width cut. Too small (< 40% of width) and you waste cycle time air-cutting around big loops." },
+    { title: "Light radial bite is the whole point — keep WOC at 5–15% of tool dia.", body: "The trochoidal arc takes a thin radial slice, so radial force and deflection stay low even at long reach. That's what lets you run deep axial DOC in a slot that traditional plowing could never reach. Don't be tempted to widen the step to 'save time' — engagement spikes at the loop turns and you lose the force advantage instantly." },
+    { title: "Depth is limited by flute length, not chip packing — run the tool's full LOC.", body: "Because the radial bite is light, chips clear up the open side of each loop instead of packing. Axial depth is no longer the constraint a full-width slot makes it — you can run to the material HEM cap (≈2.5–3.0×D for most metals, 1.5×D hardened) or the tool's LOC, whichever is less. A longer-LOC tool buys real depth here. Program DOC to LOC, never beyond it." },
+    { title: "Corner pinch is the failure mode — watch engagement at the loop ends.", body: "Even at a programmed 10% step, true engagement spikes where the trochoid arcs into the slot ends and corners. Round the loop transitions in CAM, keep a constant feed (no dwell), and if the cut talks louder at the ends, reduce stepover before anything else. The tool dies at the corners, not in the straightaway." },
+    { title: "Leave a finishing pass on each wall.", body: "Trochoidal roughing leaves a scalloped, slightly oversized slot — that's expected. Plan a light spring/finish pass down each wall at full depth (zero or near-zero radial stock) to hit width tolerance and wall finish. Roughing to size in one shot prints the loop scallops into the wall." },
+    { title: "More flutes is fine here — chip clearance isn't the limit.", body: "Unlike a full-width slot (where 5+ flutes pack and break), HEM's light engagement means you can run 4, 5, even 6-flute tools — more flutes raises feed and offsets the stiffness lost by going to a smaller diameter. Aluminum: 3 or 5-flute. Steel/stainless/Ti: 5 or 6-flute." },
+    { title: "Climb mill, constant feed, good chip evacuation.", body: "Climb milling keeps the cut stable and the finish clean. Air blast in aluminum; flood or through-coolant in steel/stainless; high-pressure coolant and never-dwell in titanium/Inconel. The open loop geometry evacuates far better than a buried slot, but recut chips still abrade — keep them moving." },
+  ],
 };
 MILLING_MODE_TIPS.trochoidal = MILLING_MODE_TIPS.hem;
+
+// ─────────────────────────────────────────────────────────────────
+// Slotting strategy recommender — Traditional (full-width plow) vs HEM (trochoidal).
+// Given a slot width + total depth + material + tool, estimate which is more efficient
+// AND safer, and explain why. This is a LIGHTWEIGHT relative estimator (pass counts +
+// engagement + risk), NOT the full physics engine — the exact feeds/time come from a
+// real Run. It exists to steer the strategy choice before the user commits.
+//
+// Logic:
+//   • Traditional: tool ≈ slot width, 100% WOC, capped at the slot DOC ceiling
+//     (flute/geom/material). passes = ceil(depth / (ceiling×D)). Each pass is a heavy
+//     full-width cut at derated feed — pass count climbs fast with depth, and tough
+//     materials / deep slots punish it with heat & deflection.
+//   • HEM: smaller tool (≈0.65× width), light WOC, deep DOC = min(matCap, LOC/D).
+//     Z-levels = ceil(depth / achievableDOC). Far fewer Z-levels when deep, but each
+//     level loops more XY distance and a wall finish pass is always required.
+//
+// Returns { winner, confidence, headline, detail } or null if inputs incomplete.
+type SlotRec = { winner: "traditional" | "hem"; confidence: "clear" | "lean"; headline: string; detail: string };
+function recommendSlotStrategy(opts: {
+  slotWidth: number; slotDepth: number; toolDia: number; loc: number;
+  flutes: number; iso: string; geometry: string;
+}): SlotRec | null {
+  const { slotWidth, slotDepth, toolDia, loc, flutes, iso, geometry } = opts;
+  if (!(slotWidth > 0) || !(slotDepth > 0) || !(toolDia > 0)) return null;
+
+  const isClean = iso === "N1" || iso === "N";   // clean non-ferrous (aluminum/brass/copper)
+  const isTi    = iso === "S";
+  const isHard  = iso === "H";
+  const seg     = geometry === "chipbreaker" || geometry === "truncated_rougher";
+
+  // ── Traditional ceiling (mirrors engine slot_doc_ceiling, ×D) ──
+  let tradCeil: number;
+  if (flutes >= 6) tradCeil = 0.15;
+  else if (flutes === 5) tradCeil = isTi ? 0.4 : 0.5;
+  else if (isClean) tradCeil = (flutes <= 2) ? 1.35 : (seg ? 1.35 : 1.0);
+  else if (isTi)   tradCeil = seg ? 1.0 : 0.75;
+  else if (flutes === 4) tradCeil = seg ? 1.25 : 1.0;
+  else tradCeil = 1.25;
+  // Traditional uses the full tool dia as the slot tool; depth in ×(tool dia).
+  const tradDocIn  = tradCeil * toolDia;
+  const tradPasses = Math.max(1, Math.ceil(slotDepth / Math.max(1e-6, tradDocIn)));
+
+  // ── HEM achievable depth per Z-level ──
+  const recTool  = slotWidth * 0.65;               // tool HEM would actually use
+  const matCapXd = iso === "M" ? 2.5 : isHard ? 1.5 : 3.0;
+  // Use the recommended HEM tool dia for the LOC bound (smaller tool, but LOC is the
+  // currently-loaded tool's LOC — best estimate available pre-run).
+  const hemLocXd = loc > 0 && recTool > 0 ? loc / recTool : matCapXd;
+  const hemDocXd = Math.min(matCapXd, loc > 0 ? hemLocXd : matCapXd);
+  const hemDocIn = hemDocXd * recTool;
+  const hemZlevels = Math.max(1, Math.ceil(slotDepth / Math.max(1e-6, hemDocIn)));
+
+  const depthToWidth = slotDepth / slotWidth;
+  const haveMaterial = !!iso;   // ISO category set — needed for a confident call
+
+  // ── Decision ──
+  // The honest tiebreaker is pass count + material toughness, NOT depth alone.
+  // A square (1×) slot that traditional clears in 1–2 passes is the BREAD-AND-BUTTER
+  // traditional case — HEM's looping + mandatory wall-finish overhead only pays off
+  // when traditional turns pass-heavy (deep slot, low DOC ceiling) or the material
+  // runs hot (Ti/superalloy/hardened). Start neutral and let real signals move it.
+  const reasons: string[] = [];
+  let hemScore = 0;
+
+  // Tough materials genuinely favor HEM (heat control).
+  if (isTi || isHard) { hemScore += 2; reasons.push(`${isTi ? "titanium/superalloy" : "hardened"} material runs cooler with HEM's light radial bite`); }
+  // Depth only pushes to HEM once it's GENUINELY deep (≥1.8× as deep as wide) AND
+  // traditional actually turns pass-heavy. A 1× square slot is not deep.
+  if (depthToWidth >= 1.8 && tradPasses >= 3) { hemScore += 2; reasons.push(`deep slot (${depthToWidth.toFixed(1)}× as deep as wide) — traditional needs ${tradPasses} full-width passes`); }
+  // Few traditional passes → traditional wins regardless of material (the looping +
+  // wall-finish overhead isn't worth it). This is the common case the old code missed
+  // when no material was selected (isClean was false → brake never fired).
+  if (tradPasses <= 2) { hemScore -= 2; reasons.push(`traditional clears this in ${tradPasses} pass${tradPasses > 1 ? "es" : ""} — looping + wall-finish overhead isn't worth it`); }
+  if (tradPasses >= 4) { hemScore += 1; reasons.push(`${tradPasses} traditional passes vs ~${hemZlevels} HEM Z-level${hemZlevels > 1 ? "s" : ""}`); }
+  if (tradCeil <= 0.5) { hemScore += 1; reasons.push(`this tool's traditional slot ceiling is only ${tradCeil}×D (high flute count), so traditional is pass-heavy`); }
+
+  const winner: "traditional" | "hem" = hemScore > 0 ? "hem" : "traditional";
+  // Confidence drops to "lean" when no material is chosen — we can't judge heat/toughness.
+  const confidence: "clear" | "lean" = (haveMaterial && Math.abs(hemScore) >= 3) ? "clear" : "lean";
+
+  const matHint = haveMaterial ? "" : " Select a material for a firmer call (toughness drives the heat trade-off).";
+  const headline = winner === "hem"
+    ? `HEM / trochoidal looks ${confidence === "clear" ? "clearly " : ""}more efficient here`
+    : `Traditional slotting looks ${confidence === "clear" ? "clearly " : ""}more efficient here`;
+  const detail = (reasons.length ? reasons.slice(0, 2).join("; ") + ". " : "")
+    + (winner === "hem"
+        ? `A ~${recTool.toFixed(3)}″ tool would run ~${hemDocXd.toFixed(1)}×D deep per level (${hemZlevels} level${hemZlevels > 1 ? "s" : ""}), with a wall finish pass.`
+        : `Tool ≈ slot width at ${tradCeil}×D ceiling → ${tradPasses} pass${tradPasses > 1 ? "es" : ""}, no separate wall finish needed.`)
+    + matHint
+    + " Run for exact feeds, time, and deflection.";
+  return { winner, confidence, headline, detail };
+}
+
+// Standard solid-carbide catalog diameter ladder (mirrors legacy_engine.py _std_dias).
+// Used to compute the diameter chips so we suggest sizes that plausibly exist; the
+// optimal-tool scorer then resolves the actual stocked EDP at the chosen diameter.
+const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
+
+// Diameter chip suggestions for the slotting panel. Given the slot width + strategy,
+// returns clickable diameter options so the user can set tool_dia WITHOUT scrolling
+// up to the tool section.
+//   Traditional: every stocked dia ≤ width is valid; ranked FEWEST side passes first
+//     (largest-that-fits ≈ single plow). Each chip notes its pass count.
+//     N side passes = ceil((width − dia) / sideStepover), sideStepover ≈ 0.5×dia.
+//   HEM: smaller dias (~0.4–0.7× width), multi-flute, labeled "deep".
+type DiaChip = { dia: number; label: string; sub: string };
+function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
+  if (!(slotWidth > 0)) return [];
+  if (strategy === "hem") {
+    // Trochoidal: tool well below width so loops have room; rec ≈0.65×, accept 0.4–0.7×.
+    const lo = slotWidth * 0.40, hi = slotWidth * 0.70;
+    const cands = STD_DIAS.filter(d => d >= lo - 1e-6 && d <= hi + 1e-6);
+    const list = cands.length ? cands : [STD_DIAS.reduce((best, d) => Math.abs(d - slotWidth * 0.65) < Math.abs(best - slotWidth * 0.65) ? d : best, STD_DIAS[0])];
+    return list.slice().reverse().map(d => ({
+      dia: d,
+      label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
+      sub: `${(slotWidth / d >= 1.43 ? "high flute · deep" : "tight — loops cramped")}`,
+    }));
+  }
+  // Traditional: all stocked dias ≤ width, ranked by fewest side passes (largest first).
+  const cands = STD_DIAS.filter(d => d <= slotWidth + 1e-6);
+  if (!cands.length) return [];
+  return cands.slice().reverse().slice(0, 4).map(d => {
+    const exact = Math.abs(d - slotWidth) < 0.001;
+    const sideStep = 0.5 * d;
+    const passes = exact ? 0 : Math.max(1, Math.ceil((slotWidth - d) / Math.max(1e-6, sideStep)));
+    return {
+      dia: d,
+      label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
+      sub: exact ? "single plow" : `plow + ${passes} side pass${passes > 1 ? "es" : ""}`,
+    };
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Stock condition — affects first-pass cutting parameters only.
@@ -1984,6 +2127,8 @@ export default function Mentor() {
 
     // Slotting
     slot_closed: false,
+    slot_strategy: "traditional" as "traditional" | "hem",
+    slot_width_in: 0,  // only used when slot_strategy === "hem" (tool < slot width)
 
     // Deep Pocket / Thin Wall strategy
     dp_target_depth: 0,
@@ -2114,6 +2259,35 @@ export default function Mentor() {
   React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
   React.useEffect(() => { localStorage.setItem("cc_mode", form.mode || ""); }, [form.mode]);
 
+  // Fetch the best stocked EDP per candidate slotting diameter — only when slot mode,
+  // a slot width, AND a material are all set (EDP can't be material-correct otherwise).
+  // Debounced; clears when prerequisites are missing so chips fall back to Ø + pass count.
+  React.useEffect(() => {
+    const width = Number(form.slot_width_in) || 0;
+    if (form.mode !== "slot" || !(width > 0) || !form.material) { setSlotDiaEdps({}); return; }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/slot-dia-tools", {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
+          body: JSON.stringify({
+            slot_width_in: width,
+            slot_strategy: form.slot_strategy ?? "traditional",
+            material: form.material,
+            final_slot_depth: form.final_slot_depth ?? 0,
+            default_cr: 0.030,
+          }),
+        });
+        if (!r.ok) { setSlotDiaEdps({}); return; }
+        const data = await r.json();
+        const map: Record<string, { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null }> = {};
+        for (const c of (data.chips ?? [])) map[Number(c.dia).toFixed(4)] = { edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null };
+        setSlotDiaEdps(map);
+      } catch { /* aborted or failed — chips fall back to Ø + pass count */ }
+    }, 350);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [form.mode, form.slot_width_in, form.slot_strategy, form.material, form.final_slot_depth]);
+
   // ── Chamfer upgrade suggestion — fires when face width exceeds current tool's edge length ──
   React.useEffect(() => {
     if (form.tool_type !== "chamfer_mill" || !(form.chamfer_depth > 0) || !(form.tool_dia > 0) || !(form.chamfer_angle > 0)) {
@@ -2177,6 +2351,8 @@ export default function Mentor() {
         // Sync drilling text fields
         if (inputs.oal)              setPdfOalText(Number(inputs.oal).toFixed(3));
         if (inputs.drill_hole_depth) setDrillHoleDepthText(Number(inputs.drill_hole_depth).toFixed(3));
+        if (inputs.slot_width_in)    setSlotWidthText(Number(inputs.slot_width_in).toFixed(3));
+        if (inputs.final_slot_depth) setSlotDepthText(Number(inputs.final_slot_depth).toFixed(3));
         if (inputs.drill_steps > 0) {
           setDrillMultiDia(true);
           if (inputs.drill_step_diameters?.length) setStepDiaTexts(inputs.drill_step_diameters.map((d: number) => d.toFixed(4)));
@@ -2426,10 +2602,20 @@ export default function Mentor() {
     };
   }
 
+  // Effective key for mode-specific tips/labels. Slotting branches by sub-strategy:
+  // HEM slot (tool < slot width) gets the trochoidal-slotting tip set; traditional
+  // slot keeps the full-width "slot" tips. Everything else maps straight to form.mode.
+  const tipsModeKey: string =
+    (form.mode === "slot" && form.slot_strategy === "hem") ? "slot_hem" : (form.mode || "");
+
   // Convenience: get presets for current form state
   const dynPresets = React.useMemo(() =>
-    getDynamicPresets(form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard"),
-    [form.mode, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series] // eslint-disable-line
+    // HEM slotting (tool < slot width) uses the trochoidal preset regime — light WOC,
+    // deep DOC — not the full-width slot ceilings. Traditional slotting keeps "slot".
+    getDynamicPresets(
+      (form.mode === "slot" && form.slot_strategy === "hem") ? "trochoidal" : form.mode,
+      isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard"),
+    [form.mode, form.slot_strategy, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series] // eslint-disable-line
   );
 
   // Keep WOC_PRESETS / DOC_PRESETS as aliases pointing to dynamic values for
@@ -2523,6 +2709,10 @@ export default function Mentor() {
   const [targetHoleText, setTargetHoleText] = React.useState("");
   const [drillFluteLenText, setDrillFluteLenText] = React.useState("");
   const [drillHoleDepthText, setDrillHoleDepthText] = React.useState("");
+  // Slotting strategy dimension inputs — text-state pattern (free typing, normalize to
+  // 3 decimals on blur) so trailing zeros and a lone "." survive mid-entry.
+  const [slotWidthText, setSlotWidthText] = React.useState("");
+  const [slotDepthText, setSlotDepthText] = React.useState("");
   const [drillMultiDia, setDrillMultiDia] = React.useState(false);
   const [reamMultiDia, setReamMultiDia] = React.useState(false);
   const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
@@ -2653,6 +2843,10 @@ export default function Mentor() {
   const [optimalRec, setOptimalRec] = React.useState<any>(null);
   const [optimalLoading, setOptimalLoading] = React.useState(false);
   const [optimalExpanded, setOptimalExpanded] = React.useState(false);
+  // Slotting diameter chips: best stocked EDP per candidate Ø (keyed by dia string).
+  // Populated only once a material is selected (before that, chips show Ø + pass count
+  // only — the EDP can't be trusted without knowing the material). See /api/slot-dia-tools.
+  const [slotDiaEdps, setSlotDiaEdps] = React.useState<Record<string, { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null }>>({});
   const [pdfIncludeOptimal, setPdfIncludeOptimal] = React.useState<boolean>(() => {
     const v = localStorage.getItem("pdf_include_optimal");
     return v == null ? true : v === "1";
@@ -2934,6 +3128,21 @@ export default function Mentor() {
     setSkuChamferEdgeLength(isChamfer ? 1 : null); // just a truthy flag — values computed from geometry
   }
 
+  // Look up a specific EDP and apply it to the tool block (same as picking it from the
+  // EDP dropdown). Used by the slotting diameter chips: tapping a chip's EDP loads that
+  // real tool so the user can run the calculator. preserveCutParams keeps the slot DOC/WOC.
+  async function applyEdpByLookup(edp: string) {
+    const want = edp.trim().toLowerCase();
+    if (!want) return;
+    try {
+      const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
+      const data: SkuRecord[] = await r.json();
+      const match = data.find(s => String(s.EDP ?? (s as any).edp ?? "").toLowerCase() === want) ?? data[0];
+      if (match) applySkuToForm(match, { preserveCutParams: true });
+      else { setEdpText(edp); setEdpNotFound(true); }
+    } catch { setEdpText(edp); }
+  }
+
   function clearSku() {
     setSkuLocked(false);
     setSkuDescription("");
@@ -2995,6 +3204,8 @@ export default function Mentor() {
     setTargetHoleText("");
     setDrillFluteLenText("");
     setDrillHoleDepthText("");
+    setSlotWidthText("");
+    setSlotDepthText("");
     setStepDiaTexts([]);
     setStepLenTexts([]);
     setReamFluteLenText("");
@@ -3133,11 +3344,26 @@ export default function Mentor() {
         return 1.25;                                 // steel 3-fl/other
       })();
       if (form.doc_xd > _slotCeiling) {
+        // In tough materials (Ti/superalloy + steel/stainless), the right way to
+        // get deep axial depth isn't a full-width slot — it's HEM/trochoidal:
+        // light radial WOC (8–15%) + deep axial DOC (1–3×D) keeps radial force,
+        // heat, and chip-packing low. Surface that as the headline fix.
+        const _hemHint = _cleanNonFerrous
+          ? ""
+          : ` For deeper axial depth in ${_isTi ? "titanium/superalloys" : "steel/stainless"}, switch to an HEM / trochoidal toolpath — light WOC (8–15%) lets you run 1–3×D DOC without the chip-packing and heat that cap full-width slotting.`;
+        // 5+ flute ceilings are a flute-count chip-clearance limit (set above,
+        // independent of geometry) — a chipbreaker won't lift them. Only fewer
+        // flutes, less DOC, or an HEM toolpath helps. Below 5 flutes the ceiling
+        // IS geometry-driven, so a chipbreaker tool can earn the deeper _cbCeiling.
+        if (fl >= 5) {
+          setRunWarnings([`Slotting DOC ceiling for this ${fl}-flute tool is ${_slotCeiling}×D — a chip-clearance limit set by flute count, not geometry. Reduce axial depth or use a 4-flute (or fewer) tool to run deeper.${_hemHint}`]);
+          return;
+        }
         const _cbCeiling = _cleanNonFerrous ? 1.35 : (_isTi ? 1.0 : 1.25);
         const _hint = _isCbGeom || _slotCeiling >= _cbCeiling
           ? `Slotting DOC ceiling for this tool is ${_slotCeiling}×D.`
           : `Slotting DOC ceiling for this tool is ${_slotCeiling}×D — a chipbreaker tool runs up to ${_cbCeiling}×D.`;
-        setRunWarnings([`${_hint} Reduce axial depth or change geometry.`]);
+        setRunWarnings([`${_hint} Reduce axial depth or change geometry.${_hemHint}`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
@@ -3505,9 +3731,12 @@ export default function Mentor() {
       face: "Facing (Planar Milling)", slot: "Slotting", trochoidal: "Roughing — HEM", circ_interp: "Circular Interpolation", deep_pocket: "Pocketing Strategy",
       surfacing: "3D Surface Contouring",
     };
+    // Slotting carries its sub-strategy into every label/export so the report is unambiguous.
+    const slotLabel = form.slot_strategy === "hem" ? "Slotting — HEM / Trochoidal" : "Slotting — Traditional";
+    const resolveModeLabel = (m: string) => (m === "slot" ? slotLabel : MODE_LABELS[m]) ?? m.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const baseOpLabel = operation === "milling" ? "Milling" : operation === "drilling" ? "Drilling" : operation === "reaming" ? "Reaming" : operation === "threadmilling" ? "Thread Milling" : operation.charAt(0).toUpperCase() + operation.slice(1);
-    const opLabel = operation === "milling" ? (MODE_LABELS[form.mode] ?? baseOpLabel) : baseOpLabel;
-    const modeLabel = MODE_LABELS[form.mode] ?? form.mode.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const opLabel = operation === "milling" ? (resolveModeLabel(form.mode) ?? baseOpLabel) : baseOpLabel;
+    const modeLabel = resolveModeLabel(form.mode);
 
     const row = (label: string, value: string | null | undefined) =>
       value ? `<tr><td class="lbl">${label}</td><td class="val">${value}</td></tr>` : "";
@@ -4822,7 +5051,14 @@ ${stabSection}
       // ── STRATEGY ────────────────────────────
       lines.push("STRATEGY");
       lines.push(DIV);
-      lines.push(L("Operation",    modeLabel[form.mode] ?? form.mode));
+      // Slotting carries its sub-strategy so the export names the exact process run.
+      const opExportLabel = form.mode === "slot"
+        ? (form.slot_strategy === "hem" ? "Slotting — HEM / Trochoidal" : "Slotting — Traditional")
+        : (modeLabel[form.mode] ?? form.mode);
+      lines.push(L("Operation",    opExportLabel));
+      if (form.mode === "slot" && form.slot_strategy === "hem" && (Number(form.slot_width_in) || 0) > 0) {
+        lines.push(L("Slot Width",   `${Number(form.slot_width_in).toFixed(3)}"  (tool ${Number(form.tool_dia).toFixed(4)}" — trochoidal)`));
+      }
       lines.push(L("Speed Preset", cust?.sfm_control?.mode === "manual"
         ? `Manual — ${Math.round(cust.sfm ?? 0)} SFM (set by user)`
         : (SPEED_PRESET_EXPORT_LABEL[form.speed_preset] ?? "Balanced (app-recommended SFM)")));
@@ -5009,7 +5245,9 @@ ${stabSection}
       }
 
       // Chip evacuation advisory
-      const chipEvacRisk = form.mode === "slot" ? "⚠ Full-width slot — ensure flood coolant or air blast to clear chips"
+      const chipEvacRisk = (form.mode === "slot" && form.slot_strategy === "hem")
+          ? "✓ HEM slot — light radial bite clears chips up the open loop side; air blast (Al) / flood or TSC (steel) keeps them moving"
+        : form.mode === "slot" ? "⚠ Full-width slot — ensure flood coolant or air blast to clear chips"
         : (form.woc_pct ?? 0) > 50 ? "⚠ High WOC — coolant/air blast critical for chip clearance"
         : form.flutes >= 7 ? "⚠ High flute count — chip clearance critical; use adequate coolant pressure"
         : "✓ OK — standard flood coolant or air blast";
@@ -5548,12 +5786,18 @@ ${stabSection}
                   const _smallDia = dia > 0 && dia <= 0.125;
                   const docLevel = _smallDia ? "low" : (mode === "hem" || mode === "trochoidal") ? "high" : mode === "slot" ? "low" : "med";
                   const hasDia = form.tool_dia > 0;
+                  // Leaving Slotting → clear slot-only fields so stale width/depth/strategy
+                  // don't linger (final_slot_depth is shared with keyseat/dovetail) or
+                  // reappear if the user switches back to Slotting later.
+                  const leavingSlot = mode !== "slot";
                   setForm((p) => ({
                     ...p,
                     mode,
                     ...(mode === "slot" ? { woc_pct: 100 } : mode === "face" ? { woc_pct: faceWocPct } : { woc_pct: wp.med }),
                     doc_xd: dp[docLevel],
+                    ...(leavingSlot ? { slot_strategy: "traditional" as const, slot_width_in: 0, final_slot_depth: 0 } : {}),
                   }));
+                  if (leavingSlot) { setSlotWidthText(""); setSlotDepthText(""); }
                   if (!hasDia) {
                     // No tool selected yet — leave text fields blank so nothing shows in the inputs
                     setWocText("");
@@ -8172,6 +8416,361 @@ ${stabSection}
                 Tailstock / live center in use
                 <span className="block text-[10px] text-zinc-500 mt-0.5">Simply-supported beam — significantly reduces part deflection. Apply when a dead center, live center, or sub-spindle is supporting the far end of the part.</span>
               </label>
+            </div>
+          )}
+
+          {/* Slotting Stats — slot facts + strategy + suggested tools. Placed AFTER
+              Material and BEFORE Tool Geometry: the strategy advisor needs material
+              toughness to give a confident call, and tapping a suggested tool chip
+              drops the EDP/diameter straight into the Tool Geometry section below. */}
+          {operation === "milling" && form.tool_type !== "chamfer_mill" && form.mode === "slot" && (
+          <div className="flex items-center gap-3 my-7">
+            <div className="flex-1 border-t-2 border-orange-500" />
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">Slotting Stats</div>
+            <div className="flex-1 border-t-2 border-orange-500" />
+          </div>
+          )}
+
+          {operation === "milling" && form.tool_type !== "chamfer_mill" && form.mode === "slot" && (
+            <div className="pb-4 mb-3 mt-3">
+              {/* Slot dimensions FIRST — these job facts drive the strategy choice,
+                  so they come before the toggle. Width + depth feed the recommendation;
+                  width also drives the HEM trochoidal geometry. */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Slot Width (in)</div>
+                  <input
+                    type="text" inputMode="decimal"
+                    value={slotWidthText}
+                    onChange={e => setSlotWidthText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(slotWidthText);
+                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, slot_width_in: n })); setSlotWidthText(n.toFixed(3)); }
+                      else { setForm(p => ({ ...p, slot_width_in: 0 })); setSlotWidthText(form.slot_width_in > 0 ? form.slot_width_in.toFixed(3) : ""); }
+                    }}
+                    placeholder="e.g. 0.500"
+                    className="no-spinners w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Total Slot Depth (in)</div>
+                  <input
+                    type="text" inputMode="decimal"
+                    value={slotDepthText}
+                    onChange={e => setSlotDepthText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(slotDepthText);
+                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, final_slot_depth: n })); setSlotDepthText(n.toFixed(3)); }
+                      else { setForm(p => ({ ...p, final_slot_depth: 0 })); setSlotDepthText(form.final_slot_depth > 0 ? form.final_slot_depth.toFixed(3) : ""); }
+                    }}
+                    placeholder="e.g. 0.750"
+                    className="no-spinners w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+              </div>
+
+              {/* Reach check — does the loaded tool's LOC cover the full slot depth in one
+                  pass? Fires for any loaded tool (incl. a manually uploaded special print),
+                  not just the suggested chips. Necked tools: LBS reach can exceed LOC, so a
+                  short LOC just means multiple Z-steps as long as LBS reaches; warn red only
+                  if even the reach falls short. Non-necked: LOC is both cut AND reach. */}
+              {form.loc > 0 && form.tool_dia > 0 && Number(form.final_slot_depth) > 0 && (() => {
+                const depthIn = Number(form.final_slot_depth);
+                const loc = form.loc;
+                if (depthIn <= loc + 1e-4) return null;   // single pass reaches — no warning
+                const isNecked = form.lbs > 0;
+                const reach = isNecked ? form.lbs : loc;
+                const zSteps = Math.ceil(depthIn / loc);   // axial passes at LOC-sized bites
+                const reachShort = depthIn > reach + 1e-4; // even total reach can't get there
+                return (
+                  <p className={`text-[11px] mt-2 ${reachShort ? "text-red-400" : "text-amber-400"}`}>
+                    {reachShort
+                      ? `⛔ Tool can't reach the full slot depth — LOC ${loc.toFixed(3)}"${isNecked ? ` / reach ${reach.toFixed(3)}"` : ""} vs ${depthIn.toFixed(3)}" slot. Pick a longer tool${isNecked ? "" : " or a reduced-neck (RN) version"}.`
+                      : `⚠ Tool LOC (${loc.toFixed(3)}") can't reach the ${depthIn.toFixed(3)}" slot depth in one pass — plan ~${zSteps} axial Z-steps of ≤${loc.toFixed(3)}" each${isNecked ? ` (LBS reach ${reach.toFixed(3)}" covers it)` : ""}, or load a longer-LOC tool. Cutting parameters still run; feeds/DOC derate via the stability advisor.`}
+                  </p>
+                );
+              })()}
+
+              {/* Strategy recommendation — fires once width + depth are both entered.
+                  Guides the toggle below; clicking pre-selects the recommended strategy. */}
+              {(() => {
+                const rec = recommendSlotStrategy({
+                  slotWidth: Number(form.slot_width_in) || 0,
+                  slotDepth: Number(form.final_slot_depth) || 0,
+                  toolDia:   Number(form.tool_dia) || 0,
+                  loc:       Number(form.loc) || 0,
+                  flutes:    Number(form.flutes) || 4,
+                  iso:       isoCategory || "",
+                  geometry:  form.geometry || "standard",
+                });
+                if (!rec) return null;
+                const matchesChoice = rec.winner === (form.slot_strategy ?? "traditional");
+                return (
+                  <div className={`mt-2.5 rounded-md border px-3 py-2 text-[11px] ${matchesChoice ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
+                    <div className={`font-semibold ${matchesChoice ? "text-emerald-300" : "text-amber-300"}`}>
+                      {matchesChoice ? "✓ " : "↪ "}{rec.headline}
+                      {!matchesChoice && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const dia = form.tool_dia || 0.5;
+                            const fp = getDynamicPresets(rec.winner === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
+                            const seedW = rec.winner === "hem" && !(form.slot_width_in > 0) ? Number((dia * 1.4).toFixed(3)) : form.slot_width_in;
+                            setForm(p => ({ ...p, slot_strategy: rec.winner, slot_width_in: seedW }));
+                            if (seedW > 0) setSlotWidthText(seedW.toFixed(3));
+                            if (rec.winner === "hem") {
+                              setWocText(((fp.woc.med / 100) * dia).toFixed(4)); setWocPreset("med");
+                              const deepIn = fp.doc.high * dia; const locIn = form.loc > 0 ? form.loc : deepIn; const seatIn = Math.min(deepIn, locIn);
+                              setDocText(seatIn.toFixed(3)); setDocPreset(seatIn < deepIn - 1e-6 ? null : "high");
+                            } else {
+                              setWocText(dia.toFixed(4)); setWocPreset(null);
+                              setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
+                            }
+                          }}
+                          className="ml-2 underline decoration-dotted hover:text-amber-200"
+                        >switch to {rec.winner === "hem" ? "HEM" : "Traditional"}</button>
+                      )}
+                    </div>
+                    <div className="text-zinc-400 mt-0.5">{rec.detail}</div>
+                  </div>
+                );
+              })()}
+
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1.5 mt-3">Slotting Strategy</div>
+              <div className="flex gap-2">
+                {([
+                  { val: "traditional", label: "Traditional", sub: "full-width plow" },
+                  { val: "hem",         label: "HEM / Trochoidal", sub: "tool < slot width" },
+                ] as const).map(opt => {
+                  const active = (form.slot_strategy ?? "traditional") === opt.val;
+                  return (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => {
+                        const dia = form.tool_dia || 0.5;
+                        // Reroute presets: HEM slot → trochoidal regime; traditional → slot regime.
+                        const fp = getDynamicPresets(opt.val === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
+                        // Seed a sensible slot width the first time HEM is picked: ~1.4× tool dia.
+                        const seedW = opt.val === "hem" ? (form.slot_width_in > 0 ? form.slot_width_in : Number((dia * 1.4).toFixed(3))) : form.slot_width_in;
+                        setForm(p => ({ ...p, slot_strategy: opt.val, slot_width_in: seedW }));
+                        if (seedW > 0) setSlotWidthText(seedW.toFixed(3));
+                        if (opt.val === "hem") {
+                          // Trochoidal: light WOC, deep DOC. HEM's light bite means depth
+                          // is limited by flute length, not chip packing — so seed DOC toward
+                          // the deep preset but never beyond the tool's LOC (can't cut deeper
+                          // than the flutes reach).
+                          setWocText(((fp.woc.med / 100) * dia).toFixed(4));
+                          setWocPreset("med");
+                          const deepIn = fp.doc.high * dia;
+                          const locIn  = form.loc > 0 ? form.loc : deepIn;
+                          const seatIn = Math.min(deepIn, locIn);
+                          setDocText(seatIn.toFixed(3));
+                          setDocPreset(seatIn < deepIn - 1e-6 ? null : "high");
+                        } else {
+                          // Traditional full-width slot: WOC = tool dia, slot DOC default.
+                          setWocText(dia.toFixed(4));
+                          setWocPreset(null);
+                          const lvl = (form.tool_dia > 0 && form.tool_dia <= 0.25) ? "low" : "low";
+                          setDocText((fp.doc[lvl] * dia).toFixed(3));
+                          setDocPreset(lvl);
+                        }
+                      }}
+                      className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${active ? "border-indigo-400 bg-indigo-500/20 text-indigo-200 font-semibold" : "border-zinc-700 bg-zinc-800/60 text-zinc-400 hover:border-zinc-500"}`}
+                    >
+                      <div>{opt.label}</div>
+                      <div className="text-[10px] font-normal opacity-70">{opt.sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Diameter chips — steer the user to a sensible tool diameter WITHOUT
+                  scrolling up to the tool section. Computed from slot width + strategy.
+                  Clicking sets tool_dia (and the tool field text) right here. */}
+              {(() => {
+                const slotW = Number(form.slot_width_in) || 0;
+                const strat = (form.slot_strategy ?? "traditional") as "traditional" | "hem";
+                const haveMat = !!form.material;
+                let chips = slotDiaChips(strat, slotW);
+                // Once a material is selected, the EDP lookup has run — hide candidate
+                // diameters with no stocked tool (every chip should be actionable).
+                if (haveMat) chips = chips.filter(c => slotDiaEdps[c.dia.toFixed(4)]);
+                if (!chips.length) return null;
+                const curDia = Number(form.tool_dia) || 0;
+                return (
+                  <div className="mt-2.5">
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+                      {haveMat
+                        ? (strat === "hem" ? "Suggested tools — optional shortcut (trochoidal)" : "Suggested tools — optional shortcut")
+                        : (strat === "hem" ? "Suggested tool Ø (trochoidal)" : "Suggested tool Ø — tap to set")}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {chips.map(chip => {
+                        const sel = Math.abs(chip.dia - curDia) < 0.001;
+                        const hit = slotDiaEdps[chip.dia.toFixed(4)];
+                        const geomTag = hit?.geometry === "chipbreaker" ? " CB" : hit?.geometry === "truncated_rougher" ? " VXR" : "";
+                        // Reach tag: if the stocked tool's LOC can't cover the slot depth
+                        // in one pass, say how many axial steps it needs (not a blocker —
+                        // stability advisor handles the deeper/longer-reach derate).
+                        const slotDepthIn = Number(form.final_slot_depth) || 0;
+                        const zSteps = (hit?.loc_in && slotDepthIn > hit.loc_in + 1e-4)
+                          ? Math.ceil(slotDepthIn / hit.loc_in) : 0;
+                        return (
+                          <button
+                            key={chip.dia}
+                            type="button"
+                            title={hit ? `Load EDP ${hit.edp} (${chip.dia}", ${hit.flutes}fl)` : `Set tool diameter to ${chip.dia}"`}
+                            onClick={() => {
+                              const dia = chip.dia;
+                              // If we have a real stocked EDP, load that tool outright so the
+                              // calculator runs with it. Otherwise just set the diameter.
+                              if (hit?.edp) {
+                                applyEdpByLookup(hit.edp);
+                                return;
+                              }
+                              setForm(p => ({ ...p, tool_dia: dia }));
+                              setToolDiaText(dia.toFixed(4));
+                              // Recompute WOC/DOC text for the new dia under the active strategy.
+                              const fp = getDynamicPresets(strat === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
+                              if (strat === "hem") {
+                                setWocText(((fp.woc.med / 100) * dia).toFixed(4)); setWocPreset("med");
+                                const deepIn = fp.doc.high * dia; const locIn = form.loc > 0 ? form.loc : deepIn; const seatIn = Math.min(deepIn, locIn);
+                                setDocText(seatIn.toFixed(3)); setDocPreset(seatIn < deepIn - 1e-6 ? null : "high");
+                              } else {
+                                setWocText(dia.toFixed(4)); setWocPreset(null);
+                                setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
+                              }
+                            }}
+                            className={`rounded border px-2 py-1 text-[11px] leading-tight text-left transition-colors ${sel ? "border-indigo-400 bg-indigo-500/20 text-indigo-200" : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-indigo-400/60"}`}
+                          >
+                            <span className="font-semibold">{chip.label}</span>
+                            <span className="opacity-70"> · {chip.sub}</span>
+                            {hit && (
+                              <span className="block text-[10px] text-orange-400 font-medium">
+                                EDP {hit.edp} · {hit.flutes}fl{geomTag}
+                                {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      {haveMat
+                        ? "A head start, not a limit — tap to load one of these, or pick any tool in the catalog below."
+                        : "Sets the tool diameter above. Select a material to see the matching stocked EDP for each size."}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Flute-count explainer for slotting — explains WHY the suggested chips
+                  are the flute counts they are. Traditional (gullet-limited): ferrous
+                  4–5fl (5fl only to ½×D), non-ferrous 2–3fl. HEM (light bite rewards
+                  teeth): ferrous ≥5fl, non-ferrous ≥3fl, no upper cap. Teaching only —
+                  any tool loads from the full picker below; cut params derate via advisor. */}
+              {Number(form.slot_width_in) > 0 && (() => {
+                const isHemStrat = (form.slot_strategy ?? "traditional") === "hem";
+                // Aluminum/clean non-ferrous is "N1" (N2 = abrasive non-ferrous, steel-tooled → ferrous advice).
+                const isNF = isoCategory === "N1";
+                return (
+                  <div className="mt-2.5 rounded-md border border-zinc-700 bg-zinc-800/40 px-3 py-2 text-[11px] text-zinc-300">
+                    <span className="font-semibold text-zinc-200">
+                      Flute count for {isHemStrat ? "HEM / trochoidal slotting" : "full-width slotting"}:
+                    </span>{" "}
+                    {isHemStrat ? (
+                      isNF ? (
+                        <>the light radial bite clears chips easily, so go up in flute count — <span className="font-semibold">3 flutes and up</span> for aluminum/non-ferrous. More teeth = more feed at the same chip load.</>
+                      ) : (
+                        <>HEM's light engagement rewards teeth in the cut — run <span className="font-semibold">5 flutes and up</span> (7, 8, 9+ all fair game) for ferrous. No upper limit; more flutes lift feed/MRR.</>
+                      )
+                    ) : (
+                      isNF ? (
+                        <>aluminum &amp; clean non-ferrous want <span className="font-semibold">2–3 flutes</span> — wide, polished gullets clear the big, soft chips a full slot makes; 4+ flutes pack and re-cut.</>
+                      ) : (
+                        <>ferrous slots run best on <span className="font-semibold">4–5 flutes</span> — enough teeth for a stable cut, enough gullet to evacuate. <span className="font-semibold">5-flute only to ≈½×D DOC</span> (tighter gullet packs in a deep slot); go 4-flute below that.</>
+                      )
+                    )}
+                    {" "}A <span className="font-semibold">chipbreaker</span> raises the deep-slot ceiling either way — see below. These are starting points, not limits.
+                  </div>
+                );
+              })()}
+
+              {/* Chipbreaker advantage — helps in BOTH strategies. The mechanism differs:
+                  Traditional full-slot → segments the chip so a deep slot doesn't pack;
+                  HEM → still a deep axial cut, so segmenting the long chip evacuates it up
+                  the flute, plus the ~17–20% force/heat reduction applies either way. */}
+              {(() => {
+                const isHemStrat = (form.slot_strategy ?? "traditional") === "hem";
+                const isCb = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
+                const why = isHemStrat
+                  ? "even at light WOC you're running a deep axial cut — segmenting the long chip clears it up the flute, and the ~17–20% lower cutting force/heat applies regardless of toolpath"
+                  : "slotting is a chip-evacuation problem — segmenting the long chip lets it clear instead of packing, which earns a deeper DOC ceiling (≈1.0–1.35×D vs 0.75–1.0×D standard) and cuts force ~17–20%";
+                return (
+                  <div className={`mt-2.5 rounded-md border px-3 py-2 text-[11px] ${isCb ? "border-emerald-500/40 bg-emerald-500/5" : "border-sky-500/40 bg-sky-500/5"}`}>
+                    {isCb ? (
+                      <span className="text-emerald-300/90">
+                        <span className="font-semibold">✓ Chipbreaker geometry selected.</span> Good call for slotting — {why}.
+                      </span>
+                    ) : (
+                      <span className="text-sky-200/90">
+                        <span className="font-semibold">💡 Consider a chipbreaker in slotting.</span> A chipbreaker (-CB) {why}.{" "}
+                        <button
+                          type="button"
+                          onClick={() => setForm(p => ({ ...p, geometry: "chipbreaker" }))}
+                          className="underline decoration-dotted font-semibold hover:text-sky-100"
+                        >Use chipbreaker →</button>
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {(form.slot_strategy ?? "traditional") === "hem" && (() => {
+                const toolDia = Number(form.tool_dia) || 0;
+                const slotW   = Number(form.slot_width_in) || 0;
+                const wallPer = slotW > toolDia ? (slotW - toolDia) / 2 : 0;
+                const ratio   = toolDia > 0 && slotW > 0 ? toolDia / slotW : 0;
+                // Recommended tool ≈ 0.6–0.7× slot width (leaves clean wall room for looping).
+                const recTool = slotW > 0 ? slotW * 0.65 : 0;
+                const tooBig  = toolDia > 0 && slotW > 0 && toolDia >= slotW - 1e-6;
+                const tooSmall= toolDia > 0 && slotW > 0 && ratio < 0.4;
+                // Depth headroom — HEM's light bite makes axial depth flute-length-limited,
+                // not chip-packing-limited, so the tool's full LOC is usable. Material HEM
+                // cap by ISO group (mirrors the engine's _sh_hem_cap_xd).
+                const matCapXd = isoCategory === "M" ? 2.5 : isoCategory === "H" ? 1.5 : 3.0;
+                const locXd    = toolDia > 0 && form.loc > 0 ? form.loc / toolDia : matCapXd;
+                const maxDocXd = Math.min(matCapXd, form.loc > 0 ? locXd : matCapXd);
+                const locLimited = form.loc > 0 && locXd < matCapXd;
+                return (
+                  <div className="mt-2.5">
+                    {toolDia > 0 && slotW > 0 && !tooBig && !tooSmall && (
+                      <>
+                        <p className="text-[10px] text-zinc-400 mt-1">
+                          Tool {toolDia.toFixed(4)}″ in a {slotW.toFixed(3)}″ slot leaves {wallPer.toFixed(4)}″ per wall ({(ratio * 100).toFixed(0)}% of width). Trochoidal loops clear the remaining material.
+                        </p>
+                        {maxDocXd > 0 && (
+                          <p className="text-[10px] text-emerald-400/90 mt-0.5">
+                            Depth: light WOC lets you run up to {maxDocXd.toFixed(1)}×D ({(maxDocXd * toolDia).toFixed(3)}″)
+                            {locLimited ? ` — the tool's full ${form.loc.toFixed(3)}″ LOC (longer LOC = deeper).` : ` (material HEM cap; bounded by ${form.loc > 0 ? `${form.loc.toFixed(3)}″ LOC` : "tool LOC"}).`}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {tooBig && (
+                      <p className="text-[10px] text-amber-400 mt-1">
+                        ⚠ Tool ({toolDia.toFixed(4)}″) is ≥ the slot width — that's a full-width cut, not trochoidal. Use Traditional, or pick a smaller tool (≈{recTool.toFixed(3)}″).
+                      </p>
+                    )}
+                    {tooSmall && (
+                      <p className="text-[10px] text-amber-400 mt-1">
+                        ⚠ Tool is under 40% of slot width — loops get inefficient (lots of air-cutting). A ~{recTool.toFixed(3)}″ tool is a better fit.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -12576,16 +13175,16 @@ ${stabSection}
                   >
                     <div>
                       <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                      {form.mode && MILLING_MODE_TIPS[form.mode] && (
+                      {form.mode && MILLING_MODE_TIPS[tipsModeKey] && (
                         <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
-                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[form.mode as string] ?? ""}
+                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting — Traditional", slot_hem:"Slotting — HEM / Trochoidal", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[tipsModeKey] ?? ""}
                         </span>
                       )}
                     </div>
                     <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
                   </button>
                   {machiningTipsOpen && (() => {
-                    const tips = MILLING_MODE_TIPS[form.mode] ?? MILLING_MODE_TIPS.hem;
+                    const tips = MILLING_MODE_TIPS[tipsModeKey] ?? MILLING_MODE_TIPS.hem;
                     return (
                       <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
                         {tips.map((tip, i) => (

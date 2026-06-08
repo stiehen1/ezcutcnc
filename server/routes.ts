@@ -1773,7 +1773,8 @@ export async function registerRoutes(
           tool_steel_s7: "iso_p", tool_steel_d2: "iso_p", cpm_10v: "iso_p",
           stainless_304: "iso_m", stainless_316: "iso_m", stainless_fm: "iso_m",
           stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
-          stainless_440c: "iso_m", stainless_ph: "iso_m", stainless_duplex: "iso_m",
+          stainless_440c: "iso_m", stainless_15_5: "iso_m", stainless_ph: "iso_m",
+          stainless_13_8: "iso_m", stainless_duplex: "iso_m",
           stainless_superduplex: "iso_m",
           cast_iron_gray: "iso_k", cast_iron_ductile: "iso_k", cast_iron_cgi: "iso_k",
           cast_iron_malleable: "iso_k",
@@ -2182,6 +2183,122 @@ export async function registerRoutes(
     }
   });
 
+  // ── Slotting diameter chips: best stocked EDP per candidate diameter ─────────
+  // The slotting panel shows clickable Ø chips. This resolves the actual best-scored
+  // stocked tool at each candidate diameter for the material + strategy, so each chip
+  // names a real EDP. Chips with no stocked tool are omitted (client hides them).
+  //   Traditional: candidate dias ≤ slot width (plow + side passes).
+  //   HEM:         candidate dias 0.40–0.70× slot width (trochoidal), multi-flute.
+  // Corner default: 0.030" CR — when the slot doesn't demand square, a CR0.030 tool
+  // is the common stock choice; we prefer it but accept square as fallback.
+  app.post("/api/slot-dia-tools", async (req, res) => {
+    try {
+      const { slot_width_in, slot_strategy, material, final_slot_depth, default_cr } = req.body ?? {};
+      const width = Number(slot_width_in ?? 0);
+      if (!(width > 0)) return res.json({ chips: [] });
+      const strat = String(slot_strategy ?? "traditional").toLowerCase();
+      const depth = Number(final_slot_depth ?? 0);
+      const defCr = Number(default_cr ?? 0.030);
+      const { pool } = await import("./db");
+
+      // Material → ISO column (same map used by EDP enrichment).
+      const MATERIAL_ISO: Record<string, string> = {
+        aluminum_wrought: "iso_n", aluminum_wrought_hs: "iso_n", aluminum_cast: "iso_n", non_ferrous: "iso_n",
+        manganese_bronze: "iso_p", silicon_bronze: "iso_p", copper_beryllium: "iso_p",
+        steel_alloy: "iso_p", steel_mild: "iso_p", steel_free: "iso_p",
+        tool_steel_p20: "iso_p", tool_steel_a2: "iso_p", tool_steel_h13: "iso_p",
+        tool_steel_s7: "iso_p", tool_steel_d2: "iso_p", cpm_10v: "iso_p",
+        stainless_304: "iso_m", stainless_316: "iso_m", stainless_fm: "iso_m",
+        stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
+        stainless_440c: "iso_m", stainless_15_5: "iso_m", stainless_ph: "iso_m",
+        stainless_13_8: "iso_m", stainless_duplex: "iso_m",
+        stainless_superduplex: "iso_m",
+        cast_iron_gray: "iso_k", cast_iron_ductile: "iso_k", cast_iron_cgi: "iso_k", cast_iron_malleable: "iso_k",
+        titanium_64: "iso_s", titanium_cp: "iso_s", hiTemp_fe: "iso_s", hiTemp_co: "iso_s",
+        monel_k500: "iso_s", inconel_625: "iso_s", inconel_718: "iso_s",
+        hastelloy_x: "iso_s", waspaloy: "iso_s", mp35n: "iso_s",
+        hardened_lt55: "iso_h", hardened_gt55: "iso_h", armor_ar400: "iso_h", armor_ar500: "iso_h",
+      };
+      const isoCol = MATERIAL_ISO[String(material ?? "")] ?? null;
+      const isN = isoCol === "iso_n";
+      const isHem = strat === "hem";
+
+      const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
+      const candidates = isHem
+        ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.70 + 1e-6)
+        : STD_DIAS.filter(d => d <= width + 1e-4);
+      if (!candidates.length) return res.json({ chips: [] });
+
+      // Strategy-aware flute filter (mirrors optimal-tool scorer).
+      // HEM's light radial bite rewards high flute counts (more teeth in the cut), so
+      // there's no upper cap: ferrous ≥5fl, non-ferrous ≥3fl. Traditional full-slot is
+      // gullet-limited: ferrous ≤5fl, non-ferrous 2–3fl.
+      const fluteClause = isHem
+        ? (isN ? `AND s.flutes >= 3` : `AND s.flutes >= 5`)
+        : isN
+          ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`
+          : `AND s.flutes <= 5`;
+      const matClause = isoCol ? `AND (s.${isoCol} = TRUE OR UPPER(s.series) IN ('QTR3','QTR3-RN'))` : "";
+      // Reach is RANKED, not filtered: a tool that reaches the full slot depth in one
+      // pass sorts ahead of a shorter one, but short-LOC tools still appear — the user
+      // may run a longer-reach tool they have on hand and let the stability advisor pull
+      // back feeds/DOC for the extra overhang. (LBS reach counts as reaching, too.)
+      const reachRank = depth > 0
+        ? `(CASE WHEN COALESCE(s.loc_in,0) >= ${(depth - 1e-4).toFixed(4)} OR COALESCE(s.lbs_in,0) >= ${(depth - 1e-4).toFixed(4)} THEN 0 ELSE 1 END) ASC,`
+        : "";
+
+      // Preferred default corner radius is SERIES- and DIAMETER-dependent (what Core
+      // Cutter actually offers), not a continuous ladder:
+      //   QTR series (QTR3 / QTR3-RN), 0.0625"–0.250" → 0.010"
+      //   all other series,            0.125"–0.250"  → 0.015"
+      //   larger tools (> 0.250")                     → 0.030" (defCr baseline)
+      // Computed per row in SQL since it depends on each candidate's series.
+      const chips: any[] = [];
+      for (const dia of candidates) {
+        const q = await pool.query(
+          `SELECT s.edp, s.flutes, s.geometry, s.coating, s.corner_condition, s.loc_in, s.lbs_in, s.series,
+                  (CASE WHEN LOWER(COALESCE(s.geometry,'standard')) = 'chipbreaker' THEN 3
+                        WHEN LOWER(COALESCE(s.geometry,'standard')) = 'truncated_rougher' THEN 2
+                        ELSE 1 END)
+                + (CASE WHEN s.corner_condition ~ '^[0-9]'
+                        THEN GREATEST(0, 2 - (ABS(s.corner_condition::numeric -
+                              (CASE
+                                 WHEN UPPER(COALESCE(s.series,'')) IN ('QTR3','QTR3-RN')
+                                      AND s.cutting_diameter_in <= 0.250 THEN 0.010
+                                 WHEN s.cutting_diameter_in <= 0.250 THEN 0.015
+                                 ELSE ${defCr}
+                               END)
+                            ) * 40))
+                        ELSE 1 END)        -- prefer the series/dia-appropriate CR; square = neutral
+                  AS score
+           FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
+           WHERE u.is_current = TRUE
+             AND ABS(s.cutting_diameter_in - ${dia}) < 0.001
+             AND s.edp NOT ILIKE '%-BLK'
+             AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+             ${fluteClause} ${matClause}
+           ORDER BY ${reachRank} score DESC, s.loc_in ASC NULLS LAST
+           LIMIT 1`
+        );
+        if (q.rows.length) {
+          const r = q.rows[0];
+          chips.push({
+            dia,
+            edp: r.edp,
+            flutes: r.flutes,
+            geometry: r.geometry ?? "standard",
+            coating: r.coating ?? null,
+            corner_condition: r.corner_condition ?? "square",
+            loc_in: r.loc_in ?? null,
+          });
+        }
+      }
+      return res.json({ chips });
+    } catch (e: any) {
+      return res.status(500).json({ message: e?.message || "Internal error", chips: [] });
+    }
+  });
+
   // ── Optimal tool recommendation ────────────────────────────────────────────
   app.post("/api/optimal-tool", async (req, res) => {
     try {
@@ -2194,12 +2311,21 @@ export async function registerRoutes(
       const wocPct  = Number(payload.woc_pct ?? 0);
       const docXd   = Number(payload.doc_xd ?? 0);
       const matKey  = String(payload.material ?? "");
+      // Slotting sub-strategy + dimensions drive WHICH tools we surface:
+      //   traditional, width = dia → plow at dia (peers at current dia, as before)
+      //   traditional, width > dia → plow + side pass: any stocked dia ≤ width works
+      //   hem                      → trochoidal: smaller dias (~0.4–0.7× width), multi-flute
+      const slotStrategy = String(payload.slot_strategy ?? "traditional").toLowerCase();
+      const slotWidth    = Number(payload.slot_width_in ?? 0);
+      const slotDepth    = Number(payload.final_slot_depth ?? 0);
+      const isHemSlot    = mode === "slot" && slotStrategy === "hem" && slotWidth > dia;
+      const isTradWideSlot = mode === "slot" && slotStrategy !== "hem" && slotWidth > dia + 1e-4;
 
       // ISO category needed before peer query (used in peer filter for slot/aluminum)
       const ISO_MAP: Record<string, string> = {
         aluminum_wrought: "N", aluminum_cast: "N",
         steel_mild: "P", steel_free: "P", steel_alloy: "P",
-        stainless_304: "M", stainless_316: "M", stainless_ph: "M",
+        stainless_304: "M", stainless_316: "M", stainless_15_5: "M", stainless_ph: "M", stainless_13_8: "M",
         stainless_duplex: "M", stainless_superduplex: "M", stainless_fm: "M",
         stainless_ferritic: "M", stainless_410: "M", stainless_420: "M", stainless_440c: "M",
         titanium_64: "S", inconel_718: "S", inconel_625: "S",
@@ -2219,6 +2345,34 @@ export async function registerRoutes(
       // LBS/necked tool: only consider peers with sufficient reach (lbs_in >= curLbs)
       const lbsPeerClause = curLbs > 0 ? ` AND COALESCE(s.lbs_in, 0) >= ${curLbs}` : "";
       console.log(`[OptimalTool] edp=${current_edp} lbs=${curLbs} lbsClause=${lbsPeerClause || "(none)"}`);
+      // Diameter is set by the slotting strategy's diameter CHIPS on the client (the
+      // user taps a suggested size before running), so the scorer stays locked to the
+      // chosen diameter and just finds the best tool AT that size — the tuned same-dia
+      // candidate cascade below depends on this. We do NOT relax the dia clause here.
+      // isHemSlot / isTradWideSlot remain available for strategy-aware flute & LOC rules.
+      void isTradWideSlot;
+
+      // Reach vs slot depth is RANKED, not filtered. Full-reach tools (LOC or LBS ≥
+      // depth, established in one Z pass) sort first, but shorter tools still show —
+      // a user may run a longer tool on hand, or step Z in HEM, and let the stability
+      // advisor derate feeds/DOC for the actual reach. No hard LOC≥depth gate.
+      const slotDepthRank = (mode === "slot" && slotDepth > 0)
+        ? `(CASE WHEN COALESCE(s.loc_in, 0) >= ${(slotDepth - 1e-4).toFixed(4)} OR COALESCE(s.lbs_in, 0) >= ${(slotDepth - 1e-4).toFixed(4)} THEN 0 ELSE 1 END) ASC,`
+        : "";
+
+      // Flute filter — strategy-aware for slotting:
+      //   HEM ferrous:     ≥5 flute (no upper cap — light bite rewards more teeth)
+      //   HEM non-ferrous: ≥3 flute (no upper cap)
+      //   trad N (aluminum): 2–3 flute, no VRX (gullet-limited, soft chips)
+      //   trad ferrous:      ≤5 flute
+      const isNslot = isoCategory === "N";
+      let slotFluteClause = "";
+      if (mode === "slot") {
+        if (isHemSlot)                slotFluteClause = isNslot ? ` AND s.flutes >= 3` : ` AND s.flutes >= 5`;
+        else if (isNslot)             slotFluteClause = ` AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`;
+        else                          slotFluteClause = ` AND s.flutes <= 5`;
+      }
+
       const peers = await pool.query(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
@@ -2230,9 +2384,8 @@ export async function registerRoutes(
            ${lbsPeerClause}
            ${isSurfacing ? `AND LOWER(s.corner_condition) IN ('ball','corner_radius')` : ""}
            ${mode === "circ_interp" ? `AND COALESCE(s.geometry,'standard') NOT IN ('chipbreaker','truncated_rougher')` : ""}
-           ${mode === "slot" && isoCategory === "N" ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)` : ""}
-           ${mode === "slot" && isoCategory !== "N" ? `AND s.flutes <= 5` : ""}
-         ORDER BY s.edp`,
+           ${slotFluteClause}
+         ORDER BY ${slotDepthRank} s.edp`,
         [dia, current_edp]
       );
       console.log(`[OptimalTool] peers=${peers.rows.length}`);
@@ -2324,18 +2477,22 @@ export async function registerRoutes(
         const locMatch  = Math.abs(Number(r.loc_in) - curLoc) < 0.001;
         const rf        = Number(r.flutes);
         const geom      = (r.geometry ?? "standard").toLowerCase();
-        // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper
-        if (isSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
+        // 5-fl VXR in slotting only at ≤ 0.5xD — exclude 5-fl VXR if deeper.
+        // EXCEPT HEM slot, which is meant to run deep with multi-flute tools.
+        if (isSlot && !isHemSlot && geom === "truncated_rougher" && rf >= 5 && docXd > 0.5) return false;
         // Never recommend a different corner condition than what the current tool has
         if (!cornerMatch(r)) return false;
-        // Slotting: never go up in flutes — chip clearance gets worse, not better.
-        // Steel/stainless/tough slot: prefer dropping to 4-flute (or 4-fl chipbreaker).
-        // Aluminum slot: prefer dropping to 3-flute.
-        const fluteMatch = rf === curFlutes
-          || (!isSlot && (stabOver || isCircInterp || isFinish) && rf === nextFlutes)
-          || (isSlot && stabOver && rf === nextFlutes && nextFlutes <= 5) // slot + deflecting: allow 4→5fl only
-          || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
-          || (isSlot && !slotAlum && rf === prevFlutes && prevFlutes >= 4);
+        // Flute preference depends on strategy:
+        //   HEM slot: light engagement — same or MORE flutes is good (5–6, capped in query).
+        //   Traditional slot: never go up — chip clearance worsens; prefer dropping
+        //     (aluminum → 3-fl, steel/tough → 4-fl).
+        const fluteMatch = isHemSlot
+          ? (rf === curFlutes || rf === nextFlutes || rf === prevFlutes)  // HEM: any nearby flute count is fine
+          : (rf === curFlutes
+            || (!isSlot && (stabOver || isCircInterp || isFinish) && rf === nextFlutes)
+            || (isSlot && stabOver && rf === nextFlutes && nextFlutes <= 5) // slot + deflecting: allow 4→5fl only
+            || (slotAlum  && rf === prevFlutes && prevFlutes >= 2)
+            || (isSlot && !slotAlum && rf === prevFlutes && prevFlutes >= 4));
         return locMatch && fluteMatch;
       });
       let bestSku: any = null;
@@ -2343,7 +2500,10 @@ export async function registerRoutes(
       for (const row of sameLocCandidates) {
         let sc = scoreSku(row);
         const rf = Number(row.flutes);
-        if (stabOver && rf === nextFlutes && (!isSlot || nextFlutes <= 5)) sc += STAB_FLUTE_BONUS;
+        if (isHemSlot) {
+          // HEM slot: more flutes raises feed and offsets the smaller-dia stiffness loss.
+          if (rf > curFlutes) sc += 2;
+        } else if (stabOver && rf === nextFlutes && (!isSlot || nextFlutes <= 5)) sc += STAB_FLUTE_BONUS;
         else if (!isSlot && isCircInterp && rf === nextFlutes) sc += CIRC_FLUTE_BONUS;
         else if (!isSlot && isFinish  && rf === nextFlutes) sc += FINISH_FLUTE_BONUS;
         else if (slotAlum  && rf === prevFlutes) sc += 2;

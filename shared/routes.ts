@@ -18,6 +18,13 @@ export const mentorSchemas = {
   input: z.object({
     operation: z.enum(["milling", "drilling", "reaming", "threadmilling", "keyseat", "dovetail", "feedmill"]).default("milling"),
     mode: z.enum(["hem", "traditional", "finish", "face", "slot", "trochoidal", "circ_interp", "surfacing", ""]).default("hem"),
+    // Slotting sub-strategy (only meaningful when mode === "slot"):
+    //   traditional = full-width plow, tool dia = slot width, 100% WOC (existing behavior)
+    //   hem         = trochoidal looping, tool dia < slot width, light WOC + deep DOC
+    slot_strategy: z.enum(["traditional", "hem"]).default("traditional"),
+    // Slot width in inches — only used for slot_strategy === "hem" (tool < width).
+    // 0 / unset → engine falls back to tool dia (degenerates to traditional).
+    slot_width_in: z.number().min(0).default(0),
     material: z.string().default("steel"),
 
     tool_dia: z.number().positive().default(0.5),
