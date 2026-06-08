@@ -606,7 +606,7 @@ function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaCh
     return list.slice().reverse().map(d => ({
       dia: d,
       label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
-      sub: `${(slotWidth / d >= 1.43 ? "high flute · deep" : "tight — loops cramped")}`,
+      sub: `${(slotWidth / d >= 1.43 ? "deep" : "tight — loops cramped")}`,
     }));
   }
   // Traditional: all stocked dias ≤ width, ranked by fewest side passes (largest first).
@@ -8754,6 +8754,9 @@ ${stabSection}
                             {hit && (
                               <span className="block text-[10px] text-orange-400 font-medium">
                                 EDP {hit.edp} · {hit.flutes}fl{geomTag}
+                                {hit.loc_in != null && hit.loc_in > 0 && (
+                                  <span className="text-zinc-400"> · LOC {hit.loc_in.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
+                                )}
                                 {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
                               </span>
                             )}
