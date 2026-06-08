@@ -2283,12 +2283,30 @@ export async function registerRoutes(
            ORDER BY ${reachRank} score DESC, s.loc_in ASC NULLS LAST
            LIMIT 12`
         );
+        // HEM/trochoidal sells deep one-pass DOC ("run the tool's full LOC"), so a
+        // short-LOC tool that needs 3-4 axial Z-levels to clear the slot contradicts
+        // the whole strategy. Drop HEM candidates that can't reach the depth in ≤2
+        // Z-steps, and rank fewest Z-steps (deepest reach) first. Slot depth is cut
+        // by the FLUTES, so reach = LOC only — LBS (non-fluted body below the shank)
+        // is clearance, not cutting length. Traditional plowing is unaffected.
+        const zStepsFor = (r: any) => {
+          const reach = Number(r.loc_in) || 0;
+          if (!(depth > 0) || !(reach > 0)) return 1;
+          return Math.ceil((depth - 1e-4) / reach);
+        };
+        let rows = q.rows;
+        if (isHem && depth > 0) {
+          const reachable = rows.filter(r => zStepsFor(r) <= 2);
+          // If nothing reaches in ≤2 passes at this Ø, suppress the Ø rather than
+          // suggest a 4-Z-step tool (the chip filter on the client hides empty Ø).
+          rows = reachable.sort((a, b) => zStepsFor(a) - zStepsFor(b) || Number(b.score) - Number(a.score));
+        }
         // Best overall, then the best with a DIFFERENT flute+geometry signature
         // (top-2-per-Ø). A 5fl chipbreaker and a 5fl standard are different tools —
         // so are 6fl CB vs 6fl standard — so dedupe on flutes+geometry, not flutes.
         const sig = (r: any) => `${r.flutes}|${String(r.geometry ?? "standard").toLowerCase()}`;
         const picks: any[] = [];
-        for (const r of q.rows) {
+        for (const r of rows) {
           if (picks.length === 0) { picks.push(r); continue; }
           if (picks.length === 1 && sig(r) !== sig(picks[0])) { picks.push(r); break; }
         }
