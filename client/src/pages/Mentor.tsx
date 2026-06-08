@@ -10703,7 +10703,25 @@ ${stabSection}
                     if (Number.isFinite(n) && n > 0) {
                       const clamped = Math.min(n, form.loc);
                       const xd = clamped / dia;
-                      setForm((p) => ({ ...p, doc_xd: xd }));
+                      // ANY HEM regime (HEM/trochoidal side-milling OR HEM slotting):
+                      // pushing DOC past the (flute-based) HEM cap is allowed up to the
+                      // tool's LOC — but a deeper axial bite raises radial force &
+                      // deflection, so auto-lighten WOC to hold force roughly constant
+                      // (WOC × DOC ≈ k). Floor at ~5% of dia so the trochoidal loop
+                      // doesn't drop into rubbing. The "past validated depth" warning
+                      // still fires downstream.
+                      const isHemRegime = form.mode === "hem" || form.mode === "trochoidal"
+                        || (form.mode === "slot" && form.slot_strategy === "hem");
+                      const capXd = dynPresets?.doc?.high ?? xd;
+                      if (isHemRegime && xd > capXd + 1e-3 && form.woc_pct > 0) {
+                        const scaled = form.woc_pct * (capXd / xd);     // hold WOC×DOC constant
+                        const newWocPct = Math.max(5, scaled);          // floor at 5% of dia (avoid rubbing)
+                        setForm((p) => ({ ...p, doc_xd: xd, woc_pct: newWocPct }));
+                        setWocText(((newWocPct / 100) * dia).toFixed(4));
+                        setWocPreset(null);
+                      } else {
+                        setForm((p) => ({ ...p, doc_xd: xd }));
+                      }
                       setDocText(clamped.toFixed(3));
                       setDocPreset(null);
                     } else {
