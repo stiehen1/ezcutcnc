@@ -138,7 +138,9 @@ BASE_SFM = {
     "stainless_440c":        200,   # 440C — high-carbon, abrasive; behaves closer to tool steel
     "stainless_304":         180,   # 304/304L/321 — midpoint 140–220 SFM (was 225 — too high)
     "stainless_316":         160,   # 316/316L Mo-bearing — midpoint 120–200 SFM (was 195 — too high)
-    "stainless_ph":          235,   # 17-4PH/15-5PH/13-8MO — shop-calibrated 250–275 SFM chamfer; 235 endmill baseline
+    "stainless_15_5":        260,   # 15-5PH (XM-12) — friendliest PH, delta-ferrite-free; ~+10% over 17-4
+    "stainless_ph":          235,   # 17-4PH benchmark — shop-calibrated 250–275 SFM chamfer; 235 endmill baseline
+    "stainless_13_8":        214,   # 13-8Mo PH (XM-13) — highest strength/toughness; 17-4 × 0.91 (-9% SFM)
     "stainless_duplex":      145,   # Duplex 2205 — midpoint 110–180 SFM
     "stainless_superduplex": 120,   # Super duplex 2507 — midpoint 90–150 SFM
     "stainless_martensitic": 215,   # legacy fallback → stainless_410
@@ -326,7 +328,9 @@ HP_PER_CUIN = {
     "stainless_440c":        1.20,   # 440C — high carbide content
     "stainless_304":         1.10,   # 304/321 austenitic — gummy, high unit power
     "stainless_316":         1.12,   # 316/316L — Mo adds unit power
-    "stainless_ph":          1.15,   # PH stainless — high strength
+    "stainless_15_5":        1.12,   # 15-5PH — lowest cutting forces of the PH grades
+    "stainless_ph":          1.15,   # 17-4PH — high strength
+    "stainless_13_8":        1.30,   # 13-8Mo PH — 10-25% higher cutting forces; highest unit power
     "stainless_duplex":      1.20,   # Duplex 2205 — high strength dual-phase
     "stainless_superduplex": 1.30,   # Super duplex 2507 — highest strength SS
     "stainless_martensitic": 1.00,   # legacy fallback
@@ -465,7 +469,9 @@ BASE_LIFE_MIN = {
     "stainless_martensitic": 60.0,
     "stainless_fm":          70.0,
     "stainless_austenitic":  50.0,
+    "stainless_15_5":        45.0,
     "stainless_ph":          45.0,
+    "stainless_13_8":        42.0,
     "cast_iron_gray":        95.0,
     "cast_iron_ductile":     75.0,
     "cast_iron_malleable":   80.0,
@@ -677,7 +683,9 @@ CHAMFER_IPT_MULT = {
     "stainless_440c":      1.45,
     "stainless_304":       1.75,
     "stainless_316":       1.75,
-    "stainless_ph":        1.75,   # CALIBRATION ANCHOR (CMH ~0.0036 / CMS ~0.0024 @ 250–275 SFM)
+    "stainless_15_5":      1.80,   # 15-5PH — slightly more aggressive chamfer feed (friendliest PH)
+    "stainless_ph":        1.75,   # 17-4PH CALIBRATION ANCHOR (CMH ~0.0036 / CMS ~0.0024 @ 250–275 SFM)
+    "stainless_13_8":      1.66,   # 13-8Mo PH — 17-4 × 0.95; conservative chamfer feed, chipping/notch risk
     "stainless_duplex":    1.45,
     "stainless_superduplex": 1.25,
     "stainless_martensitic": 1.75,
@@ -873,7 +881,9 @@ IPT_FRAC = {
     "stainless_440c":        0.0030,  # 440C — conservative; abrasive
     "stainless_304":         0.0034,  # 304/321 — midpoint 0.0012–0.0022 on 0.5" = 0.34%×D
     "stainless_316":         0.0030,  # 316/316L — midpoint 0.0010–0.0020 on 0.5" = 0.30%×D
-    "stainless_ph":          0.0035,  # 17-4PH/15-5PH — midpoint 0.0012–0.0023 on 0.5" = 0.35%×D
+    "stainless_15_5":        0.0037,  # 15-5PH — lower forces tolerate slightly heavier chip load
+    "stainless_ph":          0.0035,  # 17-4PH — midpoint 0.0012–0.0023 on 0.5" = 0.35%×D
+    "stainless_13_8":        0.0033,  # 13-8Mo PH — 17-4 × 0.95 (-5% FPT); lighter chip load limits edge chipping
     "stainless_duplex":      0.0028,  # 2205 — midpoint 0.0010–0.0018 on 0.5" = 0.28%×D
     "stainless_superduplex": 0.0024,  # 2507 — midpoint 0.0008–0.0016 on 0.5" = 0.24%×D
     "stainless_martensitic": 0.0040,  # legacy fallback
@@ -939,7 +949,9 @@ HEM_IPT_MULT = {
     "stainless_440c":        1.5,   # 440C — conservative HEM boost
     "stainless_304":         2.0,
     "stainless_316":         2.0,
-    "stainless_ph":          1.8,   # PH — high strength, moderate HEM boost
+    "stainless_15_5":        2.0,   # 15-5PH — excellent HEM candidate, lowest forces
+    "stainless_ph":          1.8,   # 17-4PH — high strength, moderate HEM boost
+    "stainless_13_8":        1.6,   # 13-8Mo PH — reduce radial engagement; conservative HEM boost
     "stainless_duplex":      1.6,   # 2205 duplex — conservative; punishes weak engagement
     "stainless_superduplex": 1.4,   # 2507 super duplex — very conservative
     "stainless_martensitic": 2.0,   # legacy fallback
@@ -1016,7 +1028,9 @@ _ISO_KEY_TO_GROUP = {
     "stainless_440c":        "Stainless",
     "stainless_304":         "Stainless",
     "stainless_316":         "Stainless",
+    "stainless_15_5":        "Stainless",
     "stainless_ph":          "Stainless",
+    "stainless_13_8":        "Stainless",
     "stainless_duplex":      "Stainless",
     "stainless_superduplex": "Stainless",
     "stainless_martensitic": "Stainless",   # legacy fallback
@@ -1702,7 +1716,8 @@ DRILL_SFM = {
     "stainless_304": 80, "stainless_316": 70,
     "stainless_410": 90, "stainless_trimrite": 85, "stainless_420": 85, "stainless_440c": 70,
     "stainless_martensitic": 90, "stainless_fm": 100, "stainless_ferritic": 95,
-    "stainless_ph": 65, "stainless_duplex": 60, "stainless_superduplex": 50,
+    "stainless_15_5": 72, "stainless_ph": 65, "stainless_13_8": 59,
+    "stainless_duplex": 60, "stainless_superduplex": 50,
     "stainless_austenitic": 70,
     # Cast iron gray/ductile anchored to MZE Ø.2480: 195 / 175 SFM.
     "cast_iron_gray": 195, "cast_iron_ductile": 175, "cast_iron_cgi": 145, "cast_iron_malleable": 170,
@@ -1733,7 +1748,8 @@ DRILL_IPR_BASE = {
     "stainless_304": 0.0055, "stainless_316": 0.0050,
     "stainless_410": 0.0062, "stainless_trimrite": 0.0059, "stainless_420": 0.0056, "stainless_440c": 0.0047,
     "stainless_martensitic": 0.0059, "stainless_fm": 0.0064, "stainless_ferritic": 0.0059,
-    "stainless_ph": 0.0044, "stainless_duplex": 0.0047, "stainless_superduplex": 0.0040,
+    "stainless_15_5": 0.0046, "stainless_ph": 0.0044, "stainless_13_8": 0.0042,
+    "stainless_duplex": 0.0047, "stainless_superduplex": 0.0040,
     "stainless_austenitic": 0.0050,
     "cast_iron_gray": 0.006, "cast_iron_ductile": 0.005, "cast_iron_cgi": 0.0048, "cast_iron_malleable": 0.005,
     "titanium_cp": 0.004, "titanium_64": 0.003,
@@ -1788,7 +1804,8 @@ def run_chamfer_mill(payload: dict) -> dict:
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(mat_group, 300))
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                       "stainless_ph", "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420",
+                       "stainless_15_5", "stainless_ph", "stainless_13_8",
+                       "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420",
                        # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; BASE_SFM already reflects it
                        "Titanium", "titanium_64", "titanium_cp", "titanium")
     if mat_group not in _no_hrc_penalty and _mat_key not in _no_hrc_penalty:
@@ -2903,7 +2920,9 @@ KEYSEAT_SFM = {
     "stainless_440c":    140,
     "stainless_304":     120,
     "stainless_316":     100,
+    "stainless_15_5":    143,
     "stainless_ph":      130,
+    "stainless_13_8":    118,
     "stainless_duplex":  100,
     "stainless_superduplex": 85,
     "stainless_martensitic": 150,
@@ -2975,7 +2994,9 @@ FEEDMILL_SFM = {
     "stainless_440c":          210,
     "stainless_304":           225,
     "stainless_316":           200,
+    "stainless_15_5":          265,
     "stainless_ph":            240,
+    "stainless_13_8":          218,
     "stainless_duplex":        175,
     "stainless_superduplex":   150,
     "stainless_martensitic":   230,
@@ -4221,7 +4242,8 @@ def run(payload=None):
                         "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
                         "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
                         # PH/duplex stainless: SFM already calibrated for their hardness range — don't double-penalize
-                        "stainless_ph", "stainless_duplex", "stainless_superduplex",
+                        "stainless_15_5", "stainless_ph", "stainless_13_8",
+                        "stainless_duplex", "stainless_superduplex",
                         "stainless_440c", "stainless_420",
                         # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; BASE_SFM already reflects it
                         "Titanium", "titanium_64", "titanium_cp", "titanium")

@@ -26,7 +26,9 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "stainless_440c":      "High-carbon martensitic SS — abrasive and hard (up to 60 HRC hardened). Treat it like a tool steel; conservative chip load, AlTiN coating required.",
   "stainless_304":       "Work-hardens instantly if the tool rubs or dwells. Maintain a positive, consistent chip load at all times — any hesitation notches the edge.",
   "stainless_316":       "High work hardening rate, low thermal conductivity, and high ductility produce stringy, built-up-edge chips. Molybdenum makes it stickier than 304 — run sharp tools, stay off the rubbing zone, and use high-pressure coolant or TSC.",
-  "stainless_ph":        "High strength with less gumminess than 304 — but still wants consistent chip load. Flood or TSC coolant recommended; don't treat it like regular alloy steel.",
+  "stainless_15_5":      "The friendliest PH stainless — delta-ferrite-free, lowest cutting forces, cleanest chip. Often runs 5–15% faster than 17-4 and is an excellent HEM candidate. Push it.",
+  "stainless_ph":        "17-4 PH — the benchmark PH stainless. High strength with less gumminess than 304, but still wants consistent chip load. Watch for notch wear at the DOC line. Flood or TSC coolant recommended.",
+  "stainless_13_8":      "13-8 Mo (XM-13) — considerably stronger and tougher than 17-4/15-5. Expect 10–25% higher cutting forces, more heat, edge chipping and notching. Run ~10–20% slower, reduce radial engagement, avoid full slotting, and climb mill exclusively.",
   "stainless_duplex":    "High-strength dual-phase SS — stronger than 304 and less prone to stress corrosion. Still work-hardens and punishes rubbing; needs a rigid setup and consistent engagement.",
   "stainless_superduplex": "The most demanding common stainless grade. Very high strength means it loads the tool hard — conservative SFM, consistent chip load, and the best rigidity you can get.",
   // K — Cast Iron
@@ -101,7 +103,9 @@ export const ISO_SUBCATEGORIES = [
   { iso: "M" as IsoCategory, key: "stainless_420",         label: "420 Martensitic Stainless",                   hardness: { value: 25, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_440c",        label: "440C Stainless",                              hardness: { value: 58, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_316",         label: "316 / 316L Stainless (Mo-bearing)",           hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_ph",          label: "17-4PH / 15-5PH / 13-8MO Stainless",         hardness: { value: 33, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_15_5",        label: "15-5 PH Stainless (XM-12)",                   hardness: { value: 33, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_ph",          label: "17-4 PH Stainless (630)",                     hardness: { value: 33, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_13_8",        label: "13-8 Mo PH Stainless (XM-13)",                hardness: { value: 43, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_superduplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 28, scale: "hrc" as const } },
   // K — Cast Iron
@@ -161,7 +165,9 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "stainless_440c":      { min: 55, max: 62,  scale: "hrc", note: "440C is the highest-hardness common stainless — 55–62 HRC fully hardened." },
   "stainless_304":       { min: 65, max: 95,  scale: "hrb", note: "304/316/321 austenitic stainless cannot be hardened by heat treatment — HRB scale only." },
   "stainless_316":       { min: 65, max: 95,  scale: "hrb", note: "316 austenitic stainless cannot be hardened by heat treatment — HRB scale only." },
-  "stainless_ph":        { min: 28, max: 45,  scale: "hrc", note: "PH stainless (17-4PH, 15-5PH) age-hardens to 28–45 HRC depending on condition (H900–H1150)." },
+  "stainless_15_5":      { min: 28, max: 44,  scale: "hrc", note: "15-5 PH age-hardens to ~28–44 HRC depending on condition (H900–H1150). Delta-ferrite-free vs 17-4." },
+  "stainless_ph":        { min: 28, max: 45,  scale: "hrc", note: "17-4 PH age-hardens to 28–45 HRC depending on condition (H900–H1150)." },
+  "stainless_13_8":      { min: 36, max: 47,  scale: "hrc", note: "13-8 Mo PH is the highest-strength PH grade — ~36–47 HRC (H950–H1050). Tougher and more abrasive than 17-4." },
   "stainless_duplex":    { min: 18, max: 25,  scale: "hrc", note: "Duplex 2205 max 217 HB (~22 HRC) — not heat-treatable, but work-hardens significantly." },
   "stainless_superduplex": { min: 22, max: 32, scale: "hrc", note: "Super duplex 2507 typical 22–32 HRC as-annealed — not heat-treatable beyond solution anneal." },
   // K — Cast Iron
@@ -400,9 +406,12 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "a4 stainless": "stainless_316", "marine grade": "stainless_316",
   // ── PH Stainless ──────────────────────────────────────────────────────────
   "17-4": "stainless_ph", "17-4ph": "stainless_ph", "17-4 ph": "stainless_ph",
-  "15-5": "stainless_ph", "15-5ph": "stainless_ph", "13-8mo": "stainless_ph",
-  "ph13-8mo": "stainless_ph", "630": "stainless_ph", "s17400": "stainless_ph",
-  "1.4542": "stainless_ph", "17-7": "stainless_ph",
+  "630": "stainless_ph", "s17400": "stainless_ph", "1.4542": "stainless_ph", "17-7": "stainless_ph",
+  "15-5": "stainless_15_5", "15-5ph": "stainless_15_5", "15-5 ph": "stainless_15_5",
+  "xm-12": "stainless_15_5", "xm12": "stainless_15_5", "s15500": "stainless_15_5",
+  "13-8": "stainless_13_8", "13-8mo": "stainless_13_8", "13-8 mo": "stainless_13_8",
+  "13-8 ph": "stainless_13_8", "ph13-8mo": "stainless_13_8", "ph 13-8 mo": "stainless_13_8",
+  "xm-13": "stainless_13_8", "xm13": "stainless_13_8", "s13800": "stainless_13_8", "1.4534": "stainless_13_8",
   // ── Duplex ────────────────────────────────────────────────────────────────
   "2205": "stainless_duplex", "s31803": "stainless_duplex", "s32205": "stainless_duplex",
   "1.4462": "stainless_duplex", "2304": "stainless_duplex",

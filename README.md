@@ -490,7 +490,9 @@ Defined in `shared/materials.ts` (UI) and `legacy_engine.py` (physics constants)
 | `stainless_440c` | 440C | 170 | 0.0030 |
 | `stainless_304` | 304, 304L | 180 | 0.0035 |
 | `stainless_316` | 316, 316L | 160 | 0.0030 |
-| `stainless_ph` | 17-4 PH, 15-5 PH | 190 | 0.0035 |
+| `stainless_15_5` | 15-5 PH (XM-12) | 260 | 0.0037 |
+| `stainless_ph` | 17-4 PH (630) | 235 | 0.0035 |
+| `stainless_13_8` | 13-8 Mo PH (XM-13) | 214 | 0.0033 |
 | `stainless_duplex` | 2205 | 140 | 0.0028 |
 | `stainless_superduplex` | 2507 | 110 | 0.0024 |
 
