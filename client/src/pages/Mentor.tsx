@@ -110,12 +110,23 @@ function SpeeederDetails({ form, setForm }: {
   );
 }
 
+// Tap-to-toggle hint. Radix Tooltip is hover/focus-only — it never opens on a
+// touch tap (phones have no hover), so the ⓘ dots were dead on mobile. Making
+// the tooltip controlled and toggling `open` on tap restores them, while
+// onOpenChange keeps hover working on desktop.
+function useTapTooltip() {
+  const [open, setOpen] = React.useState(false);
+  const tap = (e: React.MouseEvent) => { e.preventDefault(); setOpen((o) => !o); };
+  return { open, onOpenChange: setOpen, tap };
+}
+
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React.ReactNode }) {
+  const t = useTapTooltip();
   return (
     <TooltipProvider delayDuration={200}>
-      <Tooltip>
+      <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
         <TooltipTrigger asChild>
-          <Label className="flex items-center gap-1 cursor-default w-fit text-xs">
+          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-xs">
             {children}
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
           </Label>
@@ -129,11 +140,12 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React
 }
 
 function RoiLabel({ children, hint, required }: { children: React.ReactNode; hint: string; required?: boolean }) {
+  const t = useTapTooltip();
   return (
     <TooltipProvider delayDuration={200}>
-      <Tooltip>
+      <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
         <TooltipTrigger asChild>
-          <Label className="flex items-center gap-1 cursor-default w-fit text-[10px] text-zinc-500">
+          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-[10px] text-zinc-500">
             {children}
             {required && <span className="text-red-400 text-[10px]">*</span>}
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
@@ -156,14 +168,15 @@ function Kpi({
   value: React.ReactNode;
   hint?: string;
 }) {
+  const t = useTapTooltip();
   return (
     <div className="rounded-2xl border p-3">
       <div className="text-xs text-muted-foreground flex items-center gap-1">
         {hint ? (
           <TooltipProvider delayDuration={200}>
-            <Tooltip>
+            <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
               <TooltipTrigger asChild>
-                <span className="flex items-center gap-1 cursor-default">
+                <span onClick={t.tap} className="flex items-center gap-1 cursor-pointer">
                   {label}
                   <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
                     <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
