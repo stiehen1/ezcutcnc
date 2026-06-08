@@ -2963,6 +2963,9 @@ export default function Mentor() {
 
   const [formDirty, setFormDirty] = React.useState(false);
   const [runWarnings, setRunWarnings] = React.useState<string[]>([]);
+  // true = warnings are a hard "can't run" block (bad settings); false = just missing
+  // required fields ("please fill in"). Drives the header copy on the warning box.
+  const [runBlocked, setRunBlocked] = React.useState(false);
   // Snapshot of form at the moment of the last successful run; dirty = current form !== snapshot
   const lastRunFormRef = React.useRef<string>("");
 
@@ -3326,6 +3329,7 @@ export default function Mentor() {
   React.useEffect(() => { runRef.current = run; });
 
   const run = async () => {
+    setRunBlocked(false);   // reset; set true only on a hard "can't run" block below
     // Must have an EDP or CC print PDF (not required for deep pocket — tools are selected by the sequencer)
     if (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted) {
       setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);
@@ -3374,19 +3378,28 @@ export default function Mentor() {
     if (operation === "drilling" && !(form.drill_hole_depth > 0) && !(drillMultiDia && pdfExtracted)) missing.push("Hole Depth");
     if (operation === "reaming" && !(form.ream_pre_drill_dia > 0) && !(form.existing_hole_dia > 0) && !(reamMultiDia && pdfExtracted)) missing.push("Pre-Drill / Existing Hole Diameter");
     if (missing.length > 0) {
+      setRunBlocked(false);   // missing required fields — "please fill in"
       setRunWarnings(missing);
       return;
     }
 
     // Slotting safety block — chip packing risk with too many flutes
-    if ((operation === "milling" || operation === "feedmilling") && form.mode === "slot") {
+    // Full-width (traditional) slotting gates — chip-clearance limits that come from
+    // the tool plowing the whole slot. These do NOT apply to HEM/trochoidal slotting,
+    // whose light radial bite clears chips fine and actually rewards high flute counts
+    // and deep DOC — so scope this entire block to the traditional strategy.
+    if ((operation === "milling" || operation === "feedmilling") && form.mode === "slot"
+        && (form.slot_strategy ?? "traditional") !== "hem") {
       const fl = form.flutes;
       const isHardened50Plus =
         form.material === "hardened_gt55" ||
         (form.hardness_scale === "hrc" && form.hardness_value >= 50);
-      // Flute count limits for traditional slotting
+      // 6+ flute tools can't evacuate a full-slot chip — block the run outright
+      // (no running parameters) rather than hand over feeds that will pack and snap
+      // the tool. HEM slotting is exempt (handled by the strategy gate above).
       if (fl >= 6) {
-        setRunWarnings([`Traditional slotting is not recommended with ${fl} flutes — chip packing will break the tool. Use 2–5 flutes for slotting.`]);
+        setRunBlocked(true);
+        setRunWarnings([`Select a lower number of flutes for traditional slotting — need ≤5 flutes. This ${fl}-flute tool can't evacuate a full-slot chip; it will pack and break. Use a 2–5 flute tool, or switch to an HEM / trochoidal toolpath (where a high flute count is an advantage).`]);
         return;
       }
       // Slotting DOC ceiling — flute count × geometry × material. Mirrors the
@@ -3421,6 +3434,7 @@ export default function Mentor() {
         // flutes, less DOC, or an HEM toolpath helps. Below 5 flutes the ceiling
         // IS geometry-driven, so a chipbreaker tool can earn the deeper _cbCeiling.
         if (fl >= 5) {
+          setRunBlocked(true);
           setRunWarnings([`Slotting DOC ceiling for this ${fl}-flute tool is ${_slotCeiling}×D — a chip-clearance limit set by flute count, not geometry. Reduce axial depth or use a 4-flute (or fewer) tool to run deeper.${_hemHint}`]);
           return;
         }
@@ -3428,16 +3442,19 @@ export default function Mentor() {
         const _hint = _isCbGeom || _slotCeiling >= _cbCeiling
           ? `Slotting DOC ceiling for this tool is ${_slotCeiling}×D.`
           : `Slotting DOC ceiling for this tool is ${_slotCeiling}×D — a chipbreaker tool runs up to ${_cbCeiling}×D.`;
+        setRunBlocked(true);
         setRunWarnings([`${_hint} Reduce axial depth or change geometry.${_hemHint}`]);
         return;
       }
       // Hardened material conventional slotting — strict DOC limits
       if (isHardened50Plus && fl > 0) {
         if (fl === 5 && form.doc_xd > 0.10) {
+          setRunBlocked(true);
           setRunWarnings([`5-flute slotting in hardened material (≥50 HRC) is limited to 10% DOC (0.10×D) maximum. Reduce axial depth or switch to a 4-flute tool at 15% DOC max.`]);
           return;
         }
         if (fl <= 4 && form.doc_xd > 0.15) {
+          setRunBlocked(true);
           setRunWarnings([`Slotting in hardened material (≥50 HRC) is limited to 15% DOC (0.15×D) maximum with a 4-flute tool. Reduce axial depth.`]);
           return;
         }
@@ -8807,6 +8824,25 @@ ${stabSection}
                 );
               })()}
 
+              {/* High-flute slotting warning — fires the MOMENT a 6+ flute tool is
+                  loaded in TRADITIONAL (full-width) slotting, before any Run. 6+ flute
+                  tools lack the gullet volume to evacuate a full-slot chip → packing,
+                  recutting, fast failure. (HEM's light bite is fine with high flute
+                  counts, so this is traditional-only. 5fl is allowed but DOC-capped to
+                  ½×D, handled by the engine — not a hard warning.) */}
+              {(form.slot_strategy ?? "traditional") !== "hem"
+                && Number(form.tool_dia) > 0
+                && Number(form.flutes) >= 6 && (
+                <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-300">
+                  <span className="font-semibold">⚠ Select a lower number of flutes for traditional slotting (≤5).</span>{" "}
+                  A {form.flutes}-flute cutter doesn't have the gullet volume to clear chips in a
+                  full-width slot — they pack and recut, which breaks the tool with little warning.
+                  Traditional slotting won't run with this tool. Use <span className="font-semibold">4-flute
+                  (or 5-flute to ≈½×D depth)</span>, or switch to <span className="font-semibold">HEM / Trochoidal</span> above,
+                  where a high flute count is an advantage.
+                </div>
+              )}
+
               {/* Chipbreaker advantage — helps in BOTH strategies. The mechanism differs:
                   Traditional full-slot → segments the chip so a deep slot doesn't pack;
                   HEM → still a deep axial cut, so segmenting the long chip evacuates it up
@@ -11589,7 +11625,11 @@ ${stabSection}
 
           {runWarnings.length > 0 && (
             <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
-              <p className="font-semibold mb-1">Please fill in the following before running:</p>
+              <p className="font-semibold mb-1">
+                {runBlocked
+                  ? "Can't run with these settings:"
+                  : "Please fill in the following before running:"}
+              </p>
               <ul className="list-disc list-inside space-y-0.5">
                 {runWarnings.map(w => <li key={w}>{w}</li>)}
               </ul>
