@@ -593,6 +593,9 @@ const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.62
 //     N side passes = ceil((width − dia) / sideStepover), sideStepover ≈ 0.5×dia.
 //   HEM: smaller dias (~0.4–0.7× width), multi-flute, labeled "deep".
 type DiaChip = { dia: number; label: string; sub: string };
+// One stocked EDP candidate at a given slot diameter (server returns up to 2 per Ø,
+// distinct by flute count + geometry — e.g. 5fl CB vs 5fl std vs 6fl).
+type SlotDiaEdp = { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null };
 function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
   if (!(slotWidth > 0)) return [];
   if (strategy === "hem") {
@@ -2317,8 +2320,13 @@ export default function Mentor() {
         });
         if (!r.ok) { setSlotDiaEdps({}); return; }
         const data = await r.json();
-        const map: Record<string, { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null }> = {};
-        for (const c of (data.chips ?? [])) map[Number(c.dia).toFixed(4)] = { edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null };
+        // Server now returns up to 2 EDPs per Ø (distinct flute counts). Group them
+        // into a list per diameter so the UI can show both as separate chips.
+        const map: Record<string, SlotDiaEdp[]> = {};
+        for (const c of (data.chips ?? [])) {
+          const key = Number(c.dia).toFixed(4);
+          (map[key] ??= []).push({ edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null });
+        }
         setSlotDiaEdps(map);
       } catch { /* aborted or failed — chips fall back to Ø + pass count */ }
     }, 350);
@@ -2883,7 +2891,7 @@ export default function Mentor() {
   // Slotting diameter chips: best stocked EDP per candidate Ø (keyed by dia string).
   // Populated only once a material is selected (before that, chips show Ø + pass count
   // only — the EDP can't be trusted without knowing the material). See /api/slot-dia-tools.
-  const [slotDiaEdps, setSlotDiaEdps] = React.useState<Record<string, { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null }>>({});
+  const [slotDiaEdps, setSlotDiaEdps] = React.useState<Record<string, SlotDiaEdp[]>>({});
   const [pdfIncludeOptimal, setPdfIncludeOptimal] = React.useState<boolean>(() => {
     const v = localStorage.getItem("pdf_include_optimal");
     return v == null ? true : v === "1";
@@ -3106,27 +3114,47 @@ export default function Mentor() {
       const _carryDepth = form.tool_type === "chamfer_mill" && _priorDepth > 0 && _priorDepth <= _maxDepth;
       setChamferDepthText(_carryDepth ? _priorDepth.toFixed(4) : "");
     }
-    // In slot mode, pre-fill WOC=100% and DOC=med immediately on SKU select
+    // In slot mode, pre-fill WOC/DOC immediately on SKU select. Traditional slotting
+    // is a full-width plow (WOC = 100% = tool dia). HEM/trochoidal slotting runs a
+    // LIGHT radial bite (the tool is narrower than the slot) with deep DOC — so it
+    // must NOT inherit the 100% WOC, or HEM shows a full-width slot it isn't cutting.
     const _isSlotMode = (form.mode as string) === "slot";
+    const _isHemSlot = _isSlotMode && form.slot_strategy === "hem";
     const _slotDia = Number(sku.cutting_diameter_in);
+    let _slotWocPct = 100;
+    let _slotDocXd = 0;
     if (_isSlotMode) {
-      const _slotPresets = getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
-      const _slotDocLow = _slotPresets.doc.low;
-      setWocText(_slotDia.toFixed(4));
-      setWocPreset("med");
-      setDocText((_slotDocLow * _slotDia).toFixed(3));
-      setDocPreset("low");
+      if (_isHemSlot) {
+        const _hp = getDynamicPresets("trochoidal", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
+        _slotWocPct = _hp.woc.med;
+        // Deep DOC per Z-level, capped by flute length and the actual slot depth.
+        const _deepXd = _hp.doc.high;
+        const _locXd = Number(sku.loc_in) > 0 ? Number(sku.loc_in) / _slotDia : _deepXd;
+        const _depthXd = (Number(form.final_slot_depth) || 0) > 0 ? (Number(form.final_slot_depth) / _slotDia) : _deepXd;
+        _slotDocXd = Math.min(_deepXd, _locXd, _depthXd);
+        setWocText(((_slotWocPct / 100) * _slotDia).toFixed(4));
+        setWocPreset("med");
+        setDocText((_slotDocXd * _slotDia).toFixed(3));
+        setDocPreset(Math.abs(_slotDocXd - _deepXd) < 1e-6 ? "high" : null);
+      } else {
+        const _slotPresets = getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard");
+        _slotDocXd = _slotPresets.doc.low;
+        setWocText(_slotDia.toFixed(4));
+        setWocPreset("med");
+        setDocText((_slotDocXd * _slotDia).toFixed(3));
+        setDocPreset("low");
+      }
     }
     setForm((p) => ({
       ...p,
       edp: String(sku.EDP ?? (sku as any).edp ?? ""),
       tool_dia: _slotDia,
-      // Slot mode: pre-fill WOC/DOC (low = conservative default).
+      // Slot mode: pre-fill WOC/DOC. Traditional = 100% (full-width plow); HEM =
+      // light trochoidal WOC + deep DOC (computed above into _slotWocPct/_slotDocXd).
       // preserveCutParams (tool swap): carry prior DOC ×D, set WOC to optimal for new flutes.
       // Otherwise leave blank.
-      woc_pct: _isSlotMode ? 100 : (_preserve && _preserveOpt ? _preserveOpt.wocPct : 0),
-      doc_xd: _isSlotMode
-        ? getDynamicPresets("slot", isoCategory, Number(sku.flutes), _slotDia, Number(sku.loc_in), sku.series ?? "", sku.geometry ?? "standard").doc.low
+      woc_pct: _isSlotMode ? _slotWocPct : (_preserve && _preserveOpt ? _preserveOpt.wocPct : 0),
+      doc_xd: _isSlotMode ? _slotDocXd
         : (_preserve && _preservedDocXd > 0 ? _preservedDocXd : 0),
       flutes: Number(sku.flutes),
       loc: Number(sku.loc_in),
@@ -8643,12 +8671,43 @@ ${stabSection}
                 const slotW = Number(form.slot_width_in) || 0;
                 const strat = (form.slot_strategy ?? "traditional") as "traditional" | "hem";
                 const haveMat = !!form.material;
-                let chips = slotDiaChips(strat, slotW);
-                // Once a material is selected, the EDP lookup has run — hide candidate
-                // diameters with no stocked tool (every chip should be actionable).
-                if (haveMat) chips = chips.filter(c => slotDiaEdps[c.dia.toFixed(4)]);
-                if (!chips.length) return null;
+                const diaChips = slotDiaChips(strat, slotW);
+                // Expand each candidate diameter into render items. With a material
+                // selected, one item per stocked EDP variant (1-2 per Ø — distinct
+                // flute+geometry). Without a material, a single bare-Ø item.
+                type Item = { dia: number; label: string; sub: string; edp?: SlotDiaEdp };
+                const items: Item[] = [];
+                for (const c of diaChips) {
+                  const variants = slotDiaEdps[c.dia.toFixed(4)];
+                  if (haveMat) {
+                    // Hide diameters with no stocked tool (every chip should be actionable).
+                    for (const v of (variants ?? [])) items.push({ dia: c.dia, label: c.label, sub: c.sub, edp: v });
+                  } else {
+                    items.push({ dia: c.dia, label: c.label, sub: c.sub });
+                  }
+                }
+                if (!items.length) return null;
                 const curDia = Number(form.tool_dia) || 0;
+                // Seed WOC/DOC for the active strategy at a given dia/LOC. Shared by the
+                // bare-Ø path and the EDP path so loading a stocked tool ALSO sets a
+                // sensible light HEM WOC + deep (LOC/slot-capped) DOC — not 100% WOC.
+                const seedCutParams = (dia: number, locIn: number) => {
+                  const fp = getDynamicPresets(strat === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, locIn || form.loc, form.tool_series ?? "", form.geometry ?? "standard");
+                  if (strat === "hem") {
+                    setWocText(((fp.woc.med / 100) * dia).toFixed(4)); setWocPreset("med");
+                    const deepIn = fp.doc.high * dia;
+                    const loc = locIn > 0 ? locIn : (form.loc > 0 ? form.loc : deepIn);
+                    const slotDepth = Number(form.final_slot_depth) || 0;
+                    // DOC per Z-level = deep preset, capped by flute length AND by the
+                    // actual slot depth (no point cutting deeper than the slot).
+                    let seatIn = Math.min(deepIn, loc);
+                    if (slotDepth > 0) seatIn = Math.min(seatIn, slotDepth);
+                    setDocText(seatIn.toFixed(3)); setDocPreset(Math.abs(seatIn - deepIn) < 1e-6 ? "high" : null);
+                  } else {
+                    setWocText(dia.toFixed(4)); setWocPreset(null);
+                    setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
+                  }
+                };
                 return (
                   <div className="mt-2.5">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
@@ -8657,9 +8716,9 @@ ${stabSection}
                         : (strat === "hem" ? "Suggested tool Ø (trochoidal)" : "Suggested tool Ø — tap to set")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {chips.map(chip => {
-                        const sel = Math.abs(chip.dia - curDia) < 0.001;
-                        const hit = slotDiaEdps[chip.dia.toFixed(4)];
+                      {items.map((item, idx) => {
+                        const hit = item.edp;
+                        const sel = Math.abs(item.dia - curDia) < 0.001 && (!hit || edpText.trim().toLowerCase() === hit.edp.toLowerCase());
                         const geomTag = hit?.geometry === "chipbreaker" ? " CB" : hit?.geometry === "truncated_rougher" ? " VXR" : "";
                         // Reach tag: if the stocked tool's LOC can't cover the slot depth
                         // in one pass, say how many axial steps it needs (not a blocker —
@@ -8669,34 +8728,29 @@ ${stabSection}
                           ? Math.ceil(slotDepthIn / hit.loc_in) : 0;
                         return (
                           <button
-                            key={chip.dia}
+                            key={hit ? `${item.dia}-${hit.edp}` : item.dia}
                             type="button"
-                            title={hit ? `Load EDP ${hit.edp} (${chip.dia}", ${hit.flutes}fl)` : `Set tool diameter to ${chip.dia}"`}
-                            onClick={() => {
-                              const dia = chip.dia;
-                              // If we have a real stocked EDP, load that tool outright so the
-                              // calculator runs with it. Otherwise just set the diameter.
+                            title={hit ? `Load EDP ${hit.edp} (${item.dia}", ${hit.flutes}fl)` : `Set tool diameter to ${item.dia}"`}
+                            onClick={async () => {
+                              const dia = item.dia;
+                              // If we have a real stocked EDP, load that tool, THEN seed the
+                              // strategy's WOC/DOC (applyEdp preserves cut params, so we must
+                              // set them ourselves). Otherwise just set the diameter + seed.
                               if (hit?.edp) {
-                                applyEdpByLookup(hit.edp);
+                                // applySkuToForm (via applyEdp) now seeds slot WOC/DOC
+                                // correctly per strategy — light HEM bite, not 100% —
+                                // so no separate seed needed here.
+                                await applyEdpByLookup(hit.edp);
                                 return;
                               }
                               setForm(p => ({ ...p, tool_dia: dia }));
                               setToolDiaText(dia.toFixed(4));
-                              // Recompute WOC/DOC text for the new dia under the active strategy.
-                              const fp = getDynamicPresets(strat === "hem" ? "trochoidal" : "slot", isoCategory, form.flutes, dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard");
-                              if (strat === "hem") {
-                                setWocText(((fp.woc.med / 100) * dia).toFixed(4)); setWocPreset("med");
-                                const deepIn = fp.doc.high * dia; const locIn = form.loc > 0 ? form.loc : deepIn; const seatIn = Math.min(deepIn, locIn);
-                                setDocText(seatIn.toFixed(3)); setDocPreset(seatIn < deepIn - 1e-6 ? null : "high");
-                              } else {
-                                setWocText(dia.toFixed(4)); setWocPreset(null);
-                                setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
-                              }
+                              seedCutParams(dia, 0);
                             }}
                             className={`rounded border px-2 py-1 text-[11px] leading-tight text-left transition-colors ${sel ? "border-indigo-400 bg-indigo-500/20 text-indigo-200" : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-indigo-400/60"}`}
                           >
-                            <span className="font-semibold">{chip.label}</span>
-                            <span className="opacity-70"> · {chip.sub}</span>
+                            <span className="font-semibold">{item.label}</span>
+                            <span className="opacity-70"> · {item.sub}</span>
                             {hit && (
                               <span className="block text-[10px] text-orange-400 font-medium">
                                 EDP {hit.edp} · {hit.flutes}fl{geomTag}

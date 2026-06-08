@@ -2255,6 +2255,9 @@ export async function registerRoutes(
       // Computed per row in SQL since it depends on each candidate's series.
       const chips: any[] = [];
       for (const dia of candidates) {
+        // Pull the top-scored candidates at this diameter, then surface up to TWO
+        // chips with DISTINCT flute counts (e.g. the 5fl chipbreaker AND a 6fl) so
+        // the user sees the flute-count choice at the same Ø, not just one tool.
         const q = await pool.query(
           `SELECT s.edp, s.flutes, s.geometry, s.coating, s.corner_condition, s.loc_in, s.lbs_in, s.series,
                   (CASE WHEN LOWER(COALESCE(s.geometry,'standard')) = 'chipbreaker' THEN 3
@@ -2278,10 +2281,18 @@ export async function registerRoutes(
              AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
              ${fluteClause} ${matClause}
            ORDER BY ${reachRank} score DESC, s.loc_in ASC NULLS LAST
-           LIMIT 1`
+           LIMIT 12`
         );
-        if (q.rows.length) {
-          const r = q.rows[0];
+        // Best overall, then the best with a DIFFERENT flute+geometry signature
+        // (top-2-per-Ø). A 5fl chipbreaker and a 5fl standard are different tools —
+        // so are 6fl CB vs 6fl standard — so dedupe on flutes+geometry, not flutes.
+        const sig = (r: any) => `${r.flutes}|${String(r.geometry ?? "standard").toLowerCase()}`;
+        const picks: any[] = [];
+        for (const r of q.rows) {
+          if (picks.length === 0) { picks.push(r); continue; }
+          if (picks.length === 1 && sig(r) !== sig(picks[0])) { picks.push(r); break; }
+        }
+        for (const r of picks) {
           chips.push({
             dia,
             edp: r.edp,
