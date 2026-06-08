@@ -8724,8 +8724,10 @@ ${stabSection}
                         // in one pass, say how many axial steps it needs (not a blocker —
                         // stability advisor handles the deeper/longer-reach derate).
                         const slotDepthIn = Number(form.final_slot_depth) || 0;
-                        const zSteps = (hit?.loc_in && slotDepthIn > hit.loc_in + 1e-4)
-                          ? Math.ceil(slotDepthIn / hit.loc_in) : 0;
+                        // loc_in arrives from Postgres NUMERIC as a STRING — coerce before math.
+                        const locNum = Number(hit?.loc_in) || 0;
+                        const zSteps = (locNum > 0 && slotDepthIn > locNum + 1e-4)
+                          ? Math.ceil(slotDepthIn / locNum) : 0;
                         return (
                           <button
                             key={hit ? `${item.dia}-${hit.edp}` : item.dia}
@@ -8754,8 +8756,8 @@ ${stabSection}
                             {hit && (
                               <span className="block text-[10px] text-orange-400 font-medium">
                                 EDP {hit.edp} · {hit.flutes}fl{geomTag}
-                                {hit.loc_in != null && hit.loc_in > 0 && (
-                                  <span className="text-zinc-400"> · LOC {hit.loc_in.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
+                                {locNum > 0 && (
+                                  <span className="text-zinc-400"> · LOC {locNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
                                 )}
                                 {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
                               </span>
