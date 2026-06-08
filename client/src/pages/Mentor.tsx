@@ -3761,9 +3761,9 @@ export default function Mentor() {
         ? `<div style="font-size:9px;color:#b45309;margin:2px 0 4px 0;font-weight:600;">Speed Preset: ${SPEED_PRESET_EXPORT_LABEL[form.speed_preset]} — SFM biased from the app's balanced recommendation.</div>`
         : ""}
       <div class="kpi-grid">
-        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first pass</span>` : "") : null)}
-        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first pass</span>` : "") : null)}
-        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first pass</span>` : "") : null)}
+        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first skim pass</span>` : "") : null)}
+        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first skim pass</span>` : "") : null)}
+        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first skim pass</span>` : "") : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox(form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
         ${form.tool_type !== "chamfer_mill" && mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
@@ -13448,7 +13448,7 @@ ${stabSection}
                               {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
                               {firstSfm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first pass
+                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first skim pass
                                 </span>
                               )}
                             </div>
@@ -13519,7 +13519,7 @@ ${stabSection}
                             {fmtInt(customer.rpm)}
                             {firstRpm != null && (
                               <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {fmtInt(firstRpm)} first pass
+                                {fmtInt(firstRpm)} first skim pass
                               </span>
                             )}
                           </>
@@ -13543,7 +13543,7 @@ ${stabSection}
                               ) : null}
                               {firstIpm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(firstIpm, 25.4, metric ? 1 : 2)} first pass
+                                  {UC(firstIpm, 25.4, metric ? 1 : 2)} first skim pass
                                 </span>
                               )}
                             </span>
