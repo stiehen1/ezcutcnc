@@ -6041,6 +6041,18 @@ ${stabSection}
                     );
                   })}
                 </div>
+                {/* Selected-condition guidance, always visible (mobile-reachable —
+                    tooltips are hover-only, but tapping a chip selects it, so this
+                    line surfaces the same info without needing hover). */}
+                {(() => {
+                  const sel = STOCK_CONDITION_INFO[form.stock_condition];
+                  if (!sel || !sel.tooltip || form.stock_condition === "billet_cf") return null;
+                  return (
+                    <p className="mt-1.5 text-[10px] leading-snug text-orange-200/80 border-t border-orange-500/20 pt-1.5">
+                      <span className="font-semibold text-orange-300/90">{sel.short}:</span> {sel.tooltip}
+                    </p>
+                  );
+                })()}
               </div>
             </TooltipProvider>
 
