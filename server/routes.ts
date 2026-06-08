@@ -2224,9 +2224,13 @@ export async function registerRoutes(
       const isHem = strat === "hem";
 
       const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
+      // Traditional full-width slotting wants the LARGEST tool that fits the slot —
+      // fewest side passes, most rigid. Laddering all the way down to tiny tools just
+      // surfaces many-side-pass / many-Z-step suggestions nobody wants, so cap to the
+      // largest 2 diameters ≤ width. HEM stays in its 0.40–0.70× window (tool < slot).
       const candidates = isHem
         ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.70 + 1e-6)
-        : STD_DIAS.filter(d => d <= width + 1e-4);
+        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-2);
       if (!candidates.length) return res.json({ chips: [] });
 
       // Strategy-aware flute filter (mirrors optimal-tool scorer).
