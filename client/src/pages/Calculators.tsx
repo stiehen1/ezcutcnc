@@ -1550,6 +1550,21 @@ const STOCK_CONDITIONS: StockCondition[] = [
     ],
   },
   {
+    key: "flame_cut",
+    label: "Flame / Plasma Cut Edge",
+    oneLiner: "Burned plate edge re-hardens as it cools — a hard rim hiding on every blank cut from plate.",
+    whatItIs: "Plate parts cut to shape with oxy-fuel, plasma, or laser. The cut edge melts and re-solidifies, then self-quenches in the surrounding cold plate, leaving a recast layer plus a heat-affected zone harder than the parent metal.",
+    surface: "Slag/dross on the underside, a visible heat-tint band, and a slightly rounded or beveled cut face. Tolerance on the cut edge is loose (±0.030\" or worse).",
+    hardness: "Recast rim 0.030–0.060\" deep, often 50–55 HRC in alloy steels (more in higher-carbon grades). Parent plate underneath is whatever it was.",
+    toolImpact: "First cut into the burned edge behaves like machining hardened steel — abrasive and chip-prone. Honed-edge tough coated carbide. Skim the rim off in one pass, then the tool sees clean parent metal.",
+    feedAdjust: "Through the burned rim: 40–50% SFM, 60–70% IPT, light DOC. Once into parent plate: 100% baseline for the alloy.",
+    watchOuts: [
+      "Slag on the underside is harder than the rim — clean it off or your first pass eats an edge on the bottom corner.",
+      "Plasma/laser HAZ is shallower than oxy-fuel; thick-plate oxy-fuel burns the deepest, hardest rim.",
+      "If the print allows, leave machining stock on the flame-cut profile so your skim pass clears the whole HAZ in one shot.",
+    ],
+  },
+  {
     key: "nitrided",
     label: "Nitrided",
     oneLiner: "Thin, glass-hard skin (~70 HRC, ~0.010\" deep). Almost always ground, not milled.",

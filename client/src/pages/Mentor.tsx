@@ -613,7 +613,7 @@ function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaCh
 // Steady-state SFM/IPT is unchanged once the tool is past the skin.
 // Multipliers apply to the first pass that breaks the scale/skin.
 // ─────────────────────────────────────────────────────────────────
-type StockConditionKey = "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment";
+type StockConditionKey = "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "flame_cut" | "weldment";
 
 const STOCK_CONDITION_INFO: Record<StockConditionKey, {
   label: string;
@@ -671,6 +671,14 @@ const STOCK_CONDITION_INFO: Record<StockConditionKey, {
     note: "Case-hardened skin is 58–64 HRC. Plan to skim the case in ONE pass at heavily-reduced parameters, OR stay fully below it. NEVER run a pass along the case-core boundary — chatter and edge chipping.",
     tooltip: "Carburized / case-hardened steel with 58–64 HRC skin over softer core. Through the case: ~40% SFM, 60% IPT, light DOC. Consider grinding for finish passes through hardened case.",
   },
+  flame_cut: {
+    label: "Flame/Plasma Cut",
+    short: "Flame/Plasma-Cut Edge",
+    sfmMult: 0.45,
+    iptMult: 0.65,
+    note: "Flame/plasma/laser-cut edges re-harden as they cool — a 0.030–0.060\" rim can hit 50–55 HRC, harder than the parent plate. Skim the burned edge off in ONE pass at reduced SFM/IPT, then return to steady-state numbers once into clean parent metal.",
+    tooltip: "Thermally-cut plate edge (oxy-fuel, plasma, laser). Self-quenched rim ~50–55 HRC, ~0.03–0.06\" deep. Skim pass: ~45% SFM, 65% IPT to get past the recast/HAZ. Honed-edge tools — sharp edges chip on the hard rim.",
+  },
   weldment: {
     label: "Weldment",
     short: "Weldment / HAZ",
@@ -682,7 +690,7 @@ const STOCK_CONDITION_INFO: Record<StockConditionKey, {
 };
 
 const STOCK_CONDITION_ORDER: StockConditionKey[] = [
-  "billet_cf", "hot_rolled", "forged", "cast_sand", "cast_invest", "case_hard", "weldment",
+  "billet_cf", "hot_rolled", "forged", "cast_sand", "cast_invest", "case_hard", "flame_cut", "weldment",
 ];
 
 // Applicability per ISO group — dimmed when not in the set.
@@ -690,11 +698,11 @@ const STOCK_CONDITION_ORDER: StockConditionKey[] = [
 const STOCK_APPLICABILITY: Record<string, ReadonlySet<StockConditionKey>> = {
   N1: new Set(["billet_cf", "cast_sand", "weldment"]),                                           // Aluminum / Cu / brass — billet + sand cast (356/380). Forging rare; welded fixtures common.
   N2: new Set(["billet_cf", "cast_sand", "weldment"]),                                           // Abrasive non-ferrous (silicon bronze, Mn bronze, beryllium copper).
-  P:  new Set(["billet_cf", "hot_rolled", "forged", "case_hard", "weldment"]),                   // Steel — everything except castings is common.
-  M:  new Set(["billet_cf", "hot_rolled", "forged", "cast_invest", "weldment"]),                 // Stainless — investment casting common, sand casting rare.
+  P:  new Set(["billet_cf", "hot_rolled", "forged", "case_hard", "flame_cut", "weldment"]),       // Steel — everything except castings is common. Plate parts often start as flame/plasma-cut blanks.
+  M:  new Set(["billet_cf", "hot_rolled", "forged", "cast_invest", "flame_cut", "weldment"]),     // Stainless — investment casting common, sand casting rare. Plasma-cut plate routine.
   K:  new Set(["cast_sand", "cast_invest", "weldment"]),                                         // Cast iron — always cast; weld repairs are routine.
   S:  new Set(["billet_cf", "forged", "cast_invest", "weldment"]),                               // Superalloys — investment castings (turbine blades) very common.
-  H:  new Set(["billet_cf", "forged", "case_hard", "weldment"]),                                 // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common.
+  H:  new Set(["billet_cf", "forged", "case_hard", "flame_cut", "weldment"]),                     // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common. Flame-cut tool-steel blanks happen.
   O:  new Set(["billet_cf"]),                                                                    // Plastics / composites — extruded / molded stock only; no welding.
 };
 
@@ -2198,7 +2206,7 @@ export default function Mentor() {
 
     hardness_value: ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.value ?? 0,
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
-    stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "weldment",
+    stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "flame_cut" | "weldment",
 
     // Drilling-specific
     drill_point_angle: 0 as 0 | 118 | 120 | 130 | 135 | 140 | 145,
@@ -5969,39 +5977,41 @@ ${stabSection}
             </div>
 
             <TooltipProvider delayDuration={200}>
-              <div className="mt-2 flex items-center gap-1 flex-nowrap overflow-x-auto">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 shrink-0 mr-1">Stock</span>
-                {STOCK_CONDITION_ORDER.map((k) => {
-                  const info = STOCK_CONDITION_INFO[k];
-                  const active = form.stock_condition === k;
-                  const applicable = !isoCategory || (STOCK_APPLICABILITY[isoCategory]?.has(k) ?? true);
-                  return (
-                    <Tooltip key={k}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setForm((p) => ({ ...p, stock_condition: k }))}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold border transition-all whitespace-nowrap shrink-0"
-                          style={{
-                            background: active ? "#f97316" : "transparent",
-                            borderColor: active ? "#f97316" : "#52525b",
-                            color: active ? "#fff" : "#a1a1aa",
-                            opacity: applicable || active ? 1 : 0.35,
-                          }}
-                        >
-                          {info.label}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-72 text-xs">
-                        <p className="font-semibold mb-1">{info.short}</p>
-                        <p>{info.tooltip}</p>
-                        {!applicable && isoCategory && (
-                          <p className="mt-1 text-amber-300/90 text-[10px]">Uncommon for {isoCategory} materials — still selectable.</p>
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
+              <div className="mt-2 rounded-md border border-orange-500/30 bg-orange-500/[0.06] px-2 py-1.5">
+                <div className="text-[9px] font-bold uppercase tracking-widest text-orange-400/90 mb-1">Stock Condition</div>
+                <div className="flex flex-wrap gap-1">
+                  {STOCK_CONDITION_ORDER.map((k) => {
+                    const info = STOCK_CONDITION_INFO[k];
+                    const active = form.stock_condition === k;
+                    const applicable = !isoCategory || (STOCK_APPLICABILITY[isoCategory]?.has(k) ?? true);
+                    return (
+                      <Tooltip key={k}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setForm((p) => ({ ...p, stock_condition: k }))}
+                            className="rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-all whitespace-nowrap"
+                            style={{
+                              background: active ? "#f97316" : "transparent",
+                              borderColor: active ? "#f97316" : "#52525b",
+                              color: active ? "#fff" : "#a1a1aa",
+                              opacity: applicable || active ? 1 : 0.35,
+                            }}
+                          >
+                            {info.label}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-72 text-xs">
+                          <p className="font-semibold mb-1">{info.short}</p>
+                          <p>{info.tooltip}</p>
+                          {!applicable && isoCategory && (
+                            <p className="mt-1 text-amber-300/90 text-[10px]">Uncommon for {isoCategory} materials — still selectable.</p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
               </div>
             </TooltipProvider>
 
