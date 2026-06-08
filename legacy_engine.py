@@ -3882,6 +3882,94 @@ def run(payload=None):
         if "doc_xd" not in payload:
             data["doc_xd"] = default_doc
 
+    # ── HEM (trochoidal) slotting ─────────────────────────────────────────────
+    # When the user chose Slotting with the "hem" sub-strategy, the tool is SMALLER
+    # than the slot width and clears it with trochoidal loops: light radial WOC,
+    # deep axial DOC. We map this onto the existing, validated trochoidal physics by
+    # rewriting `mode` to "trochoidal" — that automatically (a) skips the full-width
+    # slot DOC ceilings below (they're gated on mode == "slot"), and (b) enables chip
+    # thinning, the IPT boost, and the tool-life boost downstream. The slot identity
+    # is preserved on data["_slot_hem"] for the advisor (tool-sizing note, labels).
+    if str(mode).lower() == "slot" and str(payload.get("slot_strategy", "traditional")).lower() == "hem":
+        _sh_tool = float(data.get("tool_dia", data.get("diameter", 0.0)) or 0.0)
+        _sh_width = float(payload.get("slot_width_in", 0.0) or 0.0)
+        # Degenerate guard: no/!valid width → fall back to traditional slotting.
+        if _sh_width > _sh_tool > 0:
+            # Peak radial engagement is bounded by the room between tool and walls.
+            # Target a light effective WOC (~10% Ø) but never exceed the wall gap,
+            # and respect the trochoidal 20%-Ø ceiling enforced downstream.
+            _sh_gap = _sh_width - _sh_tool                  # total cross-slot room
+            _sh_woc_in = min(_sh_tool * 0.10, _sh_gap / 2.0)  # per-pass radial bite
+            _sh_woc_pct = max(2.0, min(20.0, (_sh_woc_in / _sh_tool) * 100.0))
+            data["mode"] = "trochoidal"
+            mode = "trochoidal"
+            # Only override WOC if the client didn't send an explicit light value;
+            # the slot-strategy toggle seeds one, but a bare API caller may not.
+            if "woc_pct" not in payload or float(payload.get("woc_pct", 0) or 0) >= 90.0:
+                data["woc_pct"] = round(_sh_woc_pct, 2)
+            # ── Depth: HEM unlocks the tool's full LOC ────────────────────────
+            # The light radial bite keeps force/deflection low, so axial depth is no
+            # longer chip-packing-limited (as in a full-width slot) — it's limited by
+            # how much flute length the tool actually has. Achievable DOC = the lesser
+            # of the material HEM cap (×D) and the tool's LOC (a tool can't cut deeper
+            # than its flutes). This is the headroom we surface to the user.
+            _sh_mat_grp = get_material_group(str(data.get("material", "") or ""))
+            _sh_hem_cap_xd = {"Aluminum": 3.0, "Non-Ferrous": 3.0, "Inconel": 3.0,
+                              "Titanium": 3.0, "Stainless": 2.5, "Hardened": 1.5
+                              }.get(_sh_mat_grp, 2.5)
+            _sh_loc = float(data.get("loc", 0) or 0)
+            _sh_loc_xd = (_sh_loc / _sh_tool) if _sh_tool > 0 else _sh_hem_cap_xd
+            # Achievable depth (×D): bounded by both the material cap and the LOC.
+            _sh_max_doc_xd = min(_sh_hem_cap_xd, _sh_loc_xd) if _sh_loc > 0 else _sh_hem_cap_xd
+            # Clamp the requested DOC to what the flutes can physically reach.
+            _sh_doc_req = float(data.get("doc_xd", 1.0) or 1.0)
+            _sh_loc_limited = False
+            if _sh_doc_req > _sh_max_doc_xd:
+                _sh_loc_limited = (_sh_loc > 0 and _sh_loc_xd < _sh_hem_cap_xd)
+                data["doc_xd"] = round(_sh_max_doc_xd, 3)
+            data["_slot_hem"] = {
+                "slot_width_in": round(_sh_width, 4),
+                "tool_dia_in":   round(_sh_tool, 4),
+                "wall_per_side_in": round(_sh_gap / 2.0, 4),
+                "eff_woc_pct":   round(_sh_woc_pct, 2),
+                "max_doc_xd":    round(_sh_max_doc_xd, 2),
+                "max_doc_in":    round(_sh_max_doc_xd * _sh_tool, 3),
+                "loc_in":        round(_sh_loc, 3),
+                "loc_limited":   bool(_sh_loc_limited),  # depth was capped by flute length, not material
+                "mat_cap_xd":    round(_sh_hem_cap_xd, 1),
+            }
+        else:
+            # No usable slot width → behave exactly like a traditional full-width slot.
+            data["_slot_hem_degenerate"] = True
+
+    # ── Traditional slotting: plow + side pass(es) when slot is wider than tool ──
+    # Traditional ADAPTS to slot width: tool dia == width → single full-width plow;
+    # width > dia → plow a full-width channel at tool dia, then side-mill the walls
+    # out to final width. Shops do this routinely with the nearest stocked tool.
+    # We compute the side-pass plan (count, stepover, stock per side) and the combined
+    # cut so the result reflects the real multi-pass operation, not just the plow.
+    #   side passes N = ceil((width − dia) / side_stepover), side_stepover ≈ 0.5×dia.
+    # The physics run stays the plow pass (100% WOC at tool dia — the limiting cut);
+    # side passes are reported as a follow-on plan in data["_slot_sidepass"].
+    if str(mode).lower() == "slot" and str(payload.get("slot_strategy", "traditional")).lower() != "hem":
+        _ts_tool  = float(data.get("tool_dia", data.get("diameter", 0.0)) or 0.0)
+        _ts_width = float(payload.get("slot_width_in", 0.0) or 0.0)
+        if _ts_width > _ts_tool + 1e-4 and _ts_tool > 0:
+            _ts_extra      = _ts_width - _ts_tool          # total width to open beyond the plow
+            _ts_side_step  = 0.5 * _ts_tool                # conservative side-mill stepover (~50% Ø)
+            _ts_passes     = max(1, int(math.ceil(_ts_extra / max(1e-9, _ts_side_step))))
+            _ts_stock_side = _ts_extra / 2.0               # material on each wall after the plow
+            _ts_woc_in     = _ts_extra / max(1, _ts_passes)  # even radial bite per side pass
+            data["_slot_sidepass"] = {
+                "slot_width_in":   round(_ts_width, 4),
+                "tool_dia_in":     round(_ts_tool, 4),
+                "stock_per_side_in": round(_ts_stock_side, 4),
+                "side_passes":     _ts_passes,             # passes PER SIDE
+                "side_woc_in":     round(_ts_woc_in, 4),
+                "side_woc_pct":    round((_ts_woc_in / _ts_tool) * 100.0, 1) if _ts_tool > 0 else 0.0,
+                "total_passes":    1 + 2 * _ts_passes,     # 1 plow + N per wall × 2 walls
+            }
+
     # ── Micro-tool slotting DOC cap ──────────────────────────────────────────
     # Full 1×D slot DOC on tools ≤ 1/8" is unrealistic — deflection and chip
     # packing will break the tool. Scale down aggressively below 3/16".
@@ -3928,6 +4016,17 @@ def run(payload=None):
         _slot_ceiling = slot_doc_ceiling(_clean_nf, _seg_chip, _flutes_slot, _ti_slot)
         _doc_xd_cur = float(data.get("doc_xd", 1.0) or 1.0)
         if _doc_xd_cur > _slot_ceiling:
+            # Record the silent clamp so the advisor can explain why DOC came back
+            # shallower than requested (the client pre-flight normally catches this,
+            # but API / PDF-extract callers can land here un-warned).
+            data["_slot_doc_capped"] = {
+                "requested_xd": round(_doc_xd_cur, 3),
+                "ceiling_xd":   round(_slot_ceiling, 3),
+                "flutes":       _flutes_slot,
+                "clean_nf":     bool(_clean_nf),
+                "titanium":     bool(_ti_slot),
+                "flute_limited": _flutes_slot >= 5,  # 5+ fl ceiling is chip-clearance, not geometry
+            }
             _doc_xd_cur = _slot_ceiling
             data["doc_xd"] = _slot_ceiling
         # Feed pull-back above 1.0×D (holds MRR at the 1×D rate)
@@ -5840,6 +5939,92 @@ def run(payload=None):
     _doc_now = float(state.get("doc", 0) or 0)
     _loc_now = float(data.get("loc", 0) or 0)
     _is_hem  = _mode_str in ("hem", "trochoidal")
+
+    # Slot DOC was silently capped to the ceiling — explain it so the result isn't
+    # a mystery-shallow number, and (for tough materials) point toward HEM/trochoidal
+    # where light WOC unlocks the deep axial depth a full-width slot can't carry.
+    _slot_cap = data.get("_slot_doc_capped")
+    if _slot_cap:
+        _req = _slot_cap["requested_xd"]
+        _ceil = _slot_cap["ceiling_xd"]
+        if _slot_cap["flute_limited"]:
+            _why = (f"{_slot_cap['flutes']}-flute chip-clearance limit (set by flute count, "
+                    f"not geometry — a chipbreaker won't lift it)")
+        else:
+            _why = "slot chip-clearance ceiling for this geometry/material"
+        _hem_tail = ("" if _slot_cap["clean_nf"]
+                     else (f" For deeper axial depth in "
+                           f"{'titanium/superalloys' if _slot_cap['titanium'] else 'steel/stainless'}, "
+                           f"switch to an HEM / trochoidal toolpath — light WOC (8–15%) lets you run "
+                           f"1–3×D DOC without the chip-packing and heat that cap full-width slotting."))
+        _stab_suggestions.append({
+            "type": "info",
+            "label": f"DOC capped to {_ceil:.2f}×D (you requested {_req:.2f}×D)",
+            "detail": f"Held to the {_why}.{_hem_tail}",
+        })
+
+    # HEM (trochoidal) slotting — confirm the slot/tool fit and the effective WOC the
+    # loop geometry produces, so the user sees how the small tool clears the wide slot.
+    _slot_hem = data.get("_slot_hem")
+    if _slot_hem:
+        _shw = _slot_hem["slot_width_in"]
+        _sht = _slot_hem["tool_dia_in"]
+        _shwall = _slot_hem["wall_per_side_in"]
+        _sheff = _slot_hem["eff_woc_pct"]
+        _sh_maxdoc_xd = _slot_hem.get("max_doc_xd", 0)
+        _sh_maxdoc_in = _slot_hem.get("max_doc_in", 0)
+        _sh_loc_in    = _slot_hem.get("loc_in", 0)
+        _sh_loc_lim   = _slot_hem.get("loc_limited", False)
+        _sh_matcap    = _slot_hem.get("mat_cap_xd", 0)
+        # Depth story — HEM's light bite means depth is limited by flute length, not
+        # chip packing, so the user can run far deeper than a full-width slot allows.
+        if _sh_loc_lim:
+            _depth_note = (f" Achievable depth here is {_sh_maxdoc_xd:.1f}×D ({_sh_maxdoc_in:.3f}\") — "
+                           f"that's the tool's full {_sh_loc_in:.3f}\" LOC. A longer-LOC tool would let you "
+                           f"go deeper still (material allows up to {_sh_matcap:.1f}×D).")
+        else:
+            _depth_note = (f" Because the radial bite is light, axial depth isn't chip-packing-limited — "
+                           f"you can run up to {_sh_maxdoc_xd:.1f}×D ({_sh_maxdoc_in:.3f}\"), the lesser of the "
+                           f"material HEM cap and the tool's {_sh_loc_in:.3f}\" LOC. A longer LOC buys more depth.")
+        _stab_suggestions.append({
+            "type": "info",
+            "label": f"HEM slot: {_sht:.4f}\" tool in {_shw:.3f}\" slot ({_sheff:.0f}% Ø WOC, up to {_sh_maxdoc_xd:.1f}×D deep)",
+            "detail": (
+                f"Trochoidal looping — the tool takes a light {_sheff:.0f}% radial bite and steps "
+                f"across the {_shwall:.4f}\" per-wall room, clearing the full slot width in passes."
+                f"{_depth_note} A finish pass on each wall is recommended."
+            ),
+        })
+    elif data.get("_slot_hem_degenerate"):
+        _stab_suggestions.append({
+            "type": "info",
+            "label": "HEM slot needs a slot width wider than the tool",
+            "detail": ("No valid slot width was provided (or it's ≤ the tool diameter), so this ran as a "
+                       "traditional full-width slot. Enter a slot width larger than the cutting diameter "
+                       "to use trochoidal looping."),
+        })
+
+    # Traditional slot wider than tool → plow + side passes. Explain the multi-pass
+    # plan so the result (which is the plow pass) is read in context.
+    _slot_sp = data.get("_slot_sidepass")
+    if _slot_sp:
+        _spw = _slot_sp["slot_width_in"]
+        _spt = _slot_sp["tool_dia_in"]
+        _spn = _slot_sp["side_passes"]
+        _sps = _slot_sp["stock_per_side_in"]
+        _spwoc = _slot_sp["side_woc_pct"]
+        _sptot = _slot_sp["total_passes"]
+        _stab_suggestions.append({
+            "type": "info",
+            "label": f"Traditional slot: plow {_spt:.4f}\" + {_spn} side pass{'es' if _spn > 1 else ''}/wall → {_spw:.3f}\" wide",
+            "detail": (
+                f"Tool is narrower than the slot, so this runs as a full-width plow at {_spt:.4f}\" "
+                f"(the params below are that plow pass), then {_spn} side pass{'es' if _spn > 1 else ''} per "
+                f"wall at ~{_spwoc:.0f}% Ø WOC clears the {_sps:.4f}\" of stock on each side to final width "
+                f"(~{_sptot} passes total at depth). Climb mill the side passes. "
+                f"Prefer a larger tool to cut passes, or HEM for a deep slot."
+            ),
+        })
 
     # High-flex framing — when no single lever can credibly bring flex to safe,
     # tell the user to stack fixes instead of expecting one button to solve it.
