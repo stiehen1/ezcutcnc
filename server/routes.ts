@@ -2227,21 +2227,26 @@ export async function registerRoutes(
       // Traditional full-width slotting wants the LARGEST tool that fits the slot —
       // fewest side passes, most rigid. Laddering all the way down to tiny tools just
       // surfaces many-side-pass / many-Z-step suggestions nobody wants, so cap to the
-      // largest 2 diameters ≤ width. HEM stays in its 0.40–0.70× window (tool < slot).
+      // largest 3 diameters ≤ width (e.g. 3/4, 5/8, 1/2 for a 3/4" slot — gives the
+      // user a couple of step-down options without flooding with tiny tools). HEM
+      // stays in its 0.40–0.70× window (tool < slot).
       const candidates = isHem
         ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.70 + 1e-6)
-        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-2);
+        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-3);
       if (!candidates.length) return res.json({ chips: [] });
 
       // Strategy-aware flute filter (mirrors optimal-tool scorer).
       // HEM's light radial bite rewards high flute counts (more teeth in the cut), so
       // there's no upper cap: ferrous ≥5fl, non-ferrous ≥3fl. Traditional full-slot is
-      // gullet-limited: ferrous ≤5fl, non-ferrous 2–3fl.
+      // gullet-limited: non-ferrous 2–3fl. Ferrous → 4-flute is the workhorse: a real
+      // slot runs deeper than ½×D per pass, and a 5-flute tool is chip-clearance-capped
+      // to 0.5×D in a full slot (see slot_doc_ceiling), so it would force extra Z-levels.
+      // Surface 4fl (and below) only — the deep-slot guidance text says "go 4-flute."
       const fluteClause = isHem
         ? (isN ? `AND s.flutes >= 3` : `AND s.flutes >= 5`)
         : isN
           ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`
-          : `AND s.flutes <= 5`;
+          : `AND s.flutes <= 4`;
       const matClause = isoCol ? `AND (s.${isoCol} = TRUE OR UPPER(s.series) IN ('QTR3','QTR3-RN'))` : "";
       // Reach is RANKED, not filtered: a tool that reaches the full slot depth in one
       // pass sorts ahead of a shorter one, but short-LOC tools still appear — the user
@@ -2257,11 +2262,20 @@ export async function registerRoutes(
       //   all other series,            0.125"–0.250"  → 0.015"
       //   larger tools (> 0.250")                     → 0.030" (defCr baseline)
       // Computed per row in SQL since it depends on each candidate's series.
+      //
+      // Flute-count preference (traditional ferrous only): the 4-flute is the slotting
+      // workhorse — surface it ahead of a 3-flute so each Ø shows 4fl CB then 4fl std,
+      // not a mix of flute counts. (HEM and non-ferrous already filter their own flute
+      // band, so this orderer is a no-op there.) Lower distance-from-4 sorts first.
+      const fluteRank = (!isHem && !isN)
+        ? `ABS(s.flutes - 4) ASC,`
+        : "";
       const chips: any[] = [];
       for (const dia of candidates) {
         // Pull the top-scored candidates at this diameter, then surface up to TWO
-        // chips with DISTINCT flute counts (e.g. the 5fl chipbreaker AND a 6fl) so
-        // the user sees the flute-count choice at the same Ø, not just one tool.
+        // chips with a DISTINCT flute+geometry signature so the user sees the choice at
+        // the same Ø (traditional ferrous → 4fl chipbreaker + 4fl standard; HEM → its
+        // top two high-flute variants), not just one tool.
         const q = await pool.query(
           `SELECT s.edp, s.flutes, s.geometry, s.coating, s.corner_condition, s.loc_in, s.lbs_in, s.series,
                   (CASE WHEN LOWER(COALESCE(s.geometry,'standard')) = 'chipbreaker' THEN 3
@@ -2284,7 +2298,7 @@ export async function registerRoutes(
              AND s.edp NOT ILIKE '%-BLK'
              AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
              ${fluteClause} ${matClause}
-           ORDER BY ${reachRank} score DESC, s.loc_in ASC NULLS LAST
+           ORDER BY ${reachRank} ${fluteRank} score DESC, s.loc_in ASC NULLS LAST
            LIMIT 12`
         );
         // HEM/trochoidal sells deep one-pass DOC ("run the tool's full LOC"), so a
