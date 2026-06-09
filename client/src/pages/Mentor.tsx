@@ -1863,7 +1863,7 @@ export default function Mentor() {
         if (e.corner_radius > 0) { next.corner_radius = e.corner_radius; setCrText(e.corner_radius.toFixed(4)); }
         if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); next.ream_shank_dia = e.shank_dia; }
         if (e.coating) next.coating = e.coating;
-        if (e.keyseat_arbor_dia > 0) next.keyseat_arbor_dia = e.keyseat_arbor_dia;
+        if (e.keyseat_arbor_dia > 0) { next.keyseat_arbor_dia = e.keyseat_arbor_dia; setNeckDiaText(e.keyseat_arbor_dia.toFixed(4)); }
         if (e.dovetail_angle > 0) next.dovetail_angle = e.dovetail_angle;
         if (e.chamfer_angle > 0) next.chamfer_angle = e.chamfer_angle;
         if (e.chamfer_tip_dia > 0) next.chamfer_tip_dia = e.chamfer_tip_dia;
@@ -1944,7 +1944,8 @@ export default function Mentor() {
       // Necked tool detection: lbs significantly exceeds loc means there's a neck/reach
       // even when shank_dia equals tool_dia (e.g. CC-14426 — Ø.250 shank/cutter, lbs=1.25)
       const _isNeckedTool = _pdfLbs > 0 && _pdfLoc > 0 && _pdfLbs >= _pdfLoc * 1.5;
-      const _fwEst = (_pdfLoc > 0 && !_isReducedShank) ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
+      // No parallel flute-wash land on reduced-shank OR center-neck tools — the neck/taper provides clearance.
+      const _fwEst = (_pdfLoc > 0 && !_isReducedShank && !_isNeckedTool) ? Math.round(_pdfLoc * 0.20 * 10000) / 10000 : 0;
       setPdfFluteWash(_fwEst);
       setPdfFluteWashText(_fwEst > 0 ? _fwEst.toFixed(4) : "");
       // Set default stickout
@@ -2701,6 +2702,7 @@ export default function Mentor() {
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
   const [shankDiaText, setShankDiaText] = React.useState("");
+  const [neckDiaText, setNeckDiaText] = React.useState("");
   const [finalSlotDepthText, setFinalSlotDepthText] = React.useState("");
   const [machiningTipsOpen, setMachiningTipsOpen] = React.useState(false);
   const [stepReqOpen, setStepReqOpen] = React.useState(false);
@@ -9132,6 +9134,10 @@ ${stabSection}
           {form.mode !== "deep_pocket" && (() => {
             const showLbs = form.tool_type !== "chamfer_mill" && (form.lbs > 0 || pdfExtracted);
             const showOal = pdfExtracted && pdfOal > 0;
+            // Neck Dia: only for endmill-style tools (keyseat/dovetail have their own arbor field).
+            // Shows when a reduced neck is present — the LOC→LBS segment of the deflection model.
+            const showNeck = !["chamfer_mill", "keyseat", "dovetail"].includes(form.tool_type)
+              && form.keyseat_arbor_dia > 0;
             return (
               <div className="flex gap-2">
                 <div className="space-y-2" style={{ flex: "0 0 2.8rem" }}>
@@ -9238,6 +9244,32 @@ ${stabSection}
                         setLbsText("");
                       } else {
                         setLbsText(form.lbs ? (metric ? (form.lbs * 25.4).toFixed(2) : form.lbs.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>}
+                {showNeck && <div className="space-y-2" style={{ flex: 1 }}>
+                  <FieldLabel hint="Reduced neck diameter on a necked reach endmill — the thinner Ø between the flutes and the shank (e.g. Ø0.712 on a Ø0.750 tool). It is the weak link in the LOC→LBS span and drives the two-segment deflection model. Leave blank for a straight-body tool.">Neck Dia</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    value={neckDiaText}
+                    onChange={(e) => setNeckDiaText(e.target.value)}
+                    onFocus={() => {
+                      if (form.keyseat_arbor_dia) setNeckDiaText(metric ? (form.keyseat_arbor_dia * 25.4).toFixed(2) : form.keyseat_arbor_dia.toFixed(4));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(neckDiaText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const stored = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, keyseat_arbor_dia: stored }));
+                        setNeckDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(4));
+                      } else if (!neckDiaText.trim() || neckDiaText.trim() === "0") {
+                        setForm((p) => ({ ...p, keyseat_arbor_dia: 0 }));
+                        setNeckDiaText("");
+                      } else {
+                        setNeckDiaText(form.keyseat_arbor_dia ? (metric ? (form.keyseat_arbor_dia * 25.4).toFixed(2) : form.keyseat_arbor_dia.toFixed(4)) : "");
                       }
                     }}
                   />

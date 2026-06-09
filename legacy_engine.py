@@ -4099,6 +4099,15 @@ def run(payload=None):
     _shank_dia = float(payload.get("shank_dia", 0) or 0)
     if _shank_dia > float(data.get("diameter", 0)):
         data["neck_dia"] = _shank_dia  # physics.tool_deflection uses neck_dia for the body segment
+    else:
+        # Center-neck (reduced-neck) reach endmill: shank == cutter dia, but a thinner
+        # neck (e.g. Ø0.712 on a Ø0.750 tool) runs between the flutes and the shank.
+        # That neck is the weak link in the LOC→LBS segment of the composite beam model.
+        # Pass it as neck_dia so deflection isn't understated as a solid full-dia column.
+        # (keyseat_arbor_dia is the neck-Ø field reused for endmill necks.)
+        _neck_dia = float(payload.get("keyseat_arbor_dia", 0) or 0)
+        if 0 < _neck_dia < float(data.get("diameter", 0)):
+            data["neck_dia"] = _neck_dia
 
     # ── Helix angle resolution ────────────────────────────────────────────────
     # Priority: payload helix_angle (SKU column) → SERIES_HELIX lookup → default 35°
@@ -5928,12 +5937,18 @@ def run(payload=None):
     _loc_for_min = float(data.get("loc", 0) or 0)
     _flute_wash_for_min = float(data.get("flute_wash", 0) or 0)
     _clearance_buf = _d * (0.15 if _flute_wash_for_min > 0 else 0.33)
-    _min_so = max(_lbs, _loc_for_min + _flute_wash_for_min + _clearance_buf)
+    # Necked tool: you grip the shank just behind the neck, so the holder face sits
+    # ~0.5×D past the reach (LBS) — you can't bury the neck in the collet. The true
+    # minimum stickout is LBS + that grip clearance, not LBS exactly. Standard tool:
+    # LOC + flute_wash + clearance as before.
+    _lbs_grip_clear = _d * 0.5
+    _min_so = max(_lbs + _lbs_grip_clear if _lbs > 0 else 0.0,
+                  _loc_for_min + _flute_wash_for_min + _clearance_buf)
     if _lbs > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
-            "label": f'Minimum stickout = {_min_so:.3f}" (LBS + LOC clearance)',
-            "detail": f"Necked tool — stickout floor is {_min_so:.3f}\". Suggestions below respect this limit.",
+            "label": f'Minimum stickout = {_min_so:.3f}" (LBS + grip clearance)',
+            "detail": f"Necked tool — grip the shank just behind the neck, so stickout can't go below {_min_so:.3f}\". Suggestions below respect this limit.",
         })
 
     _doc_now = float(state.get("doc", 0) or 0)
@@ -6122,7 +6137,11 @@ def run(payload=None):
     _tool_series_upper = str(data.get("tool_series", "") or "").upper()
     _stickout_is_fixed = _tool_series_upper in _fixed_stickout_series
     _seen_stickout = set()
-    _at_lbs_floor = _lbs > 0 and _so <= _min_so + 0.05  # already at or within 0.05" of LBS floor
+    # Necked tool is "at the floor" once stickout is within ~0.3×D of the LBS-grip minimum.
+    # A fixed 0.05" band was too tight — the natural grip clearance (~0.5×D past LBS) sat
+    # just outside it, so "reduce stickout" fired on tools already chucked as deep as the
+    # neck allows. You can't shorten a necked tool's reach; the neck dictates it.
+    _at_lbs_floor = _lbs > 0 and _so <= _min_so + max(0.05, _d * 0.30)
 
     # Tailstock active: part is simply-supported — suppress stickout reduction suggestions
     # unless stickout is extreme (>4×D), in which case keep a soft advisory note.

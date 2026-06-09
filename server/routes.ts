@@ -4775,6 +4775,18 @@ RULE: If you see two unlabeled length dimensions on the cutting end — one roug
 
 VALIDATION: lbs must ALWAYS be greater than loc. If your extracted lbs is less than or equal to your extracted loc, you have them backwards — swap them.
 
+CENTER-NECK (REDUCED-NECK REACH) ENDMILL — the hardest case, read carefully:
+Some reach endmills are NOT shank-reduced. Instead the SHANK and the CUTTING FLUTES are the SAME diameter (e.g. Ø0.750 at the holder end AND Ø0.750 at the tip), and a REDUCED NECK sits in the MIDDLE (a smaller Ø callout such as "Ø0.712+.000/-.005" running along the central body). This is a reduced-neck reach tool — the neck gives clearance for deep slots/pockets. Identify it like this:
+- There will be THREE stacked horizontal length dimensions near the cutting end: a SHORT one at the very tip (the fluted/cutting length), a MIDDLE one spanning from a step back toward the holder to the tip (the REACH / neck length, e.g. 3.00), and the LONGEST one spanning the whole tool (OAL, e.g. 5.00).
+- loc = the SHORT tip dimension ONLY (the cutting/fluted length, e.g. 1.125). Do NOT use the middle reach dimension as loc — that is the single most common mistake on these prints. If you find yourself assigning a value of 2–4× the cutting diameter to loc on a tool that has a mid-body neck Ø callout, STOP — that is the reach (lbs), not the loc.
+- lbs = the MIDDLE reach dimension (step-to-tip, e.g. 3.00). This is the depth the tool can plunge.
+- oal = the LONGEST dimension (e.g. 5.00).
+- shank_dia = the holder-end body Ø (e.g. 0.750). When it equals tool_dia, that is normal for this geometry — still report it.
+- keyseat_arbor_dia = the reduced NECK Ø (the smaller mid-body callout, e.g. 0.712). Always extract this — it drives the two-segment deflection model. (This neck-Ø field is reused for endmill necks even though the name says keyseat.)
+- flute_wash / parallel relief = there is NONE on a center-neck tool (the neck tapers/blends, e.g. a "10° FEATHER BLEND"). Do not invent a flute-wash land.
+- STRONG TELL: a "FEATHER BLEND" callout (e.g. "10° FEATHER BLEND") almost always marks a necked tool. It is the blended/tapered transition from the reduced neck back up to the shank Ø, located at the back end of the neck (between the LOC/flute zone and the shank). If you see "FEATHER BLEND" anywhere on an endmill print, treat it as a reduced-neck reach tool: there WILL be a neck Ø (keyseat_arbor_dia) smaller than tool_dia, a short tip LOC, and a longer reach (lbs) — find all three even if dimensions are partly cut off. Never report flute_wash on a feather-blend tool.
+- Example: CC-14796 — Ø0.750 shank, Ø0.750 cutting dia, Ø0.712 mid neck, dims 1.125 / 3.00 / 5.00 → tool_dia=0.750, loc=1.125, lbs=3.00, oal=5.00, shank_dia=0.750, keyseat_arbor_dia=0.712.
+
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
   "tool_number": <string — the value from the TOOL # field in the title block, e.g. "CC-14371". ALWAYS present on Core Cutter prints. Do NOT use the CUSTOMER TOOL # field.>,
