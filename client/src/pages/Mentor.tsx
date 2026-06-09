@@ -15609,6 +15609,7 @@ ${stabSection}
                                       const m = meta[edp.trim()] ?? meta[edp];
                                       const dims = m
                                         ? [m.dia != null ? `${Number(m.dia).toFixed(3)}"Ø` : null,
+                                           m.flutes != null ? `${Number(m.flutes)}fl` : null,
                                            m.loc != null ? `${Number(m.loc).toFixed(3)}" LOC` : null]
                                           .filter(Boolean).join(" · ")
                                         : "";
