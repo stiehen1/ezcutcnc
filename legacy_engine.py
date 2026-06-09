@@ -6085,6 +6085,8 @@ def run(payload=None):
                     f"~{_doc_gain}% less force per pass."
                     + (" (stickout fixed by LBS — DOC is your primary lever)" if _lbs > 0 else "")
                 ),
+                "doc_xd": _doc_xd_target,
+                "doc_in": round(_doc_target, 4),
             })
         else:
             _detail = f"~{_doc_gain}% less axial force — brings flex to safe limit"
@@ -6094,6 +6096,8 @@ def run(payload=None):
                 "type": "doc",
                 "label": f"Reduce DOC to {_doc_target:.3f}\" ({_doc_xd_target}×D)",
                 "detail": _detail,
+                "doc_xd": _doc_xd_target,
+                "doc_in": round(_doc_target, 4),
             })
 
     # C) Reduce WOC — meaningful above ~15%; handled below (kept with WOC section)
@@ -6215,6 +6219,7 @@ def run(payload=None):
                     "type": "holder",
                     "label": _nh_label,
                     "detail": f"~{_nh_gain}% stiffer grip — est. flex drops to {_nh_defl_pct}% of limit",
+                    "toolholder": _nh_key,
                 })
         # Dual contact — informational only
         _taper = data.get("spindle_taper", "")
@@ -6283,6 +6288,8 @@ def run(payload=None):
                     f"Stepping DOC from {_doc_xd_now:.2f}×D to {_doc_step:.2f}×D offsets the MRR loss — "
                     f"same material removal rate with lower force and less deflection."
                 ),
+                "woc_pct": round(_woc_target_hem, 1),
+                "doc_xd": round(_doc_step, 2),
             })
         else:
             _imm_suggestions.append({
@@ -6293,13 +6300,17 @@ def run(payload=None):
                     f"Already near the HEM DOC cap ({_hem_doc_cap:.1f}×D) so MRR will be slightly lower, "
                     f"but flex and finish will improve."
                 ),
+                "woc_pct": round(_woc_target_hem, 1),
             })
     elif _woc_now > 15 and _defl > _dlim:
         if _woc_now >= 90.0:
             # Full slotting — can't reduce WOC without changing the operation.
             # HEM requires a SMALLER tool so it can trochoidal-path inside the slot.
             # Recommend 0.75× slot width, and more flutes to offset the smaller dia stiffness loss.
-            _slot_width = _d  # slot width = current tool dia (100% WOC)
+            # Use the user's actual slot width when given (a slot can be wider than the tool —
+            # plowed in multiple side passes). Fall back to tool dia only when no slot width is set.
+            _slot_width_input = float(payload.get("slot_width_in", 0.0) or 0.0)
+            _slot_width = _slot_width_input if _slot_width_input > _d - 1e-6 else _d
             # Snap to nearest standard catalog diameter strictly below slot width
             _hem_target = _slot_width * 0.75
             # Standard catalog diameters — only recommend sizes we actually stock
@@ -6339,6 +6350,7 @@ def run(payload=None):
                 "type": "woc",
                 "label": f"Reduce WOC to {_woc_target:.0f}% Ø",
                 "detail": f"~{_woc_gain}% less radial engagement — fewer simultaneous teeth, lower radial force",
+                "woc_pct": round(_woc_target, 1),
             })
 
     # 5) Shorter holder suggestion — if holder gage length is set and contributing to deflection

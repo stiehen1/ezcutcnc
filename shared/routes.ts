@@ -291,7 +291,15 @@ export const mentorSchemas = {
         suggested_flutes: z.number().optional(),
         suggested_edp: z.string().optional(),
         suggested_edps: z.array(z.string()).optional(),
-      })),
+        suggested_edp_meta: z.record(z.object({
+          dia: z.number().nullable(),
+          loc: z.number().nullable(),
+        })).optional(),
+        doc_xd: z.number().optional(),
+        doc_in: z.number().optional(),
+        woc_pct: z.number().optional(),
+        toolholder: z.string().optional(),
+      }).passthrough()),
     }).nullable().optional(),
 
     reaming: z.object({
