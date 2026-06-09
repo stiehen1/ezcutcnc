@@ -1920,11 +1920,15 @@ export default function Mentor() {
         } else if (_isReducedShank && e.flutes === 3 && e.variable_pitch && e.variable_helix) {
           next.tool_series = "QTR3"; // infer for reduced-shank 3-fl var pitch+helix specials
         }
-        // Coolant-fed detection
+        // Coolant-fed detection — server PDF extractor sets coolant_fed=true when the print
+        // calls out TSC / "COOLANT THRU" / "THROUGH SPINDLE COOLANT" / internal passages
+        // (server/routes.ts ~4815). Applies to ALL print uploads (standard + special tools).
         if (e.coolant_fed === true) {
           if (tt === "drill" || tt === "step_drill") next.drill_coolant_fed = true;
           else if (tt === "reamer") next.ream_coolant_fed = true;
-          else next.coolant = "tsc_low"; // endmill/keyseat/dovetail/etc — default to TSC low pressure
+          // endmill/keyseat/dovetail/chamfer/feedmill/threadmill — default to TSC1000
+          // (tsc_high is labeled "TSC 1000psi" in the coolant picker; tsc_low = "TSC 300psi").
+          else next.coolant = "tsc_high";
         }
         // Shank type detection
         if (e.shank_type === "weldon") next.toolholder = "weldon";
@@ -2885,6 +2889,11 @@ export default function Mentor() {
   const [skuLocked, setSkuLocked] = React.useState(false);
   const [skuDescription, setSkuDescription] = React.useState<string>("");
   const [edpNotFound, setEdpNotFound] = React.useState(false);
+  // Reason a tool load was refused (e.g. square tool in 3D surfacing — gouge risk).
+  // Ref mirror lets callers (tool finder) read the reason synchronously right after
+  // applySkuToForm returns false, before the state update has flushed.
+  const [skuBlockReason, setSkuBlockReason] = React.useState<string | null>(null);
+  const skuBlockReasonRef = React.useRef<string | null>(null);
   const [optimalRec, setOptimalRec] = React.useState<any>(null);
   const [optimalLoading, setOptimalLoading] = React.useState(false);
   const [optimalExpanded, setOptimalExpanded] = React.useState(false);
@@ -2994,6 +3003,8 @@ export default function Mentor() {
   React.useEffect(() => {
     if (!edpText.trim() || skuLocked) { setSkuResults([]); setSkuDropdownOpen(false); setEdpNotFound(false); return; }
     setEdpNotFound(false); // reset while user is still typing
+    setSkuBlockReason(null);
+    skuBlockReasonRef.current = null;
     const t = setTimeout(async () => {
       try {
         const r = await fetch(`/api/skus?q=${encodeURIComponent(edpText.trim())}`);
@@ -3035,7 +3046,7 @@ export default function Mentor() {
     return { wocPct: optWocPct, docXd: optDocXd, wocKey, docKey };
   }
 
-  function applySkuToForm(sku: SkuRecord, opts?: { preserveCutParams?: boolean }) {
+  function applySkuToForm(sku: SkuRecord, opts?: { preserveCutParams?: boolean; modeOverride?: string }) {
     // preserveCutParams: used when swapping to a recommended tool — keep the user's
     // prior DOC (as ×D ratio) and pre-fill WOC with the optimal value for the new
     // tool's flute count. Without this flag, WOC/DOC are blanked (the SKU-picker default).
@@ -3050,6 +3061,21 @@ export default function Mentor() {
     const crIn = (!isBall && cc !== undefined && cc !== "square" && Number(cc) > 0) ? Number(cc) : 0;
     const corner_condition = isBall ? "ball" : crIn > 0 ? "corner_radius" : "square";
     const form_tool_type = isBall ? "ballnose" : isChamfer ? "chamfer_mill" : crIn > 0 ? "corner_radius" : "endmill";
+
+    // 3D Surface Contouring gate: a square (sharp-corner) tool gouges any non-planar
+    // surface — only ball or bull-nose (corner-radius) tools are valid. Enforced here at
+    // the single load chokepoint so every path (manual EDP dropdown, tool finder, slot
+    // chips, optimal-rec swap) is covered, not just the dropdown's display filter.
+    const _effectiveMode = opts?.modeOverride ?? form.mode;
+    if (_effectiveMode === "surfacing" && !isBall && crIn <= 0) {
+      const _reason = `${sku.EDP ?? (sku as any).edp ?? "This tool"} is a square-corner tool — 3D Surface Contouring needs a ball or corner-radius (bull-nose) tool, or it will gouge curved surfaces. Pick a ball/bull-nose tool, or switch to a flat-surface mode (Face, Finish) for square tooling.`;
+      skuBlockReasonRef.current = _reason;
+      setSkuBlockReason(_reason);
+      setSkuDropdownOpen(false);
+      return false;
+    }
+    skuBlockReasonRef.current = null;
+    setSkuBlockReason(null);
 
     // Default stickout: QTR3/QTR3-RN always use hardcoded DB value (no formula).
     // Other series: use DB value if present, otherwise LOC + flute_wash + 0.33×D.
@@ -3194,6 +3220,7 @@ export default function Mentor() {
       })() : {}),
     }));
     setSkuChamferEdgeLength(isChamfer ? 1 : null); // just a truthy flag — values computed from geometry
+    return true;
   }
 
   // Look up a specific EDP and apply it to the tool block (same as picking it from the
@@ -3220,6 +3247,8 @@ export default function Mentor() {
     setSkuDropdownOpen(false);
     setSkuChamferEdgeLength(null);
     setEdpNotFound(false);
+    setSkuBlockReason(null);
+    skuBlockReasonRef.current = null;
   }
 
   function clearPdf() {
@@ -5569,7 +5598,17 @@ ${stabSection}
 
   // ── Tool Finder → apply SKU and switch to milling ────────────────────────
   function handleToolFinderSelect(tool: any, extras?: { mode?: string; isoMat?: string; chamferLength?: number }) {
-    applySkuToForm(tool as any);
+    const loaded = applySkuToForm(tool as any, extras?.mode ? { modeOverride: extras.mode } : undefined);
+    if (!loaded) {
+      // Refused (e.g. square tool into 3D surfacing — gouge risk). Tell the user; don't
+      // switch to a half-loaded Milling Calculator state.
+      toast({
+        title: "Tool not loaded",
+        description: skuBlockReasonRef.current ?? "This tool isn't valid for the selected operation.",
+        duration: 6000,
+      });
+      return;
+    }
     setOperation("milling");
     mentor.reset();
     if (extras?.mode) setForm(p => ({ ...p, mode: extras.mode as any }));
@@ -8959,6 +8998,9 @@ ${stabSection}
             </div>
             {edpNotFound && !skuLocked && (
               <p className="mt-1 text-xs font-semibold text-red-500">⚠ Invalid EDP Number Entered</p>
+            )}
+            {skuBlockReason && !skuLocked && (
+              <p className="mt-1 text-xs font-semibold text-red-500">⚠ {skuBlockReason}</p>
             )}
             {skuLocked && (
               <p className="mt-1 text-[11px] text-orange-400 flex items-center gap-2 flex-wrap">
@@ -15221,7 +15263,7 @@ ${stabSection}
                                     const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
                                     const data: SkuRecord[] = await r.json();
                                     const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                    if (match) { applySkuToForm(match, { preserveCutParams: true }); setTimeout(() => runRef.current(), 100); }
+                                    if (match && applySkuToForm(match, { preserveCutParams: true })) setTimeout(() => runRef.current(), 100);
                                   } catch {}
                                 }}
                               >{edp}</button>
@@ -15392,9 +15434,10 @@ ${stabSection}
                   type="button"
                   className="mt-1 w-full rounded-lg border border-emerald-600 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-700/50 hover:text-white transition-colors text-center"
                   onClick={() => {
-                    applySkuToForm(recSku as any, { preserveCutParams: true });
-                    setOptimalRec(null);
-                    setTimeout(() => runRef.current(), 100);
+                    if (applySkuToForm(recSku as any, { preserveCutParams: true })) {
+                      setOptimalRec(null);
+                      setTimeout(() => runRef.current(), 100);
+                    }
                   }}
                 >
                   Run Optimal Tool Parameters
@@ -15622,7 +15665,7 @@ ${stabSection}
                                                 const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
                                                 const data: SkuRecord[] = await r.json();
                                                 const match = data.find((sk) => sk.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                                if (match) { applySkuToForm(match, { preserveCutParams: true }); setTimeout(() => runRef.current(), 100); }
+                                                if (match && applySkuToForm(match, { preserveCutParams: true })) setTimeout(() => runRef.current(), 100);
                                               } catch {}
                                             }}
                                           >{edp}</button>
