@@ -15554,7 +15554,39 @@ ${stabSection}
                       <li key={idx} className="flex items-start gap-2 text-sm">
                         <span className="mt-0.5 text-[11px] font-bold text-zinc-600 w-4 shrink-0 text-center">{idx + 1}</span>
                         <span className="flex-1">
-                          <span className="font-medium text-zinc-200">{s.label}</span>
+                          {(() => {
+                            // Build a one-click "apply" for suggestions that map directly to a form field.
+                            // Tool swaps (diameter/flute/neck) keep their own EDP links in the detail line below.
+                            let apply: (() => void) | null = null;
+                            if (s.type === "stickout" && s.stickout_in > 0) {
+                              apply = () => {
+                                setForm(p => ({ ...p, stickout: Number(s.stickout_in) }));
+                                setStickoutViolation(null);
+                                setStickoutAutoSuggested(false);
+                              };
+                            } else if (s.type === "doc" && s.doc_xd > 0) {
+                              apply = () => setForm(p => ({ ...p, doc_xd: Number(s.doc_xd) }));
+                            } else if (s.type === "woc" && s.woc_pct > 0) {
+                              apply = () => setForm(p => ({
+                                ...p,
+                                woc_pct: Number(s.woc_pct),
+                                ...(s.doc_xd > 0 ? { doc_xd: Number(s.doc_xd) } : {}),
+                              }));
+                            } else if (s.type === "holder" && s.toolholder) {
+                              apply = () => setForm(p => ({ ...p, toolholder: s.toolholder }));
+                            }
+                            if (!apply) {
+                              return <span className="font-medium text-zinc-200">{s.label}</span>;
+                            }
+                            const doApply = apply;
+                            return (
+                              <button type="button"
+                                className="font-medium text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer text-left"
+                                title="Apply this change and re-run"
+                                onClick={() => { doApply(); setTimeout(() => runRef.current(), 100); }}
+                              >{s.label}</button>
+                            );
+                          })()}
                           {isBest && <span className="ml-2 text-[10px] font-semibold text-orange-400 uppercase tracking-wide">best fix</span>}
                           {s.detail && (
                             <div className="text-xs text-zinc-500 mt-0.5">
@@ -15569,22 +15601,34 @@ ${stabSection}
                                 const tryLabel = shortLoc
                                   ? `Can you use (LOC ${shortLoc.toFixed(3)}"${shortOal ? ` / OAL ${shortOal.toFixed(3)}"` : ""})?`
                                   : "Try:";
+                                const meta = s.suggested_edp_meta ?? {};
                                 return (
-                                  <span className="ml-2 inline-flex items-center gap-1.5 flex-wrap">
+                                  <span className="ml-2 inline-flex items-center gap-x-2 gap-y-1 flex-wrap">
                                     <span className={shortLoc ? "text-amber-300 font-medium" : "text-zinc-600"}>{tryLabel}</span>
-                                    {edps.map((edp: string) => (
-                                      <button key={edp} type="button"
-                                        className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
-                                        onClick={async () => {
-                                          try {
-                                            const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
-                                            const data: SkuRecord[] = await r.json();
-                                            const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                            if (match) { applySkuToForm(match, { preserveCutParams: true }); setTimeout(() => runRef.current(), 100); }
-                                          } catch {}
-                                        }}
-                                      >{edp}</button>
-                                    ))}
+                                    {edps.map((edp: string) => {
+                                      const m = meta[edp.trim()] ?? meta[edp];
+                                      const dims = m
+                                        ? [m.dia != null ? `${Number(m.dia).toFixed(3)}"Ø` : null,
+                                           m.loc != null ? `${Number(m.loc).toFixed(3)}" LOC` : null]
+                                          .filter(Boolean).join(" · ")
+                                        : "";
+                                      return (
+                                        <span key={edp} className="inline-flex items-baseline gap-1">
+                                          <button type="button"
+                                            className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
+                                            onClick={async () => {
+                                              try {
+                                                const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
+                                                const data: SkuRecord[] = await r.json();
+                                                const match = data.find((sk) => sk.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
+                                                if (match) { applySkuToForm(match, { preserveCutParams: true }); setTimeout(() => runRef.current(), 100); }
+                                              } catch {}
+                                            }}
+                                          >{edp}</button>
+                                          {dims && <span className="text-[10px] text-zinc-500">({dims})</span>}
+                                        </span>
+                                      );
+                                    })}
                                     {s.suggested_cr_note && (
                                       <span className="text-zinc-400">({s.suggested_cr_note})</span>
                                     )}
@@ -15598,6 +15642,22 @@ ${stabSection}
                     );
                   })}
                 </ul>
+              </div>
+            )}
+
+            {/* No actionable steps + flex in range → confirm the setup is good
+                (otherwise an empty list after applying a fix looks like the steps vanished). */}
+            {actionItems.length === 0 && deflPctSub != null && deflPctSub < 100 && (
+              <div className="border-t border-zinc-700/40 pt-3">
+                <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+                  <span className="mt-0.5 shrink-0 font-bold">✓</span>
+                  <span>
+                    <span className="font-semibold">Tool flex is now within range.</span>
+                    <div className="mt-0.5 opacity-80">
+                      Flex is at {deflPctSub.toFixed(0)}% of the limit — no further stability changes needed. Any change you just applied is reflected in the score above.
+                    </div>
+                  </span>
+                </div>
               </div>
             )}
 

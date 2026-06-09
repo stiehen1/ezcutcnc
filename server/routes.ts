@@ -1793,6 +1793,19 @@ export async function registerRoutes(
         const matClause2 = matIsoCol
           ? `AND (s2.${matIsoCol} = TRUE OR UPPER(s2.series) IN ('QTR3','QTR3-RN'))`
           : "";
+        // Set suggested_edps + a per-EDP {dia, loc} map so the UI can label each chip.
+        const setSuggestedEdps = (sug: any, rows: any[]) => {
+          sug.suggested_edps = rows.map((r: any) => r.edp);
+          sug.suggested_edp  = sug.suggested_edps[0];
+          sug.suggested_edp_meta = {};
+          for (const r of rows) {
+            if (r.edp == null) continue;
+            sug.suggested_edp_meta[String(r.edp)] = {
+              dia: r.cutting_diameter_in != null ? Number(r.cutting_diameter_in) : null,
+              loc: r.loc_in != null ? Number(r.loc_in) : null,
+            };
+          }
+        };
         for (const s of stability.suggestions) {
           const lookupFlutes = s.suggested_flutes ?? s.lookup_flutes;
         if ((s.type === "tool" || s.type === "diameter" || s.type === "shorter_loc") && lookupFlutes && s.lookup_dia) {
@@ -1832,7 +1845,7 @@ export async function registerRoutes(
               if (s.type === "tool" && currentEdp.length > 1 && /^\d/.test(currentEdp)) {
                 const derivedBase = String(flutes) + currentEdp.slice(1, -1); // all but last char
                 const q = await pool.query(
-                  `SELECT s.edp FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                    ${cbClause}
@@ -1845,8 +1858,7 @@ export async function registerRoutes(
                   [derivedBase + "%", payloadGeometry]
                 );
                 if (q.rows.length > 0) {
-                  s.suggested_edps = q.rows.map((r: any) => r.edp);
-                  s.suggested_edp  = s.suggested_edps[0];
+                  setSuggestedEdps(s, q.rows);
                   continue;
                 }
               }
@@ -1865,7 +1877,7 @@ export async function registerRoutes(
               if (s.type === "shorter_loc") {
                 const inputLoc = Number((parsed.data as any).loc ?? 999);
                 const qsl = await pool.query(
-                  `SELECT s.edp FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND s.flutes = $1
@@ -1880,8 +1892,7 @@ export async function registerRoutes(
                   [flutes, dia, cornerStr, loc, inputLoc]
                 );
                 if (qsl.rows.length > 0) {
-                  s.suggested_edps = qsl.rows.map((r: any) => r.edp);
-                  s.suggested_edp  = s.suggested_edps[0];
+                  setSuggestedEdps(s, qsl.rows);
                 }
                 continue;
               }
@@ -1894,8 +1905,7 @@ export async function registerRoutes(
                 // Helper: attach CR note if suggested tool has a different CR than input
                 const attachDiaCrNote = (rows: any[]) => {
                   if (!rows.length) return;
-                  s.suggested_edps = rows.map((r: any) => r.edp);
-                  s.suggested_edp  = s.suggested_edps[0];
+                  setSuggestedEdps(s, rows);
                   // Check if the suggested CR differs from input CR
                   const suggestedCr = rows[0].corner_condition ?? "";
                   const suggestedCrNum = parseFloat(suggestedCr);
@@ -1906,7 +1916,7 @@ export async function registerRoutes(
                 };
                 // Primary: matching corner, tools at the minimum sufficient LOC only (all coating variants)
                 const qd1 = await pool.query(
-                  `SELECT s.edp, s.corner_condition FROM skus s
+                  `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND s.flutes = $1
@@ -1935,7 +1945,7 @@ export async function registerRoutes(
                 } else {
                   // Fallback: ignore corner, tools at minimum sufficient LOC only
                   const qd2 = await pool.query(
-                    `SELECT s.edp, s.corner_condition FROM skus s
+                    `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND s.flutes = $1
@@ -1966,7 +1976,7 @@ export async function registerRoutes(
                   } else {
                     // Last resort: closest LOC regardless of length
                     const qd3 = await pool.query(
-                      `SELECT s.edp, s.corner_condition FROM skus s
+                      `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in FROM skus s
                        JOIN sku_uploads u ON s.upload_id = u.id
                        WHERE u.is_current = TRUE
                          AND s.flutes = $1
@@ -1999,7 +2009,7 @@ export async function registerRoutes(
               } else {
               // Non-diameter suggestions: find the closest LOC
               const q2 = await pool.query(
-                `SELECT s.edp FROM skus s
+                `SELECT s.edp, s.cutting_diameter_in, s.loc_in FROM skus s
                  JOIN sku_uploads u ON s.upload_id = u.id
                  WHERE u.is_current = TRUE
                    AND s.flutes = $1
@@ -2023,13 +2033,12 @@ export async function registerRoutes(
                 [flutes, dia, cornerStr, loc]
               );
               if (q2.rows.length > 0) {
-                s.suggested_edps = q2.rows.map((r: any) => r.edp);
-                s.suggested_edp  = s.suggested_edps[0];
+                setSuggestedEdps(s, q2.rows);
               } else {
                 // Fallback: ignore corner, just match flutes + dia + closest LOC
                 // Still enforce LBS requirement so we don't return a short-reach tool for an LBS job
                 const q3 = await pool.query(
-                  `SELECT s.edp FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND s.flutes = $1
@@ -2055,13 +2064,12 @@ export async function registerRoutes(
                   [flutes, dia, loc]
                 );
                 if (q3.rows.length > 0) {
-                  s.suggested_edps = q3.rows.map((r: any) => r.edp);
-                  s.suggested_edp  = s.suggested_edps[0];
+                  setSuggestedEdps(s, q3.rows);
                 } else if (lookupLbs > 0) {
                   // Final fallback: no tool meets lbs >= lookupLbs — use highest available LBS
                   // (user may have manually entered a larger LBS than any stocked tool)
                   const q4 = await pool.query(
-                    `SELECT s.edp FROM skus s
+                    `SELECT s.edp, s.cutting_diameter_in, s.loc_in FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND s.flutes = $1
@@ -2085,8 +2093,7 @@ export async function registerRoutes(
                     [flutes, dia]
                   );
                   if (q4.rows.length > 0) {
-                    s.suggested_edps = q4.rows.map((r: any) => r.edp);
-                    s.suggested_edp  = s.suggested_edps[0];
+                    setSuggestedEdps(s, q4.rows);
                   }
                 }
               }
