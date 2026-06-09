@@ -15419,8 +15419,10 @@ ${stabSection}
         const si      = stabilityIndex.overall;
         const deflPct = stability.deflection_pct ?? 0;
         const siLabel = si >= 80 ? "Excellent" : si >= 65 ? "Good" : si >= 35 ? "Fair" : "Needs Attention";
-        const siColor = si >= 65 ? "text-emerald-400" : si >= 35 ? "text-amber-400" : "text-orange-400";
-        const barColor = si >= 65 ? "bg-emerald-500" : si >= 35 ? "bg-amber-400" : "bg-orange-500";
+        // 4-tier color scale, matching the caption word-tiers exactly:
+        // 80+ bright emerald (Excellent) · 65–79 softer green (Good) · 35–64 amber (Fair) · <35 red (Needs Attention)
+        const siColor = si >= 80 ? "text-emerald-400" : si >= 65 ? "text-emerald-600" : si >= 35 ? "text-amber-400" : "text-red-400";
+        const barColor = si >= 80 ? "bg-emerald-400" : si >= 65 ? "bg-emerald-600" : si >= 35 ? "bg-amber-400" : "bg-red-500";
         const isOver  = deflPct >= 100;
         const isHem   = form.mode === "hem" || form.mode === "trochoidal";
 
@@ -15525,10 +15527,10 @@ ${stabSection}
                   ) : (
                     <>
                       <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[50px] overflow-hidden">
-                        <div className={`h-full rounded-full ${score >= 65 ? "bg-emerald-400" : score >= 35 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${score}%` }} />
+                        <div className={`h-full rounded-full ${score >= 80 ? "bg-emerald-400" : score >= 65 ? "bg-emerald-600" : score >= 35 ? "bg-amber-400" : "bg-red-500"}`} style={{ width: `${score}%` }} />
                       </div>
-                      <span className={`text-right font-semibold w-16 shrink-0 ${score >= 65 ? "text-emerald-400" : score >= 35 ? "text-amber-400" : "text-orange-400"}`}>
-                        {score >= 65 ? "Good" : score >= 35 ? "Fair" : "Poor"} <span className="font-normal opacity-50">{score}</span>
+                      <span className={`text-right font-semibold w-20 shrink-0 ${score >= 80 ? "text-emerald-400" : score >= 65 ? "text-emerald-600" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>
+                        {score >= 80 ? "Excellent" : score >= 65 ? "Good" : score >= 35 ? "Fair" : "Poor"} <span className="font-normal opacity-50">{score}</span>
                       </span>
                     </>
                   )}
@@ -15538,7 +15540,7 @@ ${stabSection}
 
             {/* Caption */}
             <p className="text-[10px] text-zinc-600">
-              <span className="text-emerald-400">80–100 excellent</span> · <span className="text-emerald-600">65–79 good</span> · <span className="text-amber-400">35–64 fair</span> · <span className="text-orange-400">below 35 needs attention</span> · tap any label for details
+              <span className="text-emerald-400">80–100 excellent</span> · <span className="text-emerald-600">65–79 good</span> · <span className="text-amber-400">35–64 fair</span> · <span className="text-red-400">below 35 needs attention</span> · tap any label for details
             </p>
 
             {/* Steps */}
