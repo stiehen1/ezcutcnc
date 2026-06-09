@@ -6487,10 +6487,26 @@ def run(payload=None):
     _woc_now_diam = float(data.get("woc_pct", 0) or 0)
     if _next_d and _woc_now_diam < 90.0:
         _d_gain = round((_next_d / _d) ** 4, 1)
+        # Spindle-load caveat: a larger tool at the same engagement (WOC% and DOC xD)
+        # removes ~(_next_d/_d)^2 more material per pass, so HP draw scales up roughly the
+        # same way. On a setup where flex is already in range, a bigger tool mostly just
+        # burns spindle power -- warn proportionally to how loaded the spindle already is.
+        _load_frac = float(state.get("load", 0.0) or 0.0)
+        _mrr_mult  = round((_next_d / _d) ** 2, 1) if _d > 0 else 0
+        _proj_load = round(_load_frac * (_next_d / _d) ** 2 * 100) if _d > 0 else 0
+        if _load_frac >= 0.50:
+            _d_load_note = (
+                f" — but draws ~{_mrr_mult}x the spindle power "
+                f"(load ~{_proj_load}% of available HP); best only if flex is your limiter, not power"
+            )
+        elif _defl <= _dlim:
+            _d_load_note = " — note: flex is already within range, so a bigger tool mainly adds spindle load for little stability gain"
+        else:
+            _d_load_note = f" — note: draws ~{_mrr_mult}x the spindle power at the same engagement"
         _hw_suggestions.append({
             "type": "diameter",
             "label": f'Increase Tool Diameter to {_next_d:.3f}"',
-            "detail": f"{_d_gain}× stiffer (D\u2074 law)",
+            "detail": f"{_d_gain}× stiffer (D\u2074 law){_d_load_note}",
             "lookup_dia": _next_d,
             "lookup_loc": float(data.get("loc", 0) or 0),
             "lookup_flutes": int(data.get("flutes", 0) or 0),

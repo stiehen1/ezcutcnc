@@ -294,6 +294,7 @@ export const mentorSchemas = {
         suggested_edp_meta: z.record(z.object({
           dia: z.number().nullable(),
           loc: z.number().nullable(),
+          flutes: z.number().nullable(),
         })).optional(),
         doc_xd: z.number().optional(),
         doc_in: z.number().optional(),
