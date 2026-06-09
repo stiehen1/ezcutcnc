@@ -10,7 +10,11 @@
       "Bash(git commit -m ':*)",
       "Bash(git push:*)",
       "Bash(taskkill /PID 3480 /F)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(mv \"c:/Users/scott/Documents/corecuttertoolapp/memory/project_center_neck_tools.md\" \"c:/Users/scott/.claude/projects/c--Users-scott-Documents-corecuttertoolapp/memory/project_center_neck_tools.md\" && echo moved)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\scott\\.claude\\projects\\c--Users-scott-Documents-corecuttertoolapp\\memory"
     ]
   }
 }
