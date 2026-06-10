@@ -990,8 +990,8 @@ export default function Mentor() {
           userEmail: erEmail,
           userName: localStorage.getItem("cc_user_name") || "",
           userType: roiUserType,
-          repId: roiRepVerified ? (roiRepVerified as any).repId : null,
-          repName: roiRepVerified ? (roiRepVerified as any).name : null,
+          repId: roiRepVerified ? roiRepVerified.repId : null,
+          repName: roiRepVerified ? roiRepVerified.name : null,
           distributorName: roiDistributorName,
           distributorCode: roiDistributorCode,
           // End-user / customer (the shop being tested)
@@ -1070,8 +1070,8 @@ export default function Mentor() {
           userEmail: erEmail,
           userName: localStorage.getItem("cc_user_name") || "",
           userType: roiUserType,
-          repId: roiRepVerified ? (roiRepVerified as any).repId : null,
-          repName: roiRepVerified ? (roiRepVerified as any).name : null,
+          repId: roiRepVerified ? roiRepVerified.repId : null,
+          repName: roiRepVerified ? roiRepVerified.name : null,
           // Distributor / end user
           distributorName: roiDistributorName,
           distributorCode: roiDistributorCode,
@@ -2791,7 +2791,9 @@ export default function Mentor() {
 
   // ── ROI Calculator state ───────────────────────────────────────────────────
   const [showRoi, setShowRoi] = React.useState(false);
-  const [roiRepVerified, setRoiRepVerified] = React.useState<{ name: string; repId: string } | null | false>(null); // null=unchecked, false=not authorized
+  // null = identity not yet resolved (brief spinner); object = resolved rep/user identity for ROI session attribution.
+  // No "false" state — ROI is open access; every logged-in user resolves to an identity (rep record or their own name/email).
+  const [roiRepVerified, setRoiRepVerified] = React.useState<{ name: string; repId: string } | null>(null);
   const [roiCcPrice, setRoiCcPrice] = React.useState("");
   const [roiCcParts, setRoiCcParts] = React.useState("");
   const [roiCcTime, setRoiCcTime] = React.useState("");
@@ -2831,13 +2833,22 @@ export default function Mentor() {
     mrrTimeSavingsPerPart: number;
     breakevenN: number | null; // null = not applicable
   } | null>(null);
-  // Verify rep authorization when ROI panel opens
+  // Resolve ROI rep identity when the panel opens. ROI is OPEN ACCESS — any
+  // logged-in user has it (internal allowlist gating was removed). We still hit
+  // /api/sales-rep/verify to pick up a known rep's canonical name/repId for
+  // session attribution, but a miss is NOT a block: fall back to the logged-in
+  // user's name (or email) so the panel always renders and sessions stay
+  // attributed. Never set roiRepVerified=false (that state is unreachable now).
   React.useEffect(() => {
     if (!showRoi || !erEmail || roiRepVerified !== null) return;
+    const fallback = () => setRoiRepVerified({
+      name: localStorage.getItem("cc_user_name") || erEmail,
+      repId: erEmail,
+    });
     fetch(`/api/sales-rep/verify?email=${encodeURIComponent(erEmail)}`)
       .then(r => r.json())
-      .then(d => setRoiRepVerified(d.authorized ? { name: d.name, repId: d.repId } : false))
-      .catch(() => setRoiRepVerified(false));
+      .then(d => d.authorized ? setRoiRepVerified({ name: d.name, repId: d.repId }) : fallback())
+      .catch(fallback);
   }, [showRoi, erEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cross-device session recovery: when panel opens with a named ROI, check if DB has a session for
@@ -3011,7 +3022,12 @@ export default function Mentor() {
       const current = JSON.stringify(form);
       setFormDirty(current !== lastRunFormRef.current);
     }
+    // Any input change invalidates a prior validation verdict. Clear BOTH the
+    // warnings and the hard-block flag — otherwise switching modes (e.g. an
+    // illegal 6-flute slot back to HEM) leaves runBlocked=true stuck on, so the
+    // NEXT warning mislabels as "Can't run" even when it's just a missing field.
     setRunWarnings([]);
+    setRunBlocked(false);
   }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // EDP# debounced search
@@ -15794,18 +15810,11 @@ ${stabSection}
           {showRoi && (
             <div className="px-4 pb-4 space-y-4">
 
-              {/* Rep authorization gate */}
+              {/* Resolving rep identity (ROI is open access — this is just a brief
+                  spinner while we look up the user's name for session attribution). */}
               {roiRepVerified === null && (
                 <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/40 px-4 py-6 text-center text-xs text-zinc-500">
-                  Verifying access…
-                </div>
-              )}
-
-              {roiRepVerified === false && (
-                <div className="rounded-lg bg-red-950/40 border border-red-700/50 px-4 py-5 text-center space-y-2">
-                  <div className="text-red-400 font-semibold text-sm">ROI Access Restricted</div>
-                  <p className="text-xs text-zinc-400">Your email is not on the authorized sales team list.</p>
-                  <p className="text-xs text-zinc-600">Contact Core Cutter to request access.</p>
+                  Loading…
                 </div>
               )}
 
@@ -15813,7 +15822,7 @@ ${stabSection}
               <>
               {/* Rep identity banner */}
               <div className="text-[10px] text-zinc-500">
-                Test recorded by: <span className="text-zinc-300 font-semibold">{(roiRepVerified as any).name}</span> <span className="text-zinc-600">({erEmail})</span>
+                Test recorded by: <span className="text-zinc-300 font-semibold">{roiRepVerified.name}</span> <span className="text-zinc-600">({erEmail})</span>
               </div>
 
               {roiDraftLoaded && !mentor.data && (
