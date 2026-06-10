@@ -4673,18 +4673,33 @@ ${JSON.stringify(fields.map(f => ({ id: f.id, text: f.text })), null, 2)}`;
 
   const EXTRACTION_PROMPT = `You are reading a Core Cutter LLC engineering print (technical drawing).
 
-FIRST — verify this is a genuine Core Cutter LLC print:
-1. Look for "CORE CUTTER" or "Core Cutter" or "CORE CUTTER, LLC" in the title block, header, or logo area.
-2. Find the TOOL # field in the title block. It contains a number like "CC-14371". The title block is typically a table in the lower-right corner of the print with rows labeled TOOL #, CUSTOMER, DRAWN BY, DATE, etc.
+FIRST — verify this is a genuine Core Cutter LLC ENGINEERING PRINT (a CAD tool drawing), NOT some other document:
+1. Look for the Core Cutter TITLE-BLOCK COMPANY HEADER. Every genuine custom tool print carries this header block in the title block (top-center/upper area of the drawing border). The STRUCTURE is always the same — company name, street, city/state/ZIP, phone, fax, website:
+       CORE CUTTER, LLC
+       <street address>
+       <city>, ME <zip>
+       PHONE: 207-588-7519
+       FAX: 207-588-7614
+       WEBSITE: CORECUTTERUSA.COM
+   The company has used / is transitioning between two addresses — ACCEPT EITHER:
+       • 362 MAINE AVE, FARMINGDALE, ME 04344   (older prints)
+       • 120 TECHNOLOGY DRIVE, GARDINER, ME 04345 (newer prints)
+   Do NOT key off the address text to authenticate — the address is changing. The authoritative tells are the STRUCTURE (the "CORE CUTTER, LLC" company header with PHONE/FAX/WEBSITE lines and "CORECUTTERUSA.COM") TOGETHER WITH item 2 below (a real TOOL # title-block field and a CAD tool drawing).
+2. Find the TOOL # field in the title block. It contains a number like "CC-14371". The title block is a table (typically lower-right or bottom of the drawing border) with rows labeled TOOL #, CUSTOMER, DRAWN BY, DATE, COATING/VENDOR, MATERIAL #, SCALE, PAGE, etc.
+3. Confirm there is an actual CAD TOOL-PROFILE DRAWING (a dimensioned side/front view of the physical cutting tool with Ø callouts, length dimensions, etc.). A genuine print always has this.
+
+REJECT NON-PRINTS — CRITICAL:
+- This tool ONLY accepts genuine engineering tool drawings. It must NOT accept CoreCutCNC software output (the app's own parameter/results sheets) — even though those ALSO say "Core Cutter LLC" and may show the SAME Gardiner address. The address does NOT distinguish them; the document STRUCTURE does.
+- A CoreCutCNC PARAMETER/RESULTS SHEET is NOT a print. Reject it. Tell-tale signs of a results sheet: a header reading "Produced with CoreCutCNC by Core Cutter LLC"; section headings like "SETUP", "RECOMMENDED PARAMETERS", "ENTRY MOVES", "ENGINEERING DATA", "RIGIDITY & CHATTER AUDIT"; parameter labels like "RPM", "SFM", "FEED (IPM)", "MRR", "HP REQUIRED", "WOC", "DOC". CRUCIALLY, a results sheet has NO CAD tool-profile drawing and NO "TOOL #" title-block field with a CC-XXXXX number.
+- DECISION RULE: Accept (extract) ONLY if BOTH the "CORE CUTTER, LLC" title-block header structure (item 1) AND a real "TOOL #" CC-XXXXX field on a CAD tool drawing (items 2–3) are present. If the document is a CoreCutCNC results/parameter sheet, or lacks the TOOL # title-block field / CAD tool drawing, return ONLY:
+{"error": "not_core_cutter"}
 
 TOOL NUMBER EXTRACTION — CRITICAL:
+- ALWAYS read the tool number from the "TOOL #" field in the drawing's title block. NEVER infer it from the filename — you cannot see the filename; rely solely on the text rendered on the drawing.
 - The TOOL # field contains the tool number. Example: if it says "CC-14371" extract exactly "CC-14371".
 - Do NOT confuse TOOL # with CUSTOMER TOOL # (a different field). Use only the "TOOL #" field.
 - The format is always CC- followed by 4 or 5 digits (e.g. CC-14371, CC-12650, CC-9823).
-- This field is ALWAYS present on genuine Core Cutter prints. Look carefully.
-
-If you do NOT find "Core Cutter" on the print, return ONLY:
-{"error": "not_core_cutter"}
+- This field is ALWAYS present on genuine Core Cutter prints. Look carefully — it often appears in a large font in the title block (e.g. "TOOL #  CC-14810").
 
 If you find "Core Cutter" but NO "CC-XXXXX" tool number, still extract all dimensions but include:
 {"tool_number": null, "no_tool_number": true, ...rest of fields}
@@ -4862,8 +4877,26 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       const client = new Anthropic({ apiKey });
       // Strip any data-URL prefix (e.g. "data:application/pdf;base64,") if present.
       const fileBase64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+
+      // Sniff the ACTUAL bytes — do NOT trust the browser-reported MIME. Renaming a
+      // file in Windows (or re-saving from a viewer) can make file.type come back ""
+      // or "application/octet-stream", which previously forced the wrong media_type
+      // and made Claude unable to read the doc → false "not_core_cutter". Magic bytes
+      // are authoritative: PDF starts with "%PDF" (base64 "JVBER"); PNG/JPEG/GIF/WEBP
+      // have their own signatures.
+      const sniffImageMedia = (b64: string): string | null => {
+        if (b64.startsWith("/9j/")) return "image/jpeg";            // FF D8 FF
+        if (b64.startsWith("iVBORw0KGgo")) return "image/png";       // 89 50 4E 47
+        if (b64.startsWith("R0lGOD")) return "image/gif";            // GIF8
+        if (b64.startsWith("UklGR")) return "image/webp";            // RIFF (webp)
+        return null;
+      };
+      const isPdfBytes = fileBase64.startsWith("JVBER");             // "%PDF"
+      const sniffedImage = sniffImageMedia(fileBase64);
       const mimeType = mime || "application/pdf";
-      const isImage = mimeType.startsWith("image/");
+      // Prefer sniffed type; fall back to the declared MIME only when bytes are inconclusive.
+      const isImage = isPdfBytes ? false : (sniffedImage != null ? true : mimeType.startsWith("image/"));
+      const imageMedia = sniffedImage ?? mimeType;
 
       // Build content block — PDF uses document type, images use image type
       const fileBlock: any = isImage
@@ -4871,7 +4904,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
             type: "image",
             source: {
               type: "base64",
-              media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              media_type: imageMedia as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
               data: fileBase64,
             },
           }
