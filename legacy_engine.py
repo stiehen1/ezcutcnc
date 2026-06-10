@@ -5411,11 +5411,6 @@ def run(payload=None):
     # Standard entry recommendations
     mat = material.lower()
 
-    if mat in ("aluminum", "non-ferrous"):
-        ramp_angle = 5.0
-    else:
-        ramp_angle = 3.0
-
     # Hardness-aware entry feed multiplier
     # Hard materials: edge shock at entry is the #1 cause of first-tooth failure
     _entry_hrc  = float(data.get("hardness_hrc", 0) or 0)
@@ -5423,6 +5418,33 @@ def run(payload=None):
     _hard_keys  = ("hardened_gt55", "cpm_10v")
     _medium_keys = ("hardened_lt55", "tool_steel_d2", "tool_steel_a2",
                     "stainless_440c", "tool_steel_h13", "tool_steel_s7")
+
+    # Ramp angle by ISO group (typical-band ceiling — field renders as "≤N°").
+    # Gate on the material GROUP, not the raw key: the old literal-string check
+    # ("aluminum"/"non-ferrous") missed every calibrated key (aluminum_wrought,
+    # aluminum_cast, ...) and silently demoted them to the ferrous 3° default.
+    # Each entry is the typical-band (min, max). `ramp_angle` (= max) is the
+    # ceiling shown historically as "≤N°"; `ramp_angle_min` opens it to a range.
+    #   ISO P (steel ≤45 HRC) 2–4° · ISO M (stainless) 1–3° · ISO K (cast iron) 3–6°
+    #   ISO N (alum/non-ferrous) 5–10° · ISO S (Ti/superalloy) 0.5–2°
+    #   ISO H (hardened >45 HRC) 0.5–1.5° · ISO O (plastics) 5–10°
+    _RAMP_BY_GROUP = {
+        "Aluminum":             (5.0, 10.0),
+        "Non-Ferrous":          (5.0, 10.0),
+        "Abrasive Non-Ferrous": (5.0, 10.0),   # ISO N — steeper ramp ok; abrasion hits flutes not entry
+        "Plastics":             (5.0, 10.0),    # ISO O
+        "Cast Iron":            (3.0,  6.0),    # ISO K
+        "Steel":                (2.0,  4.0),    # ISO P
+        "Stainless":            (1.0,  3.0),    # ISO M
+        "Titanium":             (0.5,  2.0),    # ISO S
+        "Inconel":              (0.5,  2.0),    # ISO S
+    }
+    ramp_angle_min, ramp_angle = _RAMP_BY_GROUP.get(material_group, (2.0, 4.0))
+    # ISO H override: hardened steel (>45 HRC) needs a near-flat ramp regardless
+    # of its "Steel" group — edge shock on entry is the dominant failure mode.
+    if _entry_hrc >= 45 or _entry_mat in _hard_keys:
+        ramp_angle_min, ramp_angle = 0.5, 1.5
+
     if _entry_hrc >= 55 or _entry_mat in _hard_keys:
         entry_feed_mult = 0.25   # 25% — very hard; edge shock is severe
         entry_caution   = "high_hardness"
@@ -7500,6 +7522,7 @@ def run(payload=None):
         "stability": _stability,
         "entry_moves": {
             "ramp_angle_deg":           round(locals().get("ramp_angle", 3.0), 1),
+            "ramp_angle_min_deg":       round(locals().get("ramp_angle_min", 0.0), 1),
             "ramp_pitch_in_per_in":     round(math.tan(math.radians(locals().get("ramp_angle", 3.0))), 5),
             "standard_ramp_ipm":        round(locals().get("standard_ramp_feed", 0.0), 2),
             "standard_helix_ipm":       round(locals().get("standard_helix_feed", 0.0), 2),

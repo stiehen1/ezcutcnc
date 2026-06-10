@@ -500,6 +500,7 @@ export const mentorSchemas = {
 
     entry_moves: z.object({
       ramp_angle_deg:           z.number(),
+      ramp_angle_min_deg:       z.number().optional(),
       standard_ramp_ipm:        z.number(),
       standard_helix_ipm:       z.number(),
       advanced_ramp_ipm:        z.number(),

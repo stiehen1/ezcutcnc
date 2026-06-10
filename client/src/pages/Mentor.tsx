@@ -3950,7 +3950,7 @@ export default function Mentor() {
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (after arc)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM</td></tr>` : "";
     const rampRows = (em && entryTypes.includes("ramp")) ? `
         <tr><td colspan="2" style="padding:${sweepRows ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Max Ramp Angle</td><td style="font-weight:600;">≤${em.ramp_angle_deg}°</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Ramp Angle</td><td style="font-weight:600;">${(em.ramp_angle_min_deg != null && em.ramp_angle_min_deg > 0 && em.ramp_angle_min_deg < em.ramp_angle_deg) ? `${em.ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(0.5–1°, chip-thinning)</span></td></tr>` : "";
     const helixRows = (em && entryTypes.includes("helical")) ? `
@@ -5313,7 +5313,7 @@ ${stabSection}
           lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
         }
         if (em && entryTypes.includes("ramp")) {
-          lines.push(L("Ramp Angle",    `≤${em.ramp_angle_deg}°`));
+          lines.push(L("Ramp Angle",    ((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`));
           lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
           lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
         }
@@ -15037,7 +15037,7 @@ ${stabSection}
                             <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Ramp Entry</span>
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                            <div><span className="text-zinc-500">Max Ramp Angle</span><span className="ml-2 font-medium">≤{em.ramp_angle_deg}°</span></div>
+                            <div><span className="text-zinc-500">Ramp Angle</span><span className="ml-2 font-medium">{((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</span></div>
                             <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{(em as any).ramp_pitch_in_per_in?.toFixed(4) ?? (Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
                             <div className="col-span-2"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">(0.5–1°, chip-thinning)</span></span></div>
