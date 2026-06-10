@@ -4057,7 +4057,7 @@ export default function Mentor() {
       : printEngZone === "extreme" ? "Near-full slot — reduce WOC% to extend tool life."
       : "";
     const pctEng = (v: number) => `${Math.min(100, (v / 360) * 100).toFixed(1)}%`;
-    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" ? `
+    const engAngleGauge = printEngAngleDeg != null && form.tool_type !== "chamfer_mill" && form.mode !== "face" && form.mode !== "slot" && form.mode !== "circ_interp" ? `
       <div style="margin:8px 0 4px;">
         <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tr>
           <td style="text-align:left;vertical-align:middle;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#555;padding:0;">Engagement Angle</td>
