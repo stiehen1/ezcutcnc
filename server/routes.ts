@@ -4830,6 +4830,11 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>,
   "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable pitch by design). false otherwise.>,
   "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable helix by design). false otherwise.>,
+  "geometry": <string — the flute geometry, one of "standard" | "chipbreaker" | "truncated_rougher". Read the NOTES section carefully:
+    - "chipbreaker" if the notes mention "CHIPBREAKER", "CHIPBREAKERS", "CHIP BREAKER", "STAGGERED CHIPBREAKERS", "SERRATED", "STAGGERED TOOTH", or any chip-splitting flute feature (these flutes have notches/serrations along the cutting edge that break the chip). On Core Cutter prints a "STAGGERED CHIPBREAKERS" note in the geometry callouts is the clearest tell.
+    - "truncated_rougher" if the notes mention "TRUNCATED ROUGHER", "ROUGHER", "RIPPER", "KNUCKLE", "CORN COB", or call out the VRX / VXR rougher series.
+    - "standard" otherwise (smooth/continuous cutting edge — most finishing and general-purpose endmills).
+    Default to "standard" only when no roughing-flute note is present.>,
   "tool_series": <string or null — look in the NOTES section for a series callout like "QTR3-STYLE", "QTR3-RN", "QTR3". Return "QTR3-RN" if noted, "QTR3" if "QTR3-STYLE" or "QTR3" is noted, null otherwise.>
 }`;
 
