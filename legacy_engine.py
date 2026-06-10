@@ -6165,6 +6165,12 @@ def run(payload=None):
                 continue
             if _ln in _seen_stickout:
                 continue
+            # Necked tool: suggestion #1 already states the LBS-grip minimum and (when the
+            # print auto-fills) the field is already sitting at it. If the only target this
+            # loop can offer is that same floor, it's a redundant "shorten to the minimum"
+            # step — skip it. Only suggest shortening when there's real travel above the floor.
+            if _lbs > 0 and _ln <= _min_so + 1e-4:
+                continue
             _gain = round(((_so / _ln) ** 3 - 1.0) * 100.0) if _ln > 0 else 0
             if _gain < 10:
                 continue

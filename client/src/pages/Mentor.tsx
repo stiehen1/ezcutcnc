@@ -1914,6 +1914,11 @@ export default function Mentor() {
         // Variable pitch/helix from print notes
         if (e.variable_pitch === true) next.variable_pitch = true;
         if (e.variable_helix === true) next.variable_helix = true;
+        // Flute geometry from print notes (e.g. "STAGGERED CHIPBREAKERS" → chipbreaker).
+        // Drives Kc force reduction, roughing-engagement gates, and EDP suggestions.
+        if (e.geometry === "chipbreaker" || e.geometry === "truncated_rougher") {
+          next.geometry = e.geometry;
+        }
         // Series from print notes (e.g. "QTR3-STYLE" → "QTR3") — drives DOC/WOC preset tables
         if (e.tool_series) {
           next.tool_series = e.tool_series;
@@ -1974,8 +1979,12 @@ export default function Mentor() {
             _defaultSo = Math.ceil((_pdfLbs + taperLen + 0.52 * _pdfShankDia) * 200) / 200;
           }
         } else if (_isNeckedTool) {
-          // Necked endmill (lbs measured shank-face to tip): clear the neck + 1×D
-          _defaultSo = Math.ceil((_pdfLbs + _pdfDia) * 200) / 200;
+          // Necked endmill (lbs = shank-face to tip): you grip the shank just behind the
+          // neck, so the floor is lbs + ~0.5×D grip clearance. Match the engine's _min_so
+          // formula exactly (legacy_engine.py ~5944) so the auto-filled value IS the stated
+          // minimum — otherwise the stability advisor offers a redundant "shorten" step that
+          // lands right back at this floor.
+          _defaultSo = Math.ceil((_pdfLbs + 0.5 * _pdfDia) * 200) / 200;
         } else {
           _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
         }
@@ -2023,6 +2032,8 @@ export default function Mentor() {
           if (e.flutes > 0) _descParts.push(`${e.flutes}-fl`);
           if (_tt) _descParts.push(_tt);
           if (e.loc > 0) _descParts.push(`${e.loc.toFixed(3)}" LOC`);
+          if (e.geometry === "chipbreaker") _descParts.push("chipbreaker");
+          else if (e.geometry === "truncated_rougher") _descParts.push("truncated rougher");
           if (e.coating) _descParts.push(e.coating);
           fetch("/api/specials", {
             method: "POST",
@@ -2059,6 +2070,8 @@ export default function Mentor() {
       if (e.variable_pitch && e.variable_helix) toastParts.push("Var Pitch + Var Helix detected");
       else if (e.variable_pitch) toastParts.push("Variable Pitch detected");
       else if (e.variable_helix) toastParts.push("Variable Helix detected");
+      if (e.geometry === "chipbreaker") toastParts.push("Chipbreaker geometry detected");
+      else if (e.geometry === "truncated_rougher") toastParts.push("Truncated rougher detected");
       if (e.shank_type === "weldon") toastParts.push("Weldon flat — toolholder set");
       else if (e.shank_type === "safe_lock") toastParts.push("Haimer Safe-Lock shank — shrink fit holder set");
       if (e.cutting_material) {
@@ -3089,12 +3102,13 @@ export default function Mentor() {
     const _isQtr3 = ["QTR3", "QTR3-RN"].includes((sku.series ?? "").toUpperCase());
     const _dbStickout = sku.default_stickout_in != null ? Number(sku.default_stickout_in) : null;
     const _hasDbStickout = _dbStickout != null;
-    // LBS (necked) tools: stickout = LBS + 0.7×D
-    // QTR3: always use DB value, never formula. Other series: DB value if present, else formula.
+    // LBS (necked) tools: stickout = LBS + 0.5×D (matches engine _min_so floor — grip
+    // the shank just behind the neck). QTR3: always use DB value, never formula.
+    // Other series: DB value if present, else formula.
     const defaultStickout: number | null = _hasDbStickout
       ? _dbStickout
       : _hasLbs
-        ? Math.ceil((_lbs + 0.7 * _dia) * 200) / 200
+        ? Math.ceil((_lbs + 0.5 * _dia) * 200) / 200
         : _isQtr3
           ? null   // QTR3 with missing DB value — leave blank rather than use formula
           : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
@@ -3685,7 +3699,7 @@ export default function Mentor() {
       const _loc = form.loc || 0;
       const _fw  = form.flute_wash || 0;
       const _lbs = form.lbs || 0;
-      if (_lbs > 0 && _dia > 0) return Math.ceil((_lbs + 0.7 * _dia) * 200) / 200;       // necked
+      if (_lbs > 0 && _dia > 0) return Math.ceil((_lbs + 0.5 * _dia) * 200) / 200;       // necked — matches engine _min_so floor
       if (_loc > 0 && _dia > 0) return Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200; // standard
       return form.loc > 0 ? form.loc * 1.25 : 2.0;                                         // last resort
     };
@@ -3702,7 +3716,7 @@ export default function Mentor() {
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
         // Stickout fallback matches the engine's default (LOC + flute_wash + 0.33×D),
         // NOT loc×1.25 — guards against a stale form.stickout (SKU-apply state race)
-        // sending a too-long reach that inflates deflection. LBS/necked: lbs + 0.7×D.
+        // sending a too-long reach that inflates deflection. LBS/necked: lbs + 0.5×D.
         stickout: stickoutForPayload(),
         machine_id: activeMachineId ?? undefined,
         // center_cutting is null when SKU hasn't specified it — drop the key so Zod's default(true) applies
