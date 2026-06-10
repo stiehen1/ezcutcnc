@@ -5948,6 +5948,61 @@ def run(payload=None):
 
     _defl_pct = round(_defl / _dlim * 100, 1) if _dlim > 0 else 0.0
 
+    # ── Applied chatter feed derate ──────────────────────────────────────────
+    # When flex exceeds the limit, actually pull the RECOMMENDED feed back (not just
+    # suggest it) so the printed parameters are internally consistent — the operator
+    # shouldn't see "back off feed" while the IPM box still shows the full feed.
+    # Force scales linearly with chip load and deflection scales linearly with force,
+    # so scaling feed by _chatter_feed_ratio scales _defl/force by the same factor and
+    # lands flex at ~the limit. Capped at 25% (matches the suggestion cap below): a
+    # deeper cut needs DOC/WOC/stickout, not a feed trim. Suppressed in HEM/trochoidal —
+    # backing off feed there tanks MRR and defeats the toolpath.
+    # MRR/HP are recomputed downstream from feed_ipm (see ~line 6770), so they pick this
+    # up automatically; we only scale feed and the force/deflection display values here.
+    _chatter_feed_applied_pct = 0
+    _chatter_feed_ratio       = 1.0
+    _mode_str_derate = _mode_str.lower()
+    if (_defl > _dlim) and (_mode_str_derate not in ("hem", "trochoidal")) and _dlim > 0:
+        _cd_pct_raw = round((1.0 - (_dlim / _defl)) * 100)
+        _cd_pct     = min(_cd_pct_raw, 25)
+        if _cd_pct >= 5:
+            _chatter_feed_applied_pct = _cd_pct
+            _chatter_feed_ratio       = 1.0 - (_cd_pct / 100.0)
+            # Scale feed and every load value that tracks chip load linearly.
+            feed_ipm  = round(float(feed_ipm) * _chatter_feed_ratio, 2)
+            # Chip load per tooth scales with feed (feed = rpm × ipt × flutes, rpm fixed),
+            # so derate fpt/adj_fpt too — otherwise the export shows feed ≠ rpm×fpt×flutes.
+            if isinstance(locals().get("_ipt_base"), (int, float)):
+                _ipt_base = float(_ipt_base) * _chatter_feed_ratio
+            if isinstance(locals().get("ipt"), (int, float)):
+                ipt = float(ipt) * _chatter_feed_ratio
+            # Entry-move feeds are derived from feed_ipm upstream (ramp/helix/sweep) —
+            # scale them too so "Full Feed / Entry Feed" never exceed the trimmed main feed.
+            # (Direct rebinds; assigning into locals() does not write back to function locals.)
+            if isinstance(locals().get("standard_ramp_feed"), (int, float)):
+                standard_ramp_feed = round(float(standard_ramp_feed) * _chatter_feed_ratio, 2)
+            if isinstance(locals().get("standard_helix_feed"), (int, float)):
+                standard_helix_feed = round(float(standard_helix_feed) * _chatter_feed_ratio, 2)
+            if isinstance(locals().get("advanced_feed"), (int, float)):
+                advanced_feed = round(float(advanced_feed) * _chatter_feed_ratio, 2)
+            if isinstance(locals().get("advanced_helix_feed"), (int, float)):
+                advanced_helix_feed = round(float(advanced_helix_feed) * _chatter_feed_ratio, 2)
+            if isinstance(locals().get("sweep_entry_ipm"), (int, float)):
+                sweep_entry_ipm = round(float(sweep_entry_ipm) * _chatter_feed_ratio, 2)
+            # Scale the load values that track chip load linearly.
+            _defl     = _defl * _chatter_feed_ratio
+            deflection = float(locals().get("deflection", 0.0) or 0.0) * _chatter_feed_ratio
+            force_lbf = float(locals().get("force_lbf", 0.0) or 0.0) * _chatter_feed_ratio
+            _force    = float(locals().get("_force", 0.0) or 0.0) * _chatter_feed_ratio
+            if isinstance(locals().get("force"), (int, float)):
+                force = float(force) * _chatter_feed_ratio
+            # Effective chip thickness (displayed "Chip Thick") scales with chip load too.
+            if isinstance(locals().get("chip_t"), (int, float)):
+                chip_t = float(chip_t) * _chatter_feed_ratio
+            # Re-derive the headline flex % from the now-reduced deflection.
+            _defl_pct = round(_defl / _dlim * 100, 1) if _dlim > 0 else 0.0
+    # ── end applied chatter feed derate ──────────────────────────────────────
+
     _stab_suggestions = []
     _imm_suggestions  = []   # immediate / no-hardware fixes — shown first
     _hw_suggestions   = []   # hardware / setup changes — shown second
@@ -6074,33 +6129,30 @@ def run(payload=None):
 
     # ── IMMEDIATE / NO-HARDWARE FIXES ─────────────────────────────────────────
 
-    # A) Reduce feed rate — fastest fix; force scales linearly with chip load.
-    # Capped at 25%: deeper cuts produce silly numbers (e.g. 85% at 6.7× limit) and tank MRR for no real benefit —
-    # at that point DOC/WOC/stickout are the real levers and feed is a trim pass.
-    # Suppressed in HEM/trochoidal — backing off feed tanks MRR and defeats the purpose of the toolpath.
-    if _defl > _dlim and not _is_hem:
-        _feed_ratio_raw = _dlim / _defl
-        _feed_pct_raw   = round((1.0 - _feed_ratio_raw) * 100)
-        _feed_pct       = min(_feed_pct_raw, 25)
-        _feed_ratio     = 1.0 - (_feed_pct / 100.0)
-        _feed_now       = float(state.get("feed", 0.0) or 0.0)
-        _feed_target    = round(_feed_now * _feed_ratio, 1) if _feed_now > 0 else 0
-        if _feed_pct >= 5:
-            _feed_label = f"Back off feed rate ~{_feed_pct}%"
-            if _feed_target > 0:
-                _feed_label += f" — try {_feed_target} IPM"
-            if _feed_pct_raw > _feed_pct:
-                _feed_detail = (
-                    "Quick first-pass trim at the control. Flex is too high for feed alone — "
-                    "pair this with the DOC/WOC/stickout fixes below."
-                )
-            else:
-                _feed_detail = "Cutting force scales directly with feed — easiest adjustment at the control, no hardware needed."
-            _imm_suggestions.append({
-                "type": "feed",
-                "label": _feed_label,
-                "detail": _feed_detail,
-            })
+    # A) Feed-rate note. The feed has ALREADY been derated above (see "applied chatter
+    # feed derate") so the recommended IPM/MRR/force/deflection boxes are the trimmed
+    # values — don't tell the operator to "back off feed" while the box shows the result
+    # of that back-off. Instead confirm what was done. Force scales linearly with chip
+    # load, so this trim is the cheapest no-hardware lever; if 25% wasn't enough the
+    # DOC/WOC/stickout suggestions below fire on the residual over-limit flex.
+    if _chatter_feed_applied_pct >= 5 and not _is_hem:
+        if _defl > _dlim:
+            _feed_detail = (
+                f"Recommended feed already trimmed {_chatter_feed_applied_pct}% (the cap) to lower flex — "
+                f"that's baked into the IPM/MRR above. Flex is still over the limit, so pair this with the "
+                f"DOC/WOC/stickout fixes below; feed alone can't bring it to safe."
+            )
+        else:
+            _feed_detail = (
+                f"Recommended feed already trimmed {_chatter_feed_applied_pct}% to hold flex at the safe limit — "
+                f"that's baked into the IPM/MRR/force above (no further feed change needed). "
+                f"Cutting force scales directly with feed, so this is the cheapest no-hardware fix."
+            )
+        _imm_suggestions.append({
+            "type": "feed",
+            "label": f"Feed already reduced ~{_chatter_feed_applied_pct}% for chatter",
+            "detail": _feed_detail,
+        })
 
     # B) Reduce DOC — skip in HEM (tanks MRR); multi-pass reframe when target is too shallow
     if not _is_hem and _doc_now > 0 and _defl > _dlim:
