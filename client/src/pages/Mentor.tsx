@@ -1829,7 +1829,7 @@ export default function Mentor() {
 
       // Reject non-Core Cutter prints
       if (e.error === "not_core_cutter") {
-        toast({ title: "Unauthorized Print", description: "This print does not appear to be a Core Cutter LLC document. Only Core Cutter prints can be uploaded.", variant: "destructive" });
+        toast({ title: "Not a Tool Print", description: "This doesn't look like a Core Cutter engineering print (CC-XXXXX tool drawing). If you uploaded a CoreCutCNC results/parameter sheet, upload the engineering print instead.", variant: "destructive" });
         return;
       }
       if (e.no_tool_number) {
