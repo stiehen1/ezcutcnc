@@ -1131,6 +1131,17 @@ export async function registerRoutes(
         added_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // Per-email blocklist: cut off a specific address you recognize as bad
+    // access (sits between "block whole domain" and "suspend an existing user").
+    // The legacy allowed_emails allowlist is dead (open-access); this replaces it.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS blocked_emails (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        reason TEXT DEFAULT '',
+        added_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
     await pool.query(`
       ALTER TABLE toolbox_sessions ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT FALSE
     `).catch(() => { /* column may already exist */ });
@@ -4470,35 +4481,35 @@ export async function registerRoutes(
   app.get("/api/admin/access", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     const { pool } = await import("./db");
-    const [emails, domains, blockedUsers] = await Promise.all([
-      pool.query(`SELECT email, notes, added_at FROM allowed_emails ORDER BY added_at DESC`),
+    const [blockedEmails, domains, blockedUsers] = await Promise.all([
+      pool.query(`SELECT email, reason, added_at FROM blocked_emails ORDER BY added_at DESC`),
       pool.query(`SELECT domain, reason, added_at FROM blocked_domains ORDER BY added_at DESC`),
       pool.query(`SELECT email, created_at FROM toolbox_sessions WHERE blocked = TRUE ORDER BY email`),
     ]);
     res.json({
-      allowed_emails: emails.rows,
+      blocked_emails: blockedEmails.rows,
       blocked_domains: domains.rows,
       blocked_users: blockedUsers.rows,
     });
   });
 
-  app.post("/api/admin/allowed-emails", async (req, res) => {
+  app.post("/api/admin/blocked-emails", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const { email, notes } = req.body;
+    const { email, reason } = req.body;
     if (!email) return res.status(400).json({ error: "email required" });
     const { pool } = await import("./db");
     await pool.query(
-      `INSERT INTO allowed_emails (email, notes) VALUES ($1, $2)
-       ON CONFLICT (email) DO UPDATE SET notes = $2`,
-      [email.toLowerCase().trim(), notes || ""]
+      `INSERT INTO blocked_emails (email, reason) VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET reason = $2`,
+      [email.toLowerCase().trim(), reason || ""]
     );
     res.json({ ok: true });
   });
 
-  app.delete("/api/admin/allowed-emails/:email", async (req, res) => {
+  app.delete("/api/admin/blocked-emails/:email", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     const { pool } = await import("./db");
-    await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [
+    await pool.query(`DELETE FROM blocked_emails WHERE email = $1`, [
       decodeURIComponent(req.params.email).toLowerCase(),
     ]);
     res.json({ ok: true });
@@ -5097,16 +5108,23 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       return res.status(403).json({ error: "This email domain is not authorized to access CoreCutCNC." });
     }
 
-    // 2. User-level block
+    // 2. Email blocklist — a specific address flagged as bad access (admin → Access tab).
+    const emailBlock = await pool.query(`SELECT 1 FROM blocked_emails WHERE email = $1`, [emailLower]);
+    if (emailBlock.rows.length > 0) {
+      return res.status(403).json({ error: "This email address is not authorized to access CoreCutCNC." });
+    }
+
+    // 3. User-level block
     const userRow = await pool.query(`SELECT blocked FROM toolbox_sessions WHERE email = $1`, [emailLower]);
     if (userRow.rows.length > 0 && userRow.rows[0].blocked) {
       return res.status(403).json({ error: "This account has been suspended. Contact sales@corecutterusa.com for assistance." });
     }
 
     // NOTE: Open access — no invitation/allowlist gate. Once a user registers
-    // they may use the Toolbox freely. Blocklist (#1) and per-user block (#2)
-    // remain as the only access controls. (allowed_emails gate removed
-    // 2026-06-04 — a single stray row had silently locked out all 45 users.)
+    // they may use the Toolbox freely. The only access controls are deny-lists:
+    // blocked domain (#1), blocked email (#2), per-user suspend (#3).
+    // (allowed_emails allowlist removed 2026-06-04 — a single stray row had
+    // silently locked out all 45 users.)
     // ──────────────────────────────────────────────────────────────────────
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -5210,6 +5228,13 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       return res.status(403).json({ error: "Email domain not authorized" });
     }
 
+    // Email blocklist — cuts off an already-registered address on its next
+    // auto-auth (so blocking someone mid-session ends their access).
+    const emailBlock = await pool.query(`SELECT 1 FROM blocked_emails WHERE email = $1`, [emailLower]);
+    if (emailBlock.rows.length > 0) {
+      return res.status(403).json({ error: "Email address not authorized" });
+    }
+
     // User-level block
     const userRow = await pool.query(`SELECT blocked FROM toolbox_sessions WHERE email = $1`, [emailLower]);
     if (userRow.rows.length > 0 && userRow.rows[0].blocked) {
@@ -5217,8 +5242,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     }
 
     // NOTE: Open access — invitation/allowlist gate removed 2026-06-04.
-    // Registered users may use the Toolbox freely; only the blocklist and
-    // per-user block above gate access.
+    // Registered users may use the Toolbox freely; only the deny-lists above
+    // (blocked domain, blocked email, per-user suspend) gate access.
 
     // Create or return existing session (no OTP required — user already verified via welcome modal)
     const token = crypto.randomBytes(24).toString("hex");

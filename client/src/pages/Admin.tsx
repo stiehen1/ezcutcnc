@@ -43,12 +43,12 @@ type Stats = {
   totals: { users: number; registrations: number; saves: number };
 };
 
-type AllowedEmail = { email: string; notes: string; added_at: string };
+type BlockedEmail = { email: string; reason: string; added_at: string };
 type BlockedDomain = { domain: string; reason: string; added_at: string };
 type BlockedUser = { email: string; created_at: string };
 
 type AccessData = {
-  allowed_emails: AllowedEmail[];
+  blocked_emails: BlockedEmail[];
   blocked_domains: BlockedDomain[];
   blocked_users: BlockedUser[];
 };
@@ -98,7 +98,7 @@ export default function Admin() {
 
   // Access form state
   const [newEmail, setNewEmail] = React.useState("");
-  const [newEmailNotes, setNewEmailNotes] = React.useState("");
+  const [newEmailReason, setNewEmailReason] = React.useState("");
   const [newDomain, setNewDomain] = React.useState("");
   const [newDomainReason, setNewDomainReason] = React.useState("");
   const [accessSaving, setAccessSaving] = React.useState(false);
@@ -258,25 +258,25 @@ export default function Admin() {
   async function addEmail() {
     if (!newEmail.trim()) return;
     setAccessSaving(true);
-    const r = await fetch("/api/admin/allowed-emails", {
+    const r = await fetch("/api/admin/blocked-emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-token": token() },
-      body: JSON.stringify({ email: newEmail.trim(), notes: newEmailNotes.trim() }),
+      body: JSON.stringify({ email: newEmail.trim(), reason: newEmailReason.trim() }),
     });
     if (r.ok) {
-      setNewEmail(""); setNewEmailNotes("");
-      flash("Email added to allowlist.");
+      setNewEmail(""); setNewEmailReason("");
+      flash("Email blocked.");
       loadAccess();
     }
     setAccessSaving(false);
   }
 
   async function removeEmail(email: string) {
-    await fetch(`/api/admin/allowed-emails/${encodeURIComponent(email)}`, {
+    await fetch(`/api/admin/blocked-emails/${encodeURIComponent(email)}`, {
       method: "DELETE",
       headers: { "x-admin-token": token() },
     });
-    flash("Removed from allowlist.");
+    flash("Email unblocked.");
     loadAccess();
   }
 
@@ -595,35 +595,36 @@ export default function Admin() {
             {/* How it works */}
             <div className="bg-zinc-900 border border-violet-700/30 rounded-xl px-4 py-3 text-xs text-zinc-400 space-y-1">
               <p className="text-violet-300 font-semibold mb-1">How access control works</p>
-              <p><span className="text-white">1. Domain blocklist</span> — any email from a blocked domain is rejected instantly.</p>
-              <p><span className="text-white">2. User block</span> — a specific email is suspended (block button on Users tab).</p>
-              <p><span className="text-white">3. Allowlist</span> — when this list has <em>any</em> entries, only listed emails can log in. Leave it empty to allow everyone (open access).</p>
+              <p>The app is <span className="text-white">open access</span> — anyone can register and log in. The lists below are <em>deny-lists</em>: use them to cut off bad access.</p>
+              <p><span className="text-white">1. Blocked email addresses</span> — a specific email is rejected at login. Blocking someone who already registered ends their access on their next visit.</p>
+              <p><span className="text-white">2. Blocked domains</span> — any email from a blocked domain is rejected instantly.</p>
+              <p><span className="text-white">3. User block</span> — suspend an existing registered user (block button on Users tab).</p>
             </div>
 
-            {/* Allowed Emails */}
+            {/* Blocked Email Addresses */}
             <div>
-              <h2 className="text-sm font-bold text-white mb-3">Allowed Emails <span className="text-xs font-normal text-zinc-400">(invitation-only — leave empty for open access)</span></h2>
+              <h2 className="text-sm font-bold text-white mb-3">Blocked Email Addresses <span className="text-xs font-normal text-zinc-400">(reject a specific email at login)</span></h2>
               <div className="flex gap-2 mb-3">
                 <input
                   type="email"
                   placeholder="user@company.com"
                   value={newEmail}
                   onChange={e => setNewEmail(e.target.value)}
-                  className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-violet-500"
+                  className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-red-500"
                 />
                 <input
                   type="text"
-                  placeholder="Notes (optional)"
-                  value={newEmailNotes}
-                  onChange={e => setNewEmailNotes(e.target.value)}
-                  className="w-40 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-violet-500"
+                  placeholder="Reason (optional)"
+                  value={newEmailReason}
+                  onChange={e => setNewEmailReason(e.target.value)}
+                  className="w-44 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-red-500"
                 />
                 <button
                   onClick={addEmail}
                   disabled={accessSaving || !newEmail.trim()}
-                  className="bg-violet-700 hover:bg-violet-600 text-white rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40 transition-colors"
+                  className="bg-red-800 hover:bg-red-700 text-white rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40 transition-colors"
                 >
-                  Add
+                  Block
                 </button>
               </div>
               <div className="border border-border rounded-xl overflow-hidden">
@@ -631,26 +632,26 @@ export default function Admin() {
                   <thead className="bg-zinc-900 border-b border-border">
                     <tr>
                       <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Email</th>
-                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Notes</th>
-                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Added</th>
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Reason</th>
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Blocked</th>
                       <th className="px-4 py-2.5" />
                     </tr>
                   </thead>
                   <tbody>
-                    {(!access || access.allowed_emails.length === 0) && (
-                      <tr><td colSpan={4} className="text-center text-muted-foreground px-4 py-6">No emails on allowlist — access is open to everyone.</td></tr>
+                    {(!access || access.blocked_emails.length === 0) && (
+                      <tr><td colSpan={4} className="text-center text-muted-foreground px-4 py-6">No emails blocked.</td></tr>
                     )}
-                    {access?.allowed_emails.map((e, i) => (
+                    {access?.blocked_emails.map((e, i) => (
                       <tr key={e.email} className={i % 2 === 0 ? "bg-zinc-950/30" : ""}>
-                        <td className="px-4 py-2.5 font-medium text-white">{e.email}</td>
-                        <td className="px-4 py-2.5 text-zinc-400">{e.notes || "—"}</td>
+                        <td className="px-4 py-2.5 font-medium text-red-300">{e.email}</td>
+                        <td className="px-4 py-2.5 text-zinc-400">{e.reason || "—"}</td>
                         <td className="px-4 py-2.5 text-zinc-400">{fmt(e.added_at)}</td>
                         <td className="px-4 py-2.5 text-right">
                           <button
                             onClick={() => removeEmail(e.email)}
-                            className="text-[10px] text-red-400 hover:text-red-300 font-semibold"
+                            className="text-[10px] text-green-400 hover:text-green-300 font-semibold"
                           >
-                            Remove
+                            Unblock
                           </button>
                         </td>
                       </tr>
