@@ -4412,6 +4412,7 @@ export default function Mentor() {
   ${row("Tool Diameter", `${form.tool_dia?.toFixed(4)}" (${(form.tool_dia * 25.4).toFixed(2)} mm)`)}
   ${row("Flute Count", `${form.flutes}-flute`)}
   ${form.loc ? row("LOC (in)", form.loc.toFixed(4) + '"') : ""}
+  ${form.lbs > 0 ? row("LBS (in)", form.lbs.toFixed(4) + '"') : ""}
   ${row("Corner Condition", form.corner_condition === "corner_radius" ? `CR ${form.corner_radius?.toFixed(4)}"` : form.corner_condition)}
   ${row("Flute Geometry", form.geometry ?? "standard")}
   ${form.stickout > 0 ? row("Tool Stickout (in)", `${form.stickout.toFixed(3)}"`) : ""}
