@@ -1829,7 +1829,7 @@ export default function Mentor() {
 
       // Reject non-Core Cutter prints
       if (e.error === "not_core_cutter") {
-        toast({ title: "Unauthorized Print", description: "This print does not appear to be a Core Cutter LLC document. Only Core Cutter prints can be uploaded.", variant: "destructive" });
+        toast({ title: "Not a Tool Print", description: "This doesn't look like a Core Cutter engineering print (CC-XXXXX tool drawing). If you uploaded a CoreCutCNC results/parameter sheet, upload the engineering print instead.", variant: "destructive" });
         return;
       }
       if (e.no_tool_number) {
@@ -4185,7 +4185,7 @@ export default function Mentor() {
           <thead>
             <tr style="background:#e55a00;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
               <th style="padding:4px 8px;text-align:left;font-weight:700;text-transform:uppercase;letter-spacing:.04em;"></th>
-              <th style="padding:4px 8px;text-align:center;font-weight:700;">Current (EDP# ${form.edp ?? "—"})</th>
+              <th style="padding:4px 8px;text-align:center;font-weight:700;">Current (${form.edp ? `EDP# ${form.edp}` : pdfToolNumber ? `CC# ${pdfToolNumber}` : "—"})</th>
               <th style="padding:4px 8px;text-align:center;font-weight:700;background:#166534;-webkit-print-color-adjust:exact;print-color-adjust:exact;">Optimized (EDP# ${recSku.edp})</th>
             </tr>
           </thead>
@@ -4400,7 +4400,12 @@ export default function Mentor() {
 
 <h2>Setup</h2>
 <table>
-  ${form.edp ? row("EDP #", `<span class="edp">${form.edp}</span>${skuDescription ? ` &nbsp;—&nbsp; <span style="color:#444;font-weight:400;">${skuDescription}</span>` : ""}`) : ""}
+  ${(() => {
+    const _id = form.edp || pdfToolNumber || null;
+    if (!_id) return "";
+    const _label = form.edp ? "EDP #" : "CC #";
+    return row(_label, `<span class="edp">${_id}</span>${skuDescription ? ` &nbsp;—&nbsp; <span style="color:#444;font-weight:400;">${skuDescription}</span>` : ""}`);
+  })()}
   ${row("Material", matLabel + (form.hardness_value ? ` — ${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : ""))}
   ${form.stock_condition && form.stock_condition !== "billet_cf" ? row("Stock Condition", STOCK_CONDITION_INFO[form.stock_condition].short + ` (first pass: SFM ×${STOCK_CONDITION_INFO[form.stock_condition].sfmMult.toFixed(2)}, IPT ×${STOCK_CONDITION_INFO[form.stock_condition].iptMult.toFixed(2)})`) : ""}
   ${row("Operation", opLabel)}
@@ -4474,7 +4479,7 @@ ${stabSection}
     iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;height:1px;border:none;visibility:hidden;";
     document.body.appendChild(iframe);
 
-    const edp = (result as any)?.engineering?.edp || form.edp || "Summary";
+    const edp = (result as any)?.engineering?.edp || form.edp || pdfToolNumber || "Summary";
     const date = new Date().toISOString().slice(0, 10);
 
     try {
