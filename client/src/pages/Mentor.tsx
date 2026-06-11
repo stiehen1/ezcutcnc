@@ -785,6 +785,27 @@ export default function Mentor() {
     if (REGISTRATION_KEYS.some(k => localStorage.getItem(k))) return false;
     return true;
   });
+  // DIAGNOSTIC (temporary): confirm whether registered users are re-prompted
+  // because localStorage was evicted (iOS PWA / Safari ITP). The server holds a
+  // long-lived probe cookie; cookie-present + no-identity = eviction.
+  //   event:"prompt" — welcome modal is showing with NO identity keys (the hunt)
+  //   event:"tag"    — already-identified user; just (re)drop the cookie so a
+  //                    FUTURE eviction on this device becomes detectable.
+  React.useEffect(() => {
+    let lsAvailable = true;
+    try { localStorage.setItem("__ls_test", "1"); localStorage.removeItem("__ls_test"); }
+    catch { lsAvailable = false; }
+    const standalone =
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      (navigator as any).standalone === true;
+    fetch("/api/diag/welcome-prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ standalone, lsAvailable, event: showWelcomeModal ? "prompt" : "tag" }),
+    }).catch(() => {});
+  }, []); // mount-only: reflects the initial identity-keys decision
+
   const [welcomeFirstName, setWelcomeFirstName] = React.useState("");
   const [welcomeLastName, setWelcomeLastName] = React.useState("");
   const [welcomeEmail, setWelcomeEmail] = React.useState("");

@@ -3246,6 +3246,52 @@ export async function registerRoutes(
     return res.json({ valid: true });
   });
 
+  // ── Welcome-modal diagnostics (TEMPORARY) ─────────────────────────────────
+  // Confirms whether registered users are being re-prompted because their
+  // localStorage was evicted (iOS PWA / Safari ITP) vs. some logic path.
+  // The client pings this ONLY when the welcome modal is about to show with
+  // zero identity keys. We drop a long-lived probe cookie; cookies survive ITP
+  // far better than localStorage, so a returning user who reports
+  // hadProbeCookie=true while their localStorage is empty = storage eviction.
+  app.post("/api/diag/welcome-prompt", (req, res) => {
+    try {
+      const { standalone, lsAvailable, event } = (req.body ?? {}) as {
+        standalone?: boolean; lsAvailable?: boolean; event?: "prompt" | "tag";
+      };
+      const ua = (req.headers["user-agent"] as string) || "";
+      const cookieHeader = (req.headers["cookie"] as string) || "";
+      // Authoritative eviction signal: cookie present BUT no localStorage identity.
+      const probeMatch = /(?:^|;\s*)cc_probe=(\d+)/.exec(cookieHeader);
+      const serverSawProbe = !!probeMatch;
+      const daysSinceProbe = probeMatch ? ((Date.now() - Number(probeMatch[1])) / 86400000).toFixed(1) : "n/a";
+      const ios = /iphone|ipad|ipod/i.test(ua);
+      const safari = /safari/i.test(ua) && !/chrome|crios|fxios|edg/i.test(ua);
+      // "tag" = an already-identified user loaded the app; we only drop the probe
+      // cookie so a LATER eviction is detectable. "prompt" = the modal is showing
+      // with no identity keys — the event we're actually hunting.
+      if (event !== "tag") {
+        console.warn(
+          `[WelcomePrompt] modal shown w/ NO identity keys — ` +
+          `ios=${ios} safari=${safari} standalone=${!!standalone} ` +
+          `lsAvailable=${lsAvailable !== false} ` +
+          `serverSawProbeCookie=${serverSawProbe} daysSinceProbe=${daysSinceProbe} ` +
+          `ua="${ua.slice(0, 120)}"`
+        );
+      }
+      // (Re)set the probe cookie only if absent — preserve the ORIGINAL timestamp
+      // so daysSinceProbe measures real elapsed time, not the last page load.
+      if (!serverSawProbe) {
+        res.setHeader(
+          "Set-Cookie",
+          `cc_probe=${Date.now()}; Max-Age=31536000; Path=/; SameSite=Lax; Secure; HttpOnly`
+        );
+      }
+      return res.json({ ok: true });
+    } catch {
+      return res.json({ ok: false });
+    }
+  });
+
   // ── Welcome modal registration (geo capture, no email sent) ──────────────
   app.post("/api/register", async (req, res) => {
     try {
