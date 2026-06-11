@@ -1112,6 +1112,33 @@ def hardness_sfm_mult(hrc: float) -> float:
     return max(0.20, 0.35 - 0.030 * (hrc - 55))        # 0.35 → 0.20 at 65 HRC
 
 
+# Generic hardened-steel keys (hardened_lt55 / hardened_gt55) cover wide HRC
+# bands, so a single flat BASE_SFM ignored the user's actual hardness — 50 and
+# 55 HRC gave the same speed. This returns an ABSOLUTE SFM as a function of HRC
+# so the number tracks hardness within the bucket. Shop-anchored: ≤45 HRC runs
+# the full hardened_lt55 speed (~240, H13 reference), but ABOVE 50 HRC carbide
+# is firmly in the 90–125 SFM band (shop-validated) and keeps derating toward
+# CBN territory past 60 HRC. The steep 45→50 drop reflects carbide losing its
+# edge fast as the work approaches its own hardness.
+def hardened_sfm_absolute(hrc: float) -> float:
+    """Absolute carbide SFM in generic hardened steel as a function of HRC.
+    Used in place of the flat BASE_SFM for hardened_lt55 / hardened_gt55."""
+    hrc = float(hrc or 0)
+    if hrc <= 0:
+        return 240.0          # unspecified → treat as the lt55 reference
+    if hrc <= 45:
+        return 240.0          # 40–45 HRC: full hardened_lt55 speed
+    if hrc <= 50:
+        # 240 @ 45 → 125 @ 50 (top of the hard-steel band)
+        return 240.0 - (240.0 - 125.0) * (hrc - 45) / 5.0
+    if hrc <= 55:
+        return 125.0 - (125.0 - 100.0) * (hrc - 50) / 5.0   # 125 → 100
+    if hrc <= 60:
+        return 100.0 - (100.0 - 90.0) * (hrc - 55) / 5.0    # 100 → 90
+    # ≥60 HRC: keep derating toward CBN territory, floor at 60 SFM
+    return max(60.0, 90.0 - 4.0 * (hrc - 60))
+
+
 def hardness_kc_mult(hrc: float) -> float:
     """Kc (specific cutting force) multiplier based on HRC."""
     hrc = float(hrc)
@@ -1802,6 +1829,9 @@ def run_chamfer_mill(payload: dict) -> dict:
 
     # SFM — same base as endmills; chamfering is still a peripheral cut
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(mat_group, 300))
+    # Generic hardened steel: HRC-driven absolute SFM (matches the endmill path)
+    if _mat_key in ("hardened_lt55", "hardened_gt55") or mat_group in ("hardened_lt55", "hardened_gt55"):
+        base_sfm = hardened_sfm_absolute(_hrc)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
                        "stainless_15_5", "stainless_ph", "stainless_13_8",
@@ -4327,8 +4357,17 @@ def run(payload=None):
 
     _mat_key = data.get("material", material_group)
     base_sfm = BASE_SFM.get(_mat_key, BASE_SFM.get(material_group, 300))
+    # Generic hardened steel: HRC-driven absolute SFM (the flat base ignored the
+    # user's hardness — see hardened_sfm_absolute). Applies to both lt55/gt55 keys.
+    _is_generic_hardened = _mat_key in ("hardened_lt55", "hardened_gt55") \
+        or material_group in ("hardened_lt55", "hardened_gt55")
+    if _is_generic_hardened:
+        base_sfm = hardened_sfm_absolute(float(data.get("hardness_hrc", 0) or 0))
     if data["mode"] in ("hem", "trochoidal"):
-        base_sfm *= 2.0  # HEM = 2× conventional for all materials
+        # Hardened steel is abrasion/thermal-limited, NOT chip-evacuation-limited,
+        # so the blanket HEM 2× doesn't physically apply — the light radial arc
+        # buys a modest bump only. Everything else keeps the 2× rule.
+        base_sfm *= 1.3 if _is_generic_hardened else 2.0  # HEM = 2× conventional (most materials)
         # Per-material HEM SFM overrides (shop-validated; prorated from 718 baseline of 216)
         _hem_sfm_override = {
             "inconel_718": 216,

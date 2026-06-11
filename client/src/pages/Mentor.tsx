@@ -6244,11 +6244,32 @@ ${stabSection}
                       ⚠ This material is typically measured in {hRange.scale.toUpperCase()} ({hRange.min}–{hRange.max} {hRange.scale.toUpperCase()}). Switching scales may give unexpected results.
                     </p>
                   )}
-                  {outOfRange && hRange && (
-                    <p className="mt-1 text-xs text-amber-500 leading-snug px-1">
-                      ⚠ {hRange.note}
-                    </p>
-                  )}
+                  {outOfRange && hRange && (() => {
+                    // If the typed hardness lands in a SIBLING H-bucket's range,
+                    // offer a one-tap switch — otherwise the user sits in an
+                    // impossible state (e.g. "< 55 HRC" key with 60 HRC typed),
+                    // and the engine can't honor the hardness within the wrong bucket.
+                    const better = ISO_SUBCATEGORIES.find((s) => {
+                      if (s.key === form.material) return false;
+                      const r = MATERIAL_HARDNESS_RANGE[s.key];
+                      return r && r.scale === form.hardness_scale && hVal >= r.min && hVal <= r.max
+                        && s.iso === isoCategory;
+                    });
+                    return (
+                      <div className="mt-1 px-1">
+                        <p className="text-xs text-amber-500 leading-snug">⚠ {hRange.note}</p>
+                        {better && (
+                          <button
+                            type="button"
+                            onClick={() => { setForm((p) => ({ ...p, material: better.key })); }}
+                            className="mt-1 text-xs font-semibold text-amber-300 underline underline-offset-2 hover:text-amber-200"
+                          >
+                            Switch to “{better.label}” →
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               );
             })()}
