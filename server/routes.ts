@@ -1786,7 +1786,7 @@ export async function registerRoutes(
           stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
           stainless_440c: "iso_m", stainless_15_5: "iso_m", stainless_ph: "iso_m",
           stainless_13_8: "iso_m", stainless_duplex: "iso_m",
-          stainless_superduplex: "iso_m",
+          stainless_superduplex: "iso_m", manganese_steel: "iso_m",
           cast_iron_gray: "iso_k", cast_iron_ductile: "iso_k", cast_iron_cgi: "iso_k",
           cast_iron_malleable: "iso_k",
           titanium_64: "iso_s", titanium_cp: "iso_s", hiTemp_fe: "iso_s", hiTemp_co: "iso_s",
@@ -2231,7 +2231,7 @@ export async function registerRoutes(
         stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
         stainless_440c: "iso_m", stainless_15_5: "iso_m", stainless_ph: "iso_m",
         stainless_13_8: "iso_m", stainless_duplex: "iso_m",
-        stainless_superduplex: "iso_m",
+        stainless_superduplex: "iso_m", manganese_steel: "iso_m",
         cast_iron_gray: "iso_k", cast_iron_ductile: "iso_k", cast_iron_cgi: "iso_k", cast_iron_malleable: "iso_k",
         titanium_64: "iso_s", titanium_cp: "iso_s", hiTemp_fe: "iso_s", hiTemp_co: "iso_s",
         monel_k500: "iso_s", inconel_625: "iso_s", inconel_718: "iso_s",
@@ -2394,6 +2394,7 @@ export async function registerRoutes(
         stainless_304: "M", stainless_316: "M", stainless_15_5: "M", stainless_ph: "M", stainless_13_8: "M",
         stainless_duplex: "M", stainless_superduplex: "M", stainless_fm: "M",
         stainless_ferritic: "M", stainless_410: "M", stainless_420: "M", stainless_440c: "M",
+        manganese_steel: "M",
         titanium_64: "S", inconel_718: "S", inconel_625: "S",
         hastelloy_x: "S", waspaloy: "S", mp35n: "S", monel_k500: "S",
         cast_iron_gray: "K", cast_iron_ductile: "K",
@@ -4890,7 +4891,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
     ALUMINUM (N1): "aluminum_wrought" (6061, 6082, 5052, plain "ALUMINUM", "AL", "ALUM", or any 6xxx/5xxx series — DEFAULT if just "ALUMINUM" with no grade); "aluminum_wrought_hs" (7075, 2024, or any 7xxx/2xxx); "aluminum_cast" (A356, A380, A390, 356, 380, "cast aluminum", "high-silicon").
     COPPER/BRASS/BRONZE (N1/N2): "non_ferrous" (copper, free-cutting brass, leaded bronze, C360, C260); "manganese_bronze" (C86300, C86500); "silicon_bronze" (C65500, C64200); "copper_beryllium" (C17200, C17300, BeCu).
     STEEL (P): "steel_alloy" (4130, 4140, 4340, 8620, 9310, chrom-moly, "alloy steel"); "steel_mild" (A36, 1018, 1020, mild/low-carbon); "steel_free" (12L14, 1215, 1117, free-machining); "tool_steel_p20" (P20); "tool_steel_a2" (A2); "tool_steel_h13" (H13); "tool_steel_s7" (S7); "tool_steel_d2" (D2); "cpm_10v" (CPM 10V, A11, PM tool steel).
-    STAINLESS (M): "stainless_304" (304, 304L, 321, plain "STAINLESS" with no grade — DEFAULT for unqualified stainless); "stainless_fm" (303, 416, free-machining stainless); "stainless_ferritic" (409, 430, 441, ferritic); "stainless_410" (410); "stainless_trimrite" (TrimRite, S42010); "stainless_420" (420); "stainless_440c" (440C); "stainless_316" (316, 316L, Mo-bearing); "stainless_ph" (17-4, 17-4PH, 15-5, 15-5PH, 13-8, 13-8MO, all precipitation-hardening / PH grades); "stainless_duplex" (2205, duplex); "stainless_superduplex" (2507, super duplex).
+    STAINLESS (M): "stainless_304" (304, 304L, 321, plain "STAINLESS" with no grade — DEFAULT for unqualified stainless); "stainless_fm" (303, 416, free-machining stainless); "stainless_ferritic" (409, 430, 441, ferritic); "stainless_410" (410); "stainless_trimrite" (TrimRite, S42010); "stainless_420" (420); "stainless_440c" (440C); "stainless_316" (316, 316L, Mo-bearing); "stainless_ph" (17-4, 17-4PH, 15-5, 15-5PH, 13-8, 13-8MO, all precipitation-hardening / PH grades); "stainless_duplex" (2205, duplex); "stainless_superduplex" (2507, super duplex); "manganese_steel" (A128, Hadfield, austenitic manganese steel, 11-14% Mn, mangalloy).
     CAST IRON (K): "cast_iron_gray" (Class 30/40, GG20/25, gray, HT200/250); "cast_iron_ductile" (65-45-12, ductile, nodular, GGG); "cast_iron_cgi" (CGI, compacted graphite, GJV); "cast_iron_malleable" (malleable, GTW, GTB, GTS).
     TITANIUM / SUPERALLOY (S): "titanium_64" (Ti-6Al-4V, Grade 5, Ti64); "titanium_cp" (CP Ti Grade 1–4); "hiTemp_fe" (A-286, Incoloy 800, Udimet — Fe-based superalloy); "hiTemp_co" (Stellite — Co-based); "monel_k500" (Monel K-500); "inconel_625" (Inconel 625, Hastelloy C-276, C-22, Incoloy 825); "inconel_718" (Inconel 718, 718 Plus, Allvac 718); "hastelloy_x" (Hastelloy X, Inconel X-750, Nimonic C-263); "inconel_617" (Inconel 617, Haynes 230); "waspaloy" (Waspaloy, René 41/77/80, Nimonic 80A/90); "mp35n" (MP35N, Udimet 720, René 95).
     HARDENED / ARMOR (H): "hardened_lt55" (generic hardened steel below 55 HRC, no specific grade); "hardened_gt55" (generic hardened steel above 55 HRC); "armor_milspec" (MIL-A-12560, 46100); "armor_ar400" (AR400, AR450); "armor_ar500" (AR500, Armox 500T); "armor_ar600" (AR550, AR600, Armox 600T).

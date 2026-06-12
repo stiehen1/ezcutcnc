@@ -138,6 +138,7 @@ BASE_SFM = {
     "stainless_440c":        200,   # 440C — high-carbon, abrasive; behaves closer to tool steel
     "stainless_304":         180,   # 304/304L/321 — midpoint 140–220 SFM (was 225 — too high)
     "stainless_316":         160,   # 316/316L Mo-bearing — midpoint 120–200 SFM (was 195 — too high)
+    "manganese_steel":       100,   # A128 Hadfield austenitic Mn steel — extreme work-hardener; shop-validated 90–120 SFM carbide roughing
     "stainless_15_5":        260,   # 15-5PH (XM-12) — friendliest PH, delta-ferrite-free; ~+10% over 17-4
     "stainless_ph":          235,   # 17-4PH benchmark — shop-calibrated 250–275 SFM chamfer; 235 endmill baseline
     "stainless_13_8":        214,   # 13-8Mo PH (XM-13) — highest strength/toughness; 17-4 × 0.91 (-9% SFM)
@@ -328,6 +329,7 @@ HP_PER_CUIN = {
     "stainless_440c":        1.20,   # 440C — high carbide content
     "stainless_304":         1.10,   # 304/321 austenitic — gummy, high unit power
     "stainless_316":         1.12,   # 316/316L — Mo adds unit power
+    "manganese_steel":       1.45,   # A128 Hadfield — work-hardened layer ahead of edge drives very high unit cutting force
     "stainless_15_5":        1.12,   # 15-5PH — lowest cutting forces of the PH grades
     "stainless_ph":          1.15,   # 17-4PH — high strength
     "stainless_13_8":        1.30,   # 13-8Mo PH — 10-25% higher cutting forces; highest unit power
@@ -683,6 +685,7 @@ CHAMFER_IPT_MULT = {
     "stainless_440c":      1.45,
     "stainless_304":       1.75,
     "stainless_316":       1.75,
+    "manganese_steel":     2.00,   # A128 — corner protection critical; work-hardening notches edges aggressively
     "stainless_15_5":      1.80,   # 15-5PH — slightly more aggressive chamfer feed (friendliest PH)
     "stainless_ph":        1.75,   # 17-4PH CALIBRATION ANCHOR (CMH ~0.0036 / CMS ~0.0024 @ 250–275 SFM)
     "stainless_13_8":      1.66,   # 13-8Mo PH — 17-4 × 0.95; conservative chamfer feed, chipping/notch risk
@@ -881,6 +884,7 @@ IPT_FRAC = {
     "stainless_440c":        0.0030,  # 440C — conservative; abrasive
     "stainless_304":         0.0034,  # 304/321 — midpoint 0.0012–0.0022 on 0.5" = 0.34%×D
     "stainless_316":         0.0030,  # 316/316L — midpoint 0.0010–0.0020 on 0.5" = 0.30%×D
+    "manganese_steel":       0.0030,  # A128 Hadfield — MUST maintain chip load (rubbing work-hardens the surface ahead of the edge); never run light
     "stainless_15_5":        0.0037,  # 15-5PH — lower forces tolerate slightly heavier chip load
     "stainless_ph":          0.0035,  # 17-4PH — midpoint 0.0012–0.0023 on 0.5" = 0.35%×D
     "stainless_13_8":        0.0033,  # 13-8Mo PH — 17-4 × 0.95 (-5% FPT); lighter chip load limits edge chipping
@@ -949,6 +953,7 @@ HEM_IPT_MULT = {
     "stainless_440c":        1.5,   # 440C — conservative HEM boost
     "stainless_304":         2.0,
     "stainless_316":         2.0,
+    "manganese_steel":       1.5,   # A128 — conservative HEM boost; work-hardening limits the upside despite light radial arc
     "stainless_15_5":        2.0,   # 15-5PH — excellent HEM candidate, lowest forces
     "stainless_ph":          1.8,   # 17-4PH — high strength, moderate HEM boost
     "stainless_13_8":        1.6,   # 13-8Mo PH — reduce radial engagement; conservative HEM boost
@@ -1027,6 +1032,7 @@ _ISO_KEY_TO_GROUP = {
     "stainless_420":         "Stainless",
     "stainless_440c":        "Stainless",
     "stainless_304":         "Stainless",
+    "manganese_steel":       "Stainless",
     "stainless_316":         "Stainless",
     "stainless_15_5":        "Stainless",
     "stainless_ph":          "Stainless",
@@ -1740,7 +1746,7 @@ DRILL_SFM = {
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
     # Stainless 304/316 anchored to MZE Ø.2480: 80 SFM. 316 slightly lower (Mo penalty).
     # Coolant-fed bonus now handles the +13–30% bump from external→internal coolant; no longer baked in here.
-    "stainless_304": 80, "stainless_316": 70,
+    "stainless_304": 80, "stainless_316": 70, "manganese_steel": 45,
     "stainless_410": 90, "stainless_trimrite": 85, "stainless_420": 85, "stainless_440c": 70,
     "stainless_martensitic": 90, "stainless_fm": 100, "stainless_ferritic": 95,
     "stainless_15_5": 72, "stainless_ph": 65, "stainless_13_8": 59,
@@ -1772,7 +1778,7 @@ DRILL_IPR_BASE = {
     "armor_milspec": 0.003, "armor_ar400": 0.002, "armor_ar500": 0.0015, "armor_ar600": 0.001,
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
-    "stainless_304": 0.0055, "stainless_316": 0.0050,
+    "stainless_304": 0.0055, "stainless_316": 0.0050, "manganese_steel": 0.0050,
     "stainless_410": 0.0062, "stainless_trimrite": 0.0059, "stainless_420": 0.0056, "stainless_440c": 0.0047,
     "stainless_martensitic": 0.0059, "stainless_fm": 0.0064, "stainless_ferritic": 0.0059,
     "stainless_15_5": 0.0046, "stainless_ph": 0.0044, "stainless_13_8": 0.0042,
@@ -2184,7 +2190,8 @@ def run_drilling(payload: dict) -> dict:
                              "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
                              "copper_beryllium",
                              # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; DRILL_SFM already reflects it
-                             "Titanium", "titanium_64", "titanium_cp", "titanium")
+                             "Titanium", "titanium_64", "titanium_cp", "titanium",
+                             "manganese_steel")  # A128 — work-hardens at the cut; DRILL_SFM already conservative
     if mat_group not in _drill_no_hrc_penalty and mat not in _drill_no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(hrc)
     base_sfm *= cool_factor * geo_factor  # PA factor applies to IPR only, not SFM
@@ -4393,7 +4400,10 @@ def run(payload=None):
                         "stainless_duplex", "stainless_superduplex",
                         "stainless_440c", "stainless_420",
                         # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; BASE_SFM already reflects it
-                        "Titanium", "titanium_64", "titanium_cp", "titanium")
+                        "Titanium", "titanium_64", "titanium_cp", "titanium",
+                        # A128 Hadfield: as-cast HRC is low but it work-hardens at the cut — SFM is already
+                        # calibrated for that behavior, so don't let a low typed hardness inflate it
+                        "manganese_steel")
     _mat_key_hrc = data.get("material", material_group)
     if material_group not in _no_hrc_penalty and _mat_key_hrc not in _no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(_hrc)

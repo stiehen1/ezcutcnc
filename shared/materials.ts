@@ -31,6 +31,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "stainless_13_8":      "13-8 Mo (XM-13) — considerably stronger and tougher than 17-4/15-5. Expect 10–25% higher cutting forces, more heat, edge chipping and notching. Run ~10–20% slower, reduce radial engagement, avoid full slotting, and climb mill exclusively.",
   "stainless_duplex":    "High-strength dual-phase SS — stronger than 304 and less prone to stress corrosion. Still work-hardens and punishes rubbing; needs a rigid setup and consistent engagement.",
   "stainless_superduplex": "The most demanding common stainless grade. Very high strength means it loads the tool hard — conservative SFM, consistent chip load, and the best rigidity you can get.",
+  "manganese_steel":     "Hadfield A128 (11–14% Mn austenitic). Soft as-cast (~190–220 HB) but work-hardens to 500+ HB the instant the edge touches it — the most extreme work-hardener you'll machine. Run LOW SFM (90–120 carbide), heavy enough chip to cut UNDER the hardened skin, and NEVER dwell, rub, or peck. Sharp coated carbide (P-Max), rigid setup, climb mill. Reduced SFM/feed to baby the cut is exactly how you glaze it and stall. Often better left as-cast or finished by grinding/EDM where tolerances are tight.",
   // K — Cast Iron
   "cast_iron_gray":      "Excellent machinability — graphite flakes act as a built-in solid lubricant, giving low cutting forces and short, crumbly chips. Machine dry with air blast; flood coolant turns graphite dust into abrasive slurry and risks thermal cracking. Abrasive flank wear is the dominant tool failure — AlTiN coated carbide preferred over uncoated. Break any chilled or skin-hardened surface carefully; white iron inclusions will chip edges instantly.",
   "cast_iron_ductile":   "Machines more like tough alloy steel than gray iron — graphite nodules don't lubricate the cut, so forces are higher and chips are longer. Ferritic grades (65-45-12, GGG-40/50) are more forgiving; pearlitic/high-strength grades (80-55-06, GGG-70/80) need SFM reductions of 15–25% and stronger edge preps. Coolant recommended, especially for drilling and tapping. Foundry practice affects machinability significantly — same grade from different suppliers can behave noticeably differently.",
@@ -108,6 +109,7 @@ export const ISO_SUBCATEGORIES = [
   { iso: "M" as IsoCategory, key: "stainless_13_8",        label: "13-8 Mo PH Stainless (XM-13)",                hardness: { value: 43, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
   { iso: "M" as IsoCategory, key: "stainless_superduplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 28, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "manganese_steel",       label: "Hadfield Manganese Steel (A128 / 11–14% Mn)", hardness: { value: 95, scale: "hrb" as const } },
   // K — Cast Iron
   { iso: "K" as IsoCategory, key: "cast_iron_gray",        label: "Gray Cast Iron (Class 30/40, GG20/25, HT200/250)",        hardness: { value: 92, scale: "hrb" as const } },
   { iso: "K" as IsoCategory, key: "cast_iron_ductile",     label: "Ductile / Nodular Iron (65-45-12, GGG-40/50/60)",         hardness: { value: 90, scale: "hrb" as const } },
@@ -170,6 +172,7 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "stainless_13_8":      { min: 36, max: 47,  scale: "hrc", note: "13-8 Mo PH is the highest-strength PH grade — ~36–47 HRC (H950–H1050). Tougher and more abrasive than 17-4." },
   "stainless_duplex":    { min: 18, max: 25,  scale: "hrc", note: "Duplex 2205 max 217 HB (~22 HRC) — not heat-treatable, but work-hardens significantly." },
   "stainless_superduplex": { min: 22, max: 32, scale: "hrc", note: "Super duplex 2507 typical 22–32 HRC as-annealed — not heat-treatable beyond solution anneal." },
+  "manganese_steel":     { min: 85, max: 100, scale: "hrb", note: "Hadfield A128 is soft as-cast (~85–100 HRB / 190–220 HB) — enter the AS-CAST hardness, not the work-hardened surface. It hardens to 500+ HB at the cut; the engine already accounts for that, so don't dial in the hardened value." },
   // K — Cast Iron
   "cast_iron_gray":     { min: 80, max: 111, scale: "hrb", note: "Gray iron ranges 80–111 HRB (150–241 HB). Class 20–25 ≈ 80–90 HRB; Class 40–60 ≈ 95–111 HRB. Not heat-treatable." },
   "cast_iron_ductile":  { min: 82, max: 110, scale: "hrb", note: "Ductile iron 65-45-12 / GGG-50 ≈ 90–99 HRB (187–217 HB). High-strength grades 100-70-03 / GGG-70 can reach 21–26 HRC (241–270 HB)." },
@@ -421,6 +424,11 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "2507": "stainless_superduplex", "s32750": "stainless_superduplex",
   "s32760": "stainless_superduplex", "zeron 100": "stainless_superduplex",
   "1.4410": "stainless_superduplex",
+  // ── Hadfield / Austenitic Manganese Steel ─────────────────────────────────
+  "a128": "manganese_steel", "astm a128": "manganese_steel", "a128 grade a": "manganese_steel",
+  "hadfield": "manganese_steel", "hadfield steel": "manganese_steel",
+  "manganese steel": "manganese_steel", "austenitic manganese steel": "manganese_steel",
+  "ams steel": "manganese_steel", "11-14% mn": "manganese_steel", "mangalloy": "manganese_steel",
   // ── Gray Cast Iron ────────────────────────────────────────────────────────
   "gray iron": "cast_iron_gray", "grey iron": "cast_iron_gray",
   "gray cast iron": "cast_iron_gray", "grey cast iron": "cast_iron_gray",
