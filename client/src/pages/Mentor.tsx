@@ -2278,6 +2278,10 @@ export default function Mentor() {
     hardness_value: ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.value ?? 0,
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
     stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "flame_cut" | "nitrided" | "cold_worked" | "weldment",
+    // Powder Metal (PM) modifier — overlays the base material with sintered-PM behavior.
+    pm_enabled: false,
+    pm_density: 0,
+    pm_sinter_hardened: false,
 
     // Drilling-specific
     drill_point_angle: 0 as 0 | 118 | 120 | 130 | 135 | 140 | 145,
@@ -6274,6 +6278,61 @@ ${stabSection}
               );
             })()}
           </div>
+
+          {/* ── Powder Metal (PM) modifier ──────────────────────────────────────
+              A state overlay on the base material — sintered PM cuts differently
+              (porous, abrasive, interrupted) even at the same alloy. Density is
+              the primary driver. Hidden for plastics (no PM equivalent). */}
+          {["P","M","K","H","S","N1","N2"].includes(isoCategory) && (
+            <div className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.pm_enabled}
+                  onChange={(e) => setForm((p) => ({ ...p, pm_enabled: e.target.checked }))}
+                  className="h-3.5 w-3.5 accent-indigo-500"
+                />
+                <span className="text-xs font-semibold text-zinc-200">Powder Metal (PM / sintered)</span>
+                {form.pm_enabled && form.pm_density > 0 && (
+                  <span className="text-[10px] text-indigo-300">
+                    {form.pm_density >= 7.4 ? "near-wrought" : form.pm_density >= 6.9 ? "medium density" : "low density / porous"}
+                  </span>
+                )}
+              </label>
+              {form.pm_enabled && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <FieldLabel hint="As-sintered density in g/cm³. The biggest driver of how PM cuts: low density (≈6.4–6.8) is porous and interrupted — bigger SFM/feed derate; high density (≈7.4–7.6) approaches wrought steel. Leave blank if unknown (mid-band derate assumed).">
+                      Density
+                    </FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={8}
+                      step={0.1}
+                      placeholder="e.g. 7.0"
+                      className="no-spinners w-24 text-sm"
+                      value={form.pm_density || ""}
+                      onChange={(e) => setForm((p) => ({ ...p, pm_density: Number(e.target.value) || 0 }))}
+                    />
+                    <span className="text-xs text-muted-foreground">g/cm³</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.pm_sinter_hardened}
+                      onChange={(e) => setForm((p) => ({ ...p, pm_sinter_hardened: e.target.checked }))}
+                      className="h-3.5 w-3.5 accent-indigo-500"
+                    />
+                    <span className="text-xs text-zinc-300">Sinter-hardened (martensitic — Distaloy / Astaloy, 35–55 HRC)</span>
+                  </label>
+                  <p className="text-[11px] text-zinc-500 leading-snug">
+                    PM derates SFM/feed and tool life vs. wrought — porous, abrasive inclusions and interrupted cuts wear the edge faster. Use a strong, tough edge (variable helix, AlCrN/AlTiN). Don't assume PM = softer/easier; sinter-hardened grades cut like prehard alloy steel.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Material note */}
           {MATERIAL_NOTES[form.material] && (

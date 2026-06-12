@@ -105,6 +105,12 @@ export const mentorSchemas = {
     hardness_value: z.number().min(0).default(0),
     hardness_scale: z.enum(["hrb", "hrc"]).default("hrc"),
 
+    // Powder Metal (PM) modifier — overlays the base material with sintered-PM
+    // behavior. Density (g/cm³) is the primary derate driver; 0 = unspecified.
+    pm_enabled: z.boolean().default(false),
+    pm_density: z.number().min(0).max(8).default(0),
+    pm_sinter_hardened: z.boolean().default(false),
+
     // Drilling-specific
     drill_point_angle: z.number().int().default(0),
     drill_flute_length: z.number().min(0).default(0),

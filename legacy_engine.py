@@ -1145,6 +1145,62 @@ def hardened_sfm_absolute(hrc: float) -> float:
     return max(60.0, 90.0 - 4.0 * (hrc - 60))
 
 
+# ── Powder Metal (PM) modifier ────────────────────────────────────────────────
+# PM is a MODIFIER on top of the base material (316, 4140, 17-4, etc.), not its
+# own material. Density is the primary driver: porous low-density grades cut with
+# interrupted loads and abrasive inclusions (heavier derate), while high-density
+# (7.4–7.6 g/cm³) sintered/forged PM approaches wrought behavior (near no derate).
+# Sinter-hardened PM is martensitic and high-force — a separate hit layered on top.
+# Common reference band: 6.4–7.6 g/cm³. Derates target the user-validated ranges:
+# SFM −10..25%, IPT −10..20%, tool life ×0.65..0.85.
+def pm_sfm_mult(density: float, sinter_hardened: bool = False) -> float:
+    """SFM multiplier for powder-metal state. density in g/cm³ (0 = unknown → mid)."""
+    d = float(density or 0)
+    if d <= 0:
+        base = 0.85                       # unknown density → mid-band derate (−15%)
+    elif d >= 7.5:
+        base = 0.95                       # near-wrought
+    elif d >= 6.4:
+        base = 0.78 + (d - 6.4) * (0.95 - 0.78) / (7.5 - 6.4)  # 6.4→0.78 .. 7.5→0.95
+    else:
+        base = 0.78                       # very porous floor (−22%)
+    if sinter_hardened:
+        base *= 0.92                      # martensitic PM — extra speed cut
+    return round(base, 4)
+
+
+def pm_ipt_mult(density: float, sinter_hardened: bool = False) -> float:
+    """IPT (chip load) multiplier for powder-metal state."""
+    d = float(density or 0)
+    if d <= 0:
+        base = 0.88                       # unknown → −12%
+    elif d >= 7.5:
+        base = 0.95
+    elif d >= 6.4:
+        base = 0.82 + (d - 6.4) * (0.95 - 0.82) / (7.5 - 6.4)  # 6.4→0.82 .. 7.5→0.95
+    else:
+        base = 0.82
+    if sinter_hardened:
+        base *= 0.92                      # stronger edge / lighter chip on hard PM
+    return round(base, 4)
+
+
+def pm_life_mult(density: float, sinter_hardened: bool = False) -> float:
+    """Tool-life multiplier for powder-metal state (abrasion + interrupted cut)."""
+    d = float(density or 0)
+    if d <= 0:
+        life = 0.75
+    elif d >= 7.5:
+        life = 0.85
+    elif d >= 6.4:
+        life = 0.65 + (d - 6.4) * (0.85 - 0.65) / (7.5 - 6.4)  # 6.4→0.65 .. 7.5→0.85
+    else:
+        life = 0.65
+    if sinter_hardened:
+        life *= 0.90
+    return round(life, 4)
+
+
 def hardness_kc_mult(hrc: float) -> float:
     """Kc (specific cutting force) multiplier based on HRC."""
     hrc = float(hrc)
@@ -4128,6 +4184,12 @@ def run(payload=None):
     _hrc = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
     data["hardness_hrc"] = _hrc
 
+    # Powder Metal (PM) modifier — base material + a PM state overlay (density,
+    # sinter-hardened). Drives SFM/IPT/tool-life derates in run_milling().
+    data["pm_enabled"]         = bool(payload.get("pm_enabled", False))
+    data["pm_density"]         = float(payload.get("pm_density", 0) or 0)
+    data["pm_sinter_hardened"] = bool(payload.get("pm_sinter_hardened", False))
+
     # ── Shank diameter → composite beam model ────────────────────────────────
     # For tools with a larger shank than cutting dia (e.g. QTR3: 0.250" shank,
     # 1/16–1/4" cutting dia), the deflection model uses a two-segment cantilever:
@@ -4412,6 +4474,15 @@ def run(payload=None):
     _coating_key = str(data.get("coating") or "").strip()
     base_sfm *= _coating_sfm_factor(_coating_key, material_group)
 
+    # Powder Metal (PM) modifier — derate the fully-resolved SFM for the porous,
+    # abrasive, interrupted-cut behavior of sintered PM. Density-driven; applies
+    # on top of the base material + hardness. No-op when pm is off.
+    _pm = bool(data.get("pm_enabled"))
+    if _pm:
+        _pm_density = float(data.get("pm_density", 0) or 0)
+        _pm_sh = bool(data.get("pm_sinter_hardened"))
+        base_sfm *= pm_sfm_mult(_pm_density, _pm_sh)
+
     # Speed control — applied last so it scales the fully-resolved recommended
     # SFM. A manual sfm_override (if > 0) wins and is clamped to the safe
     # envelope; otherwise the speed preset biases it (balanced = no change).
@@ -4430,6 +4501,11 @@ def run(payload=None):
 
     _ipt_frac = IPT_FRAC.get(_mat_key, IPT_FRAC.get(material_group, 0.005))
     ipt = _ipt_frac * data["diameter"]
+    # Powder Metal modifier — reduce base chip load for PM (interrupted cut +
+    # abrasion want a tougher, slightly lighter chip). Applied to the base IPT so
+    # it composes with runout / chip-thinning / HEM downstream. No-op when off.
+    if _pm:
+        ipt *= pm_ipt_mult(_pm_density, _pm_sh)
     # Apply holder runout correction: lower runout holders can exploit more of the rated IPT.
     # If user measured TIR at tool tip (runout_in > 0), use that — more accurate than the
     # holder-type-based default (which assumes typical runout for that holder class).
@@ -5115,6 +5191,10 @@ def run(payload=None):
     life = tool_life(material_group, coating, state["load"], data["coolant"],
                      coolant_fluid=data.get("coolant_fluid", "semi_synthetic"),
                      coolant_concentration=data.get("coolant_concentration", 10))
+    # Powder Metal modifier — abrasion + interrupted cut shorten tool life beyond
+    # what the SFM/IPT derate already accounts for. Density-driven; no-op when off.
+    if _pm:
+        life *= pm_life_mult(_pm_density, _pm_sh)
     if debug:
             print("DEBUG post-scale feed:", state["feed"], "mrr:", state["mrr"], "load:", state["load"], "defl:", state["deflection"])
         # FINAL state solve (you already have this)
