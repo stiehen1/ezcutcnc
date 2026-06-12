@@ -6217,9 +6217,9 @@ ${stabSection}
                     type="checkbox"
                     checked={form.pm_enabled}
                     onChange={(e) => setForm((p) => ({ ...p, pm_enabled: e.target.checked }))}
-                    className="h-4 w-4 accent-cyan-500"
+                    className="h-3.5 w-3.5 accent-cyan-500"
                   />
-                  <span className="text-sm font-semibold text-cyan-100">Powder Metal (PM / Sintered)</span>
+                  <span className="text-xs font-semibold text-cyan-100">Powder Metal (PM / Sintered)</span>
                   {form.pm_enabled && form.pm_density > 0 && (
                     <span className="text-[10px] text-cyan-300 ml-auto">
                       {form.pm_density >= 7.4 ? "near-wrought" : form.pm_density >= 6.9 ? "medium density" : "low density / porous"}
