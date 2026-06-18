@@ -1540,8 +1540,8 @@ const STOCK_CONDITIONS: StockCondition[] = [
     whatItIs: "Steel diffused with carbon (carburized) or nitrogen (nitrided) at the surface to depths of 0.005–0.060\". Used on gears, shafts, wear surfaces.",
     surface: "Looks like billet but feels different under a file. Print will call out 'case depth X to Y'.",
     hardness: "Case 58–64 HRC. Core typically 28–35 HRC. Transition is gradual.",
-    toolImpact: "Cutting into the case = like machining tool steel. Plan to be either fully above the case (skim it off in one shot) or fully below it. Don't make a pass that runs along the case-core boundary — chatter and edge chipping.",
-    feedAdjust: "Through the case: 40–50% SFM, 60% IPT, reduced DOC. Through the core: 90–100% baseline for the base alloy.",
+    toolImpact: "Cutting in the case = like machining tool steel. Finishing a wall with a light WOC that stays inside the case is fine at full DOC — the cut lives in the skin the whole pass at case parameters. On a floor/face, keep DOC inside the case in one skim OR go fully through to the core — don't leave the flute straddling the case/core line (chatter, edge chipping).",
+    feedAdjust: "In the case: 40–50% SFM, 60% IPT. Through the core: 90–100% baseline for the base alloy. A wall finish that never leaves the case runs case parameters for every pass — there is no steady-state core pass.",
     watchOuts: [
       "Case depth on the print is minimum — actual may be 1.5× spec.",
       "Grinding is often the right answer for finish passes through hardened case.",

@@ -684,8 +684,8 @@ const STOCK_CONDITION_INFO: Record<StockConditionKey, {
     short: "Case-Hardened",
     sfmMult: 0.40,
     iptMult: 0.60,
-    note: "Case-hardened skin is 58–64 HRC. Plan to skim the case in ONE pass at heavily-reduced parameters, OR stay fully below it. NEVER run a pass along the case-core boundary — chatter and edge chipping.",
-    tooltip: "Carburized / case-hardened steel with 58–64 HRC skin over softer core. Through the case: ~40% SFM, 60% IPT, light DOC. Consider grinding for finish passes through hardened case.",
+    note: "Case-hardened skin is 58–64 HRC over a soft core (case depth typ. .005–.015\"). Wall finish: a light WOC that stays within the case is fine at full DOC — the cut lives in the skin the whole pass. Floor/face: keep DOC inside the case in one skim, OR go fully through to the core — don't leave the flute straddling the case/core line. Mixing hard skin and soft core in the same cut causes chatter and edge chipping/notching.",
+    tooltip: "Carburized / case-hardened steel with 58–64 HRC skin over softer core. In the case: ~40% SFM, 60% IPT. Light WOC on a wall stays in the skin at full DOC; on a floor keep DOC inside the case. Consider grinding for finish through a hardened case.",
   },
   flame_cut: {
     label: "Flame/Plasma Cut",
@@ -724,6 +724,19 @@ const STOCK_CONDITION_INFO: Record<StockConditionKey, {
 const STOCK_CONDITION_ORDER: StockConditionKey[] = [
   "billet_cf", "hot_rolled", "forged", "cast_sand", "cast_invest", "case_hard", "flame_cut", "nitrided", "cold_worked", "weldment",
 ];
+
+// Effective SFM multiplier for the hard-skin first pass. The Case-Hard SFM derate
+// (×0.40) assumes the engine's base SFM is the SOFT-CORE alloy speed. But if the user
+// entered the case hardness (HRC), the engine ALREADY derated SFM via hardness_sfm_mult
+// — so applying ×0.40 on top double-penalizes (e.g. 62 HRC: base ~350 ×0.20 = 70, then
+// ×0.40 = 28 SFM, far below the ~80 SFM a carbide finish on a 62 HRC case really wants).
+// In that case the entered HRC IS the skin, so skip the SFM derate (return 1.0) and let
+// the engine's hardness-driven SFM stand. The IPT derate is independent (abrasive-skin
+// chip-load reduction, not modeled by the HRC SFM penalty) and always applies.
+function effectiveSkinSfmMult(sc: { sfmMult: number }, stockKey: string, hardnessValue: number): number {
+  if (stockKey === "case_hard" && hardnessValue > 0) return 1.0;
+  return sc.sfmMult;
+}
 
 // Applicability per ISO group — dimmed when not in the set.
 // Empty / missing ISO => show everything (no narrowing yet).
@@ -2278,6 +2291,10 @@ export default function Mentor() {
     hardness_value: ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.value ?? 0,
     hardness_scale: (ISO_SUBCATEGORIES.find((s) => s.key === "steel_alloy")?.hardness.scale ?? "hrc") as "hrb" | "hrc",
     stock_condition: "billet_cf" as "billet_cf" | "hot_rolled" | "forged" | "cast_sand" | "cast_invest" | "case_hard" | "flame_cut" | "nitrided" | "cold_worked" | "weldment",
+    // Case-hardened cut strategy: "skin" = the cut stays entirely in the hard case
+    // (e.g. a light-WOC wall finish) so the reduced case parameters apply to EVERY pass;
+    // "through" = the cut breaks into the soft core (first pass derated, steady-state after).
+    case_strategy: "through" as "skin" | "through",
     // Powder Metal (PM) modifier — overlays the base material with sintered-PM behavior.
     pm_enabled: false,
     pm_density: 0,
@@ -3921,12 +3938,24 @@ export default function Mentor() {
       !isBlank(value) ? `<div class="kpi"><div class="kpi-val">${value}</div><div class="kpi-lbl">${label}</div></div>` : "";
 
     const _scInfo = STOCK_CONDITION_INFO[form.stock_condition];
-    const _scActive = !!_scInfo && _scInfo.sfmMult < 1.0;
-    const _firstSfm = _scActive && mil?.sfm != null ? mil.sfm * _scInfo.sfmMult : null;
-    const _firstRpm = _firstSfm != null && form.tool_dia > 0 ? (_firstSfm * 12) / (Math.PI * form.tool_dia) : null;
-    const _firstIpm = _scActive && mil?.feed_ipm != null && mil?.rpm && _firstRpm != null
-      ? mil.feed_ipm * _scInfo.iptMult * (_firstRpm / mil.rpm)
+    const _skinSfmMult = _scInfo ? effectiveSkinSfmMult(_scInfo, form.stock_condition, form.hardness_value) : 1.0;
+    const _scActive = !!_scInfo && (_skinSfmMult < 1.0 || _scInfo.iptMult < 1.0);
+    const _skinSfm = _scActive && mil?.sfm != null ? mil.sfm * _skinSfmMult : null;
+    const _skinRpm = _skinSfm != null && form.tool_dia > 0 ? (_skinSfm * 12) / (Math.PI * form.tool_dia) : null;
+    const _skinIpm = _scActive && mil?.feed_ipm != null && mil?.rpm && _skinRpm != null
+      ? mil.feed_ipm * _scInfo.iptMult * (_skinRpm / mil.rpm)
       : null;
+    // Stay-in-skin: the in-case numbers ARE the running values, so the PDF leads with them
+    // and demotes steady-state to "if into core". Otherwise steady-state leads and the
+    // reduced numbers are the "first skim pass" subtext.
+    const _stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && _scActive;
+    const _headRpm = _stayInSkin ? _skinRpm : (mil?.rpm ?? null);
+    const _headSfm = _stayInSkin ? _skinSfm : (mil?.sfm ?? null);
+    const _headIpm = _stayInSkin ? _skinIpm : (mil?.feed_ipm ?? null);
+    const _subRpm = _stayInSkin ? (mil?.rpm ?? null) : _skinRpm;
+    const _subSfm = _stayInSkin ? (mil?.sfm ?? null) : _skinSfm;
+    const _subIpm = _stayInSkin ? (mil?.feed_ipm ?? null) : _skinIpm;
+    const _subLabel = _stayInSkin ? "if into core" : "first skim pass";
 
     const milSection = mil ? `
       ${(mil as any).sfm_control?.mode === "manual"
@@ -3935,9 +3964,9 @@ export default function Mentor() {
         ? `<div style="font-size:9px;color:#b45309;margin:2px 0 4px 0;font-weight:600;">Speed Preset: ${SPEED_PRESET_EXPORT_LABEL[form.speed_preset]} — SFM biased from the app's balanced recommendation.</div>`
         : ""}
       <div class="kpi-grid">
-        ${kpiBox("RPM", mil.rpm ? Math.round(mil.rpm).toLocaleString() + (_firstRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_firstRpm).toLocaleString()} first skim pass</span>` : "") : null)}
-        ${kpiBox("SFM", mil.sfm != null ? mil.sfm.toFixed(0) + (_firstSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstSfm.toFixed(0)} first skim pass</span>` : "") : null)}
-        ${kpiBox("Feed (IPM)", mil.feed_ipm != null ? mil.feed_ipm.toFixed(2) + (_firstIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_firstIpm.toFixed(2)} first skim pass</span>` : "") : null)}
+        ${kpiBox("RPM", _headRpm != null ? Math.round(_headRpm).toLocaleString() + (_subRpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${Math.round(_subRpm).toLocaleString()} ${_subLabel}</span>` : "") : null)}
+        ${kpiBox("SFM", _headSfm != null ? _headSfm.toFixed(0) + (_subSfm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_subSfm.toFixed(0)} ${_subLabel}</span>` : "") : null)}
+        ${kpiBox("Feed (IPM)", _headIpm != null ? _headIpm.toFixed(2) + (_subIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_subIpm.toFixed(2)} ${_subLabel}</span>` : "") : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox(form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
         ${form.tool_type !== "chamfer_mill" && mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
@@ -4970,8 +4999,13 @@ ${stabSection}
     if (form.hardness_value > 0) lines.push(L("Hardness", `${form.hardness_value} ${form.hardness_scale.toUpperCase()}`));
     if (form.stock_condition && form.stock_condition !== "billet_cf") {
       const sc = STOCK_CONDITION_INFO[form.stock_condition];
+      const skinSfmMult = effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value);
       lines.push(L("Stock Condition", `${sc.short}`));
-      lines.push(L("First-Pass Adj.",  `SFM × ${sc.sfmMult.toFixed(2)}, IPT × ${sc.iptMult.toFixed(2)}`));
+      if (skinSfmMult < 1.0 || sc.iptMult < 1.0) {
+        const sfmGated = form.stock_condition === "case_hard" && form.hardness_value > 0 && sc.sfmMult < 1.0;
+        const label = form.stock_condition === "case_hard" && form.case_strategy === "skin" ? "In-Case Adj." : "First-Pass Adj.";
+        lines.push(L(label, `SFM × ${skinSfmMult.toFixed(2)}, IPT × ${sc.iptMult.toFixed(2)}${sfmGated ? `  (SFM set by ${form.hardness_value} HRC)` : ""}`));
+      }
       if (sc.note) {
         // Wrap note across multiple lines so it reads cleanly in a text export
         const words = sc.note.split(/\s+/);
@@ -5251,16 +5285,27 @@ ${stabSection}
       // ── SPEEDS & FEEDS ───────────────────────
       lines.push("SPEEDS & FEEDS");
       lines.push(DIV);
-      lines.push(L("Spindle Speed",  `${Math.round(cust.rpm).toLocaleString()} RPM`));
-      lines.push(L("SFM",            String(Math.round(cust.sfm ?? 0))));
-      lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
       {
         const sc = STOCK_CONDITION_INFO[form.stock_condition];
-        if (sc && sc.sfmMult < 1.0 && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0) {
-          const fpSfm = cust.sfm * sc.sfmMult;
-          const fpRpm = (fpSfm * 12) / (Math.PI * form.tool_dia);
-          const fpIpm = cust.feed_ipm * sc.iptMult * (fpRpm / cust.rpm);
-          lines.push(L("  First Pass",  `${Math.round(fpRpm).toLocaleString()} RPM · ${Math.round(fpSfm)} SFM · ${fpIpm.toFixed(2)} IPM  (${sc.short})`));
+        const skinSfmMult = sc ? effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value) : 1.0;
+        const skinActive = !!sc && (skinSfmMult < 1.0 || sc.iptMult < 1.0) && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0;
+        const stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && skinActive;
+        const skinSfm = skinActive ? cust.sfm * skinSfmMult : null;
+        const skinRpm = skinSfm != null ? (skinSfm * 12) / (Math.PI * form.tool_dia) : null;
+        const skinIpm = skinSfm != null ? cust.feed_ipm * sc!.iptMult * (skinRpm! / cust.rpm) : null;
+        // Stay-in-skin: the in-case numbers ARE the running values — lead with them.
+        const headRpm = stayInSkin ? skinRpm! : cust.rpm;
+        const headSfm = stayInSkin ? skinSfm! : (cust.sfm ?? 0);
+        const headIpm = stayInSkin ? skinIpm! : (cust.feed_ipm ?? 0);
+        lines.push(L("Spindle Speed",  `${Math.round(headRpm).toLocaleString()} RPM`));
+        lines.push(L("SFM",            String(Math.round(headSfm))));
+        lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${headIpm.toFixed(2)} IPM`));
+        if (skinActive) {
+          if (stayInSkin) {
+            lines.push(L("  If into core",  `${Math.round(cust.rpm).toLocaleString()} RPM · ${Math.round(cust.sfm ?? 0)} SFM · ${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
+          } else {
+            lines.push(L("  First Pass",  `${Math.round(skinRpm!).toLocaleString()} RPM · ${Math.round(skinSfm!)} SFM · ${skinIpm!.toFixed(2)} IPM  (${sc!.short})`));
+          }
         }
       }
       if (cust.fpt != null)     lines.push(L("Chipload (FPT)", `${cust.fpt.toFixed(5)}"`));
@@ -6206,6 +6251,38 @@ ${stabSection}
                     </p>
                   );
                 })()}
+                {/* Case-hardened: does this cut stay in the hard skin, or break through to core?
+                    It changes which speed is the headline — a stay-in-skin wall finish runs the
+                    reduced case parameters on EVERY pass (no steady-state core pass exists). */}
+                {form.stock_condition === "case_hard" && (
+                  <div className="mt-1.5 border-t border-orange-500/20 pt-1.5">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-orange-400/90 mb-1">This cut</div>
+                    <div className="flex gap-1">
+                      {([
+                        { k: "skin" as const,    label: "Stays in case", desc: "Light-WOC wall finish — every pass runs reduced case speed" },
+                        { k: "through" as const, label: "Cuts to core",   desc: "Breaks through the case — first pass derated, then steady-state" },
+                      ]).map(({ k, label, desc }) => {
+                        const active = form.case_strategy === k;
+                        return (
+                          <button
+                            key={k}
+                            type="button"
+                            title={desc}
+                            onClick={() => setForm((p) => ({ ...p, case_strategy: k }))}
+                            className="flex-1 rounded px-1.5 py-1 text-[10px] font-semibold border transition-all leading-tight"
+                            style={{
+                              background: active ? "#f97316" : "transparent",
+                              borderColor: active ? "#f97316" : "#52525b",
+                              color: active ? "#fff" : "#a1a1aa",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </TooltipProvider>
 
@@ -13809,12 +13886,29 @@ ${stabSection}
 
                 {(() => {
                   const sc = STOCK_CONDITION_INFO[form.stock_condition];
-                  const showFirstPass = sc && sc.sfmMult < 1.0 && customer.sfm != null && customer.feed_ipm != null;
-                  const firstSfm = showFirstPass ? customer.sfm * sc.sfmMult : null;
-                  const firstRpm = showFirstPass && customer.diameter ? (firstSfm! * 12) / (Math.PI * customer.diameter) : null;
-                  const firstIpm = showFirstPass && customer.rpm
-                    ? customer.feed_ipm * sc.iptMult * (firstRpm! / customer.rpm)
+                  const skinSfmMult = sc ? effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value) : 1.0;
+                  // Show the first/skim pass row when EITHER the SFM or the IPT is reduced. (When
+                  // HRC gates off the SFM derate, IPT ×0.60 still differentiates the skim pass.)
+                  const showFirstPass = sc && (skinSfmMult < 1.0 || sc.iptMult < 1.0) && customer.sfm != null && customer.feed_ipm != null;
+                  const skimSfm = showFirstPass ? customer.sfm * skinSfmMult : null;
+                  const skimRpm = showFirstPass && customer.diameter ? (skimSfm! * 12) / (Math.PI * customer.diameter) : null;
+                  const skimIpm = showFirstPass && customer.rpm
+                    ? customer.feed_ipm * sc.iptMult * (skimRpm! / customer.rpm)
                     : null;
+                  // Stay-in-case (e.g. a light-WOC wall finish): the reduced case numbers apply to
+                  // EVERY pass, so they become the headline and steady-state drops to "if into core".
+                  // Cuts-to-core: steady-state leads, reduced numbers are the "first skim pass" subtext.
+                  const stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && showFirstPass;
+                  const headSfm = stayInSkin ? skimSfm : customer.sfm;
+                  const headRpm = stayInSkin ? skimRpm : customer.rpm;
+                  const headIpm = stayInSkin ? skimIpm : customer.feed_ipm;
+                  const subSfm = stayInSkin ? customer.sfm : skimSfm;
+                  const subRpm = stayInSkin ? customer.rpm : skimRpm;
+                  const subIpm = stayInSkin ? customer.feed_ipm : skimIpm;
+                  const subLabel = stayInSkin ? "if cut breaks into core" : "first skim pass";
+                  // Only show the secondary line in the cuts-to-core case (skimRpm != null), or
+                  // when staying in skin (then it's the steady-state "if into core" hint).
+                  const showSub = showFirstPass;
                   return (
                     <>
                       {/* SFM — full-width row: value on the left, speed-preset
@@ -13844,10 +13938,10 @@ ${stabSection}
                               )}
                             </div>
                             <div className="mt-1 text-lg font-bold leading-tight">
-                              {UC(customer.sfm, 0.3048, metric ? 1 : 0)}
-                              {firstSfm != null && (
+                              {UC(headSfm, 0.3048, metric ? 1 : 0)}
+                              {showSub && subSfm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(firstSfm, 0.3048, metric ? 1 : 0)} first skim pass
+                                  {UC(subSfm, 0.3048, metric ? 1 : 0)} {subLabel}
                                 </span>
                               )}
                             </div>
@@ -13915,10 +14009,10 @@ ${stabSection}
                         hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting."
                         value={
                           <>
-                            {fmtInt(customer.rpm)}
-                            {firstRpm != null && (
+                            {fmtInt(headRpm)}
+                            {showSub && subRpm != null && (
                               <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {fmtInt(firstRpm)} first skim pass
+                                {fmtInt(subRpm)} {subLabel}
                               </span>
                             )}
                           </>
@@ -13934,15 +14028,15 @@ ${stabSection}
                             </span>
                           ) : (
                             <span>
-                              {UC(customer.feed_ipm, 25.4, metric ? 1 : 2)}
+                              {UC(headIpm, 25.4, metric ? 1 : 2)}
                               {customer.status ? (
                                 <span className="ml-1 text-xs font-normal text-muted-foreground">
                                   {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
                                 </span>
                               ) : null}
-                              {firstIpm != null && (
+                              {showSub && subIpm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(firstIpm, 25.4, metric ? 1 : 2)} first skim pass
+                                  {UC(subIpm, 25.4, metric ? 1 : 2)} {subLabel}
                                 </span>
                               )}
                             </span>
@@ -14507,13 +14601,21 @@ ${stabSection}
               {/* Stock Condition advisory — first-pass guidance for forged / cast / case-hardened / etc. */}
               {(() => {
                 const sc = STOCK_CONDITION_INFO[form.stock_condition];
-                if (!sc || sc.sfmMult >= 1.0 || !sc.note) return null;
+                if (!sc || !sc.note) return null;
+                const skinSfmMult = effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value);
+                // Nothing to show if neither speed nor feed is actually reduced.
+                if (skinSfmMult >= 1.0 && sc.iptMult >= 1.0) return null;
+                const stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin";
+                const sfmGated = form.stock_condition === "case_hard" && form.hardness_value > 0 && sc.sfmMult < 1.0;
                 return (
                   <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-                    <div className="font-semibold text-amber-300 mb-0.5">⚠ {sc.short} — first-pass adjustment</div>
+                    <div className="font-semibold text-amber-300 mb-0.5">⚠ {sc.short} — {stayInSkin ? "in-case parameters" : "first-pass adjustment"}</div>
                     <div className="text-amber-200/90 leading-relaxed">{sc.note}</div>
                     <div className="text-[10px] text-amber-300/70 mt-1">
-                      First pass: SFM × {sc.sfmMult.toFixed(2)} · IPT × {sc.iptMult.toFixed(2)}. Steady-state values above apply once past the skin.
+                      {stayInSkin
+                        ? <>Staying in the case: SFM × {skinSfmMult.toFixed(2)} · IPT × {sc.iptMult.toFixed(2)} applies to <span className="font-semibold">every pass</span> — the headline speed above is the in-case number. There is no steady-state core pass.</>
+                        : <>First pass: SFM × {skinSfmMult.toFixed(2)} · IPT × {sc.iptMult.toFixed(2)}. Use these reduced numbers for any cut in the hard skin; the steady-state values above apply only once the cut is fully past it (in the soft core).</>}
+                      {sfmGated && <span className="block mt-0.5 text-amber-400/70">SFM not further derated — your {form.hardness_value} HRC case hardness already sets the in-case speed.</span>}
                     </div>
                   </div>
                 );
