@@ -957,6 +957,35 @@ const HRB_HB: [number, number][] = [
   [92,178],[94,188],[96,198],[98,207],[100,217],[102,228],[105,248],
 ];
 
+// Rockwell Superficial (diamond Brale) ↔ HRC — ASM Hardness Testing 1987 / ASTM E140.
+// Stored as [superficial, HRC] pairs (ascending superficial) so a superficial reading
+// converts straight to HRC via interp(). Used for thin case-hardened / nitrided parts
+// where a standard HRC diamond would punch through the case and read false-low, so the
+// print specs the case on a superficial scale (15N most common; 30N/45N for deeper cases).
+const HR15N_HRC: [number, number][] = [
+  [69.6,20.3],[76.2,32.2],[77.4,34.4],[78.6,36.6],[79.8,38.8],[80.8,40.8],
+  [81.4,41.8],[82.3,43.6],[83.2,45.3],[84.3,47.7],[85.0,49.1],[86.0,51.1],
+  [86.9,53.0],[87.8,54.7],[88.5,56.3],[89.0,57.3],[89.5,58.3],[90.3,60.1],
+  [90.7,61.0],[91.2,62.5],[91.8,64.0],[92.3,65.3],[92.7,66.4],[92.9,67.0],[93.2,68.0],
+];
+const HR30N_HRC: [number, number][] = [
+  [41.7,20.3],[52.3,32.2],[54.4,34.4],[56.4,36.6],[58.4,38.8],[60.2,40.8],
+  [61.1,41.8],[62.7,43.6],[64.3,45.3],[66.4,47.7],[67.7,49.1],[69.5,51.1],
+  [71.2,53.0],[72.7,54.7],[74.2,56.3],[75.1,57.3],[75.9,58.3],[77.6,60.1],
+  [78.4,61.0],[79.7,62.5],[81.1,64.0],[82.2,65.3],[83.1,66.4],[83.6,67.0],[84.4,68.0],
+];
+const HR45N_HRC: [number, number][] = [
+  [19.9,20.3],[33.9,32.2],[36.5,34.4],[39.1,36.6],[41.7,38.8],[44.1,40.8],
+  [45.3,41.8],[47.4,43.6],[49.4,45.3],[52.2,47.7],[53.9,49.1],[56.2,51.1],
+  [58.6,53.0],[60.5,54.7],[62.4,56.3],[63.5,57.3],[64.7,58.3],[66.7,60.1],
+  [67.7,61.0],[69.4,62.5],[71.0,64.0],[72.2,65.3],[73.6,66.4],[74.2,67.0],[75.4,68.0],
+];
+// Carburized/nitrided low-alloy cases physically top out ~62-63 HRC. Superficial
+// readings near the top of scale convert to HRC values ABOVE that ceiling — the
+// conversion is mathematically valid but metallurgically impossible for a real case.
+// Flag when a superficial input lands past this so users don't run a HRC-80 artifact.
+const CASE_HARDNESS_CEILING_HRC = 63;
+
 function interp(table: [number, number][], x: number): number | null {
   if (x < table[0][0] || x > table[table.length - 1][0]) return null;
   for (let i = 0; i < table.length - 1; i++) {
@@ -975,18 +1004,28 @@ function invertInterp(table: [number, number][], y: number): number | null {
 }
 
 function HardnessTensile() {
-  const [scale, setScale] = React.useState<"HRC"|"HRB"|"HB"|"HV">("HRC");
+  const [scale, setScale] = React.useState<"HRC"|"HRB"|"HB"|"HV"|"HR15N"|"HR30N"|"HR45N">("HRC");
   const [val,   setVal]   = React.useState("");
   const [mat,   setMat]   = React.useState<"steel"|"aluminum"|"cast_iron">("steel");
 
   const v = n(val);
+  // Superficial scales convert to HRC first, then HRC→HB feeds the rest of the chain.
+  let hrcFromSuperficial: number | null = null;
+  if (v > 0) {
+    if (scale === "HR15N") hrcFromSuperficial = interp(HR15N_HRC, v);
+    if (scale === "HR30N") hrcFromSuperficial = interp(HR30N_HRC, v);
+    if (scale === "HR45N") hrcFromSuperficial = interp(HR45N_HRC, v);
+  }
   let hb: number | null = null;
   if (v > 0) {
     if (scale === "HB")  hb = v;
     if (scale === "HV")  hb = v / 1.05;            // approx HV ≈ HB × 1.05 for steel
     if (scale === "HRC") hb = interp(HRC_HB, v);
     if (scale === "HRB") hb = interp(HRB_HB, v);
+    if (hrcFromSuperficial != null) hb = interp(HRC_HB, hrcFromSuperficial);
   }
+  // Superficial reading whose HRC equivalent exceeds the carburized/nitrided case ceiling.
+  const caseCeilingHit = hrcFromSuperficial != null && hrcFromSuperficial > CASE_HARDNESS_CEILING_HRC;
 
   const hrc = hb ? invertInterp(HRC_HB, hb) : null;
   const hrb = hb ? invertInterp(HRB_HB, hb) : null;
@@ -1022,7 +1061,10 @@ function HardnessTensile() {
   }
   const uts_mpa = uts_ksi ? uts_ksi * 6.895 : null;
 
-  const scales = ["HRC","HRB","HB","HV"] as const;
+  const scales = ["HRC","HRB","HB","HV","HR15N","HR30N","HR45N"] as const;
+  const scaleLabel: Record<typeof scales[number], string> = {
+    HRC: "HRC", HRB: "HRB", HB: "HB", HV: "HV", HR15N: "15N", HR30N: "30N", HR45N: "45N",
+  };
   const mats: { key: typeof mat; label: string; outOfRangeHint: string }[] = [
     { key: "steel",     label: "Steel",     outOfRangeHint: "Steel correlation covers ~120–650 HB." },
     { key: "aluminum",  label: "Aluminum",  outOfRangeHint: "Aluminum UTS correlation only valid ~30–150 HB (annealed → 7075-T6). Above that you're in steel territory." },
@@ -1032,18 +1074,39 @@ function HardnessTensile() {
   return (
     <CalcCard title="Hardness ↔ Tensile Strength" category="Materials" titleHint="Cross-reference HRC, HB, HV, and tensile strength. Handy when the print spec and your tester don't match units." onClear={() => { setVal(""); }}>
       <p className="text-[10px] text-gray-500 -mt-1">
-        Converts between hardness scales and estimates UTS. Steel values per ASTM E140.
+        Converts between hardness scales (incl. 15N/30N/45N superficial) and estimates UTS. Steel values per ASTM E140.
       </p>
-      <div className="flex gap-1">
-        {scales.map((s) => (
+      {(() => {
+        const bulk = ["HRC","HRB","HB","HV"] as const;
+        const superficial = ["HR15N","HR30N","HR45N"] as const;
+        const Btn = (s: typeof scales[number]) => (
           <button key={s} type="button" onClick={() => setScale(s)}
-            className="flex-1 rounded py-1.5 text-[11px] font-semibold border transition-all"
+            className="min-w-[44px] flex-1 rounded py-1.5 text-[11px] font-semibold border transition-all"
             style={{ background: scale === s ? "#a78bfa" : "transparent", borderColor: "#a78bfa", color: scale === s ? "#fff" : "#a78bfa" }}>
-            {s}
+            {scaleLabel[s]}
           </button>
-        ))}
-      </div>
-      <Row label={`Enter ${scale}`}><NumIn value={val} onChange={setVal} unit={scale} placeholder={scale === "HRC" ? "40" : scale === "HRB" ? "90" : scale === "HV" ? "400" : "380"} /></Row>
+        );
+        return (
+          <div className="flex items-stretch gap-2">
+            {/* Standard bulk-hardness scales */}
+            <div className="flex flex-1 gap-1">{bulk.map(Btn)}</div>
+            {/* Superficial scales — visually separated: they read on a different (diamond,
+                low-load) test for thin case-hardened / nitrided surfaces, not interchangeable
+                with the bulk scales above. */}
+            <div className="relative flex gap-1 rounded-md border border-dashed border-amber-500/60 bg-amber-500/[0.04] px-1.5 pt-2.5 pb-1">
+              <span className="absolute -top-2 left-1.5 px-1 text-[8px] font-bold uppercase tracking-wider text-amber-400" style={{ background: "#16213e" }}>Superficial</span>
+              {superficial.map(Btn)}
+            </div>
+          </div>
+        );
+      })()}
+      <p className="text-[9px] text-gray-500 -mt-1">15N / 30N / 45N = Rockwell Superficial (diamond) — the scales prints use for thin case-hardened &amp; nitrided cases.</p>
+      <Row label={`Enter ${scaleLabel[scale]}`}><NumIn value={val} onChange={setVal} unit={scaleLabel[scale]} placeholder={scale === "HRC" ? "40" : scale === "HRB" ? "90" : scale === "HV" ? "400" : scale === "HB" ? "380" : scale === "HR15N" ? "90" : scale === "HR30N" ? "78" : "68"} /></Row>
+      {caseCeilingHit && (
+        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[10px] leading-snug text-amber-300">
+          ⚠ This superficial reading converts to <span className="font-semibold">HRC {hrcFromSuperficial!.toFixed(0)}</span>, above the ~{CASE_HARDNESS_CEILING_HRC} HRC ceiling a carburized/nitrided case can physically reach. Near the top of the superficial scale the conversion is a math artifact — for machining, treat the real case as <span className="font-semibold">~58–62 HRC</span>.
+        </div>
+      )}
 
       {hb && <>
         <div className="border-t border-[#2d2d4a] pt-2 space-y-1.5">
