@@ -2973,9 +2973,15 @@ export default function Mentor() {
   const [tmQuoteSending, setTmQuoteSending] = React.useState(false);
   const [tmQuoteSent, setTmQuoteSent] = React.useState(false);
 
-  // Keep WOC/DOC inch displays in sync when diameter changes (skip if no dia yet)
+  // Keep WOC/DOC inch displays in sync when diameter ACTUALLY changes (skip if no dia yet).
+  // Guard against same-value re-fires: other effects (e.g. the PDF/tool effect) re-set
+  // form.tool_dia to its current value on re-render, which would otherwise repaint wocText
+  // from the stale form.woc_pct and stomp an in-progress manual WOC edit before it blurs.
+  const lastSyncedDiaRef = React.useRef<number | null>(null);
   React.useEffect(() => {
     if (!form.tool_dia) return;
+    if (lastSyncedDiaRef.current === form.tool_dia) return; // dia unchanged — don't clobber manual edits
+    lastSyncedDiaRef.current = form.tool_dia;
     if (form.woc_pct) setWocText(((form.woc_pct / 100) * form.tool_dia).toFixed(4));
     if (form.doc_xd) setDocText((form.doc_xd * form.tool_dia).toFixed(3));
   }, [form.tool_dia]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -10557,7 +10563,11 @@ ${stabSection}
                           if (Number.isFinite(n) && n > 0 && dia > 0) {
                             // Treat as percent if user typed "%", or value is clearly a percent (>=1)
                             const pct = hasPercent || n >= 1 ? n : (n / dia) * 100;
-                            const clamped = Math.max(5, Math.min(35, pct));
+                            // Finishing is a deliberate light pass (app target 1–5% WOC), so allow
+                            // sub-5% radial. Roughing/HEM keep the 5% floor — there a too-light
+                            // WOC just rubs. Chip-thickness "✓ Cutting" indicator still flags rubbing.
+                            const wocFloor = form.mode === "finish" ? 1 : 5;
+                            const clamped = Math.max(wocFloor, Math.min(35, pct));
                             setForm((p) => ({ ...p, woc_pct: clamped }));
                             setWocText(((clamped / 100) * dia).toFixed(4));
                             setWocPreset(null);
@@ -10648,8 +10658,10 @@ ${stabSection}
                     if (Number.isFinite(n) && n > 0) {
                       // % or integer (≥1) → treat as percent; decimal (<1, no %) → treat as inches
                       let pct = (hasPercent || n >= 1) ? n : (n / dia) * 100;
-                      // Finish mode: floor at 3% WOC — below this chip thinning causes rubbing not cutting
-                      if (form.mode === "finish" && pct < 3) pct = 3;
+                      // Finish mode: floor at 1% WOC. Finishing is a deliberate light pass
+                      // (app target 1–5% WOC) and case-skim work needs sub-3% radial. The
+                      // chip-thickness "✓ Cutting" indicator still flags if you go into rubbing.
+                      if (form.mode === "finish" && pct < 1) pct = 1;
                       setForm((p) => ({ ...p, woc_pct: pct }));
                       setWocText(((pct / 100) * dia).toFixed(4));
                       setWocPreset(null);
