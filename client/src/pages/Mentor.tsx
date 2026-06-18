@@ -6266,7 +6266,12 @@ ${stabSection}
               const hRange = MATERIAL_HARDNESS_RANGE[form.material];
               const hVal = form.hardness_value;
               const wrongScale = hRange && hVal > 0 && form.hardness_scale !== hRange.scale;
-              const outOfRange = hRange && hVal > 0 && !wrongScale && (hVal < hRange.min || hVal > hRange.max);
+              // Case-hardened (carburized) parts carry a 58-64 HRC skin over a soft core.
+              // The HRC field describes the SKIN here, so an "above the bulk range" value is
+              // expected, not an error — suppress the out-of-range warning + sibling-switch
+              // nudge so we don't tell the user to swap to a different (through-hardened) material.
+              const caseHardened = form.stock_condition === "case_hard";
+              const outOfRange = hRange && hVal > 0 && !wrongScale && !caseHardened && (hVal < hRange.min || hVal > hRange.max);
               return (
                 <>
                   <div className="mt-3 flex items-center gap-2">
