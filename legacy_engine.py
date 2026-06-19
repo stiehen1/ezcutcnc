@@ -1145,6 +1145,38 @@ def hardened_sfm_absolute(hrc: float) -> float:
     return max(60.0, 90.0 - 4.0 * (hrc - 60))
 
 
+def hardness_life_mult(hrc: float) -> float:
+    """Tool-life multiplier as a function of workpiece hardness (HRC).
+
+    The base Taylor-style life model (SFM ratio × chip ratio off BASE_LIFE_MIN) has
+    NO hardness term, so on a soft-steel base key (e.g. steel_alloy) a 60+ HRC cut
+    reports soft-steel life — wildly optimistic. Hard milling life is dominated by
+    abrasion + edge chipping that scale steeply with hardness, not by the SFM/chip
+    ratios. This derate brings predicted life into a realistic band for carbide:
+      ≤40 HRC → 1.0 (no derate; pre-hard / soft)
+      45 HRC  → ~0.75
+      50 HRC  → ~0.50
+      55 HRC  → ~0.30
+      60 HRC  → ~0.18  (carbide is marginal here; CBN territory begins)
+      ≥62 HRC → ~0.12 floor (carbide life is short and erratic; estimate only)
+    Anchored to the rule of thumb that carbide life roughly halves per ~5 HRC in the
+    hard range. Tune the anchors with shop data as it comes in.
+    """
+    hrc = float(hrc or 0)
+    if hrc <= 40:
+        return 1.0
+    if hrc <= 45:
+        return 1.0 - (1.0 - 0.75) * (hrc - 40) / 5.0     # 1.0 → 0.75
+    if hrc <= 50:
+        return 0.75 - (0.75 - 0.50) * (hrc - 45) / 5.0   # 0.75 → 0.50
+    if hrc <= 55:
+        return 0.50 - (0.50 - 0.30) * (hrc - 50) / 5.0   # 0.50 → 0.30
+    if hrc <= 60:
+        return 0.30 - (0.30 - 0.18) * (hrc - 55) / 5.0   # 0.30 → 0.18
+    # ≥60 HRC: keep falling, floor at 0.12 (carbide marginal; CBN is the real answer)
+    return max(0.12, 0.18 - 0.03 * (hrc - 60))
+
+
 # ── Powder Metal (PM) modifier ────────────────────────────────────────────────
 # PM is a MODIFIER on top of the base material (316, 4140, 17-4, etc.), not its
 # own material. Density is the primary driver: porous low-density grades cut with
@@ -4525,11 +4557,59 @@ def run(payload=None):
     _wh_feed_mult = max(0.70, min(1.05, 1.0 / _wh_factor_feed))
     ipt *= _wh_feed_mult
     # Surfacing: chip thinning based on stepover vs D_eff; otherwise standard woc_pct vs diameter
-    # Finish mode: chip thinning NOT applied — thinner chip is intentional for surface quality;
-    # boosting feed to compensate defeats the purpose and degrades finish.
+    # Finish mode: we do NOT boost feed to chase a target chip load (a thinner chip is
+    # intentional for surface quality). BUT radial chip thinning is geometry, not a
+    # quality choice — at low WOC the chip each tooth bites is thinned below the
+    # programmed FPT regardless of intent. If it falls below the material's minimum
+    # chip thickness the edge rubs/plows instead of cutting, which work-hardens the
+    # surface and *degrades* the finish (the opposite of the goal). So in finish mode
+    # we apply ONLY enough thinning compensation to keep the actual chip at the
+    # minimum-chip floor — never more (so we don't over-feed and hurt finish), never
+    # less (so the tool never rubs). See _finish_min_chip_note below for the UI flag.
     _base_ipt_before_ct = ipt  # preserve for micro-tool limiter
+    _finish_min_chip_note = None
     if mode == "finish":
         chip_factor = 1.0
+        _ct_thin = chip_thinning_factor(data["woc_pct"], data["diameter"])
+        if _ct_thin > 1.0:  # WOC < 50% → radial thinning is active
+            # Actual chip the tooth currently bites at programmed FPT (ipt here is the
+            # programmed value before any thinning comp): h_actual = ipt / _ct_thin.
+            _h_actual = ipt / _ct_thin
+            _hmin = minimum_chip_thickness(material_group)
+            _h_floor = _hmin * 1.05  # match effective_chip_thickness() floor
+            if _h_actual < _h_floor:
+                # Raise programmed FPT enough to bring the ACTUAL chip up to the floor.
+                # comp = _h_floor / _h_actual  ⇒  new actual chip = _h_floor exactly.
+                # We do NOT cap at full thinning recovery here: at very low WOC the chip
+                # is thinned so hard that the base calibrated finish FPT alone can't reach
+                # the floor, and leaving the edge below it means rubbing — which is what
+                # ruins the finish on hardened steel. Feeding to the floor is the only way
+                # to get the edge cutting. The WOC advisory below tells the operator the
+                # cleaner long-term fix (more radial engagement → healthier chip, lower feed).
+                _finish_comp = _h_floor / _h_actual
+                chip_factor = _finish_comp
+                # Advisory WOC: the radial engagement where the chip thins LESS, so the
+                # feed-up needed to reach the floor is modest (target ≤1.5×) rather than
+                # the extreme multiple required at very low WOC. Solve for the RCTF that
+                # makes base_fpt × 1.5 reach the floor: RCTF = (base_fpt×1.5)/_h_floor,
+                # then ae/D = (1 - cos(asin(RCTF)))/2. Capped at a realistic finishing
+                # ceiling (25%×D) — beyond that it's roughing, not a finish pass.
+                _target_comp = 1.5
+                _rctf_target = min(1.0, (_base_ipt_before_ct * _target_comp) / _h_floor)
+                _ae_over_d = (1.0 - math.cos(math.asin(_rctf_target))) / 2.0
+                _ae_over_d = min(0.25, _ae_over_d)  # cap at 25%×D (finishing ceiling)
+                _woc_healthy_in = _ae_over_d * float(data["diameter"])
+                _woc_in_disp = (data["woc_pct"] / 100.0) * float(data["diameter"])
+                _finish_min_chip_note = (
+                    f"Finish pass at {data['woc_pct']:.1f}% WOC "
+                    f"({_woc_in_disp:.4f}\") thins the chip to {_h_actual*1000:.2f} thou — "
+                    f"below the {_h_floor*1000:.2f} thou minimum for this material. "
+                    f"Feed raised {_finish_comp:.1f}× so the actual chip reaches the floor "
+                    f"and the edge cuts instead of rubbing (rubbing work-hardens the case "
+                    f"and worsens Ra). For a healthier chip at a calmer feed, open the WOC "
+                    f"toward {_woc_healthy_in:.3f}\" (~{_ae_over_d*100:.0f}%×D) if the part allows it."
+                )
+                print(f"⚠ {_finish_min_chip_note}")
     elif mode == "surfacing" and _surf_d_eff and _surf_stepover_in:
         _surf_ae_pct = (_surf_stepover_in / _surf_d_eff) * 100.0
         chip_factor = chip_thinning_factor(_surf_ae_pct, _surf_d_eff)
@@ -5955,6 +6035,48 @@ def run(payload=None):
         _life_runout_factor = _ro_life(_user_tir)
         tool_life_min *= _life_runout_factor
 
+    # ── Hardness life derate + hard-milling honesty flag ──────────────────────
+    # The Taylor-style life model above has no hardness term, so a hard cut on a
+    # soft-steel base key (e.g. steel_alloy @ 62 HRC) reports soft-steel life. Apply
+    # a hardness-driven derate (see hardness_life_mult) so high-HRC life lands in a
+    # realistic carbide band. Skip the named tool-steel/hardened keys whose
+    # BASE_LIFE_MIN already encodes their hardness (avoid double-derating); apply to
+    # the generic steel group where the base is the soft value. _life_estimate_note
+    # is appended to _cc_notes for the UI.
+    _life_estimate_note = None
+    _life_hrc = float(data.get("hardness_hrc", 0) or 0)
+    # Keys whose BASE_LIFE_MIN already reflects (some) hardness. For the generic
+    # hardened keys we still let HRC move life WITHIN their band, but renormalized so
+    # their reference hardness = 1.0 (no double-derate): hardened_gt55's base assumes
+    # ~55 HRC, hardened_lt55's assumes ~45 HRC. tool_steel_* bases are grade-specific
+    # at their as-supplied hardness, so leave them flat.
+    if _life_hrc > 40:
+        if _mat_key == "hardened_gt55":
+            _ref = hardness_life_mult(55.0)
+            tool_life_min *= hardness_life_mult(_life_hrc) / _ref if _ref > 0 else 1.0
+        elif _mat_key == "hardened_lt55":
+            _ref = hardness_life_mult(45.0)
+            tool_life_min *= hardness_life_mult(_life_hrc) / _ref if _ref > 0 else 1.0
+        elif not _mat_key.startswith("tool_steel_"):
+            tool_life_min *= hardness_life_mult(_life_hrc)
+    # Rubbing penalty: if the actual chip is below the material min-chip floor the
+    # edge plows instead of cutting — a real life killer the SFM/chip ratios (chip
+    # ratio is clamped ≥0.5) can't see. Cut predicted life proportionally to how far
+    # under the floor we are (down to 0.5×).
+    _life_hmin = float(state.get("hmin", 0.0) or 0.0)
+    if _life_hmin > 0 and chip_t > 0 and chip_t < _life_hmin * 1.05:
+        _rub_life_factor = max(0.5, chip_t / (_life_hmin * 1.05))
+        tool_life_min *= _rub_life_factor
+    # Honesty flag for hard milling — carbide life above ~55 HRC is short and erratic;
+    # above ~60 HRC CBN is usually the right tool. Flag regardless of base key.
+    if _life_hrc >= 55:
+        _cbn = " Above ~60 HRC, CBN typically outlasts carbide and is the usual choice." if _life_hrc >= 60 else ""
+        _life_estimate_note = (
+            f"Tool-life estimate at {_life_hrc:.0f} HRC is approximate — hard-milling life "
+            f"is dominated by abrasive edge wear and micro-chipping, which this model only "
+            f"approximates. Treat the minutes as a ballpark and verify on your first tool.{_cbn}"
+        )
+
     hp_required = (force_lbf * sfm_actual) / 33000.0 if (force_lbf > 0 and sfm_actual > 0) else 0.0
     # --- HP Required (cutting power estimate) ---
     force_val = float(locals().get("force_lbf", locals().get("force", 0.0)) or 0.0)
@@ -6837,6 +6959,17 @@ def run(payload=None):
     _cc_notes  = []
     _cc_risk   = None
     _cb_upgrade = None  # populated when chipbreaker upgrade advisory fires
+    # Finish-mode minimum-chip-thickness compensation note (set far upstream when a
+    # low-WOC finish pass thinned the chip below the rubbing floor and feed was raised).
+    if locals().get("_finish_min_chip_note"):
+        _cc_notes.append(f"⚠ {_finish_min_chip_note}")
+        if _cc_risk is None:
+            _cc_risk = "warning"
+    # Hard-milling tool-life honesty flag (set in the life calc when HRC ≥ 55).
+    if locals().get("_life_estimate_note"):
+        _cc_notes.append(f"ℹ {_life_estimate_note}")
+        if _cc_risk is None:
+            _cc_risk = "info"
     _fl_cc     = int(data.get("flutes", 4) or 4)
     _woc_pct_cc = float(data.get("woc_pct", 0) or 0)
     _doc_xd_cc  = float(data.get("doc_xd", 1.0) or 1.0)
@@ -7663,6 +7796,11 @@ def run(payload=None):
                 else locals().get("deflection", 0.0)
             ),
             "chip_thickness_in": float(chip_t),
+            # Minimum chip thickness floor for this material (in). Below this the edge
+            # rubs/plows instead of cutting. Exposed so client surfaces (live panel,
+            # text summary, PDF/HTML export) can floor-clamp the case-hard IPT derate
+            # consistently — a derated chip must never drop below this on a finish pass.
+            "min_chip_in": float(state.get("hmin", 0.0) or 0.0),
             "chatter_index": locals().get("chatter_index", 0.0),
             "teeth_in_cut": (
                 round(float(_circ_avg_teeth), 2)

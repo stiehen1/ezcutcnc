@@ -275,6 +275,7 @@ export const mentorSchemas = {
       torque_pct: z.number().nullable().optional(),
       deflection_in: z.number().optional(),
       chip_thickness_in: z.number().optional(),
+      min_chip_in: z.number().optional(),
       chatter_index: z.number().optional(),
       teeth_in_cut: z.number().optional(),
       helix_wrap_deg: z.number().nullable().optional(),

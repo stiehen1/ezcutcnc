@@ -738,6 +738,42 @@ function effectiveSkinSfmMult(sc: { sfmMult: number }, stockKey: string, hardnes
   return sc.sfmMult;
 }
 
+// Floor-aware case-hard / stock-condition IPT derate.
+//
+// The stock-condition iptMult (e.g. case_hard ×0.60) is an abrasive-skin chip-load
+// reduction. But on a low-WOC finish pass the chip is ALSO radially thinned, and
+// stacking the derate on top can drop the ACTUAL chip below the material's minimum
+// chip thickness — at which point the edge rubs/plows instead of cutting, which
+// work-hardens the case and *worsens* Ra (the opposite of the goal). This clamps the
+// effective iptMult so the resulting actual chip never falls below the engine-supplied
+// min-chip floor. Returns the floored skin IPM, the effective mult used, and whether
+// the floor was binding (so callers can surface a note). minChipIn / actualChipFull
+// come from the engine result (engineering.min_chip_in / customer.adj_fpt×RCTF) — keeping
+// one source of truth and avoiding a duplicated min-chip table on the client.
+function flooredSkinIpm(args: {
+  baseFeedIpm: number;        // engine feed_ipm (un-derated)
+  iptMult: number;            // stock-condition iptMult (e.g. 0.60)
+  rpmRatio: number;           // skinRpm / rpm
+  actualChipFull: number | null; // actual chip at full (un-derated) feed = adj_fpt × RCTF
+  minChipIn: number | null;   // engine min-chip floor for this material
+}): { ipm: number; effMult: number; floored: boolean } {
+  const { baseFeedIpm, iptMult, rpmRatio, actualChipFull, minChipIn } = args;
+  let effMult = iptMult;
+  let floored = false;
+  // Only clamp when we have both numbers and the derate would push actual chip under floor.
+  if (actualChipFull != null && actualChipFull > 0 && minChipIn != null && minChipIn > 0) {
+    const floor = minChipIn * 1.05;            // mirror engine effective_chip_thickness() floor
+    const deratedChip = actualChipFull * iptMult;
+    if (deratedChip < floor) {
+      // Raise the mult just enough to keep the actual chip at the floor (cap at 1.0 —
+      // never feed harder than the un-derated value).
+      effMult = Math.min(1.0, floor / actualChipFull);
+      floored = true;
+    }
+  }
+  return { ipm: baseFeedIpm * effMult * rpmRatio, effMult, floored };
+}
+
 // Applicability per ISO group — dimmed when not in the set.
 // Empty / missing ISO => show everything (no narrowing yet).
 const STOCK_APPLICABILITY: Record<string, ReadonlySet<StockConditionKey>> = {
@@ -3942,9 +3978,17 @@ export default function Mentor() {
     const _scActive = !!_scInfo && (_skinSfmMult < 1.0 || _scInfo.iptMult < 1.0);
     const _skinSfm = _scActive && mil?.sfm != null ? mil.sfm * _skinSfmMult : null;
     const _skinRpm = _skinSfm != null && form.tool_dia > 0 ? (_skinSfm * 12) / (Math.PI * form.tool_dia) : null;
-    const _skinIpm = _scActive && mil?.feed_ipm != null && mil?.rpm && _skinRpm != null
-      ? mil.feed_ipm * _scInfo.iptMult * (_skinRpm / mil.rpm)
+    // Full (un-derated) actual chip = adj_fpt × RCTF — the chip before the stock-condition derate.
+    const _pdfCtf = form.woc_pct > 0 ? Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))) : 1.0;
+    const _pdfActualChipFull = mil?.adj_fpt != null ? mil.adj_fpt * _pdfCtf : null;
+    const _skinClamp = (_scActive && mil?.feed_ipm != null && mil?.rpm && _skinRpm != null)
+      ? flooredSkinIpm({
+          baseFeedIpm: mil.feed_ipm, iptMult: _scInfo!.iptMult, rpmRatio: _skinRpm / mil.rpm,
+          actualChipFull: _pdfActualChipFull, minChipIn: eng?.min_chip_in ?? null,
+        })
       : null;
+    const _skinIpm = _skinClamp ? _skinClamp.ipm : null;
+    const _skinFloored = _skinClamp?.floored ?? false;
     // Stay-in-skin: the in-case numbers ARE the running values, so the PDF leads with them
     // and demotes steady-state to "if into core". Otherwise steady-state leads and the
     // reduced numbers are the "first skim pass" subtext.
@@ -3969,7 +4013,13 @@ export default function Mentor() {
         ${kpiBox("Feed (IPM)", _headIpm != null ? _headIpm.toFixed(2) + (_subIpm != null ? `<br><span style='font-size:10px;color:#b45309;'>${_subIpm.toFixed(2)} ${_subLabel}</span>` : "") : null)}
         ${kpiBox("FPT (in)", mil.fpt != null ? mil.fpt.toFixed(5) : null)}
         ${kpiBox(form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)", mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : null)}
-        ${form.tool_type !== "chamfer_mill" && mil.adj_fpt != null && form.woc_pct > 0 ? (() => { const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))); return kpiBox("Act. Chip Thick (in)", (mil.adj_fpt * ctf).toFixed(5)); })() : ""}
+        ${form.tool_type !== "chamfer_mill" && mil.adj_fpt != null && form.woc_pct > 0 ? (() => {
+          // Stay-in-skin: actual chip is the floored skin chip (after the floor-aware
+          // case-hard derate), not the un-derated value. Otherwise show the full chip.
+          const full = (mil.adj_fpt as number) * _pdfCtf;
+          const shown = (_stayInSkin && _skinClamp) ? full * _skinClamp.effMult : full;
+          return kpiBox("Act. Chip Thick (in)", shown.toFixed(5)) + (_skinFloored ? `<div style="font-size:8px;color:#b45309;">at min-chip floor — feed raised to avoid rubbing</div>` : "");
+        })() : ""}
         ${form.mode === "surfacing" && mil.d_eff_in != null ? kpiBox("D_eff (in)", `${mil.d_eff_in.toFixed(4)}" (${((mil.d_eff_in / (form.tool_dia || 0.5)) * 100).toFixed(0)}% of Ø)`) : ""}
         ${form.mode === "surfacing" && mil.scallop_height_in != null ? kpiBox("Scallop Height", `${mil.scallop_height_in.toFixed(6)}" / ${(mil.scallop_height_in * 25400).toFixed(0)} µm`) : ""}
         ${kpiBox(form.mode === "face" ? "Step-Over (in)" : form.mode === "surfacing" ? "Stepover ae (in)" : "WOC (in)", mil.woc_in != null ? `${mil.woc_in.toFixed(4)}" (${((mil.woc_in / (form.tool_dia || 0.5)) * 100).toFixed(1)}%)` : null)}
@@ -4207,7 +4257,7 @@ export default function Mentor() {
           <li>No pre-hole? Use helical interpolation entry in CAM — ramp feed typically 40–50% of lateral feed</li>
         </ul>
       </div>` : ""}
-      ${eng.tool_life_min != null ? `<div style="margin-top:10px;border:1px solid #ccc;border-radius:5px;padding:7px 9px;background:#fafafa;"><div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1;margin-bottom:3px;">Tool Life Prediction</div><p style="font-size:9px;color:#555;margin:0;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.<br/>Spindle-on time in the cut, not hours at the machine — at a typical ~20% spindle duty cycle that's roughly <strong>${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs</strong> of shop time per tool.</p></div>` : ""}
+      ${eng.tool_life_min != null ? `<div style="margin-top:10px;border:1px solid #ccc;border-radius:5px;padding:7px 9px;background:#fafafa;"><div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1;margin-bottom:3px;">Tool Life Prediction</div><p style="font-size:9px;color:#555;margin:0;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.<br/>Spindle-on time in the cut, not hours at the machine — at a typical ~20% spindle duty cycle that's roughly <strong>${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs</strong> of shop time per tool.</p>${form.hardness_value >= 55 ? `<p style="font-size:8px;color:#b45309;margin:4px 0 0;border-top:1px solid #f0d9b5;padding-top:3px;">⚠ Hard milling (${Math.round(form.hardness_value)} HRC): carbide life is dominated by abrasive edge wear and micro-chipping this model only approximates — treat as a ballpark and verify on your first tool.${form.hardness_value >= 60 ? " Above ~60 HRC, CBN typically outlasts carbide and is the usual choice." : ""}</p>` : ""}</div>` : ""}
       ${(() => {
         if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
         const raUin = mil.ra_actual_uin;
@@ -5285,26 +5335,35 @@ ${stabSection}
       // ── SPEEDS & FEEDS ───────────────────────
       lines.push("SPEEDS & FEEDS");
       lines.push(DIV);
+      const _txtSc = STOCK_CONDITION_INFO[form.stock_condition];
+      const _txtSkinSfmMult = _txtSc ? effectiveSkinSfmMult(_txtSc, form.stock_condition, form.hardness_value) : 1.0;
+      const _txtSkinActive = !!_txtSc && (_txtSkinSfmMult < 1.0 || _txtSc.iptMult < 1.0) && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0;
+      const _txtStayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && _txtSkinActive;
+      const _txtCtf = form.woc_pct > 0 ? Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))) : 1.0;
+      const _txtClamp = (() => {
+        if (!_txtSkinActive) return null;
+        const skinSfm = cust.sfm! * _txtSkinSfmMult;
+        const skinRpm = (skinSfm * 12) / (Math.PI * form.tool_dia);
+        const actualChipFull = cust.adj_fpt != null ? cust.adj_fpt * _txtCtf : null;
+        const c = flooredSkinIpm({
+          baseFeedIpm: cust.feed_ipm!, iptMult: _txtSc!.iptMult, rpmRatio: skinRpm / cust.rpm,
+          actualChipFull, minChipIn: eng?.min_chip_in ?? null,
+        });
+        return { ...c, skinSfm, skinRpm };
+      })();
       {
-        const sc = STOCK_CONDITION_INFO[form.stock_condition];
-        const skinSfmMult = sc ? effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value) : 1.0;
-        const skinActive = !!sc && (skinSfmMult < 1.0 || sc.iptMult < 1.0) && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0;
-        const stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && skinActive;
-        const skinSfm = skinActive ? cust.sfm * skinSfmMult : null;
-        const skinRpm = skinSfm != null ? (skinSfm * 12) / (Math.PI * form.tool_dia) : null;
-        const skinIpm = skinSfm != null ? cust.feed_ipm * sc!.iptMult * (skinRpm! / cust.rpm) : null;
         // Stay-in-skin: the in-case numbers ARE the running values — lead with them.
-        const headRpm = stayInSkin ? skinRpm! : cust.rpm;
-        const headSfm = stayInSkin ? skinSfm! : (cust.sfm ?? 0);
-        const headIpm = stayInSkin ? skinIpm! : (cust.feed_ipm ?? 0);
+        const headRpm = _txtStayInSkin ? _txtClamp!.skinRpm : cust.rpm;
+        const headSfm = _txtStayInSkin ? _txtClamp!.skinSfm : (cust.sfm ?? 0);
+        const headIpm = _txtStayInSkin ? _txtClamp!.ipm : (cust.feed_ipm ?? 0);
         lines.push(L("Spindle Speed",  `${Math.round(headRpm).toLocaleString()} RPM`));
         lines.push(L("SFM",            String(Math.round(headSfm))));
         lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${headIpm.toFixed(2)} IPM`));
-        if (skinActive) {
-          if (stayInSkin) {
+        if (_txtSkinActive && _txtClamp) {
+          if (_txtStayInSkin) {
             lines.push(L("  If into core",  `${Math.round(cust.rpm).toLocaleString()} RPM · ${Math.round(cust.sfm ?? 0)} SFM · ${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
           } else {
-            lines.push(L("  First Pass",  `${Math.round(skinRpm!).toLocaleString()} RPM · ${Math.round(skinSfm!)} SFM · ${skinIpm!.toFixed(2)} IPM  (${sc!.short})`));
+            lines.push(L("  First Pass",  `${Math.round(_txtClamp.skinRpm).toLocaleString()} RPM · ${Math.round(_txtClamp.skinSfm)} SFM · ${_txtClamp.ipm.toFixed(2)} IPM  (${_txtSc!.short})`));
           }
         }
       }
@@ -5318,14 +5377,19 @@ ${stabSection}
           lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
           lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
           if (form.woc_pct > 0) {
-            const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100))));
-            lines.push(L("Act. Chip Thick", `${(cust.adj_fpt * ctf).toFixed(5)}"`));
+            // Stay-in-skin: show the floored skin chip (after the floor-aware case-hard
+            // derate), matching the in-case feed lead. Otherwise the un-derated chip.
+            const full = cust.adj_fpt * _txtCtf;
+            const shown = (_txtStayInSkin && _txtClamp) ? full * _txtClamp.effMult : full;
+            lines.push(L("Act. Chip Thick", `${shown.toFixed(5)}"${(_txtClamp?.floored) ? "  (at min-chip floor — feed raised to avoid rubbing)" : ""}`));
           }
         }
       }
       if (eng?.chip_thickness_in != null) {
         const ct = eng.chip_thickness_in;
-        const minCt = (cust.fpt ?? ct) * 0.30;
+        // Use the engine's actual min-chip floor when available (consistent across surfaces);
+        // fall back to the legacy 30%-of-FPT heuristic only if the engine didn't supply it.
+        const minCt = eng.min_chip_in != null && eng.min_chip_in > 0 ? eng.min_chip_in : (cust.fpt ?? ct) * 0.30;
         const ctStatus = ct >= minCt ? "✓ Cutting" : "⚠ Near rubbing threshold";
         lines.push(L("Chip Thickness",  `${ct.toFixed(5)}"  (min ~${minCt.toFixed(5)}")  ${ctStatus}`));
       }
@@ -5489,6 +5553,11 @@ ${stabSection}
         lines.push(`spindle duty cycle that's roughly ${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs of shop time per tool.`);
         lines.push(`Varies with coating, runout, coolant & machine condition. Estimate only,`);
         lines.push(`not a guarantee from Core Cutter LLC.`);
+        if (form.hardness_value >= 55) {
+          lines.push(`⚠ Hard milling (${Math.round(form.hardness_value)} HRC): carbide life is dominated by`);
+          lines.push(`  abrasive edge wear/micro-chipping this model only approximates — ballpark only,`);
+          lines.push(`  verify on your first tool.${form.hardness_value >= 60 ? " Above ~60 HRC, CBN usually outlasts carbide." : ""}`);
+        }
       }
 
       // Engine advisory notes
@@ -13892,9 +13961,17 @@ ${stabSection}
                   const showFirstPass = sc && (skinSfmMult < 1.0 || sc.iptMult < 1.0) && customer.sfm != null && customer.feed_ipm != null;
                   const skimSfm = showFirstPass ? customer.sfm * skinSfmMult : null;
                   const skimRpm = showFirstPass && customer.diameter ? (skimSfm! * 12) / (Math.PI * customer.diameter) : null;
-                  const skimIpm = showFirstPass && customer.rpm
-                    ? customer.feed_ipm * sc.iptMult * (skimRpm! / customer.rpm)
+                  // Floor-aware case-hard IPT derate: never let the skim chip drop below the
+                  // engine min-chip floor (rubbing). Full actual chip = adj_fpt × RCTF.
+                  const _liveCtf = form.woc_pct > 0 ? Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))) : 1.0;
+                  const _liveActualChipFull = customer.adj_fpt != null ? customer.adj_fpt * _liveCtf : null;
+                  const _skimClamp = (showFirstPass && customer.rpm && skimRpm != null)
+                    ? flooredSkinIpm({
+                        baseFeedIpm: customer.feed_ipm, iptMult: sc!.iptMult, rpmRatio: skimRpm / customer.rpm,
+                        actualChipFull: _liveActualChipFull, minChipIn: engineering?.min_chip_in ?? null,
+                      })
                     : null;
+                  const skimIpm = _skimClamp ? _skimClamp.ipm : null;
                   // Stay-in-case (e.g. a light-WOC wall finish): the reduced case numbers apply to
                   // EVERY pass, so they become the headline and steady-state drops to "if into core".
                   // Cuts-to-core: steady-state leads, reduced numbers are the "first skim pass" subtext.
@@ -14108,17 +14185,39 @@ ${stabSection}
                 {form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
                   const wocFrac = form.woc_pct / 100;
                   const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocFrac))));
-                  const actualChip = customer.adj_fpt * ctf;
+                  const full = customer.adj_fpt * ctf;
+                  // Stay-in-skin: show the floored skin chip (after the floor-aware case-hard
+                  // derate) — that's what the tool actually bites on the running pass.
+                  const _sc = STOCK_CONDITION_INFO[form.stock_condition];
+                  const _stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin"
+                    && !!_sc && _sc.iptMult < 1.0;
+                  let actualChip = full;
+                  if (_stayInSkin && customer.rpm && customer.sfm != null) {
+                    const _ssfm = customer.sfm * effectiveSkinSfmMult(_sc!, form.stock_condition, form.hardness_value);
+                    const _srpm = (_ssfm * 12) / (Math.PI * customer.diameter);
+                    const _c = flooredSkinIpm({
+                      baseFeedIpm: customer.feed_ipm ?? 0, iptMult: _sc!.iptMult, rpmRatio: _srpm / customer.rpm,
+                      actualChipFull: full, minChipIn: engineering?.min_chip_in ?? null,
+                    });
+                    actualChip = full * _c.effMult;
+                  }
+                  const floor = engineering?.min_chip_in != null && engineering.min_chip_in > 0 ? engineering.min_chip_in * 1.05 : null;
+                  const belowFloor = floor != null && actualChip < floor - 1e-9;
                   return (
                     <Kpi
                       label={UL("Act. Chip Thick (in)", "Act. Chip Thick (mm)")}
-                      hint="Actual chip thickness formed at the cutting edge — programmed Adj FPT × radial chip thinning factor. This is what the tool actually sees. Target: 20–30% of edge radius minimum to avoid rubbing."
+                      hint={`Actual chip thickness formed at the cutting edge — programmed Adj FPT × radial chip thinning factor. This is what the tool actually sees. ${floor != null ? `Minimum for this material ≈ ${floor.toFixed(5)}" — below it the edge rubs/plows instead of cutting, which work-hardens the surface and worsens Ra.` : "Target: 20–30% of edge radius minimum to avoid rubbing."}`}
                       value={
                         <>
-                          {UC(actualChip, 25.4, metric ? 4 : 5)}
+                          <span className={belowFloor ? "text-amber-400" : undefined}>
+                            {UC(actualChip, 25.4, metric ? 4 : 5)}
+                          </span>
                           <span className="ml-1 text-xs font-normal text-muted-foreground">
                             ({fmtNum((actualChip / customer.diameter) * 100, 2)}%×D)
                           </span>
+                          {belowFloor ? (
+                            <span className="ml-1 text-[10px] font-normal text-amber-400">⚠ below min chip — rubbing</span>
+                          ) : null}
                         </>
                       }
                     />
@@ -15218,6 +15317,11 @@ ${stabSection}
                   <div className="text-xs text-muted-foreground">
                     Estimated tool life: <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min, 0)} min ({fmtNum(engineering.tool_life_min / 60, 1)} hrs)</span> of cutting time (varies with coating, runout, coolant conditions, machine tool condition, and toolholder condition). <span className="italic">This is an estimate only and is not a guarantee from Core Cutter.</span>
                     <span className="block mt-0.5 text-muted-foreground/80">This is spindle-on time in the cut — not hours at the machine. At a typical ~20% spindle duty cycle that's roughly <span className="font-medium text-foreground">{fmtNum(engineering.tool_life_min / 60 / 0.20, 1)} hrs</span> of shop time per tool.</span>
+                    {form.hardness_value >= 55 && (
+                      <span className="block mt-1 pt-1 border-t border-amber-500/20 text-amber-300/90">
+                        ⚠ Hard milling ({fmtNum(form.hardness_value, 0)} HRC): carbide life is dominated by abrasive edge wear and micro-chipping, which this model only approximates — treat the minutes as a ballpark and verify on your first tool.{form.hardness_value >= 60 ? " Above ~60 HRC, CBN typically outlasts carbide and is the usual choice." : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
