@@ -4034,7 +4034,7 @@ export default function Mentor() {
           const floorMissed = capped && target > 0 && raUin > target * 1.05;
           const verdict = target <= 0 ? "" : floorMissed ? ` ✗ target ${target} not reachable` : ` ✓ target ${target}`;
           const label = `${raUin.toFixed(1)} µin${verdict}${capped && !floorMissed ? " (feed capped)" : ""}`;
-          return kpiBox("Theoretical Ra", label);
+          return kpiBox(form.mode === "finish" ? "Theoretical Wall Ra" : "Theoretical Ra", label);
         })()}
       </div>` : drill ? `
       <div class="kpi-grid">
@@ -4275,7 +4275,9 @@ export default function Mentor() {
         if (capped && target > 0) {
           return `<p style="font-size:9px;color:#166534;background:#f0fdf4;padding:4px 6px;border-radius:4px;margin-top:4px;"><strong>Surface Finish:</strong> Feed capped to <strong>${mil.feed_ipm?.toFixed(2)} IPM</strong> to achieve Ra ≤ ${target} µin. Theoretical Ra: ${raUin.toFixed(1)} µin (${(raUin * 0.0254).toFixed(3)} µm).</p>${raDisclaimer}`;
         }
-        return `<p style="font-size:9px;color:#555;margin-top:2px;">Theoretical Ra: <strong>${raUin.toFixed(1)} µin</strong> (${(raUin * 0.0254).toFixed(3)} µm)${target > 0 ? ` — meets ${target} µin target ✓` : ""}.</p>${raDisclaimer}`;
+        const _raLabel = form.mode === "finish" ? "Theoretical Wall Ra" : "Theoretical Ra";
+        const _raMech = form.mode === "finish" ? " (side-mill wall finish — set by feed cusp & tool diameter, not corner radius)" : "";
+        return `<p style="font-size:9px;color:#555;margin-top:2px;">${_raLabel}: <strong>${raUin.toFixed(1)} µin</strong> (${(raUin * 0.0254).toFixed(3)} µm)${target > 0 ? ` — meets ${target} µin target ✓` : ""}${_raMech}.</p>${raDisclaimer}`;
       })()}
       </div>` : "";
 
@@ -5400,6 +5402,20 @@ ${stabSection}
         const minCt = eng.min_chip_in != null && eng.min_chip_in > 0 ? eng.min_chip_in : (cust.fpt ?? ct) * 0.30;
         const ctStatus = ct >= minCt ? "✓ Cutting" : "⚠ Near rubbing threshold";
         lines.push(L("Chip Thickness",  `${ct.toFixed(5)}"  (min ~${minCt.toFixed(5)}")  ${ctStatus}`));
+      }
+      // Surface finish (Ra) — wall finish (side milling) vs floor/face. Wall Ra is set
+      // by the feed cusp & tool diameter (corner radius irrelevant); face by corner scallop.
+      if ((form.mode === "finish" || form.mode === "face") && cust.ra_actual_uin != null) {
+        const _ra = cust.ra_actual_uin;
+        const _t = form.target_ra_uin;
+        const _capped = cust.ra_feed_capped;
+        const _floorMissed = _capped && _t > 0 && _ra > _t * 1.05;
+        const _verdict = _t <= 0 ? "" : _floorMissed ? `  ✗ target ${_t} not reachable` : (_ra <= _t + 0.01 ? `  ✓ meets ${_t} µin target` : "");
+        const _label = form.mode === "finish" ? "Wall Ra (side mill)" : "Theoretical Ra";
+        lines.push(L(_label, `${_ra.toFixed(1)} µin (${(_ra * 0.0254).toFixed(3)} µm)${_verdict}`));
+        if (form.mode === "finish") {
+          lines.push("  (wall finish set by feed cusp & tool diameter — corner radius not engaged)");
+        }
       }
       if (eng?.teeth_in_cut != null)
         lines.push(L("Teeth in Cut",    `${eng.teeth_in_cut.toFixed(2)}`));
@@ -10440,7 +10456,9 @@ ${stabSection}
           <div className="space-y-3">
             {/* Target Surface Finish */}
             <div className="space-y-1.5">
-              <FieldLabel hint={`Target surface finish (Ra in microinches). When set, the engine caps feed-per-tooth so the predicted Ra meets the target. Math: Ra ≈ fz² / (8 × corner_radius). High runout adds to the scallop floor — measure TIR for accurate predictions. Typical Ra grades: 8 µin (mirror), 16 µin (precision finish), 32 µin (general finish), 63 µin (semi-finish), 125 µin (rough finish).`}>
+              <FieldLabel hint={`Target surface finish (Ra in microinches). ${form.mode === "finish"
+                ? "Side-milling a wall: Ra comes from the feed cusp left by the flute periphery (driven by tool DIAMETER, not corner radius — the corner isn't engaged on a wall). This is very fine at normal feeds, so feed is limited by deflection/chatter, not the Ra target."
+                : "Facing/floor finish: the engine caps feed-per-tooth so predicted Ra meets the target. Math: Ra ≈ fz² / (8 × corner_radius) — corner radius governs."} High runout adds to the scallop floor — measure TIR for accurate predictions. Typical Ra grades: 8 µin (mirror), 16 µin (precision finish), 32 µin (general finish), 63 µin (semi-finish), 125 µin (rough finish).`}>
                 Target Surface Finish <span className="text-zinc-500 font-normal">— optional, µin Ra</span>
               </FieldLabel>
               <div className="flex flex-nowrap gap-1 items-center overflow-x-auto">
@@ -14345,8 +14363,10 @@ ${stabSection}
                   return (
                     <>
                       <Kpi
-                        label="Theoretical Ra (µin)"
-                        hint="Estimated surface roughness from Ra = FPT² × 1,000,000 / (8 × CR). Assumes sharp tool, no runout, consistent engagement. Below the minimum chip thickness the tool rubs and actual finish degrades — feeding lighter past that point does not help. Actual finish depends on machine condition, tool runout, and coolant."
+                        label={form.mode === "finish" ? "Theoretical Wall Ra (µin)" : "Theoretical Ra (µin)"}
+                        hint={form.mode === "finish"
+                          ? "Side-milling a wall: roughness comes from the feed-per-tooth cusp left by the cylindrical flute periphery — driven by TOOL DIAMETER, not corner radius (the corner isn't engaged on a wall). This is far finer than a floor finish at the same feed, so feed is limited by deflection/chatter, not by the Ra target. Actual finish also depends on runout, machine rigidity, and chatter."
+                          : "Facing/floor finish: roughness comes from the corner/tip scallop between stepover passes — Ra ≈ FPT² × 1e6 / (8 × CR), so corner radius governs. Below the minimum chip thickness the tool rubs and finish degrades — feeding lighter past that point does not help. Actual finish depends on machine condition, tool runout, and coolant."}
                         value={
                           <span className={meetsTarget === true ? "text-emerald-400 font-semibold" : (meetsTarget === false || floorMissed) ? "text-red-400 font-semibold" : "font-semibold"}>
                             {raUin.toFixed(1)} µin

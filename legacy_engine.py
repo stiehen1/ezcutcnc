@@ -7111,15 +7111,20 @@ def run(payload=None):
     _ra_floor_limited = False
     _mode_lower = (data.get("mode") or "").lower()
     _ra_eligible = _mode_lower in ("face", "finish", "deep_pocket")
-    # Effective corner radius: real CR for CR endmill, ~0.0005" edge prep on a "square"
-    _ra_cr = float(data.get("corner_radius") or 0)
+    # ── Finish SURFACE TYPE: wall (side milling) vs floor (facing/planar) ─────
+    # The two leave roughness by completely different mechanisms:
+    #   • FLOOR/FACE (mode "face"): the corner/tip wipes the bottom, leaving cusps
+    #     between stepover passes. Ra = fz²·1e6 / (8·CR) — corner radius governs.
+    #   • WALL (mode "finish"/"deep_pocket": side milling): the cylindrical flute
+    #     PERIPHERY sweeps the wall; the corner is NOT engaged (often dropped into a
+    #     fixture clearance below the floor). Ra is the peripheral feed-cusp, driven
+    #     by TOOL DIAMETER — Ra ≈ (fz²/(4·D))·1e6/4 — which is thousands of times
+    #     finer than the floor formula. Corner radius is IRRELEVANT here. Applying the
+    #     floor formula to a wall invented huge fake Ra (e.g. 141 µin) and tried to
+    #     feed the tool down into rubbing to "fix" a finish problem that didn't exist.
+    _ra_is_wall = _mode_lower in ("finish", "deep_pocket")
     _ra_corner_cond = (data.get("corner_condition") or "square").lower()
-    if _ra_corner_cond == "square" and _ra_cr <= 0:
-        _ra_cr_eff = 0.0005  # square endmills have a small edge prep that limits achievable Ra
-    elif _ra_corner_cond == "ball":
-        _ra_cr_eff = float(data.get("tool_dia") or data.get("diameter") or 0) / 2.0
-    else:
-        _ra_cr_eff = _ra_cr if _ra_cr > 0 else 0.0005
+    _ra_cr = float(data.get("corner_radius") or 0)
     # Runout floor: TIR creates uneven scallop heights between teeth. The peak-to-
     # valley deviation is ~TIR, but Ra (the *average* deviation) is much smaller —
     # roughly 5% of TIR in microinches. Calibrated against shop data: 0.5 mil TIR
@@ -7127,7 +7132,29 @@ def run(payload=None):
     # real-world finishes from typical ER vs. shrink-fit holders).
     _ra_tir = float(data.get("runout_in", 0) or 0)
     _ra_tir_floor_uin = (_ra_tir * 1_000_000) * 0.05  # in µin (5% factor, not 80%)
-    if _ra_eligible and _ra_cr_eff > 0:
+
+    if _ra_eligible and _ra_is_wall:
+        # WALL finish (side milling) — peripheral feed-cusp Ra, tool-diameter driven.
+        # CR is not engaged so it does not enter the calc. The cusp is microscopic at
+        # any sane fz, so feed is limited by deflection/chatter (handled elsewhere),
+        # NOT by the Ra target — we never feed the tool DOWN to chase Ra on a wall.
+        _ra_D = float(data.get("tool_dia") or data.get("diameter") or 0.5) or 0.5
+        _fz_wall_cusp_in = (_ipt_base ** 2) / (4.0 * _ra_D)
+        _fz_wall_uin = _fz_wall_cusp_in * 1_000_000 / 4.0   # Ra ≈ cusp/4
+        _ra_actual = round(max(_fz_wall_uin, _ra_tir_floor_uin), 2)
+        # No feed cap for a wall: if the predicted Ra exceeds the target it's almost
+        # always the runout floor doing it, which feed reduction can't fix.
+        if _target_ra > 0 and _ra_actual > _target_ra and _ra_tir_floor_uin > _target_ra:
+            _ra_unachievable = True  # runout-limited; tighter holder needed
+    # Effective corner radius (FLOOR/FACE path only): real CR for CR endmill, ~0.0005"
+    # edge prep on a "square", tool radius for a ball.
+    if _ra_corner_cond == "square" and _ra_cr <= 0:
+        _ra_cr_eff = 0.0005  # square endmills have a small edge prep that limits achievable Ra
+    elif _ra_corner_cond == "ball":
+        _ra_cr_eff = float(data.get("tool_dia") or data.get("diameter") or 0) / 2.0
+    else:
+        _ra_cr_eff = _ra_cr if _ra_cr > 0 else 0.0005
+    if _ra_eligible and not _ra_is_wall and _ra_cr_eff > 0:
         _fz_scallop_uin = (_ipt_base ** 2 * 1_000_000) / (8 * _ra_cr_eff)
         _ra_actual = round(max(_fz_scallop_uin, _ra_tir_floor_uin), 2)
         if _target_ra > 0:
@@ -7183,11 +7210,17 @@ def run(payload=None):
     # Append Ra-related notes
     if _ra_eligible and _target_ra > 0:
         if _ra_unachievable:
+            # CR/ball advice only helps a FLOOR finish (corner scallop). On a side-milled
+            # WALL the corner isn't engaged, so the only lever for a runout-limited Ra is
+            # a finer-runout holder.
+            _ra_fix = ("a tighter (finer-runout) holder is required — measure TIR at the tip"
+                       if _ra_is_wall else
+                       "a tighter holder is required, or use a tool with a larger corner radius / "
+                       "ball nose to reduce scallop sensitivity to runout")
             _cc_notes.append(
                 f"⚠ Target Ra {_target_ra:.0f} µin is below the runout floor "
                 f"({_ra_tir_floor_uin:.1f} µin from {_ra_tir*1000:.1f} mil TIR). "
-                f"No feed reduction can hit the target — a tighter holder is required, "
-                f"or use a tool with a larger corner radius / ball nose to reduce scallop sensitivity to runout."
+                f"No feed reduction can hit the target — {_ra_fix}."
             )
             if _cc_risk != "warning":
                 _cc_risk = "warning"
