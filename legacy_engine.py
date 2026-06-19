@@ -7108,6 +7108,7 @@ def run(payload=None):
     _ra_actual = None
     _ra_feed_capped = False
     _ra_unachievable = False
+    _ra_floor_limited = False
     _mode_lower = (data.get("mode") or "").lower()
     _ra_eligible = _mode_lower in ("face", "finish", "deep_pocket")
     # Effective corner radius: real CR for CR endmill, ~0.0005" edge prep on a "square"
@@ -7138,7 +7139,36 @@ def run(payload=None):
                 _ra_actual = round(_ra_tir_floor_uin, 2)
             else:
                 _max_fpt = math.sqrt(_ra_budget * 8 * _ra_cr_eff / 1_000_000)
-                if _ipt_base > _max_fpt:
+                # Min-chip floor guard: the scallop formula says "lighter fz = finer
+                # finish", but that only holds ABOVE the material minimum chip thickness.
+                # Below it the edge rubs/plows instead of cutting — which smears the
+                # surface and WORSENS Ra (and work-hardens hardened steel). So the Ra
+                # feed cap must not drive fz below the floor. Convert the floor (an actual
+                # chip) back to a programmed fz using the same radial-thinning factor the
+                # feed path uses, then clamp _max_fpt to it. If the Ra target genuinely
+                # requires a sub-floor fz, it's not achievable by feed reduction alone —
+                # flag it like the runout-floor case rather than silently rubbing.
+                _ra_hmin = float(state.get("hmin", 0.0) or 0.0)
+                _ra_floor_chip = _ra_hmin * 1.05 if _ra_hmin > 0 else 0.0
+                _ra_ct_thin = chip_thinning_factor(data["woc_pct"], data["diameter"])
+                _ra_min_fz = _ra_floor_chip * _ra_ct_thin if _ra_floor_chip > 0 else 0.0
+                if _ra_min_fz > 0 and _max_fpt < _ra_min_fz:
+                    # Target Ra would require rubbing — hold fz at the floor and report
+                    # the Ra actually achievable there (don't claim the target is met).
+                    _ipt_base = _ra_min_fz
+                    ipt = _ra_min_fz
+                    feed_ipm = round(rpm * ipt * float(data.get("flutes", flutes)), 2)
+                    _ra_at_floor = round(
+                        max((_ra_min_fz ** 2 * 1_000_000) / (8 * _ra_cr_eff), _ra_tir_floor_uin), 2
+                    )
+                    _ra_actual = _ra_at_floor
+                    _ra_feed_capped = True
+                    _ra_floor_limited = True
+                    _mrr_for_hp = float(doc) * float(woc) * float(feed_ipm)
+                    hp_required = _mrr_for_hp * HP_PER_CUIN.get(
+                        data.get("material", material_group), HP_PER_CUIN.get(material_group, 1.0)
+                    ) * _geom_hp_factor * _hardness_hp_factor
+                elif _ipt_base > _max_fpt:
                     _ipt_base = _max_fpt
                     ipt = _max_fpt
                     feed_ipm = round(rpm * ipt * float(data.get("flutes", flutes)), 2)
@@ -7158,6 +7188,18 @@ def run(payload=None):
                 f"({_ra_tir_floor_uin:.1f} µin from {_ra_tir*1000:.1f} mil TIR). "
                 f"No feed reduction can hit the target — a tighter holder is required, "
                 f"or use a tool with a larger corner radius / ball nose to reduce scallop sensitivity to runout."
+            )
+            if _cc_risk != "warning":
+                _cc_risk = "warning"
+        elif _ra_floor_limited:
+            _cc_notes.append(
+                f"⚠ Target Ra {_target_ra:.0f} µin would require fz below the minimum chip "
+                f"thickness ({_ra_floor_chip*1000:.2f} thou) — feeding that light makes the edge "
+                f"rub/plow instead of cut, which work-hardens the surface and actually WORSENS "
+                f"the finish. Feed held at the min-chip floor ({feed_ipm:.1f} IPM, fz {ipt:.5f}\"); "
+                f"best achievable Ra here ≈ {_ra_actual:.0f} µin. To truly hit {_target_ra:.0f} µin: "
+                f"use a larger corner radius / ball nose (less scallop per fz), a finer-runout "
+                f"holder, or accept the achievable Ra."
             )
             if _cc_risk != "warning":
                 _cc_risk = "warning"

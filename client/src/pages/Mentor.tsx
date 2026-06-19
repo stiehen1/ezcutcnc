@@ -4027,11 +4027,13 @@ export default function Mentor() {
         ${kpiBox("MRR (in³/min)", mil.mrr_in3_min != null ? mil.mrr_in3_min.toFixed(4) : null)}
         ${kpiBox("HP Required", mil.hp_required != null ? mil.hp_required.toFixed(2) : null)}
         ${(() => {
-          if (form.mode !== "face" || mil.ra_actual_uin == null) return "";
+          if (!(form.mode === "face" || form.mode === "finish") || mil.ra_actual_uin == null) return "";
           const raUin = mil.ra_actual_uin;
           const target = form.target_ra_uin;
           const capped = mil.ra_feed_capped;
-          const label = `${raUin.toFixed(1)} µin${target > 0 ? ` ✓ target ${target}` : ""}${capped ? " (feed capped)" : ""}`;
+          const floorMissed = capped && target > 0 && raUin > target * 1.05;
+          const verdict = target <= 0 ? "" : floorMissed ? ` ✗ target ${target} not reachable` : ` ✓ target ${target}`;
+          const label = `${raUin.toFixed(1)} µin${verdict}${capped && !floorMissed ? " (feed capped)" : ""}`;
           return kpiBox("Theoretical Ra", label);
         })()}
       </div>` : drill ? `
@@ -4259,11 +4261,17 @@ export default function Mentor() {
       </div>` : ""}
       ${eng.tool_life_min != null ? `<div style="margin-top:10px;border:1px solid #ccc;border-radius:5px;padding:7px 9px;background:#fafafa;"><div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1;margin-bottom:3px;">Tool Life Prediction</div><p style="font-size:9px;color:#555;margin:0;">Est. tool life: <strong>${Math.round(eng.tool_life_min)} min (${(eng.tool_life_min / 60).toFixed(1)} hrs)</strong> of cutting time — varies with coating, runout, coolant &amp; machine condition. Estimate only, not a guarantee from Core Cutter LLC.<br/>Spindle-on time in the cut, not hours at the machine — at a typical ~20% spindle duty cycle that's roughly <strong>${(eng.tool_life_min / 60 / 0.20).toFixed(1)} hrs</strong> of shop time per tool.</p>${form.hardness_value >= 55 ? `<p style="font-size:8px;color:#b45309;margin:4px 0 0;border-top:1px solid #f0d9b5;padding-top:3px;">⚠ Hard milling (${Math.round(form.hardness_value)} HRC): carbide life is dominated by abrasive edge wear and micro-chipping this model only approximates — treat as a ballpark and verify on your first tool.${form.hardness_value >= 60 ? " Above ~60 HRC, CBN typically outlasts carbide and is the usual choice." : ""}</p>` : ""}</div>` : ""}
       ${(() => {
-        if (form.mode !== "face" || mil?.ra_actual_uin == null) return "";
+        if (!(form.mode === "face" || form.mode === "finish") || mil?.ra_actual_uin == null) return "";
         const raUin = mil.ra_actual_uin;
         const target = form.target_ra_uin;
         const capped = mil.ra_feed_capped;
+        // Floor-limited: feed was capped but the achieved Ra still misses the target —
+        // means the target needs fz below the rubbing floor (not reachable by feed alone).
+        const floorMissed = capped && target > 0 && raUin > target * 1.05;
         const raDisclaimer = `<p style="font-size:8px;color:#888;font-style:italic;margin-top:3px;">Surface finish is theoretical. Actual results depend on spindle condition, toolholder accuracy, tool runout, workholding rigidity, chip evacuation, coolant delivery, and material lot variation. Estimate only — not a guarantee from Core Cutter.</p>`;
+        if (floorMissed) {
+          return `<p style="font-size:9px;color:#9a3412;background:#fff7ed;padding:4px 6px;border-radius:4px;margin-top:4px;"><strong>Surface Finish — target not reachable:</strong> Ra ${target} µin would need a chip below the rubbing floor; feeding that light degrades the finish. Best achievable here ≈ <strong>${raUin.toFixed(0)} µin</strong> at ${mil.feed_ipm?.toFixed(2)} IPM. For a finer finish use a larger corner radius / ball nose, a finer-runout holder, or open the WOC.</p>${raDisclaimer}`;
+        }
         if (capped && target > 0) {
           return `<p style="font-size:9px;color:#166534;background:#f0fdf4;padding:4px 6px;border-radius:4px;margin-top:4px;"><strong>Surface Finish:</strong> Feed capped to <strong>${mil.feed_ipm?.toFixed(2)} IPM</strong> to achieve Ra ≤ ${target} µin. Theoretical Ra: ${raUin.toFixed(1)} µin (${(raUin * 0.0254).toFixed(3)} µm).</p>${raDisclaimer}`;
         }
@@ -14317,34 +14325,46 @@ ${stabSection}
                     />
                   );
                 })()}
-                {form.mode === "face" && (() => {
+                {(form.mode === "face" || form.mode === "finish") && (() => {
                   const cr = form.corner_radius ?? 0;
-                  if (cr <= 0) return (
-                    <Kpi label="Theoretical Ra" hint="Surface finish prediction requires a corner radius > 0. Square-corner tools produce finish limited by runout and engagement geometry." value={<span className="text-muted-foreground text-xs">CR required</span>} />
-                  );
                   const raUin = customer.ra_actual_uin;
+                  // Square tool with no CR: the engine uses a ~0.0005" edge-prep CR for finish
+                  // mode and still returns a Ra, so only short-circuit when there's truly no Ra.
+                  if (raUin == null) {
+                    if (cr <= 0) return (
+                      <Kpi label="Theoretical Ra" hint="Surface finish prediction requires a corner radius > 0. Square-corner tools produce finish limited by runout and engagement geometry." value={<span className="text-muted-foreground text-xs">CR required</span>} />
+                    );
+                    return null;
+                  }
                   const capped = customer.ra_feed_capped;
                   const target = form.target_ra_uin;
-                  if (raUin == null) return null;
-                  const meetsTarget = target > 0 ? raUin <= target + 0.01 : null;
+                  // Floor-missed: feed capped but achieved Ra still misses target → the target
+                  // needs a chip below the rubbing floor, unreachable by feed reduction alone.
+                  const floorMissed = capped && target > 0 && raUin > target * 1.05;
+                  const meetsTarget = target > 0 ? (!floorMissed && raUin <= target + 0.01) : null;
                   return (
                     <>
                       <Kpi
                         label="Theoretical Ra (µin)"
-                        hint="Estimated surface roughness from Ra = FPT² × 1,000,000 / (8 × CR). Assumes sharp tool, no runout, consistent engagement. Actual finish depends on machine condition, tool runout, and coolant."
+                        hint="Estimated surface roughness from Ra = FPT² × 1,000,000 / (8 × CR). Assumes sharp tool, no runout, consistent engagement. Below the minimum chip thickness the tool rubs and actual finish degrades — feeding lighter past that point does not help. Actual finish depends on machine condition, tool runout, and coolant."
                         value={
-                          <span className={meetsTarget === true ? "text-emerald-400 font-semibold" : meetsTarget === false ? "text-red-400 font-semibold" : "font-semibold"}>
+                          <span className={meetsTarget === true ? "text-emerald-400 font-semibold" : (meetsTarget === false || floorMissed) ? "text-red-400 font-semibold" : "font-semibold"}>
                             {raUin.toFixed(1)} µin
                             <span className="ml-1 text-xs font-normal text-muted-foreground">({(raUin * 0.0254).toFixed(3)} µm)</span>
                             {meetsTarget === true && <span className="ml-1 text-xs"> ✓ meets {target} µin target</span>}
+                            {floorMissed && <span className="ml-1 text-xs"> ✗ target {target} not reachable</span>}
                           </span>
                         }
                       />
-                      {capped && target > 0 && (
+                      {floorMissed ? (
+                        <div className="col-span-full px-1 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                          <span className="font-semibold">Ra {target} µin not reachable by feed alone</span> — it needs a chip below the rubbing floor, and feeding that light degrades the finish (rubbing/work-hardening). Best achievable here ≈ <span className="font-semibold">{raUin.toFixed(0)} µin</span> at {customer.feed_ipm?.toFixed(2)} IPM. To get finer: larger corner radius / ball nose, a finer-runout holder, or open the WOC.
+                        </div>
+                      ) : capped && target > 0 ? (
                         <div className="col-span-full px-1 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400">
                           Feed capped to <span className="font-semibold">{customer.feed_ipm?.toFixed(2)} IPM</span> to achieve Ra ≤ {target} µin. RPM unchanged — only feed was reduced.
                         </div>
-                      )}
+                      ) : null}
                       <p className="col-span-full text-[10px] text-muted-foreground italic px-1">
                         Surface finish is theoretical and depends on many factors beyond tool geometry and cutting parameters — including spindle condition, toolholder accuracy, tool runout, workholding rigidity, chip evacuation, coolant delivery, and material lot variation. Actual results will vary. This is an estimate only and is not a guarantee from Core Cutter.
                       </p>
