@@ -17,7 +17,7 @@ import { Switch as UiSwitch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { ISO_CATEGORIES, ISO_SUBCATEGORIES, MATERIAL_NOTES, MATERIAL_HARDNESS_RANGE, type IsoCategory } from "@shared/materials";
+import { ISO_CATEGORIES, ISO_SUBCATEGORIES, MATERIAL_NOTES, MATERIAL_HARDNESS_RANGE, PH_CONDITION_HARDNESS, type IsoCategory } from "@shared/materials";
 import { COATINGS, getCoatingDef, coatingIncompatible } from "@shared/coatings";
 
 // ── Thread TPI / pitch lookup tables (mirrors engine/physics.py) ─────────────
@@ -6482,6 +6482,48 @@ ${stabSection}
                     />
                     <span className="text-xs text-muted-foreground">{form.hardness_scale.toUpperCase()}</span>
                   </div>
+                  {/* PH stainless: pick the heat-treat condition (e.g. H1150) and we
+                      fill the typical HRC. Still hand-editable — this only saves the
+                      user from having to know the number. */}
+                  {PH_CONDITION_HARDNESS[form.material] && (() => {
+                    const conditions = PH_CONDITION_HARDNESS[form.material];
+                    // Reflect the current hardness back onto a chip: highlight the
+                    // condition whose typical HRC matches what's in the field.
+                    const activeCond = form.hardness_scale === "hrc"
+                      ? conditions.find(c => c.hrc === form.hardness_value)
+                      : undefined;
+                    return (
+                      <div className="mt-2 px-1">
+                        <div className="text-[11px] text-muted-foreground mb-1">
+                          Heat-treat condition <span className="opacity-70">(fills typical HRC — editable)</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {conditions.map((c) => {
+                            const isActive = activeCond?.condition === c.condition;
+                            return (
+                              <button
+                                key={c.condition}
+                                type="button"
+                                title={c.note ? `${c.label} — ~${c.hrc} HRC. ${c.note}` : `${c.label} — ~${c.hrc} HRC`}
+                                onClick={() => setForm((p) => ({ ...p, hardness_scale: "hrc", hardness_value: c.hrc }))}
+                                className="rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors"
+                                style={{
+                                  backgroundColor: isActive ? "#6366f1" : "transparent",
+                                  color: isActive ? "#fff" : "#a5b4fc",
+                                  borderColor: isActive ? "#6366f1" : "#3730a3",
+                                }}
+                              >
+                                {c.condition}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {activeCond?.note && (
+                          <p className="mt-1 text-[11px] text-indigo-300/80 leading-snug">{activeCond.note}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {wrongScale && hRange && (
                     <p className="mt-1 text-xs text-amber-500 leading-snug px-1">
                       ⚠ This material is typically measured in {hRange.scale.toUpperCase()} ({hRange.min}–{hRange.max} {hRange.scale.toUpperCase()}). Switching scales may give unexpected results.

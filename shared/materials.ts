@@ -203,6 +203,46 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "composite_tpc":    { min: 0, max: 0, scale: "hrb", note: "Hardness not applicable for continuous-fiber TPC laminates — leave at 0." },
 };
 
+// ── PH Stainless Condition → Hardness ────────────────────────────────────────
+// Standardized aging tempers fully determine the hardness of a PH grade, so the
+// user can pick the heat-treat condition (e.g. H1150) and get the typical HRC
+// instead of having to know the number. `hrc` is the working midpoint of the
+// published range for that temper (same ranges shown in the Calculators "Material
+// Condition → Hardness" lookup). Keyed by Mentor material key.
+//
+// The engine still receives a plain HRC number — this only makes the input friendly.
+export const PH_CONDITION_HARDNESS: Record<string, { condition: string; label: string; hrc: number; note?: string }[]> = {
+  // 17-4 PH (630) — the benchmark
+  "stainless_ph": [
+    { condition: "Condition A", label: "Condition A (solution annealed)", hrc: 32, note: "Annealed, not yet aged — best machinability. Often machined here, then aged." },
+    { condition: "H900",  label: "H900 — 900°F",  hrc: 45, note: "Hardest/most abrasive aged condition. Highest strength, lowest toughness." },
+    { condition: "H925",  label: "H925 — 925°F",  hrc: 43 },
+    { condition: "H1025", label: "H1025 — 1025°F", hrc: 40, note: "Most common aerospace machining range." },
+    { condition: "H1075", label: "H1075 — 1075°F", hrc: 36 },
+    { condition: "H1100", label: "H1100 — 1100°F", hrc: 34 },
+    { condition: "H1150", label: "H1150 — 1150°F", hrc: 30, note: "Best corrosion resistance of aged conditions; cuts close to 4140 Q&T." },
+    { condition: "H1150M", label: "H1150M — modified", hrc: 29 },
+    { condition: "H1150D", label: "H1150D — double age", hrc: 29, note: "Maximum toughness — most forgiving to machine." },
+  ],
+  // 15-5 PH (XM-12)
+  "stainless_15_5": [
+    { condition: "Condition A", label: "Condition A (solution annealed)", hrc: 32, note: "Annealed, not yet aged — best machinability." },
+    { condition: "H900",  label: "H900 — 900°F",  hrc: 42, note: "Hardest aged condition — carbide required." },
+    { condition: "H925",  label: "H925 — 925°F",  hrc: 40 },
+    { condition: "H1025", label: "H1025 — 1025°F", hrc: 37, note: "Common aerospace machining range." },
+    { condition: "H1075", label: "H1075 — 1075°F", hrc: 34 },
+    { condition: "H1100", label: "H1100 — 1100°F", hrc: 32 },
+    { condition: "H1150", label: "H1150 — 1150°F", hrc: 30 },
+  ],
+  // 13-8 Mo PH (XM-13) — highest-strength PH grade, runs harder at the same temper
+  "stainless_13_8": [
+    { condition: "H950",  label: "H950 — 950°F",  hrc: 44, note: "Highest-strength PH temper — very hard, abrasive." },
+    { condition: "H1000", label: "H1000 — 1000°F", hrc: 41 },
+    { condition: "H1025", label: "H1025 — 1025°F", hrc: 39 },
+    { condition: "H1050", label: "H1050 — 1050°F", hrc: 38 },
+  ],
+};
+
 // ── Material Aliases ─────────────────────────────────────────────────────────
 // Maps common grade names, trade names, UNS numbers, and DIN numbers to
 // catalog material keys. Used for Level-1 (instant) material matching.
