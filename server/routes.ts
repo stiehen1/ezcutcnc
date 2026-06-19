@@ -51,6 +51,12 @@ function runMentorBridge(payload: unknown): Promise<unknown> {
       env: {
         ...process.env,
         PYTHONIOENCODING: "utf-8",
+        // Never write .pyc bytecode. A stale __pycache__/legacy_engine.*.pyc whose
+        // mtime ended up NEWER than the source caused Python to load old bytecode and
+        // silently ignore engine edits (e.g. the min-chip-floor fix didn't take effect
+        // on dev until the cache was deleted). Running from source every spawn prevents
+        // that — the bridge is short-lived so there's no compile-cost concern.
+        PYTHONDONTWRITEBYTECODE: "1",
         ...(extraPythonPath ? { PYTHONPATH: extraPythonPath } : {}),
       },
       stdio: ["pipe", "pipe", "pipe"],
