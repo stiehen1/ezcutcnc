@@ -163,15 +163,17 @@ function Kpi({
   label,
   value,
   hint,
+  labelClassName,
 }: {
   label: string;
   value: React.ReactNode;
   hint?: string;
+  labelClassName?: string;
 }) {
   const t = useTapTooltip();
   return (
     <div className="rounded-2xl border p-3">
-      <div className="text-xs text-muted-foreground flex items-center gap-1">
+      <div className={`text-xs flex items-center gap-1 ${labelClassName ?? "text-muted-foreground"}`}>
         {hint ? (
           <TooltipProvider delayDuration={200}>
             <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
@@ -5366,9 +5368,14 @@ ${stabSection}
         const headRpm = _txtStayInSkin ? _txtClamp!.skinRpm : cust.rpm;
         const headSfm = _txtStayInSkin ? _txtClamp!.skinSfm : (cust.sfm ?? 0);
         const headIpm = _txtStayInSkin ? _txtClamp!.ipm : (cust.feed_ipm ?? 0);
+        // When chip thinning is active the feed is driven by Adj Chipload, not the
+        // base FPT — flag it on the Feed Rate line so RPM×FPT×flutes back-calcs land right.
+        const _thinActive = form.tool_type !== "chamfer_mill" && cust.adj_fpt != null && cust.fpt != null
+          && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005;
+        const _feedNote = _thinActive ? "  (from Adj Chipload — chip-thinned)" : "";
         lines.push(L("Spindle Speed",  `${Math.round(headRpm).toLocaleString()} RPM`));
         lines.push(L("SFM",            String(Math.round(headSfm))));
-        lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${headIpm.toFixed(2)} IPM`));
+        lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${headIpm.toFixed(2)} IPM${_feedNote}`));
         if (_txtSkinActive && _txtClamp) {
           if (_txtStayInSkin) {
             lines.push(L("  If into core",  `${Math.round(cust.rpm).toLocaleString()} RPM · ${Math.round(cust.sfm ?? 0)} SFM · ${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
@@ -5377,7 +5384,13 @@ ${stabSection}
           }
         }
       }
-      if (cust.fpt != null)     lines.push(L("Chipload (FPT)", `${cust.fpt.toFixed(5)}"`));
+      if (cust.fpt != null) {
+        // "Base Chipload" only when chip thinning makes Adj differ (and the Adj line will print
+        // below); otherwise Base == Adj, so the qualifier is noise — plain "Chipload (FPT)".
+        const _thin = form.tool_type !== "chamfer_mill" && cust.adj_fpt != null
+          && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005;
+        lines.push(L(_thin ? "Base Chipload (FPT)" : "Chipload (FPT)", `${cust.fpt.toFixed(5)}"`));
+      }
       if (cust.adj_fpt != null && cust.fpt != null && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005) {
         const isChamfer = form.tool_type === "chamfer_mill";
         if (isChamfer) {
@@ -5386,6 +5399,7 @@ ${stabSection}
         } else {
           lines.push(L("Adj Chipload",  `${cust.adj_fpt.toFixed(5)}"  (chip-thinned)`));
           lines.push(L("Chip Thin Factor", `${(cust.adj_fpt / cust.fpt).toFixed(2)}×  — why feedrate looks high in adaptive paths`));
+          lines.push(L("  Feed = RPM × Adj Chipload × flutes", `${Math.round(cust.rpm).toLocaleString()} × ${cust.adj_fpt.toFixed(5)} × ${form.flutes} = ${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
           if (form.woc_pct > 0) {
             // Stay-in-skin: show the floored skin chip (after the floor-aware case-hard
             // derate), matching the in-case feed lead. Otherwise the un-derated chip.
@@ -12258,11 +12272,18 @@ ${stabSection}
                     const adjIpt = feedReduced && mil.adj_fpt != null ? mil.adj_fpt * feedMult
                       : feedReduced && mil.fpt != null ? mil.fpt * feedMult
                       : null;
+                    // Chip thinning active → the IPM is driven by Adj FPT, not base FPT.
+                    // Flag it so RPM × FPT × flutes back-calcs don't confuse the two.
+                    const thinActive = tool.tool_type !== "chamfer_mill" && mil.adj_fpt != null && mil.fpt != null
+                      && Math.abs((mil.adj_fpt as number) - (mil.fpt as number)) > 0.000005;
+                    const feedNote = feedReduced
+                      ? `calc ${mil.feed_ipm!.toFixed(1)} → ${Math.round(feedMult*100)}% for stability`
+                      : thinActive ? "= RPM × Adj FPT × flutes (chip-thinned)" : null;
 
                     return [
                       ["RPM", mil.rpm != null ? Math.round(mil.rpm).toLocaleString() : "—"],
-                      ["Feed (IPM)", adjFeed != null ? adjFeed.toFixed(1) : "—", feedReduced ? `calc ${mil.feed_ipm.toFixed(1)} → ${Math.round(feedMult*100)}% for stability` : null],
-                      ["IPT (in)", adjIpt != null ? adjIpt.toFixed(5) : mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—"],
+                      ["Feed (IPM)", adjFeed != null ? adjFeed.toFixed(1) : "—", feedNote],
+                      ["IPT (in)", adjIpt != null ? adjIpt.toFixed(5) : mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—", thinActive ? "Adj FPT (chip-thinned)" : null],
                       ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
                       ["WOC", mil.woc_in != null && tool.dia > 0 ? `${mil.woc_in.toFixed(3)} (${((mil.woc_in/tool.dia)*100).toFixed(0)}%)` : "—"],
                       ["DOC", mil.doc_in != null && tool.dia > 0 ? `${mil.doc_in.toFixed(2)} (${(mil.doc_in/tool.dia).toFixed(1)}×D)` : mil.doc_in != null ? `${mil.doc_in.toFixed(2)}` : "—"],
@@ -14179,6 +14200,24 @@ ${stabSection}
                                   {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
                                 </span>
                               ) : null}
+                              {/* When chip thinning is active the feed is driven by Adj FPT, not
+                                  the base FPT — spell out the source so RPM×FPT×flutes back-calcs
+                                  don't confuse the two numbers shown side-by-side. */}
+                              {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
+                                && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                                <>
+                                  <span className="block text-[10px] font-normal text-muted-foreground leading-tight mt-0.5">
+                                    = RPM × <span className="text-emerald-400 font-semibold">Adj FPT</span> × flutes
+                                    {!(form.mode === "hem" || form.mode === "trochoidal")
+                                      && <span className="text-yellow-300"> (chip-thinned, not base FPT)</span>}
+                                  </span>
+                                  {(form.mode === "hem" || form.mode === "trochoidal") && (
+                                    <span className="block text-[10px] font-normal text-sky-300 leading-tight mt-0.5">
+                                      * see note below
+                                    </span>
+                                  )}
+                                </>
+                              )}
                               {showSub && subIpm != null && (
                                 <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
                                   {UC(subIpm, 25.4, metric ? 1 : 2)} {subLabel}
@@ -14212,8 +14251,15 @@ ${stabSection}
                 )}
 
                 <Kpi
-                  label={UL("FPT (in)", "FPT (mm)")}
-                  hint={form.mode === "circ_interp" ? "Chip load per tooth varies pass-by-pass with bore engagement — see the Pass Schedule below for the per-pass IPT." : "Base chip load per tooth before radial chip thinning correction. Calculated as a fixed fraction of diameter for the material. This is the starting point; the engine adjusts it for WOC via the chip thinning factor."}
+                  label={
+                    // "Base FPT" only when chip thinning makes it differ from Adj FPT; otherwise
+                    // Base == Adj, so the "Base" qualifier is noise — show plain "FPT".
+                    (form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
+                      && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005)
+                      ? UL("Base FPT (in)", "Base FPT (mm)")
+                      : UL("FPT (in)", "FPT (mm)")
+                  }
+                  hint={form.mode === "circ_interp" ? "Chip load per tooth varies pass-by-pass with bore engagement — see the Pass Schedule below for the per-pass IPT." : "Base chip load per tooth before radial chip thinning correction. Calculated as a fixed fraction of diameter for the material. This is the starting point; the engine adjusts it for WOC via the chip thinning factor to produce Adj FPT, which drives the feed."}
                   value={
                     form.mode === "circ_interp" ? (
                       <span className="text-[11px] font-normal text-yellow-300 leading-tight">
@@ -14227,16 +14273,28 @@ ${stabSection}
                             ({fmtNum((customer.fpt / customer.diameter) * 100, 1)}%)
                           </span>
                         ) : null}
+                        {/* Neutral descriptor — only when thinning makes Base differ from Adj. */}
+                        {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
+                          && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                          <span className="block text-[10px] font-normal leading-tight mt-0.5 text-zinc-500">
+                            FPT before chip thinning
+                          </span>
+                        )}
                       </>
                     )
                   }
                 />
-                {customer.adj_fpt != null && form.mode !== "circ_interp" ? (
+                {customer.adj_fpt != null && form.mode !== "circ_interp"
+                  // For endmills, only show Adj FPT when thinning actually moved it off base FPT —
+                  // otherwise it'd duplicate the FPT card with the same number. Chamfer always shows
+                  // its Actual Chip card (lead-angle thinning is always in play).
+                  && (form.tool_type === "chamfer_mill" || (customer.fpt != null && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005)) ? (
                   <Kpi
                     label={UL(
                       form.tool_type === "chamfer_mill" ? "Actual Chip (in)" : "Adj FPT (in)",
                       form.tool_type === "chamfer_mill" ? "Actual Chip (mm)" : "Adj FPT (mm)"
                     )}
+                    labelClassName={form.tool_type !== "chamfer_mill" ? "text-emerald-400" : undefined}
                     hint={form.tool_type === "chamfer_mill"
                       ? "Actual chip thickness formed at the cutting edge after lead-angle thinning. Programmed FPT is boosted by 1/sin(half-angle) so that the chip the tool actually sees lands at the target — this value IS that target chip."
                       : "Adjusted chip load per tooth after applying the radial chip thinning factor (RCTF) for your WOC. At low radial engagement, the tool must feed faster to generate the same actual chip thickness. This is the value the engine uses to compute feed IPM."}
@@ -14246,6 +14304,13 @@ ${stabSection}
                         <span className="ml-1 text-xs font-normal text-muted-foreground">
                           ({fmtNum((customer.adj_fpt / customer.diameter) * 100, 1)}%)
                         </span>
+                        {/* This is the number that actually drives Feed (IPM) when thinning is active. */}
+                        {form.tool_type !== "chamfer_mill" && customer.fpt != null
+                          && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                          <span className="block text-[10px] font-semibold leading-tight mt-0.5 text-zinc-500">
+                            Driving IPM Calc
+                          </span>
+                        )}
                       </>
                     }
                   />
@@ -14466,6 +14531,28 @@ ${stabSection}
                 />
 
                 <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
+
+                {/* HEM feed is a peak, not a constant — reassure customers who see a chip-thinned
+                    feed roughly double their old constant-engagement number. Only when the feed is
+                    actually thinning-boosted on an adaptive path. */}
+                {(form.mode === "hem" || form.mode === "trochoidal") && form.tool_type !== "chamfer_mill"
+                  && customer.adj_fpt != null && customer.fpt != null
+                  && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                  <div className="col-span-full rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
+                    <div className="text-[11px] font-semibold text-sky-300 mb-0.5">
+                      * This {UC(customer.feed_ipm, 25.4, metric ? 0 : 1)} {metric ? "mm/min" : "IPM"} is a ceiling, not a constant feed
+                    </div>
+                    <p className="text-[10.5px] leading-snug text-sky-100/90">
+                      HEM / adaptive toolpaths run this feed <span className="font-semibold">only in the light-engagement arcs</span> the
+                      path spends most of its time in — that light radial bite is exactly why the chip-thinned feed can sit near
+                      double a traditional constant-engagement number and still be safe. Your CAM's adaptive engine
+                      <span className="font-semibold"> automatically eases WOC and/or feed</span> wherever engagement climbs
+                      (corners, full-width entries, tight pockets), so the tool rarely holds the full number continuously.
+                      Program it as the max — the intelligent path dips below it for safety on its own. The
+                      <span className="font-semibold"> average</span> feed you'll observe is lower, and that's by design.
+                    </p>
+                  </div>
+                )}
 
                 {customer.torque_avail_ftlb != null && customer.torque_req_ftlb != null && (() => {
                   const zone = customer.torque_zone;
