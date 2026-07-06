@@ -944,7 +944,6 @@ export default function Mentor() {
     localStorage.setItem("cc_company", welcomeCompany.trim());
     localStorage.setItem("cc_zip", welcomeZip.trim());
     setErEmail(welcomeEmail.trim().toLowerCase());
-    setErGateInput(welcomeEmail.trim().toLowerCase());
     setContactEmail(welcomeEmail.trim().toLowerCase());
     setShowWelcomeModal(false);
     const _regEmail = welcomeEmail.trim().toLowerCase();
@@ -1402,11 +1401,18 @@ export default function Mentor() {
   }
 
   // ── Email gate (lock all outputs behind email) ─────────────────────────
-  const [erGateOpen, setErGateOpen] = React.useState(false);
-  const [erGatePending, setErGatePending] = React.useState<"copy" | "print" | "pdf" | "stp" | null>(null);
-  const [erGateStpUrl, setErGateStpUrl] = React.useState("");
-  const [erGateInput, setErGateInput] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
-  const [erGateError, setErGateError] = React.useState("");
+
+  // ── HEM toolpath acknowledgment ──────────────────────────────────────────
+  // Chip-thinned HEM feeds are only safe on a true adaptive path (constant low WOC).
+  // Require the user to confirm before exporting; sticky for the session. Also shows
+  // a shake/flash when they try to export without confirming.
+  const [hemAck, setHemAck] = React.useState<boolean>(() => sessionStorage.getItem("hem_ack") === "1");
+  const [hemAckFlash, setHemAckFlash] = React.useState(false);
+  const setHemAckSticky = React.useCallback((v: boolean) => {
+    setHemAck(v);
+    if (v) sessionStorage.setItem("hem_ack", "1");
+    else sessionStorage.removeItem("hem_ack");
+  }, []);
 
   // ── Contact modal ("Don't know which tool?") ──────────────────────────
   const [showContactModal, setShowContactModal] = React.useState(false);
@@ -4536,6 +4542,20 @@ export default function Mentor() {
   </div>
 </div>
 
+${(() => {
+  // HEM acknowledgment banner — printed only for HEM/trochoidal endmill cuts where the
+  // feed is chip-thinned. Records the confirmation the user gave to unlock export.
+  const _ackHem = (form.mode === "hem" || form.mode === "trochoidal")
+    && form.tool_type !== "chamfer_mill"
+    && mil?.adj_fpt != null && mil?.fpt != null
+    && Math.abs(mil.adj_fpt - mil.fpt) > 0.000005;
+  if (!_ackHem) return "";
+  return `<div style="margin:10px 0;border:1.5px solid #d97706;background:#fffbeb;border-radius:6px;padding:8px 10px;">
+    <div style="font-weight:700;font-size:11px;color:#b45309;margin-bottom:2px;">⚠ HEM / Adaptive Toolpath — Acknowledged</div>
+    <div style="font-size:9.5px;color:#78350f;line-height:1.45;">User confirmed these parameters will run on a <strong>true HEM / adaptive toolpath</strong> that actively manages radial engagement to keep it low — by holding IPM or WOC constant, or dynamically varying either or both (e.g. Mastercam Dynamic, Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining). These chip-thinned feeds are <strong>unsafe on a conventional contour or pocket path</strong> — engagement spikes in corners can overload or break the tool. <strong>Core Cutter LLC assumes no responsibility for outcomes.</strong></div>
+  </div>`;
+})()}
+
 <h2>Setup</h2>
 <table>
   ${(() => {
@@ -5344,6 +5364,28 @@ ${stabSection}
       if (isRoughing)    lines.push(L("Stock to Leave","0.010\" radial  /  0.005\" axial  (suggested)"));
       lines.push("");
 
+      // ── HEM TOOLPATH ACKNOWLEDGMENT ──────────
+      // Only for HEM/trochoidal endmill cuts where thinning is live. Records the user's
+      // confirmation (export was gated on it) + Core Cutter's disclaimer of responsibility.
+      {
+        const _ackHem = (form.mode === "hem" || form.mode === "trochoidal")
+          && form.tool_type !== "chamfer_mill"
+          && cust?.adj_fpt != null && cust?.fpt != null
+          && Math.abs(cust.adj_fpt - cust.fpt) > 0.000005;
+        if (_ackHem) {
+          lines.push("HEM TOOLPATH — ACKNOWLEDGED");
+          lines.push(DIV);
+          lines.push("User confirmed these parameters will be run on a TRUE HEM / adaptive");
+          lines.push("toolpath that actively manages radial engagement to keep it low — by");
+          lines.push("holding IPM or WOC constant, OR dynamically varying either or both (e.g.");
+          lines.push("Mastercam Dynamic, Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining).");
+          lines.push("These chip-thinned feeds are UNSAFE on a conventional contour or pocket");
+          lines.push("path — engagement spikes in corners can overload or break the tool.");
+          lines.push("Core Cutter LLC assumes no responsibility for outcomes.");
+          lines.push("");
+        }
+      }
+
       // ── SPEEDS & FEEDS ───────────────────────
       lines.push("SPEEDS & FEEDS");
       lines.push(DIV);
@@ -5747,54 +5789,37 @@ ${stabSection}
     }
   }
 
+  // HEM chip-thinned feeds are only safe on a true adaptive path — require acknowledgment
+  // before any export. Only applies to HEM/trochoidal endmill cuts where thinning is live
+  // (Adj FPT ≠ base FPT); STEP downloads are unaffected.
+  function hemAckRequiredMissing(action: "copy" | "print" | "pdf" | "stp"): boolean {
+    if (action === "stp") return false;
+    const isHemMode = form.mode === "hem" || form.mode === "trochoidal";
+    const thinning = form.tool_type !== "chamfer_mill"
+      && customer?.adj_fpt != null && customer?.fpt != null
+      && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005;
+    return isHemMode && thinning && !hemAck;
+  }
+
   function runGatedAction(action: "copy" | "print" | "pdf" | "stp", stpHref?: string) {
+    // HEM safety acknowledgment gate — flash the checkbox and bail if unconfirmed.
+    if (hemAckRequiredMissing(action)) {
+      setHemAckFlash(true);
+      window.setTimeout(() => setHemAckFlash(false), 1500);
+      document.getElementById("hem-ack-box")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (action === "copy") copyCamParams();
     else if (action === "print") downloadPDF();
     else if (action === "pdf") downloadPDF();
     else if (action === "stp" && stpHref) window.open(stpHref, "_blank");
   }
 
+  // Exports are NOT email-gated (the email gate was removed). This is a thin pass-through
+  // kept under its old name so call sites don't change; the only gate now is the HEM
+  // acknowledgment enforced inside runGatedAction.
   function requireEmail(action: "copy" | "print" | "pdf" | "stp", stpHref?: string) {
-    const email = erEmail || localStorage.getItem("er_email") || "";
-    if (email) {
-      runGatedAction(action, stpHref);
-    } else {
-      setErGatePending(action);
-      if (stpHref) setErGateStpUrl(stpHref);
-      setErGateOpen(true);
-    }
-  }
-
-  function submitErGate() {
-    const v = erGateInput.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setErGateError("Enter a valid email address."); return; }
-    localStorage.setItem("er_email", v);
-    setErEmail(v);
-    setErGateOpen(false);
-    if (erGatePending) runGatedAction(erGatePending, erGateStpUrl || undefined);
-    setErGatePending(null);
-    // Register lead (fire-and-forget — captures emails that never went through welcome modal)
-    fetch("/api/register", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: v }),
-    }).catch(() => {});
-    // Attempt toolbox auto-auth so they don't have to sign in again to save
-    if (!localStorage.getItem("tb_token")) {
-      fetch("/api/toolbox/auto-auth", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: v }),
-      })
-        .then(r => r.ok ? r.json() : null)
-        .then(d => {
-          if (d?.ok && d.token) {
-            localStorage.setItem("tb_email", v);
-            localStorage.setItem("tb_token", d.token);
-            setTbEmail(v);
-            setTbToken(d.token);
-          }
-        })
-        .catch(() => {});
-    }
+    runGatedAction(action, stpHref);
   }
 
   async function submitContactModal() {
@@ -5808,7 +5833,6 @@ ${stabSection}
       });
       localStorage.setItem("er_email", contactEmail.trim().toLowerCase());
       setErEmail(contactEmail.trim().toLowerCase());
-      setErGateInput(contactEmail.trim().toLowerCase());
       setContactStatus("sent");
     } catch {
       setContactStatus("idle");
@@ -6174,6 +6198,43 @@ ${stabSection}
                 <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
                 <option value="deep_pocket">Pocketing Strategy</option>
               </select>
+              </div>
+            )}
+
+            {/* HEM safety acknowledgment — chip-thinned feeds are only safe on a true
+                adaptive path. Required (blocks export) whenever HEM/trochoidal is selected. */}
+            {(form.mode === "hem" || form.mode === "trochoidal") && (
+              <div
+                id="hem-ack-box"
+                className={`mt-2 rounded-lg border px-3 py-2 transition-all ${
+                  hemAck
+                    ? "border-emerald-500/40 bg-emerald-500/10"
+                    : hemAckFlash
+                    ? "border-red-500 bg-red-500/15 ring-2 ring-red-500/60"
+                    : "border-amber-500/50 bg-amber-500/10"
+                }`}
+              >
+                <label className="flex items-start gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hemAck}
+                    onChange={e => setHemAckSticky(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer"
+                  />
+                  <span className={`text-[10.5px] leading-snug ${hemAck ? "text-emerald-100/90" : "text-amber-100/90"}`}>
+                    <span className="font-semibold">I confirm I am running a true HEM / adaptive toolpath</span>{" "}
+                    that actively manages radial engagement to keep it low — whether by holding IPM or
+                    WOC constant, or dynamically varying either or both (e.g. Mastercam Dynamic,
+                    Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining). These chip-thinned feeds
+                    are unsafe on a conventional contour or pocket path.{" "}
+                    <span className="font-semibold">Core Cutter LLC assumes no responsibility for outcomes.</span>
+                    {!hemAck && (
+                      <span className="block mt-0.5 font-semibold text-amber-300">
+                        Required before exporting.
+                      </span>
+                    )}
+                  </span>
+                </label>
               </div>
             )}
 
@@ -12118,6 +12179,36 @@ ${stabSection}
               <p>{(mentor.error as any)?.message || "Unknown error"}</p>
             </div>
           ) : null}
+
+          {/* HEM confirmation gate — until the box is checked, results show the conservative
+              (traditional, un-thinned) feed. This tells the user why, and how to see the real
+              HEM numbers. Same gate as the export block and the process-panel checkbox. */}
+          {(() => {
+            const _c = (mentor.data as any)?.customer;
+            const _hemThinning = (form.mode === "hem" || form.mode === "trochoidal")
+              && form.tool_type !== "chamfer_mill"
+              && _c?.adj_fpt != null && _c?.fpt != null
+              && Math.abs(_c.adj_fpt - _c.fpt) > 0.000005;
+            if (!_hemThinning || hemAck) return null;
+            return (
+              <div
+                className={`rounded-xl border p-3 text-sm transition-all ${
+                  hemAckFlash
+                    ? "border-red-500 bg-red-500/15 ring-2 ring-red-500/60 text-red-200"
+                    : "border-amber-500/50 bg-amber-500/10 text-amber-200"
+                }`}
+              >
+                <p className="font-semibold mb-1">⚠ Showing conservative feed — HEM results locked</p>
+                <p className="leading-snug text-[13px]">
+                  You've selected HEM / adaptive, but the elevated chip-thinned feed is hidden. The Feed shown
+                  is the <span className="font-semibold">conservative (un-thinned)</span> value — safe on a
+                  conventional path. <span className="font-semibold">To see the actual HEM cutting results you
+                  must confirm the use of a true HEM toolpath</span> — tick the acknowledgment box near the
+                  process selector above.
+                </p>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -14075,6 +14166,17 @@ ${stabSection}
                   // Only show the secondary line in the cuts-to-core case (skimRpm != null), or
                   // when staying in skin (then it's the steady-state "if into core" hint).
                   const showSub = showFirstPass;
+                  // HEM lock: until the user confirms a true HEM/adaptive path, do NOT surface the
+                  // chip-thinned (elevated) feed. Show the conservative un-thinned feed instead
+                  // (RPM × base FPT × flutes) — a number safe to run on a conventional path.
+                  const hemThinning = (form.mode === "hem" || form.mode === "trochoidal")
+                    && form.tool_type !== "chamfer_mill"
+                    && customer.adj_fpt != null && customer.fpt != null
+                    && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005;
+                  const hemLocked = hemThinning && !hemAck;
+                  const unthinnedIpm = (customer.rpm != null && customer.fpt != null)
+                    ? customer.rpm * customer.fpt * form.flutes : null;
+                  const displayIpm = hemLocked && unthinnedIpm != null ? unthinnedIpm : headIpm;
                   return (
                     <>
                       {/* SFM — full-width row: value on the left, speed-preset
@@ -14194,34 +14296,43 @@ ${stabSection}
                             </span>
                           ) : (
                             <span>
-                              {UC(headIpm, 25.4, metric ? 1 : 2)}
-                              {customer.status ? (
+                              {UC(displayIpm, 25.4, metric ? 1 : 2)}
+                              {customer.status && !hemLocked ? (
                                 <span className="ml-1 text-xs font-normal text-muted-foreground">
                                   {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
                                 </span>
                               ) : null}
-                              {/* When chip thinning is active the feed is driven by Adj FPT, not
-                                  the base FPT — spell out the source so RPM×FPT×flutes back-calcs
-                                  don't confuse the two numbers shown side-by-side. */}
-                              {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
-                                && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                              {/* HEM feed locked: showing the conservative un-thinned feed until the
+                                  user confirms a true HEM/adaptive path. Full explanation lives in
+                                  the warning below the Run button; keep the card itself terse. */}
+                              {hemLocked ? (
+                                <span className="block text-[10px] font-normal leading-tight mt-0.5 text-amber-300">
+                                  Conservative feed — confirm HEM toolpath to unlock
+                                </span>
+                              ) : (
                                 <>
-                                  <span className="block text-[10px] font-normal text-muted-foreground leading-tight mt-0.5">
-                                    = RPM × <span className="text-emerald-400 font-semibold">Adj FPT</span> × flutes
-                                    {!(form.mode === "hem" || form.mode === "trochoidal")
-                                      && <span className="text-yellow-300"> (chip-thinned, not base FPT)</span>}
-                                  </span>
-                                  {(form.mode === "hem" || form.mode === "trochoidal") && (
-                                    <span className="block text-[10px] font-normal text-sky-300 leading-tight mt-0.5">
-                                      * see note below
+                                  {/* When chip thinning is active the feed is driven by Adj FPT, not base FPT. */}
+                                  {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
+                                    && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                                    <>
+                                      <span className="block text-[10px] font-normal text-muted-foreground leading-tight mt-0.5">
+                                        = RPM × <span className="text-emerald-400 font-semibold">Adj FPT</span> × flutes
+                                        {!(form.mode === "hem" || form.mode === "trochoidal")
+                                          && <span className="text-yellow-300"> (chip-thinned, not base FPT)</span>}
+                                      </span>
+                                      {(form.mode === "hem" || form.mode === "trochoidal") && (
+                                        <span className="block text-[10px] font-normal text-sky-300 leading-tight mt-0.5">
+                                          * see note below
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                  {showSub && subIpm != null && (
+                                    <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                      {UC(subIpm, 25.4, metric ? 1 : 2)} {subLabel}
                                     </span>
                                   )}
                                 </>
-                              )}
-                              {showSub && subIpm != null && (
-                                <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(subIpm, 25.4, metric ? 1 : 2)} {subLabel}
-                                </span>
                               )}
                             </span>
                           )
@@ -14531,6 +14642,31 @@ ${stabSection}
                 />
 
                 <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
+
+                {/* SAFETY: chip-thinned HEM feeds are only safe on a path that HOLDS WOC low.
+                    Running them on a conventional contour/pocket path spikes engagement in corners
+                    and will overload/snap the tool. Same gate as the ceiling callout below. */}
+                {(form.mode === "hem" || form.mode === "trochoidal") && form.tool_type !== "chamfer_mill"
+                  && customer.adj_fpt != null && customer.fpt != null
+                  && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                  <div className="col-span-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+                    <div className="text-[11px] font-bold text-amber-300 mb-0.5 flex items-center gap-1">
+                      <span aria-hidden>⚠</span> Requires a true HEM / adaptive toolpath
+                    </div>
+                    <p className="text-[10.5px] leading-snug text-amber-100/90">
+                      These feeds are safe <span className="font-semibold">only</span> if your CAM runs a genuine
+                      HEM / adaptive path that <span className="font-semibold">actively manages radial engagement to keep
+                      it low</span> — whether it holds IPM or WOC constant, or dynamically varies either or both. Examples:
+                      <span className="font-semibold"> Mastercam Dynamic Motion, Fusion / HSMWorks Adaptive Clearing, VoluMill,
+                      hyperMILL MAXX, Esprit ProfitMilling, SolidCAM iMachining, GibbsCAM VoluMill</span>. The elevated feed
+                      exists precisely because the chip is thin at low WOC. Do <span className="font-semibold">NOT</span> program
+                      these numbers on a conventional contour or pocket path: radial engagement <span className="font-semibold">spikes
+                      in corners and full-width moves</span>, and at this chip-thinned feed the tool takes a chip several times
+                      heavier than intended — likely snapping the tool, stalling the spindle, or pulling the part. If you can't
+                      run a true adaptive path, drop back to <span className="font-semibold">Traditional</span> roughing.
+                    </p>
+                  </div>
+                )}
 
                 {/* HEM feed is a peak, not a constant — reassure customers who see a chip-thinned
                     feed roughly double their old constant-engagement number. Only when the feed is
@@ -17197,41 +17333,6 @@ ${stabSection}
             <span className="font-semibold text-indigo-200">Programming team?</span> After signing in, connect to a shared team email so everyone sees the same machines and saved setups.
           </div>
           <p className="text-[10px] text-zinc-600 text-center mt-3">Your info is used to personalize your experience and may be used by Core Cutter LLC to follow up on your machining needs.</p>
-        </div>
-      </div>
-    )}
-
-    {/* Email Gate Modal */}
-    {erGateOpen && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setErGateOpen(false)}>
-        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
-          <h2 className="text-base font-semibold text-white mb-1">Enter your email to continue</h2>
-          <p className="text-xs text-zinc-400 mb-4">
-            {erGatePending === "stp" ? "We'll unlock the STEP file download." : erGatePending === "copy" ? "We'll unlock copy & all exports." : "We'll unlock PDF export & all outputs."}
-            {" "}One-time per device — auto-fills after.
-          </p>
-          <input
-            type="text"
-            inputMode="email"
-            autoCapitalize="none"
-            autoCorrect="off"
-            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
-            placeholder="your@email.com"
-            value={erGateInput}
-            onChange={e => { setErGateInput(e.target.value); setErGateError(""); }}
-            onKeyDown={e => { if (e.key === "Enter") submitErGate(); }}
-            autoFocus
-          />
-          {erGateError && <p className="text-xs text-red-400 mt-1">{erGateError}</p>}
-          <div className="flex gap-2 mt-3">
-            <button
-              className="flex-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-medium"
-              onClick={submitErGate}
-            >
-              Continue
-            </button>
-            <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setErGateOpen(false)}>Cancel</button>
-          </div>
         </div>
       </div>
     )}
