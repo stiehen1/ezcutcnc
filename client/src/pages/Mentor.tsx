@@ -6222,12 +6222,14 @@ ${stabSection}
                     className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer"
                   />
                   <span className={`text-[10.5px] leading-snug ${hemAck ? "text-emerald-100/90" : "text-amber-100/90"}`}>
-                    <span className="font-semibold">I confirm I am running a true HEM / adaptive toolpath</span>{" "}
-                    that actively manages radial engagement to keep it low — whether by holding IPM or
-                    WOC constant, or dynamically varying either or both (e.g. Mastercam Dynamic,
-                    Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining). These chip-thinned feeds
-                    are unsafe on a conventional contour or pocket path.{" "}
-                    <span className="font-semibold">Core Cutter LLC assumes no responsibility for outcomes.</span>
+                    <span className="font-semibold">I confirm that I am operating a genuine high-efficiency (HEM) toolpath
+                    that dynamically manages MRR.</span>{" "}
+                    This is achieved by either maintaining IPM or WOC at a constant level, or by
+                    dynamically varying either or both to maintain low radial engagement (e.g. Mastercam
+                    Dynamic, Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining). Conventional contour
+                    or parallel offset programming is not adequate for these chip-thinned elevated cutting
+                    parameters, and{" "}
+                    <span className="font-semibold">Core Cutter LLC assumes no liability for the results.</span>
                     {!hemAck && (
                       <span className="block mt-0.5 font-semibold text-amber-300">
                         Acknowledgement required before chip-thinning results displayed and/or exported.
