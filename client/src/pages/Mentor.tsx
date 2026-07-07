@@ -6230,7 +6230,7 @@ ${stabSection}
                     <span className="font-semibold">Core Cutter LLC assumes no responsibility for outcomes.</span>
                     {!hemAck && (
                       <span className="block mt-0.5 font-semibold text-amber-300">
-                        Required before exporting.
+                        Acknowledgement required before chip-thinning results displayed and/or exported.
                       </span>
                     )}
                   </span>
@@ -14642,31 +14642,6 @@ ${stabSection}
                 />
 
                 <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
-
-                {/* SAFETY: chip-thinned HEM feeds are only safe on a path that HOLDS WOC low.
-                    Running them on a conventional contour/pocket path spikes engagement in corners
-                    and will overload/snap the tool. Same gate as the ceiling callout below. */}
-                {(form.mode === "hem" || form.mode === "trochoidal") && form.tool_type !== "chamfer_mill"
-                  && customer.adj_fpt != null && customer.fpt != null
-                  && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
-                  <div className="col-span-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
-                    <div className="text-[11px] font-bold text-amber-300 mb-0.5 flex items-center gap-1">
-                      <span aria-hidden>⚠</span> Requires a true HEM / adaptive toolpath
-                    </div>
-                    <p className="text-[10.5px] leading-snug text-amber-100/90">
-                      These feeds are safe <span className="font-semibold">only</span> if your CAM runs a genuine
-                      HEM / adaptive path that <span className="font-semibold">actively manages radial engagement to keep
-                      it low</span> — whether it holds IPM or WOC constant, or dynamically varies either or both. Examples:
-                      <span className="font-semibold"> Mastercam Dynamic Motion, Fusion / HSMWorks Adaptive Clearing, VoluMill,
-                      hyperMILL MAXX, Esprit ProfitMilling, SolidCAM iMachining, GibbsCAM VoluMill</span>. The elevated feed
-                      exists precisely because the chip is thin at low WOC. Do <span className="font-semibold">NOT</span> program
-                      these numbers on a conventional contour or pocket path: radial engagement <span className="font-semibold">spikes
-                      in corners and full-width moves</span>, and at this chip-thinned feed the tool takes a chip several times
-                      heavier than intended — likely snapping the tool, stalling the spindle, or pulling the part. If you can't
-                      run a true adaptive path, drop back to <span className="font-semibold">Traditional</span> roughing.
-                    </p>
-                  </div>
-                )}
 
                 {/* HEM feed is a peak, not a constant — reassure customers who see a chip-thinned
                     feed roughly double their old constant-engagement number. Only when the feed is
