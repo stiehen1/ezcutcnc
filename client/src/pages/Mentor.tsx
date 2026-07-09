@@ -14457,7 +14457,7 @@ ${stabSection}
                     }
                   />
                 ) : null}
-                {form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
+                {operation !== "feedmill" && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && customer.adj_fpt != null && customer.diameter > 0 && form.woc_pct > 0 ? (() => {
                   const wocFrac = form.woc_pct / 100;
                   const ctf = Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * wocFrac))));
                   const full = customer.adj_fpt * ctf;

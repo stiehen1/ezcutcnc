@@ -3927,8 +3927,11 @@ def run_feedmill(payload: dict) -> dict:
             "mrr_in3_min":      round(mrr, 3),
             "spindle_load_pct": round(hp_util_pct, 1),
             "hp_required":      round(hp_required, 3),
-            "fpt":              round(programmed_fpt, 6),
-            "adj_fpt":          round(ipt_base, 6),
+            # KPI panel semantics: "Base FPT" = raw chip before thinning; "Adj FPT" =
+            # the thinning-amplified value that actually drives the feed (RPM×Adj FPT×flutes).
+            # For a feed mill the CTF makes programmed FPT LARGER than base, so Adj > Base.
+            "fpt":              round(ipt_base, 6),         # Base FPT (actual chip, pre-CTF)
+            "adj_fpt":          round(programmed_fpt, 6),   # Adj FPT (programmed, drives IPM)
             "status":           "warning" if (notes and any("HRC" in n or "DOC" in n for n in notes)) else "ok",
             "status_hint":      notes[0] if notes else None,
             "risk":             "high" if stability_pct > 175 else ("medium" if stability_pct > 100 else "low"),
