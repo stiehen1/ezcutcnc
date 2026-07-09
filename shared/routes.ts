@@ -464,6 +464,8 @@ export const mentorSchemas = {
 
     feedmill: z.object({
       lead_angle_deg: z.number(),
+      ctf_source: z.enum(["radius", "lead_angle"]).optional(),
+      eff_lead_angle_deg: z.number().optional(),
       lead_ctf: z.number(),
       programmed_fpt_in: z.number(),
       actual_chip_in: z.number(),

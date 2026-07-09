@@ -3730,10 +3730,16 @@ def run_feedmill(payload: dict) -> dict:
     _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
     hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
 
-    # Lead angle chip thinning factor
-    lead_rad   = math.radians(max(1.0, min(lead_angle, 45.0)))
-    lead_sin   = math.sin(lead_rad)
-    lead_ctf   = 1.0 / lead_sin   # programmed FPT multiplier (e.g. 2.92× at 20°)
+    # Chip thinning factor — two geometry models:
+    #  (A) Radius-form hi-feed cutter (corner_radius > 0, e.g. CC-14904 R.281):
+    #      the chip is thinned by the corner-radius arc at the shallow axial DOC,
+    #      NOT by a lead-angle insert face. Effective lead angle at the contact point
+    #      is theta = acos(1 - DOC/R); CTF = 1/sin(theta). Shallow DOC into a big
+    #      radius = strong thinning. This is the physically correct model for a
+    #      radius-form tool and does not depend on a (usually absent) lead-angle callout.
+    #  (B) Lead-angle insert cutter (no corner radius): classic CTF = 1/sin(lead_angle).
+    # We resolve the DOC first so the radius model can key off it, then compute CTF.
+    _radius_form = corner_r > 0.0
 
     # SFM and RPM. sfm_target stays at rated (un-biased) speed for the tool-life
     # ratio; the speed preset biases only the RPM we drive (sfm_actual).
@@ -3744,13 +3750,6 @@ def run_feedmill(payload: dict) -> dict:
     rpm        = min(target_rpm, max_rpm * rpm_util)
     rpm        = max(1.0, rpm)
     sfm_actual = (rpm * math.pi * D) / 12.0
-
-    # Chip load — base IPT from standard milling table × 1.15 feed mill boost,
-    # then amplify by lead CTF.
-    # The 1.15× accounts for feed mill geometry running hotter chip loads than
-    # a conventional endmill at the same diameter (shop-validated chart data).
-    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D * 1.15
-    programmed_fpt = ipt_base * lead_ctf   # what gets programmed in CAM
 
     # L/D ratio — used for long-reach derating
     ld_ratio = stickout / D if D > 0 else 0.0
@@ -3767,16 +3766,11 @@ def run_feedmill(payload: dict) -> dict:
         _ld_doc_factor = 1.00
         _ld_ipt_factor = 1.00
 
-    ipt_base       *= _ld_ipt_factor
-    programmed_fpt  = ipt_base * lead_ctf
-
-    # Feed rate
-    feed_ipm = rpm * flutes * programmed_fpt
-
     # DOC — two constraints: corner radius geometry limit + axial depth limit
     # CR limit: max = 1.5×CR (overloads dual-radius contact zone beyond this)
     # Axial limit: max = 0.15×D (shop-validated for solid carbide HFM)
     # Recommended: 0.10×D or 0.8×CR, whichever is smaller
+    # Resolved BEFORE chip thinning so the radius-form CTF can key off DOC.
     cr_max_doc   = corner_r * 1.5 if corner_r > 0 else D * 0.15
     axial_max    = D * 0.15
     max_doc_in   = min(cr_max_doc, axial_max) * _ld_doc_factor
@@ -3786,6 +3780,38 @@ def run_feedmill(payload: dict) -> dict:
     doc_in = float(payload.get("feedmill_doc_in", 0.0) or 0.0)
     if doc_in <= 0:
         doc_in = rec_doc_in
+
+    # Chip thinning factor (CTF)
+    if _radius_form:
+        # Radius-form: effective lead angle at the contact point is
+        # theta = acos(1 - DOC/R). Clamp DOC/R to (0, 1] — the arc contact cannot
+        # exceed the radius. Deeper DOC → larger theta → LESS thinning; shallow DOC
+        # into a big radius → small theta → MORE thinning (higher CTF).
+        _dr           = max(1e-4, min(1.0, doc_in / corner_r))
+        _eff_lead_rad = math.acos(max(-1.0, min(1.0, 1.0 - _dr)))
+        _eff_lead_deg = math.degrees(_eff_lead_rad)
+        # Cap CTF at the 45° equivalent (1.414×) floor and a 4.0× ceiling so a razor-thin
+        # DOC can't program an unrealistic feed. sin(theta) grows with DOC so CTF shrinks.
+        ctf           = max(1.0, min(4.0, 1.0 / max(0.25, math.sin(_eff_lead_rad))))
+        _ctf_source   = "radius"
+    else:
+        # Lead-angle insert cutter: classic CTF = 1/sin(lead_angle).
+        lead_rad      = math.radians(max(1.0, min(lead_angle, 45.0)))
+        ctf           = 1.0 / math.sin(lead_rad)
+        _eff_lead_deg = max(1.0, min(lead_angle, 45.0))
+        _ctf_source   = "lead_angle"
+    lead_ctf = ctf   # retained name for downstream/output compatibility
+
+    # Chip load — base IPT from standard milling table × 1.15 feed mill boost,
+    # then amplify by the geometric CTF.
+    # The 1.15× accounts for feed mill geometry running hotter chip loads than
+    # a conventional endmill at the same diameter (shop-validated chart data).
+    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D * 1.15
+    ipt_base      *= _ld_ipt_factor
+    programmed_fpt = ipt_base * ctf   # what gets programmed in CAM
+
+    # Feed rate
+    feed_ipm = rpm * flutes * programmed_fpt
 
     # WOC — HFM sweet spot is 6–12% of diameter. Default to 8%.
     # Do NOT use the standard milling woc_pct (50%) — that would destroy a feed mill.
@@ -3816,8 +3842,8 @@ def run_feedmill(payload: dict) -> dict:
     deflection /= rigidity
 
     # Max ramp angle — feed mill can ramp steeper than a standard endmill because
-    # axial force goes into the spindle. Conservative limit: lead_angle − 3°.
-    ramp_angle_max = max(2.0, lead_angle - 3.0)
+    # axial force goes into the spindle. Conservative limit: effective lead angle − 3°.
+    ramp_angle_max = max(2.0, _eff_lead_deg - 3.0)
 
     # Stability — feed mills rarely deflect into chatter; flag if long reach
     stability_pct = round((deflection / 0.0005) * 100.0, 1)  # 0.0005" threshold for endwork
@@ -3857,9 +3883,21 @@ def run_feedmill(payload: dict) -> dict:
     _sfm_ratio      = sfm_actual / max(1.0, sfm_target)
     tool_life_min   = (_base_life / max(0.20, _sfm_ratio ** 0.35)) * _coolant_factor
 
+    if _ctf_source == "radius":
+        _thin_tip = (
+            f"Radius-form chip thinning: the R{corner_r:.3f}\" corner at {doc_in:.4f}\" DOC gives an "
+            f"effective lead angle of {_eff_lead_deg:.0f}° (CTF {ctf:.2f}×). Program FPT at "
+            f"{programmed_fpt:.5f}\" — actual chip on the tool is only {ipt_base:.5f}\". "
+            "Thinning comes from the radius + shallow DOC, not a lead-angle face. Do not reduce feed. "
+            "Note: a deeper DOC into the radius REDUCES thinning (lower CTF); shallower DOC increases it."
+        )
+    else:
+        _thin_tip = (
+            f"Lead angle chip thinning at {lead_angle:.0f}°: program FPT at {programmed_fpt:.5f}\" "
+            f"— actual chip on the tool is only {ipt_base:.5f}\". This is correct. Do not reduce feed."
+        )
     tips = [
-        f"Lead angle chip thinning at {lead_angle:.0f}°: program FPT at {programmed_fpt:.5f}\" "
-        f"— actual chip on the tool is only {ipt_base:.5f}\". This is correct. Do not reduce feed.",
+        _thin_tip,
         f"WOC is your control knob. Running at {woc_pct:.0f}% ({woc_in:.4f}\"). "
         f"Sweet spot is 6–12% of diameter. Adjust WOC first if anything goes wrong — not feed.",
         f"Ramp angle up to {ramp_angle_max:.0f}°. Feed mills ramp far steeper than standard endmills "
@@ -3917,6 +3955,8 @@ def run_feedmill(payload: dict) -> dict:
         },
         "feedmill": {
             "lead_angle_deg":     lead_angle,
+            "ctf_source":         _ctf_source,          # "radius" or "lead_angle"
+            "eff_lead_angle_deg": round(_eff_lead_deg, 1),
             "lead_ctf":           round(lead_ctf, 3),
             "programmed_fpt_in":  round(programmed_fpt, 6),
             "actual_chip_in":     round(ipt_base, 6),

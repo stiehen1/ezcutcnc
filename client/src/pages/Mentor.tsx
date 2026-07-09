@@ -2987,6 +2987,7 @@ export default function Mentor() {
   const [stickoutText, setStickoutText] = React.useState("");
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
+  const [feedmillDocText, setFeedmillDocText] = React.useState("");
   const [partStickoutText, setPartStickoutText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
@@ -7518,8 +7519,8 @@ ${stabSection}
             {operation === "feedmill" && (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="space-y-2">
-                  <FieldLabel hint="Lead angle from the print (degrees). This is the angle between the cutting edge and the radial plane. At 20°, the engine programs FPT at 2.92× the actual chip — this is correct and intentional.">Lead Angle (°)</FieldLabel>
-                  <div className="flex gap-1.5 flex-wrap">
+                  <FieldLabel hint="Lead angle from the print (degrees). Only used for lead-angle insert feed mills. For radius-form hi-feed cutters (a corner radius is set), chip thinning comes from the radius + DOC instead — this field is ignored.">Lead Angle (°)</FieldLabel>
+                  <div className={`flex gap-1.5 flex-wrap ${form.corner_radius > 0 ? "opacity-40 pointer-events-none" : ""}`}>
                     {[10, 12, 15, 17, 20].map(a => (
                       <button key={a} type="button"
                         onClick={() => setForm(p => ({ ...p, lead_angle: a }))}
@@ -7532,7 +7533,21 @@ ${stabSection}
                       onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, lead_angle: n })); }}
                     />
                   </div>
-                  {form.lead_angle > 0 && (
+                  {form.corner_radius > 0 ? (() => {
+                    // Radius-form: effective lead angle at the contact point = acos(1 - DOC/R).
+                    // Preview uses the DOC the engine will use (typed, else rec = 0.8×CR).
+                    const R = form.corner_radius;
+                    const doc = form.feedmill_doc_in > 0 ? form.feedmill_doc_in : R * 0.8;
+                    const dr = Math.max(1e-4, Math.min(1, doc / R));
+                    const effLead = Math.acos(Math.max(-1, Math.min(1, 1 - dr))) * 180 / Math.PI;
+                    const ctf = Math.max(1, Math.min(4, 1 / Math.max(0.25, Math.sin(effLead * Math.PI / 180))));
+                    return (
+                      <div className="text-[10px] text-cyan-400 font-mono leading-relaxed">
+                        Radius-form thinning (R{R.toFixed(3)}"): eff lead ≈ {effLead.toFixed(0)}° → CTF {ctf.toFixed(2)}×
+                        <span className="block text-zinc-500">Lead-angle field ignored — thinning driven by radius + DOC.</span>
+                      </div>
+                    );
+                  })() : form.lead_angle > 0 && (
                     <div className="text-[10px] text-indigo-400 font-mono">
                       CTF: {(1/Math.sin(form.lead_angle * Math.PI / 180)).toFixed(3)}× → prog FPT ≈ {form.tool_dia > 0 ? ((0.005 * form.tool_dia) / Math.sin(form.lead_angle * Math.PI / 180)).toFixed(5) : "—"}"
                     </div>
@@ -7542,8 +7557,17 @@ ${stabSection}
                   <FieldLabel hint="Axial depth per pass (inches). Feed mills run shallow — typically 0.8–1.5× corner radius. The engine will suggest a safe starting DOC based on the corner radius from your print. Leave 0 to use the recommended value.">DOC per Pass (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder={form.corner_radius > 0 ? `rec. ${(form.corner_radius * 0.8).toFixed(4)}"` : "e.g. 0.040"}
-                    value={form.feedmill_doc_in > 0 ? form.feedmill_doc_in.toFixed(4) : ""}
-                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n >= 0) setForm(p => ({ ...p, feedmill_doc_in: n })); }}
+                    value={feedmillDocText !== "" ? feedmillDocText : (form.feedmill_doc_in > 0 ? form.feedmill_doc_in.toFixed(4) : "")}
+                    onChange={(e) => {
+                      setFeedmillDocText(e.target.value);
+                      const n = parseDim(e.target.value);
+                      if (Number.isFinite(n) && n >= 0) setForm(p => ({ ...p, feedmill_doc_in: n }));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(feedmillDocText);
+                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, feedmill_doc_in: n })); setFeedmillDocText(n.toFixed(4)); }
+                      else { setForm(p => ({ ...p, feedmill_doc_in: 0 })); setFeedmillDocText(""); }
+                    }}
                   />
                   {form.corner_radius > 0 && (
                     <div className="text-[10px] text-zinc-500">
@@ -14029,13 +14053,18 @@ ${stabSection}
                       L/D {feedmillResult.ld_ratio?.toFixed(1)}× — DOC &amp; IPT auto-derated for long reach
                     </div>
                   )}
+                  {feedmillResult.ctf_source === "radius" && (
+                    <div className="text-[10px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded px-2 py-1">
+                      Radius-form cutter: chip thinning driven by the corner radius + DOC (no lead-angle face). The lead-angle field is not used.
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
                     <div>
-                      <span className="text-muted-foreground">Lead Angle</span>
-                      <span className="ml-2 font-semibold">{feedmillResult.lead_angle_deg}°</span>
+                      <span className="text-muted-foreground">{feedmillResult.ctf_source === "radius" ? "Eff. Lead (radius)" : "Lead Angle"}</span>
+                      <span className="ml-2 font-semibold">{feedmillResult.ctf_source === "radius" ? (feedmillResult.eff_lead_angle_deg?.toFixed(0) ?? feedmillResult.lead_angle_deg) : feedmillResult.lead_angle_deg}°</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Lead CTF</span>
+                      <span className="text-muted-foreground">{feedmillResult.ctf_source === "radius" ? "Radius CTF" : "Lead CTF"}</span>
                       <span className="ml-2 font-semibold text-cyan-400">{feedmillResult.lead_ctf?.toFixed(3)}×</span>
                     </div>
                     <div>
