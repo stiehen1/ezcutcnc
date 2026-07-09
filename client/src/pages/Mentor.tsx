@@ -2988,6 +2988,8 @@ export default function Mentor() {
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
   const [feedmillDocText, setFeedmillDocText] = React.useState("");
+  const [feedmillCrText, setFeedmillCrText] = React.useState("");
+  const [feedmillStickoutText, setFeedmillStickoutText] = React.useState("");
   const [partStickoutText, setPartStickoutText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
@@ -7502,16 +7504,34 @@ ${stabSection}
                   <FieldLabel hint="Primary corner radius from the print (inches). The dual-radius geometry uses this for the DOC advisory: rec DOC = 0.8 × CR, max DOC = 1.5 × CR.">Corner Radius (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.060"
-                    value={form.corner_radius > 0 ? form.corner_radius.toFixed(4) : ""}
-                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n >= 0) setForm(p => ({ ...p, corner_radius: n, corner_condition: "corner_radius" })); }}
+                    value={feedmillCrText !== "" ? feedmillCrText : (form.corner_radius > 0 ? form.corner_radius.toFixed(4) : "")}
+                    onChange={(e) => {
+                      setFeedmillCrText(e.target.value);
+                      const n = parseDim(e.target.value);
+                      if (Number.isFinite(n) && n >= 0) setForm(p => ({ ...p, corner_radius: n, corner_condition: "corner_radius" }));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(feedmillCrText);
+                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, corner_radius: n, corner_condition: "corner_radius" })); setFeedmillCrText(n.toFixed(4)); }
+                      else { setForm(p => ({ ...p, corner_radius: 0 })); setFeedmillCrText(""); }
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel hint="Stickout from holder nose to tool tip in inches. Feed mills are designed for long-reach — stickout advisory still applies for lateral loads on entry/exit moves.">Stickout (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 3.000"
-                    value={form.stickout > 0 ? form.stickout.toFixed(3) : ""}
-                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, stickout: n })); }}
+                    value={feedmillStickoutText !== "" ? feedmillStickoutText : (form.stickout > 0 ? form.stickout.toFixed(3) : "")}
+                    onChange={(e) => {
+                      setFeedmillStickoutText(e.target.value);
+                      const n = parseDim(e.target.value);
+                      if (Number.isFinite(n) && n > 0) setForm(p => ({ ...p, stickout: n }));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(feedmillStickoutText);
+                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, stickout: n })); setFeedmillStickoutText(n.toFixed(3)); }
+                      else { setFeedmillStickoutText(""); }
+                    }}
                   />
                 </div>
               </div>
