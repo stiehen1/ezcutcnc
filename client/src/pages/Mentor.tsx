@@ -2990,6 +2990,7 @@ export default function Mentor() {
   const [feedmillDocText, setFeedmillDocText] = React.useState("");
   const [feedmillCrText, setFeedmillCrText] = React.useState("");
   const [feedmillStickoutText, setFeedmillStickoutText] = React.useState("");
+  const [arborDiaText, setArborDiaText] = React.useState("");
   const [partStickoutText, setPartStickoutText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
@@ -7298,8 +7299,17 @@ ${stabSection}
                   <FieldLabel hint="Arbor (neck) diameter — the narrow section between the shank and the cutting teeth. Critical for deflection. Found on the engineering print as the neck or arbor OD.">Arbor/Neck Dia (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.250"
-                    value={form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : ""}
-                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n })); }}
+                    value={arborDiaText !== "" ? arborDiaText : (form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : "")}
+                    onChange={(e) => {
+                      setArborDiaText(e.target.value);
+                      const n = parseDim(e.target.value);
+                      if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n }));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(arborDiaText);
+                      if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, keyseat_arbor_dia: n })); setArborDiaText(n.toFixed(4)); }
+                      else { setForm((p) => ({ ...p, keyseat_arbor_dia: 0 })); setArborDiaText(""); }
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -7371,8 +7381,17 @@ ${stabSection}
                   <FieldLabel hint="Neck diameter — the narrow section between the shank and the cutting head. Used for deflection modeling.">Neck Dia (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder="e.g. 0.200"
-                    value={form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : ""}
-                    onChange={(e) => { const n = parseDim(e.target.value); if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n })); }}
+                    value={arborDiaText !== "" ? arborDiaText : (form.keyseat_arbor_dia > 0 ? form.keyseat_arbor_dia.toFixed(4) : "")}
+                    onChange={(e) => {
+                      setArborDiaText(e.target.value);
+                      const n = parseDim(e.target.value);
+                      if (Number.isFinite(n) && n > 0) setForm((p) => ({ ...p, keyseat_arbor_dia: n }));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(arborDiaText);
+                      if (Number.isFinite(n) && n > 0) { setForm((p) => ({ ...p, keyseat_arbor_dia: n })); setArborDiaText(n.toFixed(4)); }
+                      else { setForm((p) => ({ ...p, keyseat_arbor_dia: 0 })); setArborDiaText(""); }
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
