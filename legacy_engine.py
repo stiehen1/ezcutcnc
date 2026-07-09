@@ -3094,7 +3094,7 @@ FEEDMILL_SFM = {
     "copper_beryllium":       325,
     # Steel
     "Steel":                  450,
-    "steel_mild":             500,
+    "steel_mild":            1000,   # 1018/A36 feed-milling runs hot (shop: 900-1200 SFM); RPM ceiling caps it per machine
     "steel_free":             550,
     "steel_alloy":            425,
     "tool_steel_p20":         375,
@@ -3802,11 +3802,15 @@ def run_feedmill(payload: dict) -> dict:
         _ctf_source   = "lead_angle"
     lead_ctf = ctf   # retained name for downstream/output compatibility
 
-    # Chip load — base IPT from standard milling table × 1.15 feed mill boost,
+    # Chip load — base IPT from standard milling table × feed-mill boost,
     # then amplify by the geometric CTF.
-    # The 1.15× accounts for feed mill geometry running hotter chip loads than
-    # a conventional endmill at the same diameter (shop-validated chart data).
-    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D * 1.15
+    # FEEDMILL_IPT_BOOST applies globally to all feed mills (all sizes/materials).
+    # Calibrated to 0.80 against CC-14904 (5/16" 5FL, 1018, DOC 0.010") on Swiss
+    # live tooling: 6000 rpm ceiling × 5 fl × programmed FPT ≈ 185 IPM, in the
+    # shop's 150-200 IPM band. Pairs with FEEDMILL_SFM["steel_mild"]=1000 (RPM
+    # ceiling is the binding limit here, not SFM). Retune with more shop data.
+    FEEDMILL_IPT_BOOST = 0.80
+    ipt_base       = IPT_FRAC.get(mat, IPT_FRAC.get(mat_group, 0.005)) * D * FEEDMILL_IPT_BOOST
     ipt_base      *= _ld_ipt_factor
     programmed_fpt = ipt_base * ctf   # what gets programmed in CAM
 
