@@ -1994,7 +1994,13 @@ export default function Mentor() {
         }
         if (e.ream_step_lengths?.length > 0) next.ream_step_lengths = e.ream_step_lengths;
         // ream_flute_length deprecated — LOC (form.loc) is the cut depth for reamers
-        if (e.cutting_material) {
+        // Apply the print's material ONLY if the user hasn't already chosen one. The print
+        // states the material the tool was DESIGNED for (e.g. "ALUMINUM GEOMETRY"), which is
+        // often NOT the material being quoted (same ball geometry, different job). Clobbering
+        // a user's pick silently swapped 13-8 SS → aluminum and ran 800 SFM with no warning.
+        // When the user already picked a material, keep it — the mismatch banner (~line 6750)
+        // surfaces the difference and offers a one-click switch to the print's material.
+        if (e.cutting_material && !p.material) {
           const matKey = e.cutting_material as string;
           next.material = matKey as any;
           const sub = ISO_SUBCATEGORIES.find(s => s.key === matKey);
@@ -6782,6 +6788,28 @@ ${stabSection}
                     >
                       Switch to {printLabel} →
                     </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Material came from the print AND is still unchanged — nudge the user to
+              confirm it matches the JOB, since the print's material is what the tool was
+              DESIGNED for (often not what's being quoted). Mutually exclusive with the
+              mismatch banner above (that fires when they DIFFER; this when they're SAME). */}
+          {pdfExtracted && pdfMaterial && form.material && pdfMaterial === form.material && (() => {
+            const sub = ISO_SUBCATEGORIES.find(s => s.key === form.material);
+            const label = sub?.label ?? form.material;
+            return (
+              <div className="mt-2 rounded-lg border border-sky-500/50 bg-sky-500/10 px-3 py-2 text-xs leading-snug">
+                <div className="flex items-start gap-2">
+                  <span className="text-sky-400 mt-0.5">ⓘ</span>
+                  <div className="text-sky-200/90">
+                    Material <span className="font-semibold">{label}</span> was read from the print — that's
+                    what the tool was <span className="italic">designed for</span>. Confirm it matches your
+                    <span className="font-semibold"> job</span> material before running; change the dropdown if you're
+                    cutting something else.
                   </div>
                 </div>
               </div>
