@@ -39,9 +39,15 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+# Build first, then free port 5000 and serve a SINGLE listener.
+# Why the port dance: the Run button and any prior supervisor process both try to
+# own 5000. Starting `node dist/index.cjs` while an old listener is still bound
+# races and dies with EADDRINUSE (exactly the crash seen on redeploy). `fuser -k`
+# alone is unreliable — the old proc can outlive a fixed `sleep 2`. So kill, then
+# WAIT in a loop until the kernel reports 5000 actually free before starting.
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run build && node dist/index.cjs"
+args = "npm run build && fuser -k 5000/tcp 2>/dev/null || true; for i in $(seq 1 30); do fuser 5000/tcp >/dev/null 2>&1 || break; sleep 0.5; done; exec node dist/index.cjs"
 waitForPort = 5000
 
 [agent]
