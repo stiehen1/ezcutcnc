@@ -1860,6 +1860,9 @@ export default function Mentor() {
   // ── PDF Print Upload ──────────────────────────────────────────────────────
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfExtracted, setPdfExtracted] = React.useState(false);
+  // User acknowledged a material mismatch ("show parameters anyway") — lets an intentional
+  // cross-material run through the results gate. Reset whenever the mismatch changes.
+  const [materialMismatchAck, setMaterialMismatchAck] = React.useState(false);
   // Tracks whether the surfacing tilt value is auto (seed/engine rec) or user-dragged.
   // Auto tilt syncs to the engine's latest recommendation both directions; a user-set
   // tilt is never overridden.
@@ -2448,6 +2451,11 @@ export default function Mentor() {
   React.useEffect(() => { localStorage.setItem("cc_operation", operation); }, [operation]);
   React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
   React.useEffect(() => { localStorage.setItem("cc_mode", form.mode || ""); }, [form.mode]);
+
+  // Re-arm the material-mismatch gate whenever the material selection or the print's
+  // material changes — an "override" acknowledged for one mismatch must not silently
+  // carry over to a different one.
+  React.useEffect(() => { setMaterialMismatchAck(false); }, [form.material, pdfMaterial]);
 
   // Surfacing default: seed the "Finish" preset (32 µin Ra, ap 10%D) the first time
   // surfacing mode is entered with nothing chosen yet, so the Cut Engagement section
@@ -13100,7 +13108,7 @@ ${stabSection}
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recommendation</CardTitle>
-            {customer && (
+            {customer && !(pdfExtracted && pdfMaterial && form.material && pdfMaterial !== form.material && !materialMismatchAck) && (
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-1.5">
                   <button
@@ -13141,6 +13149,55 @@ ${stabSection}
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {(() => {
+            // Gate the results on an UNRESOLVED material mismatch: the tool's design
+            // material (from the print) differs from the selected material. Withhold cut
+            // parameters until the user either switches material or explicitly overrides —
+            // so wrong-material speeds/feeds can't be read or exported by mistake.
+            const mm = pdfExtracted && pdfMaterial && form.material && pdfMaterial !== form.material;
+            if (!mm || materialMismatchAck) return null;
+            const printSub = ISO_SUBCATEGORIES.find(s => s.key === pdfMaterial);
+            const selSub   = ISO_SUBCATEGORIES.find(s => s.key === form.material);
+            const printLabel = printSub?.label ?? pdfMaterial;
+            const selLabel   = selSub?.label ?? form.material;
+            return (
+              <div className="rounded-xl border border-amber-500/60 bg-amber-500/10 px-4 py-4 space-y-3">
+                <p className="text-sm font-semibold text-amber-300">Parameters hidden — resolve material first</p>
+                <p className="text-xs text-amber-200/90 leading-snug">
+                  This tool {pdfToolNumber ? `(${pdfToolNumber}) ` : ""}was designed for
+                  {" "}<span className="font-semibold">{printLabel}</span>, but you have
+                  {" "}<span className="font-semibold">{selLabel}</span> selected. Speeds & feeds are hidden
+                  to prevent quoting wrong-material numbers. Switch to the tool's material, or override if you
+                  intend to run this tool in {selLabel}.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button"
+                    onClick={() => {
+                      setForm(p => ({
+                        ...p,
+                        material: pdfMaterial as any,
+                        hardness_value: printSub?.hardness.value ?? p.hardness_value,
+                        hardness_scale: printSub?.hardness.scale ?? p.hardness_scale,
+                      }));
+                      if (printSub) setIsoCategory(printSub.iso);
+                    }}
+                    className="text-xs font-semibold px-3 py-1.5 rounded border border-amber-400 bg-amber-400 text-black hover:bg-amber-300">
+                    Switch to {printLabel}
+                  </button>
+                  <button type="button"
+                    onClick={() => setMaterialMismatchAck(true)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded border border-amber-500/60 text-amber-300 hover:bg-amber-500/10">
+                    Show parameters anyway
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+          {(() => {
+            // When the gate above is showing, suppress the results body entirely.
+            const mmBlock = pdfExtracted && pdfMaterial && form.material && pdfMaterial !== form.material && !materialMismatchAck;
+            if (mmBlock) return null;
+            return (<>
           {!customer ? (
             <div className="text-sm text-muted-foreground">
               Run the engine to view recommendations.
@@ -16289,6 +16346,8 @@ ${stabSection}
 
             </>
           )}
+            </>);
+          })()}
         </CardContent>
       </Card>}
 
