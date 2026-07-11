@@ -1860,6 +1860,10 @@ export default function Mentor() {
   // ── PDF Print Upload ──────────────────────────────────────────────────────
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfExtracted, setPdfExtracted] = React.useState(false);
+  // Tracks whether the surfacing tilt value is auto (seed/engine rec) or user-dragged.
+  // Auto tilt syncs to the engine's latest recommendation both directions; a user-set
+  // tilt is never overridden.
+  const [tiltUserSet, setTiltUserSet] = React.useState(false);
   const [pdfToolNumber, setPdfToolNumber] = React.useState<string | null>(null);
   const [pdfConvertedFromMm, setPdfConvertedFromMm] = React.useState(false);
   const [pdfFluteWash, setPdfFluteWash] = React.useState<number>(0);
@@ -1873,6 +1877,7 @@ export default function Mentor() {
     setPdfUploading(true);
     setPdfExtracted(false);
     setBarrelFormTool(false);
+    setTiltUserSet(false);   // fresh tool → tilt back to auto-tracking
     setPdfOal(0);
     try {
       // Send the file as base64 in a JSON body, NOT multipart/form-data. The
@@ -2455,20 +2460,25 @@ export default function Mentor() {
     const apIn = form.tool_dia > 0 ? apXD * form.tool_dia : 0;
     const needSeed = !(form.target_ra_uin > 0);
     const needAp   = form.tool_dia > 0 && !(form.surfacing_ap_in > 0);
-    if (!needSeed && !needAp) return;
+    // Only pre-fill a tilt once a print is actually uploaded — a bare "5°" sitting in the
+    // slider before any tool is loaded reads as a hard preset, not a default. When there's
+    // no upload, tilt stays 0 and the "3–5° recommended" hint nudges the user instead. The
+    // engine still refines tilt up after the calc regardless.
+    const needTilt = pdfExtracted && form.tool_dia > 0 && !(form.surfacing_tilt_deg > 0);
+    if (!needSeed && !needAp && !needTilt) return;
     setForm((p) => {
       const next = { ...p };
       if (needSeed) {
         next.target_ra_uin = 32;
         next.surfacing_input_mode = "scallop";
         next.surfacing_scallop_in = (32 * 4) / 1_000_000;
-        if (!(p.surfacing_tilt_deg > 0)) next.surfacing_tilt_deg = 5;
       }
       if (needAp) next.surfacing_ap_in = apIn;
+      if (needTilt) next.surfacing_tilt_deg = 5;
       return next;
     });
     if (needAp && apIn > 0) setSurfApText(apIn.toFixed(4));
-  }, [form.mode, form.tool_dia]);
+  }, [form.mode, form.tool_dia, pdfExtracted]);
 
   // Fetch the best stocked EDP per candidate slotting diameter — only when slot mode,
   // a slot width, AND a material are all set (EDP can't be material-correct otherwise).
@@ -3043,15 +3053,16 @@ export default function Mentor() {
   }, [mentor.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Adopt the engine's tool-aware tilt recommendation for THIS uploaded tool/ap/material.
-  // The engine emits tilt_rec_deg (5–20°) only when the ball would otherwise rub on its
-  // dead zone (contact SFM below the material floor). It's a MINIMUM required tilt, so we
-  // only ever bump UP — never reduce a tilt the user already dialed in. When the engine
-  // returns no rec, the flat 5° good-practice default (seeded on surfacing entry) stands.
-  // Self-stabilizing: raising tilt lifts D_eff, so the next calc returns no rec.
+  // The engine computes tilt_rec_deg from the contact geometry, so it responds to ap
+  // (shallow ap → more tilt to clear the dead zone; well-engaged ap → the ~5° baseline).
+  // If the tilt is still AUTO (seed or a prior rec, not user-dragged), sync it to the
+  // latest rec in BOTH directions after each calc — so changing ap + re-running visibly
+  // moves the tilt. A tilt the user set by hand is never overridden.
   React.useEffect(() => {
     if (form.mode !== "surfacing") return;
+    if (tiltUserSet) return;                       // respect a hand-dialed tilt
     const rec = (mentor.data as any)?.customer?.tilt_rec_deg;
-    if (typeof rec === "number" && rec > form.surfacing_tilt_deg + 0.5) {
+    if (typeof rec === "number" && Math.abs(rec - form.surfacing_tilt_deg) >= 1) {
       setForm((p) => ({ ...p, surfacing_tilt_deg: Math.round(rec) }));
     }
   }, [mentor.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3465,6 +3476,7 @@ export default function Mentor() {
   function clearPdf() {
     setPdfExtracted(false);
     setBarrelFormTool(false);
+    setTiltUserSet(false);
     setPdfToolNumber(null);
     setPdfConvertedFromMm(false);
     setPdfMaterial(null);
@@ -11618,12 +11630,20 @@ ${stabSection}
                         step={1}
                         className="flex-1"
                         value={form.surfacing_tilt_deg}
-                        onChange={(e) => setForm((p) => ({ ...p, surfacing_tilt_deg: Number(e.target.value) }))}
+                        onChange={(e) => { setTiltUserSet(true); setForm((p) => ({ ...p, surfacing_tilt_deg: Number(e.target.value) })); }}
                       />
                       <span className="text-sm font-semibold w-8 text-right">{form.surfacing_tilt_deg}°</span>
+                      {tiltUserSet && (
+                        <button type="button" title="Return tilt to the engine's recommendation"
+                          onClick={() => setTiltUserSet(false)}
+                          className="text-[10px] text-sky-400 hover:text-sky-300 underline shrink-0">auto</button>
+                      )}
                     </div>
                     {form.surfacing_tilt_deg === 0 && (
                       <p className="text-[10px] text-amber-400">3–5° tilt recommended</p>
+                    )}
+                    {form.surfacing_tilt_deg > 0 && !tiltUserSet && (
+                      <p className="text-[10px] text-zinc-500">Auto — tracks the engine's recommendation for this tool &amp; ap.</p>
                     )}
                     {(() => {
                       const rec = (mentor.data as any)?.customer?.tilt_rec_deg;
