@@ -3072,6 +3072,9 @@ export default function Mentor() {
   // If the tilt is still AUTO (seed or a prior rec, not user-dragged), sync it to the
   // latest rec in BOTH directions after each calc — so changing ap + re-running visibly
   // moves the tilt. A tilt the user set by hand is never overridden.
+  // Fires ONLY when mentor.data changes — i.e. a fresh calc just completed, so the rec
+  // matches the inputs that were run. (The "auto" button does NOT rely on this; it resets
+  // to the 5° baseline directly, so it can never apply a stale rec from an earlier ap.)
   React.useEffect(() => {
     if (form.mode !== "surfacing") return;
     if (tiltUserSet) return;                       // respect a hand-dialed tilt
@@ -11670,8 +11673,14 @@ ${stabSection}
                       />
                       <span className="text-sm font-semibold w-8 text-right">{form.surfacing_tilt_deg}°</span>
                       {tiltUserSet && (
-                        <button type="button" title="Return tilt to the engine's recommendation"
-                          onClick={() => setTiltUserSet(false)}
+                        <button type="button" title="Return tilt to the recommended default (refined on the next run)"
+                          onClick={() => {
+                            // Reset to the 5° baseline AND clear the user flag. Don't adopt
+                            // whatever rec is sitting in mentor.data — it may be stale (computed
+                            // at a different ap). The next Re-run refines from the baseline.
+                            setTiltUserSet(false);
+                            setForm((p) => ({ ...p, surfacing_tilt_deg: 5 }));
+                          }}
                           className="text-[10px] text-sky-400 hover:text-sky-300 underline shrink-0">auto</button>
                       )}
                     </div>
