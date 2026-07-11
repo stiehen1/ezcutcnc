@@ -15103,11 +15103,11 @@ ${stabSection}
                           const diaLabel = fracMap[snapped] ?? `${snapped.toFixed(3)}"`;
                           const targetRpm = Math.round((customer.sfm * 12) / (snapped * Math.PI));
                           return (
-                            <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
-                              <div><span className="font-semibold">Downsize the tool to use this machine's speed range.</span>{" "}
-                              At {fmtNum(customer.rpm, 0)} RPM you're using only {fmtNum(rpmPct, 0)}% of this machine's {fmtNum(machMaxRpm, 0)} RPM capability.
-                              {" "}A {diaLabel} tool in this material runs at ~{fmtNum(targetRpm, 0)} RPM — more passes at lighter load, better MRR, and far less deflection.</div>
-                              <div className="text-amber-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
+                            <div className="rounded border border-sky-500/50 bg-sky-500/10 px-2.5 py-2 text-xs text-sky-300 leading-snug space-y-1">
+                              <div><span className="font-semibold">Opportunity: your machine has more speed to give.</span>{" "}
+                              This tool tops out at {fmtNum(customer.rpm, 0)} RPM — well under your {fmtNum(machMaxRpm, 0)} RPM ceiling.
+                              {" "}Step down to a {diaLabel} tool to run the same SFM at ~{fmtNum(targetRpm, 0)} RPM and unlock it: more passes at lighter load, higher MRR, and far less deflection.</div>
+                              <div className="text-sky-400/70">For smaller features, Core Cutter's QTR3 series (1/16"–1/4") is built for exactly this — high-RPM machines, small diameters, variable pitch+helix for stability.</div>
                             </div>
                           );
                         } else if (targetDia < 0.375) {
@@ -15118,15 +15118,15 @@ ${stabSection}
                           const pct375 = Math.round((rpm375 / machMaxRpm) * 100);
                           const pct250 = Math.round((rpm250 / machMaxRpm) * 100);
                           return (
-                            <div className="rounded border border-amber-500/50 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 leading-snug space-y-1">
-                              <div><span className="font-semibold">This machine's high-RPM range is underutilized by this material.</span>{" "}
-                              {fmtNum(customer.sfm, 0)} SFM caps RPM at {fmtNum(customer.rpm, 0)} with this tool — only {fmtNum(rpmPct, 0)}% of {fmtNum(machMaxRpm, 0)} RPM max.
-                              {" "}Smaller tools run faster in the same material:</div>
+                            <div className="rounded border border-sky-500/50 bg-sky-500/10 px-2.5 py-2 text-xs text-sky-300 leading-snug space-y-1">
+                              <div><span className="font-semibold">Unlock more of your high-speed spindle.</span>{" "}
+                              This material's {fmtNum(customer.sfm, 0)} SFM holds this tool to {fmtNum(customer.rpm, 0)} RPM — {fmtNum(rpmPct, 0)}% of your {fmtNum(machMaxRpm, 0)} RPM ceiling.
+                              {" "}Smaller diameters capture more of that speed at the same SFM:</div>
                               <div className="pl-2 space-y-0.5">
-                                <div>• <span className="font-medium">3/8"</span> → ~{fmtNum(rpm375, 0)} RPM ({pct375}% utilization)</div>
-                                <div>• <span className="font-medium">1/4"</span> → ~{fmtNum(rpm250, 0)} RPM ({pct250}% utilization)</div>
+                                <div>• <span className="font-medium">3/8"</span> → ~{fmtNum(rpm375, 0)} RPM ({pct375}% of max)</div>
+                                <div>• <span className="font-medium">1/4"</span> → ~{fmtNum(rpm250, 0)} RPM ({pct250}% of max)</div>
                               </div>
-                              <div className="text-amber-400/70">More passes at lighter radial load — better MRR and less deflection. This machine's sweet spot is aluminum, plastics, and light alloys at full speed. For smaller features in this material, Core Cutter's QTR3 series (1/16"–1/4") offers variable pitch+helix stability at high RPM with minimal stickout.</div>
+                              <div className="text-sky-400/70">More passes at lighter radial load — higher MRR and less deflection. To take full advantage of this fast spindle on smaller features, Core Cutter's QTR3 series (1/16"–1/4") is purpose-built for it: variable pitch+helix stability at high RPM with minimal stickout.</div>
                             </div>
                           );
                         }
