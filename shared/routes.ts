@@ -50,6 +50,11 @@ export const mentorSchemas = {
     surfacing_stepover_in: z.number().min(0).default(0),
     surfacing_ap_in: z.number().min(0).default(0),
     surfacing_tilt_deg: z.number().min(0).max(30).default(0),
+    // Tapered ballnose / tapered-neck (surfacing): tip dia == tool_dia; base derived
+    // from included angle + tapered length. Rigidity effect only (chip load unchanged).
+    is_tapered: z.boolean().default(false),
+    taper_included_angle_deg: z.number().min(0).max(45).default(0),
+    taper_length_in: z.number().min(0).default(0),
 
     // Chamfer mill specific
     chamfer_series: z.enum(["CMS", "CMH"]).default("CMH"),

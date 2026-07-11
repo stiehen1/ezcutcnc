@@ -1698,6 +1698,8 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
         data.get("holder_gage_length"),
         data.get("holder_nose_dia"),
         data.get("core_ratio"),
+        data.get("taper_base_dia"),
+        data.get("taper_length"),
     )
     # Rigidity factor reduces deflection — stiffer holder/interface = less tip movement
     deflection /= rigidity
@@ -4286,6 +4288,22 @@ def run(payload=None):
         _neck_dia = float(payload.get("keyseat_arbor_dia", 0) or 0)
         if 0 < _neck_dia < float(data.get("diameter", 0)):
             data["neck_dia"] = _neck_dia
+
+    # ── Tapered ballnose → tapered-cantilever stiffness (3D surfacing) ────────
+    # Tapered ballnose / tapered-neck tools have a conical body that flares from the
+    # ball tip dia (== cutting diameter) up to a larger base over the taper length.
+    # The cone is far stiffer than a straight neck at tip dia; model it exactly.
+    # Input is the taper INCLUDED angle (deg, off the print) + tapered length (in).
+    # base_dia = tip_dia + 2·tan(included/2)·length.  Surfacing mode only for now.
+    _is_tapered = bool(payload.get("is_tapered", False))
+    if _is_tapered and str(data.get("mode", "")).lower() == "surfacing":
+        _taper_ang = float(payload.get("taper_included_angle_deg", 0) or 0)
+        _taper_len = float(payload.get("taper_length_in", 0) or 0)
+        _tip_dia   = float(data.get("diameter", 0) or 0)
+        if _taper_ang > 0 and _taper_len > 0 and _tip_dia > 0:
+            _taper_base = _tip_dia + 2.0 * math.tan(math.radians(_taper_ang / 2.0)) * _taper_len
+            data["taper_base_dia"] = _taper_base
+            data["taper_length"]   = _taper_len
 
     # ── Helix angle resolution ────────────────────────────────────────────────
     # Priority: payload helix_angle (SKU column) → SERIES_HELIX lookup → default 35°
@@ -7903,6 +7921,12 @@ def run(payload=None):
             "scallop_height_in": round(_surf_scallop_h,    6) if _surf_scallop_h    is not None else None,
             "stepover_in":       round(_surf_stepover_in,  5) if _surf_stepover_in  is not None else None,
             "stepover_pct_d":    round(_surf_stepover_pct, 2) if _surf_stepover_pct is not None else None,
+            "taper_base_dia_in": round(float(data["taper_base_dia"]), 4) if data.get("taper_base_dia") else None,
+            "taper_note": (
+                f"Tapered ballnose: Ø{float(data['diameter']):.4f}\" tip → "
+                f"Ø{float(data['taper_base_dia']):.4f}\" base over {float(data['taper_length']):.3f}\". "
+                f"Conical body modeled as a stiffer cantilever; speeds/feeds unchanged (same tip chip load)."
+            ) if data.get("taper_base_dia") else None,
             "status": feed_limiter,
             "status_hint": feed_limiter_hint,
             "risk": _cc_risk,

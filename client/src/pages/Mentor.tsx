@@ -1939,6 +1939,16 @@ export default function Mentor() {
         if (e.helix_angle > 0) next.helix_angle = e.helix_angle;
         if (e.corner_condition) next.corner_condition = e.corner_condition;
         if (e.corner_radius > 0) { next.corner_radius = e.corner_radius; setCrText(e.corner_radius.toFixed(4)); }
+        // Tapered ballnose / tapered bull-nose: server extractor normalizes to INCLUDED
+        // angle + tapered length. Populate the surfacing taper inputs so the stiffer
+        // cantilever model activates. Works alongside corner_radius (tapered bull-nose).
+        if (e.taper_included_angle_deg > 0 && e.taper_length_in > 0) {
+          next.is_tapered = true;
+          next.taper_included_angle_deg = e.taper_included_angle_deg;
+          next.taper_length_in = e.taper_length_in;
+          setSurfTaperAngleText(String(e.taper_included_angle_deg));
+          setSurfTaperLenText(e.taper_length_in.toFixed(4));
+        }
         if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); next.ream_shank_dia = e.shank_dia; }
         if (e.coating) next.coating = e.coating;
         if (e.keyseat_arbor_dia > 0) { next.keyseat_arbor_dia = e.keyseat_arbor_dia; setNeckDiaText(e.keyseat_arbor_dia.toFixed(4)); }
@@ -1988,6 +1998,13 @@ export default function Mentor() {
         else if (tt === "threadmill") { setOperation("threadmilling"); next.operation = "threadmilling"; }
         else if (tt === "chamfer_mill") {
           next.tool_type = "chamfer_mill";
+        }
+        // Tapered ballnose / bull-nose is a 3D-surfacing tool, and the taper stiffness
+        // model only engages in surfacing mode. Auto-select it so the upload takes effect
+        // (a ball/CR endmill otherwise stays in whatever milling mode was selected).
+        if (next.is_tapered && (tt === "" || tt === "endmill")) {
+          setOperation("milling"); next.operation = "milling";
+          next.mode = "surfacing";
         }
         // Variable pitch/helix from print notes
         if (e.variable_pitch === true) next.variable_pitch = true;
@@ -2260,6 +2277,9 @@ export default function Mentor() {
     surfacing_stepover_in: 0,
     surfacing_ap_in: 0,
     surfacing_tilt_deg: 0,
+    is_tapered: false,
+    taper_included_angle_deg: 0,
+    taper_length_in: 0,
 
     // Slotting
     slot_closed: false,
@@ -2797,6 +2817,8 @@ export default function Mentor() {
   const [surfScallopText, setSurfScallopText] = React.useState("");
   const [surfStepoverText, setSurfStepoverText] = React.useState("");
   const [surfApText, setSurfApText] = React.useState("");
+  const [surfTaperAngleText, setSurfTaperAngleText] = React.useState("");
+  const [surfTaperLenText, setSurfTaperLenText] = React.useState("");
   const [toolDiaText, setToolDiaText] = React.useState("");
   const [locText, setLocText] = React.useState("");
   const [lbsText, setLbsText] = React.useState("");
@@ -6199,7 +6221,7 @@ ${stabSection}
                 <option value="face">Facing (Planar Milling)</option>
                 <option value="slot">Slotting</option>
                 <option value="circ_interp">Circular Interpolation (e.g. Bore Enlargement)</option>
-                <option value="surfacing">3D Surface Contouring (Ball / Bull Nose)</option>
+                <option value="surfacing">3D Surface Contouring (Ball / Bull Nose / Torus)</option>
                 <option value="deep_pocket">Pocketing Strategy</option>
               </select>
               </div>
@@ -11532,6 +11554,82 @@ ${stabSection}
                       <p className="text-[10px] text-amber-400">3–5° tilt recommended</p>
                     )}
                   </div>
+                </div>
+
+                {/* Tapered ballnose / tapered-neck tool */}
+                <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/40 px-3 py-3 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.is_tapered}
+                      onChange={(e) => setForm((p) => ({ ...p, is_tapered: e.target.checked }))}
+                    />
+                    <span className="text-xs font-semibold text-zinc-200">Tapered ballnose / tapered-neck tool</span>
+                  </label>
+                  {form.is_tapered && (
+                    <>
+                      <p className="text-[10px] text-zinc-400 leading-snug">
+                        Ball tip Ø = tool diameter ({form.tool_dia > 0 ? `${form.tool_dia.toFixed(4)}"` : "set tool dia"}).
+                        The conical body is modeled as a stiffer cantilever (lower deflection). Speeds/feeds are unchanged —
+                        the tip cuts the same chip.
+                      </p>
+                      <div className="flex gap-3 items-start">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <FieldLabel hint="Taper INCLUDED angle in degrees (the full cone angle, off the tool print — e.g. 6° per side = 12° included). Base dia = tip + 2·tan(included/2)·length.">
+                            Taper Angle <span className="font-normal text-zinc-500">(° included)</span>
+                          </FieldLabel>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
+                            placeholder="e.g. 3"
+                            value={surfTaperAngleText}
+                            onChange={(e) => setSurfTaperAngleText(e.target.value)}
+                            onBlur={() => {
+                              const n = parseFloat(surfTaperAngleText);
+                              if (Number.isFinite(n) && n >= 0 && n <= 45) {
+                                setForm((p) => ({ ...p, taper_included_angle_deg: n }));
+                                setSurfTaperAngleText(n ? n.toString() : "");
+                              } else {
+                                setSurfTaperAngleText(form.taper_included_angle_deg > 0 ? form.taper_included_angle_deg.toString() : "");
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <FieldLabel hint="Length of the tapered body from the ball tip up to where it reaches the base diameter (in). Usually the flute/tapered-neck length off the print.">
+                            Taper Length <span className="font-normal text-zinc-500">(in)</span>
+                          </FieldLabel>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
+                            placeholder="e.g. 1.0"
+                            value={surfTaperLenText}
+                            onChange={(e) => setSurfTaperLenText(e.target.value)}
+                            onBlur={() => {
+                              const n = parseFloat(surfTaperLenText);
+                              if (Number.isFinite(n) && n >= 0) {
+                                setForm((p) => ({ ...p, taper_length_in: n }));
+                                setSurfTaperLenText(n ? n.toFixed(4) : "");
+                              } else {
+                                setSurfTaperLenText(form.taper_length_in > 0 ? form.taper_length_in.toFixed(4) : "");
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {form.taper_included_angle_deg > 0 && form.taper_length_in > 0 && form.tool_dia > 0 && (
+                        <p className="text-[10px] text-sky-300">
+                          Derived base Ø ≈ {(form.tool_dia + 2 * Math.tan((form.taper_included_angle_deg / 2) * Math.PI / 180) * form.taper_length_in).toFixed(4)}"
+                          {" "}(tip {form.tool_dia.toFixed(4)}" → over {form.taper_length_in.toFixed(3)}")
+                        </p>
+                      )}
+                      {(!(form.taper_included_angle_deg > 0) || !(form.taper_length_in > 0)) && (
+                        <p className="text-[10px] text-amber-400">Enter taper angle and length to activate the stiffer cantilever model.</p>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             );

@@ -428,7 +428,7 @@ const QP_OPERATIONS = [
   { value: "face",        label: "Facing (Planar Milling)",               desc: "Wide shallow passes across flat surfaces",                                geo: "standard",    toolType: "endmill" },
   { value: "slot",        label: "Slotting",                              desc: "Full-width slot or keyway",                                               geo: "standard",    toolType: "endmill" },
   { value: "circ_interp", label: "Circular Interpolation",                desc: "Helical or circular bore interpolation",                                  geo: "standard",    toolType: "endmill" },
-  { value: "surfacing",   label: "3D Surface Contouring",                 desc: "Ball nose / bull nose — scallop and flow-line finishing",                 geo: "standard",    toolType: "endmill" },
+  { value: "surfacing",   label: "3D Surface Contouring",                 desc: "Ball nose / bull nose / torus — scallop and flow-line finishing",                 geo: "standard",    toolType: "endmill" },
   { value: "chamfer",     label: "Chamfering / Deburring",                desc: "Edge break and chamfer",                                                  geo: null,          toolType: "chamfer_mill" },
 ];
 

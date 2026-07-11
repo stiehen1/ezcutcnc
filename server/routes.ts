@@ -4837,6 +4837,14 @@ CRITICAL RULES — READ CAREFULLY:
    - thread_tpi = threads per inch if shown; 0 if not labeled (single-profile mills show thread angle only)
    - The neck diameter (smaller Ø between shank and cutter, e.g. "Ø0.525") maps to keyseat_arbor_dia for deflection modeling
 
+7. For TAPERED tools (tapered ballnose AND tapered bull-nose — 3D surfacing tools) specifically:
+   - THE TELL: the cutting body is CONICAL — it flares from a SMALL diameter at the tip up to a LARGER diameter toward the shank, with straight angled profile lines (not parallel). A ball tip (full radius) makes it a TAPERED BALLNOSE; a corner radius at the tip makes it a TAPERED BULL-NOSE. Look for an angular callout on the tapered flank like "3° PER SIDE", "6° INCLUDED", "1.5° / SIDE", "TAPER 3°", or an angle dimension between the profile line and the tool centerline.
+   - tool_dia = the BALL TIP diameter (the SMALL end where the tool actually contacts the surface), NOT the larger base/shank Ø. This is the single most common mistake on tapered prints — if you extracted the big base diameter as tool_dia, you read the wrong end. On a tapered ballnose, tool_dia = 2 × tip ball radius. The tip radius is usually a "R.XXXX BALL" callout (e.g. "R.1875 BALL" → tip dia 0.375). A "Ø.XXX @ TAN." callout is the diameter where the ball blends tangent into the taper — it CONFIRMS the tip end but is NOT the ball tip dia; still use 2×R for tool_dia.
+   - taper_included_angle_deg = the FULL INCLUDED cone angle in degrees. CRITICAL — CORE CUTTER TAPERED PRINTS CALL OUT THE ANGLE PER SIDE (half angle), so you must DOUBLE almost every taper angle you read: the angle dimension sits between the tool CENTERLINE (the green dash-dot line) and ONE tapered flank. An angle measured from the centerline to one flank is ALWAYS per-side → included = 2× that value. Example on a real print: a "4.00°" dimension drawn above the centerline means 4° per side → taper_included_angle_deg = 8.0. Treat a bare angle callout on a taper (e.g. "4.00°", "3°", "TAPER 4°", "4°/SIDE", "4.00° PER SIDE") as PER-SIDE and double it. ONLY use the value as-is (do NOT double) when the print explicitly says "INCLUDED" or "INCL" next to the angle. Geometry cross-check: base_dia ≈ tip_dia + 2·tan(included/2)·taper_length should land near the shank Ø — if doubling makes the base overshoot the shank wildly, reconsider, but per-side is the default for these prints. 0 if the tool is not tapered.
+   - taper_length_in = the axial length of the TAPERED body — from the ball tip up to where the taper reaches full base diameter. On these prints it is the LONGER length dimension spanning the tapered flank (e.g. a "(1.980)" reference dim from the shank step to the tip region), NOT the LOC (which is the shorter fluted-length callout, e.g. "1.00 LOC"). If both a LOC and a longer tapered-body dimension are shown, taper_length_in = the longer one. 0 if not tapered.
+   - Still set corner_condition normally: "ball" for a tapered ballnose, "corner_radius" (+ corner_radius R value) for a tapered bull-nose.
+   - Set taper_included_angle_deg = 0 and taper_length_in = 0 for ALL non-tapered tools (straight ballnose, straight endmills, etc.). Only populate these when the conical taper + angle callout are actually present.
+
 CRITICAL — LOC vs LBS for ENDMILLS (read this carefully before extracting):
 
 On long-reach / reduced-neck endmill prints you will see TWO horizontal length dimensions stacked near the cutting end of the tool — one short, one long. Identify them like this:
@@ -4907,6 +4915,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "shank_type": <string or null — look in the title block, notes section, or shank detail for shank type callouts. Return "weldon" if "WELDON FLAT", "WELDON", or "W/FLAT" is noted. Return "safe_lock" if "SAFE LOCK", "SAFELOCK", "SAFE-LOCK", "HAIMER", or "HAIMER SAFE-LOCK" is noted. Return null if no special shank type is noted.>,
   "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>,
   "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>,
+  "taper_included_angle_deg": <number, FULL INCLUDED taper cone angle in degrees for tapered ballnose / tapered bull-nose tools — see rule 7. Normalize per-side/half angles to included (double them). 0 for all non-tapered tools.>,
+  "taper_length_in": <number in inches, axial length of the tapered body (tip to full base dia) — see rule 7. 0 for all non-tapered tools.>,
   "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable pitch by design). false otherwise.>,
   "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable helix by design). false otherwise.>,
   "geometry": <string — the flute geometry, one of "standard" | "chipbreaker" | "truncated_rougher". Read the NOTES section carefully:
@@ -5048,7 +5058,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
       // ── Metric → inch conversion ──────────────────────────────────────────
       if (extracted.units === "mm") {
         const MM_FIELDS = ["tool_dia", "loc", "lbs", "corner_radius", "shank_dia",
-                           "keyseat_arbor_dia", "chamfer_tip_dia"];
+                           "keyseat_arbor_dia", "chamfer_tip_dia", "taper_length_in"];
         for (const f of MM_FIELDS) {
           if (typeof extracted[f] === "number" && (extracted[f] as number) > 0) {
             extracted[f] = Math.round(((extracted[f] as number) / 25.4) * 100000) / 100000;
@@ -5093,6 +5103,12 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         if (extracted.variable_pitch !== true) extracted.variable_pitch = true;
         if (extracted.variable_helix !== true) extracted.variable_helix = true;
       }
+
+      // Tapered ballnose / bull-nose: derive is_tapered from the extracted angle+length
+      // (post mm-conversion) so the client can activate the stiffer cantilever model.
+      const _tapAng = typeof extracted.taper_included_angle_deg === "number" ? extracted.taper_included_angle_deg : 0;
+      const _tapLen = typeof extracted.taper_length_in === "number" ? extracted.taper_length_in : 0;
+      extracted.is_tapered = _tapAng > 0 && _tapLen > 0;
 
       // Uncoated + no stated material → N1 Non-Ferrous. An uncoated tool with no
       // workpiece material called out is almost always an aluminum/non-ferrous

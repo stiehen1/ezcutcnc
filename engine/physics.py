@@ -527,8 +527,38 @@ def cutting_force_per_tooth(material_group, h_eff, helix, hardness_hrc=0, radial
     return K * h_eff * HELIX_FORCE_FACTOR.get(helix, 1.0) * _rake_ff
 
 
+def _tapered_cantilever_delta(force, L, d_tip, d_base, E):
+    """Tip deflection of an end-loaded cantilever whose diameter varies linearly
+    from d_tip (free end) to d_base (fixed end) over length L.
+
+    δ = (F/3E)·∫₀ᴸ (L−x)²/I(x) dx,  I(x)=π·d(x)⁴/64,  d(x)=d_tip+(d_base−d_tip)·x/L
+
+    Substituting u = d(x) gives a closed form (no numerical integration). Reduces
+    exactly to the straight-beam result δ = F·L³/(3E·I) when d_tip == d_base.
+    Used for tapered ballnose / tapered-neck tools in 3D surfacing.
+    """
+    import math
+    L = float(L); d_tip = float(d_tip); d_base = float(d_base)
+    if L <= 0 or d_tip <= 0 or d_base <= 0:
+        return 0.0
+    k = 64.0 / math.pi
+    # Straight beam (equal diameters): avoid divide-by-zero in the taper form.
+    if abs(d_base - d_tip) < 1e-9:
+        I = (math.pi * d_tip**4) / 64.0
+        return (force * L**3) / (3.0 * E * I)
+    m = (d_base - d_tip) / L          # slope of diameter vs. x
+    # (L−x) = (d_base − d(x))/m ; change variable to u=d(x), du=m·dx.
+    # δ = (F·k)/(3E·m³) · ∫_{d_tip}^{d_base} (d_base − u)² / u⁴ du
+    # ∫ (d_base−u)²/u⁴ du = -d_base²/(3u³) + d_base/u² - 1/u   (antiderivative)
+    def _F(u):
+        return -(d_base**2) / (3.0 * u**3) + d_base / (u**2) - 1.0 / u
+    integral = _F(d_base) - _F(d_tip)
+    return (force * k) / (3.0 * E * m**3) * integral
+
+
 def tool_deflection(force, stickout, diameter, flutes, loc=None, lbs=None, neck_dia=None,
-                    holder_gage_len=None, holder_nose_dia=None, series_core_ratio=None):
+                    holder_gage_len=None, holder_nose_dia=None, series_core_ratio=None,
+                    taper_base_dia=None, taper_length=None):
     import math
 
     # Carbide modulus
@@ -565,7 +595,20 @@ def tool_deflection(force, stickout, diameter, flutes, loc=None, lbs=None, neck_
     # Composite beam model for necked / reduced-reach tools:
     # δ = F/(3E) * [LOC³/I_flute + (LBS³ - LOC³)/I_neck]
     # This uses Mohr's integral over two beam segments (flute + neck).
-    if lbs and loc and float(lbs) > float(loc) and float(lbs) <= L_t:
+    if taper_base_dia and taper_length and float(taper_base_dia) > diameter and float(taper_length) > 0:
+        # Tapered ballnose / tapered-neck tool: the conical body (tip dia → base dia
+        # over taper_length) is far stiffer than a straight column at tip dia. Model
+        # the tapered segment exactly, then any remaining stickout as a stiff straight
+        # segment at the base dia. Ball tip dia == cutting `diameter` (tip = tool_dia).
+        L_taper = min(float(taper_length), L_t)
+        delta_tool = _tapered_cantilever_delta(force, L_taper, diameter, float(taper_base_dia), E_carbide)
+        L_rem = L_t - L_taper
+        if L_rem > 1e-6:
+            # Straight base-dia segment beyond the taper: cantilever + rigid-body rotation
+            # of the taper tip carried out to full stickout (parallel-axis via Mohr).
+            I_base = (math.pi * float(taper_base_dia)**4) / 64.0
+            delta_tool += (force / (3.0 * E_carbide * I_base)) * (L_t**3 - L_taper**3)
+    elif lbs and loc and float(lbs) > float(loc) and float(lbs) <= L_t:
         nd = neck_dia if neck_dia else (diameter * 0.75)
         I_neck = (math.pi * float(nd)**4) / 64.0
         lbs_f, loc_f = float(lbs), float(loc)
