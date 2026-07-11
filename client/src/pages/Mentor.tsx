@@ -2438,6 +2438,20 @@ export default function Mentor() {
   React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
   React.useEffect(() => { localStorage.setItem("cc_mode", form.mode || ""); }, [form.mode]);
 
+  // Surfacing default: seed the "Finish" preset (32 µin Ra, ap 10%D) the first time
+  // surfacing mode is entered with nothing chosen yet, so the Cut Engagement section
+  // isn't blank on a fresh upload. Surfacing is a finishing op and Finish is the most
+  // common mold/die pass. Only fires when no finish target is set — user picks override.
+  React.useEffect(() => {
+    if (form.mode !== "surfacing") return;
+    if (form.target_ra_uin > 0) return;  // already chosen — don't clobber
+    const ra = 32, apXD = 0.10;
+    const sc = (ra * 4) / 1_000_000;
+    const apIn = form.tool_dia > 0 ? apXD * form.tool_dia : 0;
+    setForm((p) => ({ ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: sc, surfacing_ap_in: apIn }));
+    if (apIn > 0) setSurfApText(apIn.toFixed(4));
+  }, [form.mode, form.tool_dia]);
+
   // Fetch the best stocked EDP per candidate slotting diameter — only when slot mode,
   // a slot width, AND a material are all set (EDP can't be material-correct otherwise).
   // Debounced; clears when prerequisites are missing so chips fall back to Ø + pass count.
