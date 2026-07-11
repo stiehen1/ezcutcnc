@@ -2445,10 +2445,19 @@ export default function Mentor() {
   React.useEffect(() => {
     if (form.mode !== "surfacing") return;
     if (form.target_ra_uin > 0) return;  // already chosen — don't clobber
-    const ra = 32, apXD = 0.10;
+    // Finish default (32 µin Ra) with recommended engagement pre-filled so the customer
+    // sees runnable parameters, not blank fields: ap = 10%D (depth/rigidity choice), and
+    // tilt = 5° (moves contact off the ball dead-zone — the low end of the app's tilt
+    // guidance; always beneficial, never over-tilts on a light finish pass). Stepover is
+    // solved from the Ra target downstream (ae = √(8·R·scallop)).
+    const ra = 32, apXD = 0.10, tiltDeg = 5;
     const sc = (ra * 4) / 1_000_000;
     const apIn = form.tool_dia > 0 ? apXD * form.tool_dia : 0;
-    setForm((p) => ({ ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: sc, surfacing_ap_in: apIn }));
+    setForm((p) => ({
+      ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: sc,
+      surfacing_ap_in: apIn,
+      surfacing_tilt_deg: p.surfacing_tilt_deg > 0 ? p.surfacing_tilt_deg : tiltDeg,
+    }));
     if (apIn > 0) setSurfApText(apIn.toFixed(4));
   }, [form.mode, form.tool_dia]);
 
