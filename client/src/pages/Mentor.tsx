@@ -3033,6 +3033,20 @@ export default function Mentor() {
     if (life > 0) setRoiCcCutTime(String(Math.round(life)));
   }, [mentor.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Adopt the engine's tool-aware tilt recommendation for THIS uploaded tool/ap/material.
+  // The engine emits tilt_rec_deg (5–20°) only when the ball would otherwise rub on its
+  // dead zone (contact SFM below the material floor). It's a MINIMUM required tilt, so we
+  // only ever bump UP — never reduce a tilt the user already dialed in. When the engine
+  // returns no rec, the flat 5° good-practice default (seeded on surfacing entry) stands.
+  // Self-stabilizing: raising tilt lifts D_eff, so the next calc returns no rec.
+  React.useEffect(() => {
+    if (form.mode !== "surfacing") return;
+    const rec = (mentor.data as any)?.customer?.tilt_rec_deg;
+    if (typeof rec === "number" && rec > form.surfacing_tilt_deg + 0.5) {
+      setForm((p) => ({ ...p, surfacing_tilt_deg: Math.round(rec) }));
+    }
+  }, [mentor.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [tmMajorDiaText, setTmMajorDiaText] = React.useState("");
   const [tmTpiText, setTmTpiText] = React.useState("");
   const [tmPitchMmText, setTmPitchMmText] = React.useState("");
@@ -11602,6 +11616,22 @@ ${stabSection}
                     {form.surfacing_tilt_deg === 0 && (
                       <p className="text-[10px] text-amber-400">3–5° tilt recommended</p>
                     )}
+                    {(() => {
+                      const rec = (mentor.data as any)?.customer?.tilt_rec_deg;
+                      const se = (mentor.data as any)?.customer?.sfm_eff_contact;
+                      const st = (mentor.data as any)?.customer?.sfm_target_contact;
+                      if (typeof rec === "number" && rec > 0) {
+                        return (
+                          <p className="text-[10px] text-sky-300">
+                            Engine suggests ≥{Math.round(rec)}° for this tool
+                            {typeof se === "number" && typeof st === "number"
+                              ? ` — lifts contact speed ~${Math.round(se)}→${Math.round(st)} SFM (off the dead zone)`
+                              : " to keep the contact off the ball dead zone"}.
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
 

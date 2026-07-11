@@ -4405,6 +4405,12 @@ def run(payload=None):
     mode = (data.get("mode") or "").lower()
     is_ball = tool_type in ("ball", "ballnose", "ball_nose") or mode == "ballnose"
     ball_finish_mode = is_ball
+    # Surfacing tools with a ball corner condition are ball-contact tools too, but they
+    # don't set tool_type="ballnose" (they upload as endmills with corner_condition="ball").
+    # This flag gates the tilt/dead-zone solver ONLY — it deliberately does NOT flip
+    # ball_finish_mode (which would double-handle the scallop→stepover math that the
+    # surfacing block already does).
+    _surf_is_ball = (mode == "surfacing") and ((data.get("corner_condition") or "ball").lower() == "ball")
     
     flutes = int(data.get("flutes", 6 if data["mode"] in ("hem", "trochoidal") else 4))
     coating = "T-Max" if material_group in [
@@ -5404,7 +5410,53 @@ def run(payload=None):
                 state["tilt_rec_deg"] = float(tilt_rec)
                 state["sfm_eff"] = float(sfm_eff)
                 state["sfm_target_eff"] = float(sfm_target)
-    
+
+    # Surfacing ball tools (uploaded as endmills with corner_condition="ball") don't
+    # trip the is_ball solver above, so compute a tool-aware tilt recommendation here
+    # from the surfacing contact geometry. Without tilt the ball contacts at angle
+    # φ = acos(1 − ap/R) off the axis; peripheral speed there scales with sin(φ) (the
+    # contact-radius / R ratio). Tilt θ shifts contact to sin(φ+θ). Solve the minimum θ
+    # (5–20°, clamped) that raises the contact-speed ratio to the material target, so the
+    # edge cuts instead of rubbing on the dead zone. Only when tilt would actually help.
+    if _surf_is_ball and state.get("tilt_rec_deg") is None and _surf_d_eff and _surf_R > 0:
+        # A ball nose has ZERO surface speed at the dead-center point — no ap or RPM fixes
+        # that, so ANY ball surfacing pass benefits from some tilt to move the cut off the
+        # tip. So we ALWAYS recommend a tilt for ball surfacing (not only when rubbing):
+        #   • a small baseline nudge (machine-aware: 5-axis can tilt freely, so lean in),
+        #   • scaled UP toward 20° as the zero-tilt contact SFM falls below the material
+        #     floor (rubbing severity).
+        # Recommendation is an ABSOLUTE target from the ZERO-TILT geometry so it converges:
+        # as the user adopts it the rec stops rising and the client stops bumping.
+        # Zero-tilt contact ratio from ap alone: sin(φ) = √(2·ap/R − (ap/R)²).
+        _apR = min(2.0, max(0.0, _surf_ap / _surf_R)) if _surf_R > 0 else 0.0
+        _r0  = min(1.0, max(1e-6, math.sqrt(max(0.0, 2.0 * _apR - _apR * _apR))))
+        _r_now = min(1.0, max(1e-6, _surf_d_eff / (2.0 * _surf_R)))
+        _sfm_full = float(sfm_actual) / _r_now          # SFM at full dia
+        _sfm_contact0 = _sfm_full * _r0                 # contact SFM at zero tilt
+        _mg = get_material_group(data["material"])
+        _floor = {"Steel": 180, "Stainless": 160, "Cast Iron": 180, "Aluminum": 400,
+                  "Non-Ferrous": 300, "Inconel": 120, "Titanium": 120, "Plastics": 250}.get(_mg, 180)
+        _sfm_tgt = min(_sfm_full, max(_floor, 0.60 * _sfm_full))
+
+        # Baseline always-on tilt: 5-axis / mill-turn can freely orient the tool axis, so
+        # recommend a real working tilt (5°); 3-axis rigs can only approximate via fixture,
+        # so a smaller nudge (3°). Either way, non-zero — the dead point always rubs.
+        _mt = str(data.get("machine_type", "vmc") or "vmc").lower()
+        _five_axis = _mt in ("5axis", "mill_turn", "gantry")
+        _tilt_base = 5.0 if _five_axis else 3.0
+
+        # Rubbing severity: how far the zero-tilt contact SFM is below target (0 = fine,
+        # 1 = at/near dead center). Scales the recommendation up toward 20°.
+        _sev = 0.0
+        if _sfm_tgt > 1e-6:
+            _sev = max(0.0, min(1.0, 1.0 - (_sfm_contact0 / _sfm_tgt)))
+        _tilt = _tilt_base + _sev * (20.0 - _tilt_base)
+        _tilt = max(1.0, min(20.0, round(_tilt)))       # never below 1°, never above 20°
+
+        state["tilt_rec_deg"]   = float(_tilt)
+        state["sfm_eff"]        = float(round(_sfm_contact0, 0))
+        state["sfm_target_eff"] = float(round(_sfm_tgt, 0))
+
     # ===============================
     # AUTO ANTI-RUBBING IPT BUMP (strategy)
     # ===============================
@@ -7927,6 +7979,13 @@ def run(payload=None):
                 f"Ø{float(data['taper_base_dia']):.4f}\" base over {float(data['taper_length']):.3f}\". "
                 f"Conical body modeled as a stiffer cantilever; speeds/feeds unchanged (same tip chip load)."
             ) if data.get("taper_base_dia") else None,
+            # Tool-aware tilt recommendation (surfacing/ball): the solver back-computes the
+            # minimum tilt (5–20°, clamped) that lifts the contact point off the ball dead
+            # zone to a live cutting speed for THIS tool/ap/material. None = no tilt needed
+            # (effective SFM already sufficient). The client seeds this into the tilt field.
+            "tilt_rec_deg":     state.get("tilt_rec_deg"),
+            "sfm_eff_contact":  round(float(state["sfm_eff"]), 0) if state.get("sfm_eff") is not None else None,
+            "sfm_target_contact": round(float(state["sfm_target_eff"]), 0) if state.get("sfm_target_eff") is not None else None,
             "status": feed_limiter,
             "status_hint": feed_limiter_hint,
             "risk": _cc_risk,
