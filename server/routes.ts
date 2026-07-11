@@ -4845,6 +4845,11 @@ CRITICAL RULES — READ CAREFULLY:
    - Still set corner_condition normally: "ball" for a tapered ballnose, "corner_radius" (+ corner_radius R value) for a tapered bull-nose.
    - Set taper_included_angle_deg = 0 and taper_length_in = 0 for ALL non-tapered tools (straight ballnose, straight endmills, etc.). Only populate these when the conical taper + angle callout are actually present.
 
+8. BARREL / TANGENT / OVAL-FORM tools (detection only — NOT yet fully modeled):
+   - THE TELL: the cutting profile is a large-radius CONVEX arc along the FLANK (side) of the tool, not a small tip radius. The flank bulges out like a barrel or oval, and the profile radius is LARGE — typically many times the tool diameter (a big R callout on the side profile, e.g. "R6.00" on a Ø0.5 tool). Notes may say "BARREL", "BARREL FORM", "OVAL FORM", "TANGENT", "TANGENT FORM", "CONICAL BARREL", "LENS FORM", or "PARABOLIC". These are 5-axis high-efficiency surfacing tools that contact on the flank arc, not the tip.
+   - Set barrel_form = true if ANY of those tells are present. Otherwise barrel_form = false.
+   - Extract tool_dia (the max cutting Ø), corner_condition, and the flank profile radius into barrel_profile_radius_in if a large side-profile R is called out (0 if unclear). Do your best on the other fields, but these tools are flagged as approximate downstream.
+
 CRITICAL — LOC vs LBS for ENDMILLS (read this carefully before extracting):
 
 On long-reach / reduced-neck endmill prints you will see TWO horizontal length dimensions stacked near the cutting end of the tool — one short, one long. Identify them like this:
@@ -4917,6 +4922,8 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "lead_angle": <number, lead angle in degrees for feed mills — see rule 6 above. 0 for all other tool types.>,
   "taper_included_angle_deg": <number, FULL INCLUDED taper cone angle in degrees for tapered ballnose / tapered bull-nose tools — see rule 7. Normalize per-side/half angles to included (double them). 0 for all non-tapered tools.>,
   "taper_length_in": <number in inches, axial length of the tapered body (tip to full base dia) — see rule 7. 0 for all non-tapered tools.>,
+  "barrel_form": <boolean — true if this is a barrel / tangent / oval-form / lens / conical-barrel surfacing tool (large convex flank arc), see rule 8. false for all standard ball/bull-nose/tapered tools.>,
+  "barrel_profile_radius_in": <number in inches, the LARGE flank profile radius on a barrel/tangent tool (usually several × the tool dia), 0 if not a barrel tool or not clearly called out.>,
   "variable_pitch": <boolean — true if the notes or title explicitly say "VARIABLE PITCH" or "VAR PITCH". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable pitch by design). false otherwise.>,
   "variable_helix": <boolean — true if the notes or title explicitly say "VARIABLE HELIX" or "VAR HELIX". ALSO true if the print mentions "QTR3", "QTR3-STYLE", or "QTR3-RN" (QTR3 series tools always have variable helix by design). false otherwise.>,
   "geometry": <string — the flute geometry, one of "standard" | "chipbreaker" | "truncated_rougher". Read the NOTES section carefully:

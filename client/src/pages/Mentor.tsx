@@ -1867,10 +1867,12 @@ export default function Mentor() {
   const [pdfOal, setPdfOal] = React.useState<number>(0);
   const [pdfOalText, setPdfOalText] = React.useState<string>("");
   const [pdfMaterial, setPdfMaterial] = React.useState<string | null>(null);
+  const [barrelFormTool, setBarrelFormTool] = React.useState(false);
 
   const uploadPrintPdf = async (file: File) => {
     setPdfUploading(true);
     setPdfExtracted(false);
+    setBarrelFormTool(false);
     setPdfOal(0);
     try {
       // Send the file as base64 in a JSON body, NOT multipart/form-data. The
@@ -1912,6 +1914,19 @@ export default function Mentor() {
       }
       if (e.no_tool_number) {
         toast({ title: "Concept Tool — No CC Number", description: "No CC-XXXXX number found. Dimensions extracted — note this tool has not yet been assigned a Core Cutter number.", variant: "default" });
+      }
+
+      // Barrel / tangent / oval-form tools are detected but NOT yet modeled — the
+      // ball/torus surfacing math would mis-calc scallop and D_eff (barrel flank
+      // radius is decoupled from the tool OD). Warn instead of silently mis-calcing.
+      const _isBarrel = e.barrel_form === true;
+      setBarrelFormTool(_isBarrel);
+      if (_isBarrel) {
+        toast({
+          title: "Barrel / Tangent Tool — Approximate",
+          description: "Barrel/tangent/oval-form tools aren't yet modeled in surfacing. Scallop and effective-diameter results assume a ball/torus tip and should be treated as approximate. Contact Core Cutter for verified barrel-tool parameters.",
+          variant: "destructive",
+        });
       }
 
       // Map extracted fields to form — only set fields that have real values
@@ -3403,6 +3418,7 @@ export default function Mentor() {
 
   function clearPdf() {
     setPdfExtracted(false);
+    setBarrelFormTool(false);
     setPdfToolNumber(null);
     setPdfConvertedFromMm(false);
     setPdfMaterial(null);
@@ -11440,6 +11456,16 @@ ${stabSection}
             ];
             return (
               <div className="space-y-4">
+                {barrelFormTool && (
+                  <div className="rounded-lg border border-amber-500/60 bg-amber-500/10 px-3 py-2">
+                    <p className="text-[11px] font-semibold text-amber-300">Barrel / tangent tool — approximate results</p>
+                    <p className="text-[10px] text-amber-200/90 leading-snug mt-0.5">
+                      This tool's large flank profile isn't yet modeled. Scallop and effective-diameter
+                      values below assume a ball/torus tip and will not reflect true barrel-tool engagement.
+                      Use for rough guidance only; contact Core Cutter for verified parameters.
+                    </p>
+                  </div>
+                )}
                 {/* Surface Finish Quality */}
                 <div className="space-y-2">
                   <FieldLabel hint="Target surface finish expressed as Ra (roughness average). The engine converts this to the correct scallop height and stepover for your ball-nose or bull-nose tool. Rough = fast but visible cusps; Fine = slow but near-mirror.">
