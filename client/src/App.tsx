@@ -1471,8 +1471,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Mentor} />
-      <Route path="/catalog" component={Catalog} />
-      <Route path="/toolbox" component={Toolbox} />
+      <Route path="/catalog">{() => <Catalog />}</Route>
+      <Route path="/toolbox">{() => <Toolbox />}</Route>
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

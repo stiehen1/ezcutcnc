@@ -6488,7 +6488,7 @@ ${catalogList}`
       // Small FM: one step down from smallest bulk tool (less Z pressure option)
       const fmSmallDia = FM_SIZES.filter(d => d < smallestBulk).slice(-1)[0] ?? FM_SIZES[0];
 
-      function fmEstimate(dia: number) {
+      const fmEstimate = (dia: number) => {
         const doc = Math.min(0.8 * FM_CR, 0.12 * dia);
         const rpm = (fmMat.sfm * 12) / (Math.PI * dia);
         const feed = rpm * FM_FLUTES * fmMat.ipt;
@@ -6502,7 +6502,7 @@ ${catalogList}`
         const minutes = Math.round((zPasses * xPasses * passLen) / feed * 1.10);
         const timeStr = minutes < 1 ? "< 1 min" : minutes === 1 ? "~1 min" : `~${minutes} min`;
         return { dia, doc_in: +doc.toFixed(4), z_passes: zPasses, feed_ipm: +feed.toFixed(0), rpm: +rpm.toFixed(0), est_str: timeStr };
-      }
+      };
 
       const feedmill_estimate = {
         large: fmEstimate(fmLargeDia),
@@ -6561,10 +6561,10 @@ ${catalogList}`
         1.4219,1.4375,1.4531,1.4688,1.4844,1.5000,1.5625,1.6250,1.6875,1.7500,1.8125,1.8750,
         1.9375,2.0000,2.0625,2.1250,2.1875,2.2500,2.3125,2.3750,2.4375,2.5000,
       ];
-      function snapDrillDown(maxDia: number): number | null {
+      const snapDrillDown = (maxDia: number): number | null => {
         const fits = STANDARD_DRILLS_IN.filter(d => d <= maxDia);
         return fits.length > 0 ? fits[fits.length - 1] : null;
-      }
+      };
       const drillMaxDia = pocketCeilingDia < Infinity ? Math.min(pocketCeilingDia, maxBulkDia) : maxBulkDia;
       const recommended_pre_drill_dia = closed_pocket
         ? snapDrillDown(drillMaxDia * 0.99) // tiny margin so we're clearly under ceiling

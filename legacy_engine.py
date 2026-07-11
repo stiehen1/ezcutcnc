@@ -6375,6 +6375,20 @@ def run(payload=None):
     _imm_suggestions  = []   # immediate / no-hardware fixes — shown first
     _hw_suggestions   = []   # hardware / setup changes — shown second
 
+    # Special / custom tool guard — when the running tool is a one-off special (uploaded
+    # engineering print, tapered ballnose, or any non-catalog CC-XXXXX design), there is NO
+    # catalog family to swap into. Suggestions that assume an interchangeable catalog tool
+    # (different flute count at the same diameter, a bigger stock diameter, EDP# lookups)
+    # are nonsense for a custom design — the only tool that exists is the one on the print.
+    # Gate those out and keep only the setup-side fixes the user can actually apply to THIS
+    # tool: shorter stickout, better holder, dual contact, lighter DOC/WOC/feed.
+    _is_special_tool = bool(
+        payload.get("is_special_tool")
+        or payload.get("is_tapered")
+        or data.get("taper_base_dia")
+        or str(payload.get("tool_number", "") or "").strip().upper().startswith("CC-")
+    )
+
     _lbs = float(data.get("lbs", 0) or 0)  # Length Below Shoulder (neck reach)
 
     # Minimum stickout: LOC + flute_wash + clearance buffer
@@ -6631,7 +6645,8 @@ def run(payload=None):
     #     cantilever directly (L³ law), same as stickout but at the tool level.
     #     Skip for LBS/necked tools: the neck reach (LBS) drives stickout, not LOC.
     #     Only fires when there's meaningful LOC headroom (>0.1") above the DOC.
-    if _doc_now > 0 and _loc_now > 0 and _defl > _dlim and _lbs == 0:
+    #     Skip for special/custom tools — no shorter-LOC catalog variant exists to order.
+    if _doc_now > 0 and _loc_now > 0 and _defl > _dlim and _lbs == 0 and not _is_special_tool:
         _min_loc_needed = _doc_now + _d * 0.33   # DOC + holder-clearance buffer
         _loc_headroom   = _loc_now - _min_loc_needed
         if _loc_headroom > 0.10:                  # at least 0.1" shorter than current LOC
@@ -6900,7 +6915,8 @@ def run(payload=None):
     # Next 1-2 available flute counts above current from catalog
     # LBS/necked tools: cap at 6-flute — 7-flute not offered in reduced-neck versions
     _max_flute_cap = 6 if _lbs > 0 else 99
-    _next_flutes = [f for f in _avail_flutes if f > _cur_flutes and f <= _max_flute_cap][:2]
+    # Custom/special tools have no catalog flute-count variants — suppress the swap.
+    _next_flutes = [] if _is_special_tool else [f for f in _avail_flutes if f > _cur_flutes and f <= _max_flute_cap][:2]
     for _nf in _next_flutes:
         if _nf > max(_avail_flutes):
             break
@@ -6950,7 +6966,8 @@ def run(payload=None):
     # 8) Diameter step-up (D⁴ law)
     # Skip for slotting — slot width is fixed; a larger tool can't fit in the same slot
     _common = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5, 2.0]
-    _next_d = next((s for s in _common if s > _d + 1e-4), None)
+    # Custom/special tools aren't offered in larger stock diameters — suppress the step-up.
+    _next_d = None if _is_special_tool else next((s for s in _common if s > _d + 1e-4), None)
     _woc_now_diam = float(data.get("woc_pct", 0) or 0)
     if _next_d and _woc_now_diam < 90.0:
         _d_gain = round((_next_d / _d) ** 4, 1)

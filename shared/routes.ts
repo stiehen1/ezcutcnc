@@ -56,6 +56,13 @@ export const mentorSchemas = {
     taper_included_angle_deg: z.number().min(0).max(45).default(0),
     taper_length_in: z.number().min(0).default(0),
 
+    // Special / custom tool: uploaded engineering print, tapered ballnose, or any
+    // one-off CC-XXXXX design with no catalog family. Suppresses catalog-swap stability
+    // suggestions (different flute count, bigger diameter, shorter-LOC, EDP# lookups) —
+    // the engine keeps only setup-side fixes that apply to the actual tool.
+    is_special_tool: z.boolean().optional(),
+    tool_number: z.string().optional(),
+
     // Chamfer mill specific
     chamfer_series: z.enum(["CMS", "CMH"]).default("CMH"),
     chamfer_angle: z.number().min(0).max(180).default(90),

@@ -781,14 +781,14 @@ function flooredSkinIpm(args: {
 // Applicability per ISO group — dimmed when not in the set.
 // Empty / missing ISO => show everything (no narrowing yet).
 const STOCK_APPLICABILITY: Record<string, ReadonlySet<StockConditionKey>> = {
-  N1: new Set(["billet_cf", "cast_sand", "cold_worked", "weldment"]),                             // Aluminum / Cu / brass — billet + sand cast (356/380). Cold-drawn/spun parts common; welded fixtures common.
-  N2: new Set(["billet_cf", "cast_sand", "cold_worked", "weldment"]),                             // Abrasive non-ferrous (silicon bronze, Mn bronze, beryllium copper).
-  P:  new Set(["billet_cf", "hot_rolled", "forged", "case_hard", "flame_cut", "nitrided", "cold_worked", "weldment"]),  // Steel — everything except castings is common. Plate parts often start as flame/plasma-cut blanks.
-  M:  new Set(["billet_cf", "hot_rolled", "forged", "cast_invest", "flame_cut", "nitrided", "cold_worked", "weldment"]),  // Stainless — investment casting common, sand casting rare. Plasma-cut plate routine; work-hardens aggressively.
-  K:  new Set(["cast_sand", "cast_invest", "weldment"]),                                         // Cast iron — always cast; weld repairs are routine.
-  S:  new Set(["billet_cf", "forged", "cast_invest", "cold_worked", "weldment"]),                 // Superalloys — investment castings (turbine blades) very common; work-harden severely.
-  H:  new Set(["billet_cf", "forged", "case_hard", "flame_cut", "nitrided", "weldment"]),         // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common. Flame-cut/nitrided tool-steel blanks happen.
-  O:  new Set(["billet_cf"]),                                                                    // Plastics / composites — extruded / molded stock only; no welding.
+  N1: new Set<StockConditionKey>(["billet_cf", "cast_sand", "cold_worked", "weldment"]),                             // Aluminum / Cu / brass — billet + sand cast (356/380). Cold-drawn/spun parts common; welded fixtures common.
+  N2: new Set<StockConditionKey>(["billet_cf", "cast_sand", "cold_worked", "weldment"]),                             // Abrasive non-ferrous (silicon bronze, Mn bronze, beryllium copper).
+  P:  new Set<StockConditionKey>(["billet_cf", "hot_rolled", "forged", "case_hard", "flame_cut", "nitrided", "cold_worked", "weldment"]),  // Steel — everything except castings is common. Plate parts often start as flame/plasma-cut blanks.
+  M:  new Set<StockConditionKey>(["billet_cf", "hot_rolled", "forged", "cast_invest", "flame_cut", "nitrided", "cold_worked", "weldment"]),  // Stainless — investment casting common, sand casting rare. Plasma-cut plate routine; work-hardens aggressively.
+  K:  new Set<StockConditionKey>(["cast_sand", "cast_invest", "weldment"]),                                         // Cast iron — always cast; weld repairs are routine.
+  S:  new Set<StockConditionKey>(["billet_cf", "forged", "cast_invest", "cold_worked", "weldment"]),                 // Superalloys — investment castings (turbine blades) very common; work-harden severely.
+  H:  new Set<StockConditionKey>(["billet_cf", "forged", "case_hard", "flame_cut", "nitrided", "weldment"]),         // Hardened steel / tool steel — usually billet, sometimes forged; weld build-up common. Flame-cut/nitrided tool-steel blanks happen.
+  O:  new Set<StockConditionKey>(["billet_cf"]),                                                                    // Plastics / composites — extruded / molded stock only; no welding.
 };
 
 export default function Mentor() {
@@ -2289,6 +2289,12 @@ export default function Mentor() {
     lbs: 0,
     edp: "",
     tool_type: "endmill" as "endmill" | "ballnose" | "corner_radius" | "chamfer_mill",
+    // Circular-interpolation entry mode (bore milling): helical ramp vs pre-drilled sweep.
+    // "auto" resolves by whether an existing hole is present. Only used when mode === "circ_interp".
+    circ_entry: "auto" as "auto" | "helical" | "pre_drill",
+    // Flute wash (unused clearance length after LOC before the neck/shank) — feeds the
+    // default-stickout estimate (LOC + flute_wash + 0.33×D). Populated from SKU/print.
+    flute_wash: 0,
     corner_condition: "square" as "square" | "corner_radius" | "ball",
     corner_radius: 0,
     geometry: "standard" as "standard" | "chipbreaker" | "truncated_rougher",
@@ -2355,7 +2361,7 @@ export default function Mentor() {
     holder_nose_dia: 0,
     runout_in: 0,  // measured TIR at tool tip in spindle (0 = not measured)
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing" | "hydraulic_chuck" | "power_chuck" | "step_jaws" | "form_jaws" | "pie_jaws" | "steady_rest" | "modular_quickchange" | "secondary_op_vise",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -3948,6 +3954,12 @@ export default function Mentor() {
         machine_id: activeMachineId ?? undefined,
         // center_cutting is null when SKU hasn't specified it — drop the key so Zod's default(true) applies
         center_cutting: (form as any).center_cutting ?? undefined,
+        // Flag one-off / uploaded special tools so the engine suppresses catalog-swap
+        // stability suggestions (different flute count, bigger diameter, shorter-LOC,
+        // EDP# lookups) — no catalog family exists for a custom print. Setup-side fixes
+        // (stickout, holder, DOC/WOC/feed) still apply.
+        is_special_tool: !!pdfToolNumber || form.is_tapered || undefined,
+        tool_number: pdfToolNumber ?? undefined,
         debug: false,
       });
       lastRunFormRef.current = JSON.stringify(form);
@@ -11206,8 +11218,10 @@ ${stabSection}
                 if (form.woc_pct > wocHigh) return <p className="text-[10px] text-amber-400 mt-1">⚠ Above {form.mode === "hem" ? "HEM" : form.mode} range ({wocLow}–{wocHigh}%) — consider reducing for stability</p>;
                 return null;
               })()}
-              {/* Engagement physics mini-chart — not shown for face, circ_interp, or slot (always 180°) */}
-              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "circ_interp" && form.mode !== "slot" && (() => {
+              {/* Engagement physics mini-chart — not shown for face or slot (always 180°).
+                  circ_interp is already excluded: this is the non-circ_interp branch of the
+                  ternary above (line ~10949), so form.mode can't be "circ_interp" here. */}
+              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "face" && form.mode !== "slot" && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 // Engine uses 2×acos(...) — full included arc entry-to-exit
