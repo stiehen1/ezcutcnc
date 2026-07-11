@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Replit deploy — force-sync to GitHub, then build & serve.
+# Replit deploy — force-sync to GitHub, then build. Does NOT serve.
 #
 # WHY reset --hard instead of pull: Replit auto-commits "Published your App"
 # onto the workspace's own `main`, which forks it from GitHub. A `git pull`
@@ -12,7 +12,16 @@
 # nothing is lost. If you ever edit code DIRECTLY in the Replit shell, push it to
 # GitHub FIRST — this script will blow away un-pushed local work by design.
 #
-# Usage (Replit shell):  bash script/deploy.sh
+# WHY it does NOT start the server: Replit's SUPERVISOR owns port 5000 (via the
+# Run button / Deploy config), not the shell. A manual `node dist/index.cjs` from
+# the shell races the supervisor and loses with EADDRINUSE. So this script only
+# syncs + builds. To START the freshly-built server, use the workspace buttons:
+#
+#     Stop ■   →   Run ▶     (supervisor restarts and owns port 5000 cleanly)
+#
+# or, for the production Reserved VM, the Deploy panel's Redeploy button.
+#
+# Usage (Replit shell):  bash script/deploy.sh   then click Stop ■ → Run ▶
 #
 set -euo pipefail
 
@@ -26,10 +35,7 @@ echo ">>> now at: $(git log --oneline -1)"
 echo ">>> building..."
 npm run build
 
-echo ">>> freeing port 5000..."
-fuser -k 5000/tcp 2>/dev/null || true
-kill -9 "$(lsof -t -i:5000)" 2>/dev/null || true
-while lsof -i:5000 >/dev/null 2>&1; do sleep 0.5; done
-
-echo ">>> port 5000 free — starting new build"
-node dist/index.cjs
+echo ""
+echo ">>> BUILD COMPLETE. New bundle is in dist/."
+echo ">>> Now click  Stop ■  then  Run ▶  in the Replit workspace to serve it"
+echo ">>> (the supervisor owns port 5000 — don't start node from the shell)."
