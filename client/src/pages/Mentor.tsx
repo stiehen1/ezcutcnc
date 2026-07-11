@@ -126,7 +126,7 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React
     <TooltipProvider delayDuration={200}>
       <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
         <TooltipTrigger asChild>
-          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-xs">
+          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-xs whitespace-nowrap">
             {children}
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
           </Label>
@@ -2444,21 +2444,30 @@ export default function Mentor() {
   // common mold/die pass. Only fires when no finish target is set — user picks override.
   React.useEffect(() => {
     if (form.mode !== "surfacing") return;
-    if (form.target_ra_uin > 0) return;  // already chosen — don't clobber
-    // Finish default (32 µin Ra) with recommended engagement pre-filled so the customer
-    // sees runnable parameters, not blank fields: ap = 10%D (depth/rigidity choice), and
-    // tilt = 5° (moves contact off the ball dead-zone — the low end of the app's tilt
-    // guidance; always beneficial, never over-tilts on a light finish pass). Stepover is
-    // solved from the Ra target downstream (ae = √(8·R·scallop)).
-    const ra = 32, apXD = 0.10, tiltDeg = 5;
-    const sc = (ra * 4) / 1_000_000;
+    // Two independent concerns, both keyed off tool_dia so they settle after an upload
+    // populates the diameter (Ra can get seeded a render BEFORE tool_dia arrives — don't
+    // let that race leave ap blank):
+    //   (a) seed the Finish target + a starter tilt ONCE when nothing is chosen yet,
+    //   (b) fill ap = 10%D whenever ap is still empty and tool_dia is known.
+    // ap = 10%D is a depth/rigidity default (NOT the finish driver — stepover is, solved
+    // downstream from Ra). Tilt 5° = starter; the engine refines it up after the calc.
+    const apXD = 0.10;
     const apIn = form.tool_dia > 0 ? apXD * form.tool_dia : 0;
-    setForm((p) => ({
-      ...p, target_ra_uin: ra, surfacing_input_mode: "scallop", surfacing_scallop_in: sc,
-      surfacing_ap_in: apIn,
-      surfacing_tilt_deg: p.surfacing_tilt_deg > 0 ? p.surfacing_tilt_deg : tiltDeg,
-    }));
-    if (apIn > 0) setSurfApText(apIn.toFixed(4));
+    const needSeed = !(form.target_ra_uin > 0);
+    const needAp   = form.tool_dia > 0 && !(form.surfacing_ap_in > 0);
+    if (!needSeed && !needAp) return;
+    setForm((p) => {
+      const next = { ...p };
+      if (needSeed) {
+        next.target_ra_uin = 32;
+        next.surfacing_input_mode = "scallop";
+        next.surfacing_scallop_in = (32 * 4) / 1_000_000;
+        if (!(p.surfacing_tilt_deg > 0)) next.surfacing_tilt_deg = 5;
+      }
+      if (needAp) next.surfacing_ap_in = apIn;
+      return next;
+    });
+    if (needAp && apIn > 0) setSurfApText(apIn.toFixed(4));
   }, [form.mode, form.tool_dia]);
 
   // Fetch the best stocked EDP per candidate slotting diameter — only when slot mode,
@@ -9717,7 +9726,7 @@ ${stabSection}
             const showNeck = !["chamfer_mill", "keyseat", "dovetail"].includes(form.tool_type)
               && form.keyseat_arbor_dia > 0;
             return (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <div className="space-y-2" style={{ flex: "0 0 2.8rem" }}>
                   <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
                   <Input
@@ -9728,7 +9737,7 @@ ${stabSection}
                     onChange={onNum("flutes")}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: 1 }}>
+                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
                   <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia", "Cut Dia")}</FieldLabel>
                   <Input
                     type="text"
@@ -9751,7 +9760,7 @@ ${stabSection}
                     }}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: 1 }}>
+                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
                   <FieldLabel hint="Shank diameter. When larger than cutting diameter, activates the two-segment cantilever deflection model for reduced-neck tools.">Shank Dia</FieldLabel>
                   <Input
                     type="text"
@@ -9777,7 +9786,7 @@ ${stabSection}
                     }}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: 1 }}>
+                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
                   <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC", "LOC")}</FieldLabel>
                   <Input
                     type="text"
