@@ -9520,8 +9520,8 @@ ${stabSection}
                                 )}
                                 {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
                                 {wocBelowFloor && (
-                                  <span className="block text-rose-300/90 mt-0.5" title={`${hit.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated rougher"} needs ≥${geoFloorPct}% WOC to engage; this material's trochoidal bite is lighter. Bump WOC to ≥${geoFloorPct}% or run the standard tool.`}>
-                                    ⚠ needs ≥{geoFloorPct}% WOC to engage
+                                  <span className="block text-rose-300/90 mt-0.5" title={`${hit.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated rougher"} prefers ≥${geoFloorPct}% WOC to engage; this material's trochoidal bite is lighter. Bump WOC to ≥${geoFloorPct}% or run the standard tool.`}>
+                                    ⚠ prefers ≥{geoFloorPct}% WOC to engage
                                   </span>
                                 )}
                               </span>
