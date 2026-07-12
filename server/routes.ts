@@ -2368,22 +2368,29 @@ export async function registerRoutes(
            ORDER BY ${reachRank} ${fluteRank} score DESC, s.loc_in ASC NULLS LAST
            LIMIT 12`
         );
-        // HEM/trochoidal sells deep one-pass DOC ("run the tool's full LOC"), so a
-        // short-LOC tool that needs 3-4 axial Z-levels to clear the slot contradicts
-        // the whole strategy. Drop HEM candidates that can't reach the depth in ≤2
-        // Z-steps, and rank fewest Z-steps (deepest reach) first. Slot depth is cut
-        // by the FLUTES, so reach = LOC only — LBS (non-fluted body below the shank)
-        // is clearance, not cutting length. Traditional plowing is unaffected.
+        // Z-steps to clear the slot are cut by the FLUTES, so the axial bite = LOC
+        // (LBS = the non-fluted necked body below the flutes; it's clearance so the
+        // tool can DESCEND to depth without the neck rubbing, not cutting length).
         const zStepsFor = (r: any) => {
           const reach = Number(r.loc_in) || 0;
           if (!(depth > 0) || !(reach > 0)) return 1;
           return Math.ceil((depth - 1e-4) / reach);
         };
+        // A HEM candidate qualifies if it can PHYSICALLY reach the full slot depth —
+        // either its flutes are long enough (LOC ≥ depth) OR it's a reduced-neck tool
+        // whose necked body clears to depth (LBS ≥ depth). A necked tool still cuts in
+        // LOC-sized Z-levels, so we surface it WITH its true Z-step count (the client
+        // badges "N Z-steps") rather than hiding it — the user may have that RN tool on
+        // hand and prefer it over a shorter-reach standard. (Was filtered to ≤2 Z-steps
+        // on LOC alone, which wrongly hid necked tools that reach depth via LBS —
+        // e.g. a 3/16" 5fl RN with 0.25" LOC + 1.0" LBS in a 1.0" slot.)
+        const reachesDepth = (r: any) =>
+          (Number(r.loc_in) || 0) >= depth - 1e-4 || (Number(r.lbs_in) || 0) >= depth - 1e-4;
         let rows = q.rows;
         if (isHem && depth > 0) {
-          const reachable = rows.filter(r => zStepsFor(r) <= 2);
-          // If nothing reaches in ≤2 passes at this Ø, suppress the Ø rather than
-          // suggest a 4-Z-step tool (the chip filter on the client hides empty Ø).
+          const reachable = rows.filter(reachesDepth);
+          // Rank fewest Z-steps (deepest single-pass reach) first, then score. If nothing
+          // reaches full depth at this Ø, suppress it (client hides empty Ø).
           rows = reachable.sort((a, b) => zStepsFor(a) - zStepsFor(b) || Number(b.score) - Number(a.score));
         }
         // Best overall, then the best with a DIFFERENT flute+geometry signature
@@ -2404,6 +2411,8 @@ export async function registerRoutes(
             coating: r.coating ?? null,
             corner_condition: r.corner_condition ?? "square",
             loc_in: r.loc_in ?? null,
+            lbs_in: r.lbs_in ?? null,
+            series: r.series ?? null,
           });
         }
       }

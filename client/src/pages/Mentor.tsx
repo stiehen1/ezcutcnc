@@ -599,7 +599,7 @@ const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.62
 type DiaChip = { dia: number; label: string; sub: string };
 // One stocked EDP candidate at a given slot diameter (server returns up to 2 per Ø,
 // distinct by flute count + geometry — e.g. 5fl CB vs 5fl std vs 6fl).
-type SlotDiaEdp = { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null };
+type SlotDiaEdp = { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null; lbs_in?: number | null; series?: string | null };
 function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
   if (!(slotWidth > 0)) return [];
   if (strategy === "hem") {
@@ -2535,7 +2535,7 @@ export default function Mentor() {
         const map: Record<string, SlotDiaEdp[]> = {};
         for (const c of (data.chips ?? [])) {
           const key = Number(c.dia).toFixed(4);
-          (map[key] ??= []).push({ edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null });
+          (map[key] ??= []).push({ edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null, lbs_in: c.lbs_in ?? null, series: c.series ?? null });
         }
         setSlotDiaEdps(map);
       } catch { /* aborted or failed — chips fall back to Ø + pass count */ }
@@ -9446,8 +9446,14 @@ ${stabSection}
                         const slotDepthIn = Number(form.final_slot_depth) || 0;
                         // loc_in arrives from Postgres NUMERIC as a STRING — coerce before math.
                         const locNum = Number(hit?.loc_in) || 0;
+                        const lbsNum = Number(hit?.lbs_in) || 0;
                         const zSteps = (locNum > 0 && slotDepthIn > locNum + 1e-4)
                           ? Math.ceil(slotDepthIn / locNum) : 0;
+                        // Reduced-neck reach: the tool clears to full depth on its necked
+                        // body (LBS ≥ depth) even though the flutes are shorter — so it's a
+                        // deep-reach option, not a stubby tool. Flag it so the Z-step badge
+                        // reads as intentional multi-level cutting on a necked tool.
+                        const rnReach = lbsNum >= slotDepthIn - 1e-4 && slotDepthIn > locNum + 1e-4;
                         return (
                           <button
                             key={hit ? `${item.dia}-${hit.edp}` : item.dia}
@@ -9478,6 +9484,9 @@ ${stabSection}
                                 EDP {hit.edp} · {hit.flutes}fl{geomTag}
                                 {locNum > 0 && (
                                   <span className="text-zinc-400"> · LOC {locNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
+                                )}
+                                {rnReach && lbsNum > 0 && (
+                                  <span className="text-sky-300/90"> · RN reaches {lbsNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
                                 )}
                                 {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
                               </span>
