@@ -3265,15 +3265,18 @@ export default function Mentor() {
 
   // Shared logic: compute the same values the Optimal buttons produce
   function computeOptimalCutParams(
-    mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string, tool_series = ""
+    mode: string, iso: string, flutes: number, dia: number, loc: number, geometry: string, tool_series = "", slotStrategy = ""
   ): { wocPct: number; docXd: number; wocKey: "low"|"med"|"high"|"optimal"; docKey: "low"|"med"|"high"|"optimal" } {
-    const presets = getDynamicPresets(mode, iso, flutes, dia, loc, tool_series, "standard");
+    // HEM slotting is trochoidal — use the light-WOC/deep-DOC regime, not the
+    // full-width "slot" ceiling. Mirrors dynPresets normalization (see ~line 2864).
+    const presetMode = (mode === "slot" && slotStrategy === "hem") ? "trochoidal" : mode;
+    const presets = getDynamicPresets(presetMode, iso, flutes, dia, loc, tool_series, "standard");
     const wp = presets.woc;
     const dp = presets.doc;
     // DOC optimal — HEM defaults to high (deep axial + light radial is the HEM philosophy);
     // other modes use med as the balanced target
     const locCap = loc > 0 && dia > 0 ? loc / dia : 99;
-    const isHemMode = mode === "hem" || mode === "trochoidal";
+    const isHemMode = presetMode === "hem" || presetMode === "trochoidal";
     const optDocXd = isHemMode
       ? Math.min(locCap, dp.high)
       : Math.min(locCap, Math.max(dp.low, dp.med));
@@ -3281,7 +3284,7 @@ export default function Mentor() {
     // WOC optimal — same as WOC Optimal button
     const geoFloor = geometry === "chipbreaker" ? 8 : geometry === "truncated_rougher" ? 10 : 0;
     let optWocPct = wp.med;
-    if (mode === "hem" || mode === "trochoidal") {
+    if (isHemMode) {
       const scale = Math.min(1.5, Math.max(0.5, (dp.med ?? 1.0) / optDocXd));
       optWocPct = Math.round(wp.med * scale * 2) / 2;
     }
@@ -3356,7 +3359,7 @@ export default function Mentor() {
     const _skuDia = Number(sku.cutting_diameter_in);
     const _skuLoc = Number(sku.loc_in);
     const _preserveOpt = _preserve
-      ? computeOptimalCutParams(form.mode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc, sku.geometry ?? "standard", sku.series ?? "")
+      ? computeOptimalCutParams(form.mode, isoCategory, Number(sku.flutes), _skuDia, _skuLoc, sku.geometry ?? "standard", sku.series ?? "", form.slot_strategy ?? "")
       : null;
     const _preservedDocXd = _preserve && _priorDocXd > 0 ? _priorDocXd : 0;
     const _preservedDocIn = _preservedDocXd > 0 ? _preservedDocXd * _skuDia : 0;
@@ -11131,7 +11134,11 @@ ${stabSection}
                       }
                       title={taperDriven ? `Wall-taper driven: ${taperRecPct.toFixed(0)}% WOC respects your max taper target.` : undefined}
                       onClick={() => {
-                        const wp = WOC_PRESETS[form.mode];
+                        // HEM slotting is trochoidal — Optimal must use the light-WOC
+                        // trochoidal regime (dynPresets already computes it), NOT
+                        // WOC_PRESETS["slot"] which is a fixed 100% full-width ceiling.
+                        const isHemSlot = form.mode === "slot" && form.slot_strategy === "hem";
+                        const wp = isHemSlot ? dynPresets.woc : WOC_PRESETS[form.mode];
                         if (!wp) return;
                         const dia = form.tool_dia || 0.5;
                         // Prefer engine's taper-driven WOC if available, else fall back to Med preset
