@@ -9407,6 +9407,21 @@ ${stabSection}
                   }
                 }
                 if (!items.length) return null;
+                // HEM tiles: list fewest axial Z-passes FIRST (a tool that clears the slot
+                // in 1-2 deep passes beats one needing 4 LOC-sized levels — that's HEM's
+                // whole point). Z-steps are cut by the flutes (LOC), so a shorter-LOC necked
+                // tool that reaches via LBS still ranks by its true pass count. Tie-break by
+                // larger diameter (stiffer). Traditional keeps its diameter-order (fewest
+                // side passes = largest tool, already ordered by slotDiaChips).
+                if (strat === "hem") {
+                  const slotDepthForSort = Number(form.final_slot_depth) || 0;
+                  const zStepsOf = (it: Item) => {
+                    const loc = Number(it.edp?.loc_in) || 0;
+                    if (!(slotDepthForSort > 0) || !(loc > 0)) return 1;
+                    return Math.ceil((slotDepthForSort - 1e-4) / loc);
+                  };
+                  items.sort((a, b) => zStepsOf(a) - zStepsOf(b) || b.dia - a.dia);
+                }
                 const curDia = Number(form.tool_dia) || 0;
                 // Seed WOC/DOC for the active strategy at a given dia/LOC. Shared by the
                 // bare-Ø path and the EDP path so loading a stocked tool ALSO sets a
