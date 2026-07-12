@@ -2024,6 +2024,44 @@ export async function registerRoutes(
                     }
                   }
                 }
+                // HEM slot step-up: also surface CHIPBREAKER variants at this diameter across
+                // the whole flute-option set (e.g. 4/5/6-flute). The deep, light-radial HEM cut
+                // evacuates well with a segmented chip, and CB comes in these flute counts here.
+                // Attached separately as suggested_edps_cb so the UI can show std + CB side by side.
+                if (s.hem_slot_stepup) {
+                  const fluteOpts: number[] = Array.isArray(s.lookup_flute_opts) && s.lookup_flute_opts.length
+                    ? s.lookup_flute_opts.map((n: any) => Number(n)).filter((n: number) => n > 0)
+                    : [flutes];
+                  try {
+                    const qcb = await pool.query(
+                      `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                       JOIN sku_uploads u ON s.upload_id = u.id
+                       WHERE u.is_current = TRUE
+                         AND LOWER(COALESCE(s.geometry, '')) = 'chipbreaker'
+                         AND s.flutes = ANY($1::int[])
+                         AND ABS(s.cutting_diameter_in - $2) < 0.001
+                         AND COALESCE(s.loc_in, 0) >= $3
+                         AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+                         ${noBLK}
+                         ${matClause}
+                       ORDER BY s.flutes ASC, s.loc_in ASC, s.edp`,
+                      [fluteOpts, dia, loc]
+                    );
+                    if (qcb.rows.length > 0) {
+                      s.suggested_edps_cb = qcb.rows.map((r: any) => r.edp);
+                      s.suggested_edp_cb  = s.suggested_edps_cb[0];
+                      s.suggested_edp_cb_meta = {};
+                      for (const r of qcb.rows) {
+                        if (r.edp == null) continue;
+                        s.suggested_edp_cb_meta[String(r.edp)] = {
+                          dia: r.cutting_diameter_in != null ? Number(r.cutting_diameter_in) : null,
+                          loc: r.loc_in != null ? Number(r.loc_in) : null,
+                          flutes: r.flutes != null ? Number(r.flutes) : null,
+                        };
+                      }
+                    }
+                  } catch (_) { /* skip CB enrichment on error */ }
+                }
               } else {
               // Non-diameter suggestions: find the closest LOC
               const q2 = await pool.query(

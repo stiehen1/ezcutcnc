@@ -16749,6 +16749,46 @@ ${stabSection}
                                   </span>
                                 );
                               })()}
+                              {/* Chipbreaker variants for a HEM-slot step-up — surfaced
+                                  alongside the standard EDPs so the user can pick. The deep,
+                                  light-radial HEM cut clears well with a segmented chip. */}
+                              {(() => {
+                                const cbEdps: string[] = s.suggested_edps_cb?.length
+                                  ? s.suggested_edps_cb
+                                  : s.suggested_edp_cb ? [s.suggested_edp_cb] : [];
+                                if (!cbEdps.length) return null;
+                                const cbMeta = s.suggested_edp_cb_meta ?? {};
+                                return (
+                                  <span className="ml-2 inline-flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                    <span className="text-emerald-400 font-medium">Or chipbreaker:</span>
+                                    {cbEdps.map((edp: string) => {
+                                      const m = cbMeta[edp.trim()] ?? cbMeta[edp];
+                                      const dims = m
+                                        ? [m.dia != null ? `${Number(m.dia).toFixed(3)}"Ø` : null,
+                                           m.flutes != null ? `${Number(m.flutes)}fl` : null,
+                                           m.loc != null ? `${Number(m.loc).toFixed(3)}" LOC` : null]
+                                          .filter(Boolean).join(" · ")
+                                        : "";
+                                      return (
+                                        <span key={edp} className="inline-flex items-baseline gap-1">
+                                          <button type="button"
+                                            className="font-semibold text-emerald-300 underline underline-offset-2 hover:text-emerald-100 transition-colors cursor-pointer"
+                                            onClick={async () => {
+                                              try {
+                                                const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
+                                                const data: SkuRecord[] = await r.json();
+                                                const match = data.find((sk) => sk.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
+                                                if (match && applySkuToForm(match, { preserveCutParams: true })) setTimeout(() => runRef.current(), 100);
+                                              } catch {}
+                                            }}
+                                          >{edp}</button>
+                                          {dims && <span className="text-[10px] text-zinc-500">({dims})</span>}
+                                        </span>
+                                      );
+                                    })}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           )}
                         </span>

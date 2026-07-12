@@ -6793,8 +6793,11 @@ def run(payload=None):
             # plowed in multiple side passes). Fall back to tool dia only when no slot width is set.
             _slot_width_input = float(payload.get("slot_width_in", 0.0) or 0.0)
             _slot_width = _slot_width_input if _slot_width_input > _d - 1e-6 else _d
-            # Snap to nearest standard catalog diameter strictly below slot width
-            _hem_target = _slot_width * 0.75
+            # Snap to nearest standard catalog diameter strictly below slot width.
+            # Target 0.85× slot width — bias toward the stiffer (bigger) tool; the 10%
+            # per-wall clearance floor below is the hard safety stop that keeps the
+            # trochoidal loop from getting cramped.
+            _hem_target = _slot_width * 0.85
             # Standard catalog diameters — only recommend sizes we actually stock
             _std_dias = [0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5]
             # Candidates must be strictly smaller than slot width to leave room for trochoidal looping.
@@ -6802,7 +6805,7 @@ def run(payload=None):
             # 0.0625" per wall — path geometry gets fussy and a finishing pass is always required.
             # Drop any candidate where slot clearance per wall < 10% of slot width.
             _candidates = [s for s in _std_dias if (_slot_width - s) / _slot_width >= 0.10 - 1e-6 and s < _slot_width - 1e-6]
-            _hem_dia = min(_candidates, key=lambda s: abs(s - _hem_target)) if _candidates else _slot_width * 0.75
+            _hem_dia = min(_candidates, key=lambda s: abs(s - _hem_target)) if _candidates else _slot_width * 0.85
             # Wall clearance per side with chosen tool (for detail text)
             _wall_clearance = (_slot_width - _hem_dia) / 2
             _woc_min = round(_hem_dia * 0.05, 4)
@@ -6892,7 +6895,20 @@ def run(payload=None):
             _avail_flutes = []  # VRX not available at this diameter — no flute suggestion
         else:
             _avail_flutes = [4, 5]
-    elif _is_cb:
+    # Max flute count physically offered by cutting diameter (Core Cutter, std or custom).
+    # 7-flute standards start at 3/8", and 1/4" can be made as a 7-flute custom — but
+    # nothing smaller than 1/4" can carry 6-7 flutes (std OR custom). Below that the
+    # flute list is trimmed — you cannot pack that many flutes into a 3/16" or 1/8" tool.
+    #   ≤ 1/8"  (0.125):   max 4 flutes
+    #   3/16"   (0.1875):  max 5 flutes
+    #   ≥ 1/4"  (0.250):   max 7+ flutes (7 is custom below 3/8")
+    if _dia_key <= 0.125 + 1e-6:
+        _dia_max_flutes = 4
+    elif _dia_key < 0.250 - 1e-6:
+        _dia_max_flutes = 5
+    else:
+        _dia_max_flutes = 99
+    if _is_cb:
         # Chipbreaker: min 3 flutes; same diameter breakdowns
         _dia_flute_catalog = {
             1.000: [3,4,5,6,7,9,11],
@@ -6906,6 +6922,8 @@ def run(payload=None):
             0.750: [2,3,4,5,6,7,9],
         }
         _avail_flutes = _dia_flute_catalog.get(_dia_key, [2,3,4,5,6,7])
+    # Trim the flute list to what the diameter can physically carry.
+    _avail_flutes = [f for f in _avail_flutes if f <= _dia_max_flutes]
     _cur_flutes = int(data.get("flutes", 4) or 4)
     _cur_cr = _flute_core_map.get(_cur_flutes, 0.70)
     _is_slotting = float(data.get("woc_pct", 0) or 0) >= 90.0
@@ -6964,12 +6982,82 @@ def run(payload=None):
         })
 
     # 8) Diameter step-up (D⁴ law)
-    # Skip for slotting — slot width is fixed; a larger tool can't fit in the same slot
+    # Skip for slotting — slot width is fixed; a larger tool can't fit in the same slot.
+    # This includes HEM/trochoidal-in-a-slot: those run a LIGHT radial WOC (<90%) but still
+    # clear a fixed slot_width_in, so the plain WOC<90% gate would wrongly let them through.
+    # When there's a slot to clear, "go bigger for stiffness" is the wrong lever — the tool
+    # must stay smaller than the slot (the HEM-dia suggestion already handles slot fit).
+    _slot_width_diam = float(payload.get("slot_width_in", 0.0) or 0.0)
+    _hem_in_slot     = _mode_str.lower() in ("hem", "trochoidal") and _slot_width_diam > _d + 1e-6
+    _full_slotting   = float(data.get("woc_pct", 0) or 0) >= 90.0
     _common = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5, 2.0]
     # Custom/special tools aren't offered in larger stock diameters — suppress the step-up.
     _next_d = None if _is_special_tool else next((s for s in _common if s > _d + 1e-4), None)
-    _woc_now_diam = float(data.get("woc_pct", 0) or 0)
-    if _next_d and _woc_now_diam < 90.0:
+    if _next_d and _hem_in_slot:
+        # HEM/trochoidal clearing a FIXED slot: a plain "go bigger for D⁴ stiffness" is wrong
+        # framing — the tool must stay smaller than the slot to leave room for the trochoidal
+        # loop. But a bigger tool that STILL FITS (≥10% wall clearance per side, same rule as
+        # the HEM-dia picker) is genuinely stiffer and reduces flex. Offer the largest fitting
+        # standard diameter, framed for the slot; if the current tool is already the largest
+        # that fits, say nothing (no bogus step-up).
+        _fit_dias = [s for s in _common
+                     if s > _d + 1e-4
+                     and s < _slot_width_diam - 1e-6
+                     and (_slot_width_diam - s) / _slot_width_diam >= 0.10 - 1e-6]
+        _slot_next_d = max(_fit_dias) if _fit_dias else None
+        if _slot_next_d:
+            _sd_gain    = round((_slot_next_d / _d) ** 4, 1)
+            _sd_wall    = (_slot_width_diam - _slot_next_d) / 2
+            _sd_woc_min = round(_slot_next_d * 0.05, 4)
+            _sd_woc_max = round(_slot_next_d * 0.10, 4)
+            # HEM wants high flute count — the light radial bite frees the chip gullets, and
+            # the bigger diameter can carry more flutes than the current small tool. Cap by
+            # what the NEW diameter physically offers as a standard (7 is custom below 3/8",
+            # so cap the auto-suggested range at 6). Aluminum/non-ferrous stay lower (3-5).
+            if _slot_next_d <= 0.125 + 1e-6:
+                _sd_flute_ceiling = 4
+            elif _slot_next_d < 0.375 - 1e-6:
+                _sd_flute_ceiling = 6   # 1/4"-5/16": 5 & 6 standard, 7 custom (excluded here)
+            else:
+                _sd_flute_ceiling = 7
+            _mat_grp_sd = get_material_group(str(data.get("material", "") or ""))
+            _is_nf_sd = _mat_grp_sd in ("Aluminum", "aluminum_wrought", "aluminum_wrought_hs",
+                                        "aluminum_cast", "Non-Ferrous")
+            if _is_nf_sd:
+                _sd_flute_opts = [f for f in (3, 5) if f <= _sd_flute_ceiling]
+            else:
+                _sd_flute_opts = [f for f in (4, 5, 6) if f <= _sd_flute_ceiling]
+            # Never suggest fewer flutes than the tool already has.
+            _cur_fl_sd = int(data.get("flutes", 0) or 0)
+            _sd_flute_opts = [f for f in _sd_flute_opts if f >= _cur_fl_sd] or _sd_flute_opts
+            _sd_flute_target = _sd_flute_opts[-1] if _sd_flute_opts else _cur_fl_sd
+            _sd_flute_txt = (" or ".join(str(f) for f in _sd_flute_opts) + "-flute") if _sd_flute_opts else ""
+            _sd_flute_clause = f" in {_sd_flute_txt}" if _sd_flute_txt else ""
+            _hw_suggestions.append({
+                "type": "diameter",
+                "label": f'Increase Tool Diameter to {_slot_next_d:.3f}"{_sd_flute_clause} (still fits {_slot_width_diam:.3f}" slot)',
+                "detail": (
+                    f"{_sd_gain}× stiffer core (D⁴ law) and still clears the slot — leaves "
+                    f"{_sd_wall:.4f}\" per wall, enough for trochoidal looping at "
+                    f"{_sd_woc_min:.4f}\"–{_sd_woc_max:.4f}\" WOC (5–10% of tool dia). "
+                    f"HEM's light bite frees the gullets, so a higher flute count here adds "
+                    f"feed rate on top of the stiffness gain."
+                ),
+                "lookup_dia": _slot_next_d,
+                "lookup_loc": float(data.get("loc", 0) or 0),
+                "suggested_flutes": _sd_flute_target,
+                "lookup_flutes": _sd_flute_target,
+                "lookup_series": data.get("tool_series", ""),
+                "lookup_corner": data.get("corner_condition", ""),
+                "lookup_cr": float(data.get("corner_radius", 0) or 0),
+                "lookup_edp": str(data.get("edp", "") or ""),
+                # HEM slot step-up: the deep, light-radial cut clears well with a chipbreaker,
+                # which also comes in 4/5/6-flute here. Flag so the server ALSO returns CB EDPs
+                # (surfaced alongside the standard-geometry EDPs — user picks).
+                "hem_slot_stepup": True,
+                "lookup_flute_opts": _sd_flute_opts,
+            })
+    elif _next_d and not _full_slotting:
         _d_gain = round((_next_d / _d) ** 4, 1)
         # Spindle-load caveat: a larger tool at the same engagement (WOC% and DOC xD)
         # removes ~(_next_d/_d)^2 more material per pass, so HP draw scales up roughly the
