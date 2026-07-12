@@ -9464,18 +9464,23 @@ ${stabSection}
                         const lbsNum = Number(hit?.lbs_in) || 0;
                         // Roughing-geometry WOC floor: CB needs >=8% WOC, truncated rougher
                         // (VXR) >=10%, to engage — below that the segmented/truncated edge
-                        // rubs instead of cutting. HEM's trochoidal WOC is a light programmed
-                        // bite that CAN land under the floor (esp. titanium/HRSA at 5-10% or
-                        // high flute counts). We still SHOW the CB/VXR tile (it's a valid
-                        // choice at the right WOC) but warn when the WOC this tile would seed
-                        // is below its floor, so the customer knows to bump WOC or run std.
+                        // rubs instead of cutting. We still SHOW the CB/VXR tile (it's a valid
+                        // choice at the right WOC) but warn when the WOC that will ACTUALLY
+                        // RUN is below the floor — i.e. the user's current form WOC (which can
+                        // be a stale value carried over from a prior material, e.g. 9% from a
+                        // 4140 setup that didn't re-seed when switching to Inconel). Only when
+                        // no WOC is set yet do we fall back to the tile's seeded preset (which
+                        // for CB is self-floored to >=8%, so a fresh tap is always safe).
                         const geoFloorPct = strat === "hem"
                           ? (hit?.geometry === "chipbreaker" ? 8 : hit?.geometry === "truncated_rougher" ? 10 : 0)
                           : 0;
                         let wocBelowFloor = false;
                         if (geoFloorPct > 0 && haveMat) {
-                          const fpT = getDynamicPresets("trochoidal", isoCategory, hit?.flutes ?? form.flutes, item.dia, locNum || form.loc, hit?.series ?? form.tool_series ?? "", hit?.geometry ?? "standard");
-                          wocBelowFloor = (fpT?.woc?.med ?? 0) < geoFloorPct - 1e-6;
+                          const curWocPct = Number(form.woc_pct) || 0;
+                          const effWocPct = curWocPct > 0
+                            ? curWocPct
+                            : (getDynamicPresets("trochoidal", isoCategory, hit?.flutes ?? form.flutes, item.dia, locNum || form.loc, hit?.series ?? form.tool_series ?? "", hit?.geometry ?? "standard")?.woc?.med ?? 0);
+                          wocBelowFloor = effWocPct > 0 && effWocPct < geoFloorPct - 1e-6;
                         }
                         const zSteps = (locNum > 0 && slotDepthIn > locNum + 1e-4)
                           ? Math.ceil(slotDepthIn / locNum) : 0;
@@ -9597,12 +9602,33 @@ ${stabSection}
               {(() => {
                 const isHemStrat = (form.slot_strategy ?? "traditional") === "hem";
                 const isCb = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
+                // A chipbreaker/VXR only engages at/above its WOC floor (CB 8%, VXR 10%);
+                // below that the segmented edge rubs. Check the WOC that will actually run
+                // (form.woc_pct — can be a stale value carried over from a prior material).
+                const cbFloorPct = form.geometry === "chipbreaker" ? 8 : form.geometry === "truncated_rougher" ? 10 : 0;
+                const curWocPct = Number(form.woc_pct) || 0;
+                const cbUnderFloor = isCb && cbFloorPct > 0 && curWocPct > 0 && curWocPct < cbFloorPct - 1e-6;
                 const why = isHemStrat
                   ? "even at light WOC you're running a deep axial cut — segmenting the long chip clears it up the flute, and the ~17–20% lower cutting force/heat applies regardless of toolpath"
                   : "slotting is a chip-evacuation problem — segmenting the long chip lets it clear instead of packing, which earns a deeper DOC ceiling (≈1.0–1.35×D vs 0.75–1.0×D standard) and cuts force ~17–20%";
                 return (
-                  <div className={`mt-2.5 rounded-md border px-3 py-2 text-[11px] ${isCb ? "border-emerald-500/40 bg-emerald-500/5" : "border-sky-500/40 bg-sky-500/5"}`}>
-                    {isCb ? (
+                  <div className={`mt-2.5 rounded-md border px-3 py-2 text-[11px] ${cbUnderFloor ? "border-amber-500/50 bg-amber-500/5" : isCb ? "border-emerald-500/40 bg-emerald-500/5" : "border-sky-500/40 bg-sky-500/5"}`}>
+                    {cbUnderFloor ? (
+                      <span className="text-amber-300/90">
+                        <span className="font-semibold">⚠ Chipbreaker at {curWocPct.toFixed(0)}% WOC — below the ~{cbFloorPct}% it needs to engage.</span> The segmented edge prefers ≥{cbFloorPct}% radial bite to cut instead of rub. Bump WOC to ≥{cbFloorPct}%{" "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const dia = Number(form.tool_dia) || 0;
+                            setForm(p => ({ ...p, woc_pct: cbFloorPct }));
+                            if (dia > 0) setWocText(((cbFloorPct / 100) * dia).toFixed(4));
+                            setWocPreset(null);
+                          }}
+                          className="underline decoration-dotted font-semibold hover:text-amber-100"
+                        >set {cbFloorPct}% →</button>{" "}
+                        or run the standard tool at this WOC.
+                      </span>
+                    ) : isCb ? (
                       <span className="text-emerald-300/90">
                         <span className="font-semibold">✓ Chipbreaker geometry selected.</span> Good call for slotting — {why}.
                       </span>
