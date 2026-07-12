@@ -1819,11 +1819,14 @@ function EngagementAngle() {
   const arcDisp  = result ? (metric ? result.arc_len * 25.4 : result.arc_len) : null;
   const chipDisp = result && fz > 0 ? (metric ? result.mean_chip * 25.4 : result.mean_chip) : null;
 
-  // Heat risk note
+  // Advisory note — chip thinning is driven by the WOC-to-diameter ratio, NOT
+  // by % of revolution in cut. Radial chip thinning only occurs below 50% WOC;
+  // at exactly 50% WOC (θ = 90°) the mean chip ≈ programmed FPT with no thinning.
+  const woc_ratio = D > 0 ? ae / D : 0;
   const heatNote = result
-    ? result.pct_in_cut > 50 ? "High heat per tooth — ensure good coolant coverage."
-    : result.pct_in_cut > 25 ? "Moderate engagement — standard cutting conditions."
-    : "Low engagement — chip thinning likely; consider increasing FPT."
+    ? woc_ratio >= 0.5 ? "Full/heavy radial engagement — high heat per tooth; ensure good coolant coverage."
+    : woc_ratio >= 0.3 ? "Moderate engagement — mild chip thinning; standard cutting conditions."
+    : "Light radial engagement — significant chip thinning; increase FPT to hold mean chip thickness."
     : null;
 
   usePrintRegister("Engagement Angle", "Speed & Feed", result ? [
