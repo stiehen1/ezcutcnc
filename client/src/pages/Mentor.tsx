@@ -9462,6 +9462,21 @@ ${stabSection}
                         // loc_in arrives from Postgres NUMERIC as a STRING — coerce before math.
                         const locNum = Number(hit?.loc_in) || 0;
                         const lbsNum = Number(hit?.lbs_in) || 0;
+                        // Roughing-geometry WOC floor: CB needs >=8% WOC, truncated rougher
+                        // (VXR) >=10%, to engage — below that the segmented/truncated edge
+                        // rubs instead of cutting. HEM's trochoidal WOC is a light programmed
+                        // bite that CAN land under the floor (esp. titanium/HRSA at 5-10% or
+                        // high flute counts). We still SHOW the CB/VXR tile (it's a valid
+                        // choice at the right WOC) but warn when the WOC this tile would seed
+                        // is below its floor, so the customer knows to bump WOC or run std.
+                        const geoFloorPct = strat === "hem"
+                          ? (hit?.geometry === "chipbreaker" ? 8 : hit?.geometry === "truncated_rougher" ? 10 : 0)
+                          : 0;
+                        let wocBelowFloor = false;
+                        if (geoFloorPct > 0 && haveMat) {
+                          const fpT = getDynamicPresets("trochoidal", isoCategory, hit?.flutes ?? form.flutes, item.dia, locNum || form.loc, hit?.series ?? form.tool_series ?? "", hit?.geometry ?? "standard");
+                          wocBelowFloor = (fpT?.woc?.med ?? 0) < geoFloorPct - 1e-6;
+                        }
                         const zSteps = (locNum > 0 && slotDepthIn > locNum + 1e-4)
                           ? Math.ceil(slotDepthIn / locNum) : 0;
                         // Reduced-neck reach: the tool clears to full depth on its necked
@@ -9504,6 +9519,11 @@ ${stabSection}
                                   <span className="text-sky-300/90"> · RN reaches {lbsNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
                                 )}
                                 {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
+                                {wocBelowFloor && (
+                                  <span className="block text-rose-300/90 mt-0.5" title={`${hit.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated rougher"} needs ≥${geoFloorPct}% WOC to engage; this material's trochoidal bite is lighter. Bump WOC to ≥${geoFloorPct}% or run the standard tool.`}>
+                                    ⚠ needs ≥{geoFloorPct}% WOC to engage
+                                  </span>
+                                )}
                               </span>
                             )}
                           </button>
