@@ -59,6 +59,66 @@ function fmtIn(v: number): string {
   return `${v.toFixed(4)}"`;
 }
 
+// Number (wire gauge) drill series #1–#80, decimal inch.
+const NUMBER_DRILLS: [number, number][] = [
+  [1,0.2280],[2,0.2210],[3,0.2130],[4,0.2090],[5,0.2055],[6,0.2040],[7,0.2010],[8,0.1990],
+  [9,0.1960],[10,0.1935],[11,0.1910],[12,0.1890],[13,0.1850],[14,0.1820],[15,0.1800],[16,0.1770],
+  [17,0.1730],[18,0.1695],[19,0.1660],[20,0.1610],[21,0.1590],[22,0.1570],[23,0.1540],[24,0.1520],
+  [25,0.1495],[26,0.1470],[27,0.1440],[28,0.1405],[29,0.1360],[30,0.1285],[31,0.1200],[32,0.1160],
+  [33,0.1130],[34,0.1110],[35,0.1100],[36,0.1065],[37,0.1040],[38,0.1015],[39,0.0995],[40,0.0980],
+  [41,0.0960],[42,0.0935],[43,0.0890],[44,0.0860],[45,0.0820],[46,0.0810],[47,0.0785],[48,0.0760],
+  [49,0.0730],[50,0.0700],[51,0.0670],[52,0.0635],[53,0.0595],[54,0.0550],[55,0.0520],[56,0.0465],
+  [57,0.0430],[58,0.0420],[59,0.0410],[60,0.0400],[61,0.0390],[62,0.0380],[63,0.0370],[64,0.0360],
+  [65,0.0350],[66,0.0330],[67,0.0320],[68,0.0310],[69,0.0292],[70,0.0280],[71,0.0260],[72,0.0250],
+  [73,0.0240],[74,0.0225],[75,0.0210],[76,0.0200],[77,0.0180],[78,0.0160],[79,0.0145],[80,0.0135],
+];
+// Letter drill series A–Z, decimal inch.
+const LETTER_DRILLS: [string, number][] = [
+  ["A",0.2340],["B",0.2380],["C",0.2420],["D",0.2460],["E",0.2500],["F",0.2570],["G",0.2610],
+  ["H",0.2660],["I",0.2720],["J",0.2770],["K",0.2810],["L",0.2900],["M",0.2950],["N",0.3020],
+  ["O",0.3160],["P",0.3230],["Q",0.3320],["R",0.3390],["S",0.3480],["T",0.3580],["U",0.3680],
+  ["V",0.3770],["W",0.3860],["X",0.3970],["Y",0.4040],["Z",0.4130],
+];
+// Fractional drill series 1/64" up to 1", decimal inch.
+const FRACTION_DRILLS: [number, string][] = Array.from({ length: 64 }, (_, i) => {
+  const s = (i + 1) / 64;
+  const fr = [
+    "1/64","1/32","3/64","1/16","5/64","3/32","7/64","1/8","9/64","5/32","11/64","3/16","13/64","7/32","15/64","1/4",
+    "17/64","9/32","19/64","5/16","21/64","11/32","23/64","3/8","25/64","13/32","27/64","7/16","29/64","15/32","31/64","1/2",
+    "33/64","17/32","35/64","9/16","37/64","19/32","39/64","5/8","41/64","21/32","43/64","11/16","45/64","23/32","47/64","3/4",
+    "49/64","25/32","51/64","13/16","53/64","27/32","55/64","7/8","57/64","29/32","59/64","15/16","61/64","31/32","63/64","1",
+  ][i];
+  return [s, fr] as [number, string];
+});
+
+// Standard drill (fractional / number / letter) nearest a target decimal inch.
+// biasUnder: prefer the largest drill AT OR BELOW target. Modern HP carbide drills
+// cut essentially on-size (unlike old HSS jobbers that ran oversize), so rounding UP
+// directly thins the thread — bias undersize to protect the requested engagement.
+function nearestDrill(v: number, biasUnder = true): { label: string; size: number; series: string } | null {
+  if (!(v > 0)) return null;
+  const cands: { label: string; size: number; series: string }[] = [
+    ...FRACTION_DRILLS.map(([s, lbl]) => ({ label: `${lbl}"`, size: s, series: "fraction" })),
+    ...NUMBER_DRILLS.map(([num, s]) => ({ label: `#${num}`, size: s, series: "number" })),
+    ...LETTER_DRILLS.map(([ltr, s]) => ({ label: `${ltr}`, size: s, series: "letter" })),
+  ];
+  if (biasUnder) {
+    // Largest drill ≤ target (+0.0003" tolerance so a drill that lands ~on-size still counts).
+    const under = cands.filter(c => c.size <= v + 0.0003);
+    if (under.length) return under.reduce((a, b) => (b.size > a.size ? b : a));
+    // Target is below the whole series — fall back to the absolute smallest.
+    return cands.reduce((a, b) => (b.size < a.size ? b : a));
+  }
+  return cands.reduce((a, b) => Math.abs(b.size - v) < Math.abs(a.size - v) ? b : a);
+}
+
+// Back-calculate the % thread engagement a given drilled hole yields for a UN/metric thread.
+// perThread = 1.2990/TPI (inch) or 1.2990×pitch (metric); engagement scales linearly.
+function engagementForDrill(major: number, drillSize: number, perThread: number): number | null {
+  if (!(major > 0) || !(perThread > 0) || !(drillSize > 0)) return null;
+  return ((major - drillSize) / perThread) * 100;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Metric context — provided at page level, consumed by each calc
 // ─────────────────────────────────────────────────────────────────
@@ -625,10 +685,23 @@ function FeedArcCorrection() {
 // ─────────────────────────────────────────────────────────────────
 // 8. Tap Drill Size
 // ─────────────────────────────────────────────────────────────────
+// Typical diameter oversize (inch) a drill cuts beyond its nominal size, by drill type.
+// HP carbide holds essentially on-size; HSS/cobalt jobbers walk oversize, more so as
+// diameter grows. Rough shop averages — enough to shift the drill pick, not a spec.
+function drillOversize(type: string, nominalIn: number): number {
+  if (type === "carbide") return 0.0000;
+  // HSS & cobalt behave similarly on oversize; scale mildly with diameter.
+  if (nominalIn < 0.125) return 0.0015;
+  if (nominalIn < 0.375) return 0.0025;
+  if (nominalIn < 0.750) return 0.0035;
+  return 0.0045;
+}
+
 function TapDrill() {
   const [major,    setMajor]    = React.useState("");
   const [tpi,      setTpi]      = React.useState("");
   const [engPct,   setEngPct]   = React.useState("75");
+  const [drillType, setDrillType] = React.useState("carbide");
 
   const D = n(major), T = n(tpi), pct = n(engPct);
   let drill: number | null = null;
@@ -647,7 +720,7 @@ function TapDrill() {
   }
 
   return (
-    <CalcCard title="Tap Drill Size" category="Hole Making" titleHint="Drill size to use before tapping. Lower % thread = less tap torque, longer tap life — sweet spot is 65–70% for most CNC work." onClear={() => { setMajor(""); setTpi(""); setEngPct("65"); setMajorMm(""); setPitchMm(""); }}>
+    <CalcCard title="Tap Drill Size" category="Hole Making" titleHint="Drill size to use before tapping. Lower % thread = less tap torque, longer tap life — sweet spot is 65–70% for most CNC work." onClear={() => { setMajor(""); setTpi(""); setEngPct("65"); setMajorMm(""); setPitchMm(""); setDrillType("carbide"); }}>
       <Row
         label="% Thread Engagement"
         hint="65–70% is the production sweet spot — past 75% strength barely climbs but tap torque jumps 25–50%+. Aluminum 65–75%, mild steel 60–70%, stainless 55–65%, hardened 55–65%, Ti/Inconel 50–60%. Drop to 50–60% for small taps (#0–80, M2, M3) — they fail from torque fast."
@@ -682,24 +755,72 @@ function TapDrill() {
           {pct < 50 && "Below 50% — thread strength drops off quickly. Verify pullout meets spec."}
         </p>
       )}
+      <Row
+        label="Drill Type"
+        hint={'HP carbide drills cut essentially on-size, so the drilled hole ≈ nominal drill size. HSS and cobalt jobbers walk oversize (~0.0015–0.0045" depending on diameter), enlarging the hole and lowering effective thread engagement. This shifts both the recommended drill and the actual % thread it yields.'}
+      >
+        <div className="flex gap-1 flex-1">
+          {[
+            { v: "carbide", lbl: "Carbide", title: "HP carbide — cuts on size" },
+            { v: "cobalt",  lbl: "Cobalt",  title: "Cobalt jobber — cuts slightly oversize" },
+            { v: "hss",     lbl: "HSS",     title: "HSS jobber — cuts oversize" },
+          ].map((p) => (
+            <button key={p.v} type="button"
+              onClick={() => setDrillType(p.v)}
+              title={p.title}
+              className="rounded px-2 py-1 text-[11px] border transition-all flex-1"
+              style={{
+                background: drillType === p.v ? "#0ea5e9" : "transparent",
+                borderColor: "#0ea5e9",
+                color: drillType === p.v ? "#fff" : "#0ea5e9",
+              }}
+            >{p.lbl}</button>
+          ))}
+        </div>
+      </Row>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">UN Threads (inch)</p>
         <Row label="Major Dia"><NumIn value={major} onChange={setMajor} unit="in" placeholder="0.5000" /></Row>
         <Row label="TPI"><NumIn value={tpi} onChange={setTpi} placeholder="13" /></Row>
-        {drill !== null && drill > 0 && <>
-          <Result label="Tap Drill" value={`${drill.toFixed(4)}"`} highlight />
-          <Result label="Nearest Fraction" value={fmtIn(drill)} />
-          <Result label="Drill (mm)" value={`${(drill * 25.4).toFixed(3)} mm`} />
-        </>}
+        {drill !== null && drill > 0 && (() => {
+          // Pick the drill so the FINISHED hole (nominal + oversize) hits the target.
+          const os = drillOversize(drillType, drill);
+          const nd = nearestDrill(drill - os);
+          const effHole = nd ? nd.size + os : 0;            // actual drilled hole
+          const actualPct = nd ? engagementForDrill(D, effHole, 1.2990 / T) : null;
+          return <>
+            <Result label="Tap Drill (theoretical)" value={`${drill.toFixed(4)}" (${fmtIn(drill)})`} highlight />
+            {nd && (
+              <Result
+                label="Nearest Standard Drill"
+                value={`${nd.label} — ${nd.size.toFixed(4)}"${os > 0 ? ` (hole ≈ ${effHole.toFixed(4)}")` : ""}${actualPct != null ? ` → ${actualPct.toFixed(0)}% thread` : ""}`}
+              />
+            )}
+            <Result label="Drill (mm)" value={`${(drill * 25.4).toFixed(3)} mm`} />
+          </>;
+        })()}
       </div>
       <div className="border-t border-[#2d2d4a] pt-2">
         <p className="text-[10px] text-gray-500 mb-2">Metric Threads</p>
         <Row label="Major Dia (mm)"><NumIn value={major_mm} onChange={setMajorMm} unit="mm" placeholder="12" /></Row>
         <Row label="Pitch (mm)"><NumIn value={pitch_mm} onChange={setPitchMm} unit="mm" placeholder="1.75" /></Row>
-        {drill_m !== null && drill_m > 0 && <>
-          <Result label="Tap Drill" value={`${drill_m.toFixed(3)} mm`} highlight />
-          <Result label="Drill (in)" value={`${(drill_m / 25.4).toFixed(4)}"`} />
-        </>}
+        {drill_m !== null && drill_m > 0 && (() => {
+          const drillIn = drill_m / 25.4;
+          const os = drillOversize(drillType, drillIn);
+          const nd = nearestDrill(drillIn - os);
+          const effHole = nd ? nd.size + os : 0;            // actual drilled hole (in)
+          const actualPct = nd ? engagementForDrill(Dm, effHole * 25.4, 1.2990 * Pm) : null;
+          return <>
+            <Result label="Tap Drill (theoretical)" value={`${drill_m.toFixed(3)} mm`} highlight />
+            <Result label="Drill (in)" value={`${drillIn.toFixed(4)}" (${fmtIn(drillIn)})`} />
+            {nd && (
+              <Result
+                label="Nearest Standard Drill"
+                value={`${nd.label} — ${nd.size.toFixed(4)}"${os > 0 ? ` (hole ≈ ${effHole.toFixed(4)}")` : ""}${actualPct != null ? ` → ${actualPct.toFixed(0)}% thread` : ""}`}
+              />
+            )}
+          </>;
+        })()}
       </div>
     </CalcCard>
   );

@@ -4249,7 +4249,7 @@ export default function Mentor() {
     const predrillFullFeed = result?.milling?.feed_ipm ?? 0;
     const predrillPlungeRows = (entryTypes.includes("predrill_plunge") && predrillToolDia > 0) ? `
         <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#22c55e;border-bottom:1px solid #22c55e40;">Pre-drill + Plunge (Closed Slot)</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Hole Dia</td><td style="font-weight:600;">≥${(predrillToolDia + 0.010).toFixed(4)}" <span style="color:#888;font-weight:400;">(tool dia + 0.010" clearance)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Hole Dia</td><td style="font-weight:600;">≥${(predrillToolDia + 0.010).toFixed(4)}" <span style="color:#888;font-weight:400;">(${((predrillToolDia + 0.010) * 25.4).toFixed(2)} mm — tool dia + 0.010" clearance)</span></td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Hole Depth</td><td style="font-weight:600;">≥ slot DOC</td></tr>
         ${predrillFullFeed > 0 ? `<tr><td style="color:#888;padding:2px 8px 2px 0;">Slot Feed (after drop-in)</td><td style="font-weight:600;">${predrillFullFeed.toFixed(1)} IPM</td></tr>` : ""}
         <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">Drill clearance hole at one end of slot, drop endmill into hole, then feed laterally through slot at full feed.</td></tr>` : "";
@@ -5712,7 +5712,7 @@ ${stabSection}
           const toolDia = Number(form.tool_dia) || 0;
           const slotFull = result?.milling?.feed_ipm ?? 0;
           if (toolDia > 0) {
-            lines.push(L("Pre-drill Hole Dia", `≥${(toolDia + 0.010).toFixed(4)}"  (tool dia + 0.010" clearance)`));
+            lines.push(L("Pre-drill Hole Dia", `≥${(toolDia + 0.010).toFixed(4)}" (${((toolDia + 0.010) * 25.4).toFixed(2)} mm)  (tool dia + 0.010" clearance)`));
             lines.push(L("Pre-drill Hole Depth", `≥ slot DOC`));
             if (slotFull > 0) {
               lines.push(L("Slot Feed (after drop-in)", `${slotFull.toFixed(1)} IPM`));
@@ -12420,7 +12420,7 @@ ${stabSection}
                       {form.slot_closed && entryTypes.includes("predrill_plunge") && toolDia > 0 && (
                         <div className="text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
                           <span className="font-semibold">Pre-drill hole:</span>
-                          {" ≥"}{predrillDia.toFixed(3)}{"\""} dia (tool dia + 0.010" clearance),
+                          {" ≥"}{predrillDia.toFixed(3)}{"\""} <span className="text-green-400/70">({(predrillDia * 25.4).toFixed(2)} mm)</span> dia (tool dia + 0.010" clearance),
                           {" depth ≥ slot DOC. Drop endmill into hole, then feed laterally through the slot at full feed."}
                         </div>
                       )}
@@ -12440,7 +12440,7 @@ ${stabSection}
                     {entryTypes.includes("predrill_plunge") && stdToolDia > 0 && (
                       <div className="mt-2 text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
                         <span className="font-semibold">Pre-drill hole:</span>
-                        {" ≥"}{stdPredrillDia.toFixed(3)}{"\""} dia (tool dia × 1.15, ≥15% larger than the endmill).
+                        {" ≥"}{stdPredrillDia.toFixed(3)}{"\""} <span className="text-green-400/70">({(stdPredrillDia * 25.4).toFixed(2)} mm)</span> dia (tool dia × 1.15, ≥15% larger than the endmill).
                         {" Drop endmill to depth, then begin lateral cut at full feed."}
                       </div>
                     )}
@@ -16162,7 +16162,7 @@ ${stabSection}
                             </div>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div className="flex flex-col">
-                                <div><span className="text-zinc-500">Pre-drill Hole Dia</span><span className="ml-2 font-medium text-green-300">≥{(toolDia + 0.010).toFixed(4)}"</span></div>
+                                <div><span className="text-zinc-500">Pre-drill Hole Dia</span><span className="ml-2 font-medium text-green-300">≥{(toolDia + 0.010).toFixed(4)}" <span className="text-green-400/70">({((toolDia + 0.010) * 25.4).toFixed(2)} mm)</span></span></div>
                                 <div className="text-[10px] text-zinc-500">(tool dia + 0.010" clearance)</div>
                               </div>
                               <div className="flex flex-col">
