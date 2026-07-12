@@ -2292,9 +2292,13 @@ export async function registerRoutes(
       // surfaces many-side-pass / many-Z-step suggestions nobody wants, so cap to the
       // largest 3 diameters ≤ width (e.g. 3/4, 5/8, 1/2 for a 3/4" slot — gives the
       // user a couple of step-down options without flooding with tiny tools). HEM
-      // stays in its 0.40–0.70× window (tool < slot).
+      // uses a 0.40–0.80× window (tool < slot): the 0.80× ceiling matches the 10%
+      // per-wall clearance floor (leaves >=10% of slot width per side to loop) and
+      // the engine's 0.85× sizing target, so a stiffer near-slot-width tool is
+      // offered — e.g. a 0.350" slot now admits 0.250" as well as 0.1875" (was 0.70×
+      // -> 0.1875" only, which surfaced NO chip when no small HEM tool was stocked).
       const candidates = isHem
-        ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.70 + 1e-6)
+        ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.80 + 1e-6)
         : STD_DIAS.filter(d => d <= width + 1e-4).slice(-3);
       if (!candidates.length) return res.json({ chips: [] });
 

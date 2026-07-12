@@ -603,14 +603,21 @@ type SlotDiaEdp = { edp: string; flutes: number; geometry: string; coating: stri
 function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
   if (!(slotWidth > 0)) return [];
   if (strategy === "hem") {
-    // Trochoidal: tool well below width so loops have room; rec ≈0.65×, accept 0.4–0.7×.
-    const lo = slotWidth * 0.40, hi = slotWidth * 0.70;
+    // Trochoidal: tool must be smaller than the slot so the loops have room, but a
+    // BIGGER tool is stiffer and clears the slot in fewer/faster loops. Accept up to
+    // ~0.85× (target, matches the engine's Picker A), hard-capped at 0.80× by the 10%
+    // per-wall clearance floor (leaves ≥10% of slot width per side to loop). Floor at
+    // 0.40× so we don't suggest a tiny tool air-cutting around huge loops.
+    // For a 0.350" slot this admits 0.1875" AND 0.250" (was 0.40–0.70× → 0.1875" only).
+    const lo = slotWidth * 0.40, hi = slotWidth * 0.80;
     const cands = STD_DIAS.filter(d => d >= lo - 1e-6 && d <= hi + 1e-6);
-    const list = cands.length ? cands : [STD_DIAS.reduce((best, d) => Math.abs(d - slotWidth * 0.65) < Math.abs(best - slotWidth * 0.65) ? d : best, STD_DIAS[0])];
+    const list = cands.length ? cands : [STD_DIAS.reduce((best, d) => Math.abs(d - slotWidth * 0.75) < Math.abs(best - slotWidth * 0.75) ? d : best, STD_DIAS[0])];
     return list.slice().reverse().map(d => ({
       dia: d,
       label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
-      sub: `${(slotWidth / d >= 1.43 ? "deep" : "tight — loops cramped")}`,
+      // ratio = slot/tool: ≥1.43 (tool ≤0.70×) roomy; 1.25–1.43 (0.70–0.80×) stiffer but
+      // tighter loops; <1.25 would be cramped (excluded by the 0.80× cap above).
+      sub: `${(slotWidth / d >= 1.43 ? "deep" : "stiffer — tighter loops")}`,
     }));
   }
   // Traditional: all stocked dias ≤ width, ranked by fewest side passes (largest first).
