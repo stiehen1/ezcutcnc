@@ -2393,14 +2393,33 @@ export async function registerRoutes(
           // reaches full depth at this Ø, suppress it (client hides empty Ø).
           rows = reachable.sort((a, b) => zStepsFor(a) - zStepsFor(b) || Number(b.score) - Number(a.score));
         }
-        // Best overall, then the best with a DIFFERENT flute+geometry signature
-        // (top-2-per-Ø). A 5fl chipbreaker and a 5fl standard are different tools —
-        // so are 6fl CB vs 6fl standard — so dedupe on flutes+geometry, not flutes.
+        // Surface the best EDP for each distinct flute+geometry signature. A 5fl
+        // chipbreaker and a 5fl standard are different tools — so are 6fl CB vs 6fl
+        // standard — so dedupe on flutes+geometry, not flutes. HEM shows up to FOUR
+        // signatures per Ø (e.g. 5fl CB / 6fl CB / 5fl std / 6fl std) so the customer
+        // sees the full choice — in tougher materials the CB geometry takes a beating,
+        // and some shops prefer to run the standard. Traditional stays at 2-per-Ø
+        // (4fl CB + 4fl std) to avoid flooding the panel with side-pass options.
+        // `rows` is already ordered best-first (reach/z-steps then score), so the first
+        // row seen for each signature is that signature's best EDP.
         const sig = (r: any) => `${r.flutes}|${String(r.geometry ?? "standard").toLowerCase()}`;
+        const maxPerDia = isHem ? 4 : 2;
+        const seenSig = new Set<string>();
         const picks: any[] = [];
         for (const r of rows) {
-          if (picks.length === 0) { picks.push(r); continue; }
-          if (picks.length === 1 && sig(r) !== sig(picks[0])) { picks.push(r); break; }
+          const g = sig(r);
+          if (seenSig.has(g)) continue;
+          seenSig.add(g);
+          picks.push(r);
+          if (picks.length >= maxPerDia) break;
+        }
+        // HEM display order: chipbreaker first (tougher-material choice up front), then
+        // standard; within each geometry, fewer flutes first — i.e. 5fl CB, 6fl CB,
+        // 5fl std, 6fl std. Z-steps are equal across same-LOC tools at one Ø, so this
+        // reorder doesn't fight the cross-diameter fewest-Z-passes ranking above.
+        if (isHem) {
+          const geomRank = (r: any) => (String(r.geometry ?? "standard").toLowerCase() === "chipbreaker" ? 0 : 1);
+          picks.sort((a, b) => geomRank(a) - geomRank(b) || Number(a.flutes) - Number(b.flutes));
         }
         for (const r of picks) {
           chips.push({
