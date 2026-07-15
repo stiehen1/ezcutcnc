@@ -831,12 +831,12 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                 </div>
 
                 {/* ════════════════════════════════════════════════════════
-                    SECTION 3 — Saved Uploaded Special Tools
+                    SECTION 3 — Your Saved Special Tooling
                 ════════════════════════════════════════════════════════ */}
                 <div className="rounded-2xl border border-orange-900/40 bg-orange-950/10 overflow-hidden">
                   <SectionHeader
                     icon="🔩"
-                    title="Saved Uploaded Special Tools"
+                    title="Your Saved Special Tooling"
                     count={specials.length}
                     open={specialsOpen}
                     onToggle={() => setSpecialsOpen(v => !v)}

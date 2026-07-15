@@ -1931,6 +1931,22 @@ export default function Mentor() {
         toast({ title: "Not a Tool Print", description: "This doesn't look like a Core Cutter engineering print (CC-XXXXX tool drawing). If you uploaded a CoreCutCNC results/parameter sheet, upload the engineering print instead.", variant: "destructive" });
         return;
       }
+
+      // Tool type outside the nine families the app models (form tool, burr,
+      // countersink, port tool, broach, etc.). The extractor flags these instead
+      // of force-fitting them into an endmill. Do NOT populate the form, run the
+      // calculator, or auto-save — the math would be misleading. Just tell the
+      // user to call for verified speeds & feeds.
+      if (e.unsupported_form === true) {
+        const _what = typeof e.unsupported_reason === "string" && e.unsupported_reason.trim()
+          ? ` (${e.unsupported_reason.trim()})` : "";
+        toast({
+          title: "Tool Type Not Supported",
+          description: `This tool type${_what} isn't supported in the app. Call us at 207-588-7519 for speeds & feeds.`,
+          variant: "destructive",
+        });
+        return;
+      }
       if (e.no_tool_number) {
         toast({ title: "Concept Tool — No CC Number", description: "No CC-XXXXX number found. Dimensions extracted — note this tool has not yet been assigned a Core Cutter number.", variant: "default" });
       }

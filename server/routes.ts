@@ -4956,6 +4956,11 @@ Some reach endmills are NOT shank-reduced. Instead the SHANK and the CUTTING FLU
 - STRONG TELL: a "FEATHER BLEND" callout (e.g. "10° FEATHER BLEND") almost always marks a necked tool. It is the blended/tapered transition from the reduced neck back up to the shank Ø, located at the back end of the neck (between the LOC/flute zone and the shank). If you see "FEATHER BLEND" anywhere on an endmill print, treat it as a reduced-neck reach tool: there WILL be a neck Ø (keyseat_arbor_dia) smaller than tool_dia, a short tip LOC, and a longer reach (lbs) — find all three even if dimensions are partly cut off. Never report flute_wash on a feather-blend tool.
 - Example: CC-14796 — Ø0.750 shank, Ø0.750 cutting dia, Ø0.712 mid neck, dims 1.125 / 3.00 / 5.00 → tool_dia=0.750, loc=1.125, lbs=3.00, oal=5.00, shank_dia=0.750, keyseat_arbor_dia=0.712.
 
+UNSUPPORTED TOOL TYPES — CRITICAL:
+The app models ONLY these nine cutting-tool families: endmill, feedmill, keyseat, dovetail, drill, step_drill, reamer, threadmill, chamfer_mill. If the print's NOTES, title block, or CAD profile clearly describe a tool OUTSIDE this list — for example a FORM TOOL / custom-form cutter, BURR, COUNTERSINK, SPOT DRILL, CENTER DRILL, FLY CUTTER, BORING BAR, PORT TOOL, BROACH, ENGRAVER, GEAR/HOB, SLITTING SAW, T-SLOT cutter, or any special profile the nine types above do not cover — do NOT force-fit it into the enum. Instead return ONLY:
+{"tool_number": <the CC-XXXXX value if present, else null>, "unsupported_form": true, "unsupported_reason": <short string naming what you saw, e.g. "form tool", "countersink", "port tool">}
+Do NOT extract dimensions for an unsupported form — the app cannot calculate it and must simply tell the user to call. When in doubt (the tool clearly maps to one of the nine supported types), do NOT set unsupported_form — classify it normally.
+
 Required fields (use 0 for unknown numbers, null for unknown strings):
 {
   "tool_number": <string — the value from the TOOL # field in the title block, e.g. "CC-14371". ALWAYS present on Core Cutter prints. Do NOT use the CUSTOMER TOOL # field.>,
