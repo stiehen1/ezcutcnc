@@ -831,6 +831,8 @@ export default function Mentor() {
   const [erEmail, setErEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
   const [erStatus, setErStatus] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
   const [erError, setErError] = React.useState("");
+  const [erCc, setErCc] = React.useState(() => localStorage.getItem("er_cc") || "");
+  const [erCcOpen, setErCcOpen] = React.useState(() => !!localStorage.getItem("er_cc"));
 
   // ── Welcome modal (first-visit name + email capture) ──────────────────────
   const [showWelcomeModal, setShowWelcomeModal] = React.useState(() => {
@@ -5896,6 +5898,7 @@ ${stabSection}
   async function emailResults() {
     if (!erEmail.trim()) { setErError("Enter your email address."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(erEmail.trim())) { setErError("Enter a valid email address."); return; }
+    if (erCc.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(erCc.trim())) { setErError("Enter a valid CC email address."); return; }
     setErStatus("sending");
     setErError("");
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? undefined;
@@ -5905,6 +5908,7 @@ ${stabSection}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: erEmail.trim(),
+          cc: erCc.trim() || undefined,
           operation,
           material: matLabel,
           machine_name: activeMachineName || undefined,
@@ -5923,6 +5927,9 @@ ${stabSection}
       } else {
         setErStatus("sent");
         localStorage.setItem("er_email", erEmail.trim().toLowerCase());
+        // Remember the CC (typically the user's boss) so it prefills next time.
+        if (erCc.trim()) localStorage.setItem("er_cc", erCc.trim().toLowerCase());
+        else localStorage.removeItem("er_cc");
       }
     } catch {
       setErError("Network error — check your connection.");
@@ -17681,6 +17688,7 @@ ${stabSection}
                 onKeyDown={e => { if (e.key === "Enter") emailResults(); }}
                 className="w-52 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
                 disabled={erStatus === "sending"}
+                autoFocus={!erEmail}
               />
               <button
                 onClick={emailResults}
@@ -17691,6 +17699,39 @@ ${stabSection}
               </button>
             </div>
           </div>
+          {!erCcOpen ? (
+            <button
+              type="button"
+              onClick={() => setErCcOpen(true)}
+              className="mt-2 text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2"
+            >
+              + CC someone
+            </button>
+          ) : (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-zinc-500 shrink-0">CC:</span>
+              <input
+                type="text"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="colleague@email.com"
+                value={erCc}
+                onChange={e => { setErCc(e.target.value); setErError(""); }}
+                onKeyDown={e => { if (e.key === "Enter") emailResults(); }}
+                className="w-52 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
+                disabled={erStatus === "sending"}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => { setErCc(""); setErCcOpen(false); setErError(""); localStorage.removeItem("er_cc"); }}
+                className="text-xs text-zinc-500 hover:text-zinc-300"
+              >
+                Remove
+              </button>
+            </div>
+          )}
           {erError && <p className="mt-1 text-xs text-red-400">{erError}</p>}
         </div>
       )}
@@ -17700,7 +17741,7 @@ ${stabSection}
             <span className="text-base">✓</span>
             <span>Sent! Check your inbox at <span className="font-medium">{erEmail}</span></span>
           </div>
-          <button onClick={() => setErStatus("idle")} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send again</button>
+          <button onClick={() => { setErEmail(""); setErError(""); setErStatus("idle"); /* keep remembered CC (usually the boss) prefilled */ }} className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 shrink-0">Send to another address</button>
         </div>
       )}
 

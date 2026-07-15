@@ -3116,13 +3116,19 @@ export async function registerRoutes(
   // ── Email Results (lead capture) ─────────────────────────────────────────
   app.post("/api/results/email", async (req, res) => {
     try {
-      const { email, operation, material, machine_name, results_text } = (req.body ?? {}) as {
-        email?: string; operation?: string; material?: string;
+      const { email, cc, operation, material, machine_name, results_text } = (req.body ?? {}) as {
+        email?: string; cc?: string; operation?: string; material?: string;
         machine_name?: string; results_text?: string;
       };
 
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: "Valid email address required." });
+      }
+
+      // CC is optional and delivery-only — it is NOT captured as a sales lead.
+      const ccClean = typeof cc === "string" ? cc.trim() : "";
+      if (ccClean && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccClean)) {
+        return res.status(400).json({ error: "Valid CC email address required." });
       }
 
       // Store lead in DB regardless of email delivery
@@ -3165,6 +3171,7 @@ export async function registerRoutes(
         await transporter.sendMail({
           from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
           to: email,
+          ...(ccClean ? { cc: ccClean } : {}),
           subject: "Your Core Cutter Speeds & Feeds Results",
           text: [
             "Here are your machining parameters from the Core Cutter Machining App.",
