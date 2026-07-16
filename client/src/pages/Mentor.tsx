@@ -17347,8 +17347,10 @@ ${stabSection}
                           onChange={e => setRoiCompMrr(e.target.value)}
                         />
                       </div>
-                      {/* Material volume per part — REQUIRED to convert the MRR gain into dollars */}
-                      {(parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0) && (
+                      {/* Material Removed per Part — the field that converts an MRR gap into dollars.
+                          Shown as soon as either tool has an MRR so it's never hidden when only the
+                          auto-filled CC MRR is present; it spans the full Throughput row. */}
+                      {(parseFloat(roiCcMrr) > 0 || parseFloat(roiCompMrr) > 0) && (
                         <div className="space-y-1.5">
                           <RoiLabel hint="Cubic inches of material removed per part — WOC × DOC × pass length is a quick estimate. This is what converts your MRR advantage into dollars-per-part machine-time savings. Without it, the throughput gain shows as a badge but adds $0 to savings.">
                             Material Removed per Part (in³)
@@ -17363,7 +17365,9 @@ ${stabSection}
                           />
                           {!(parseFloat(roiMatVolPerPart) > 0) && (
                             <p className="text-[10px] text-amber-400/80 leading-snug">
-                              Both tools have MRR — add this to turn the {parseFloat(roiCcMrr) > parseFloat(roiCompMrr) ? `${(((parseFloat(roiCcMrr) - parseFloat(roiCompMrr)) / parseFloat(roiCompMrr)) * 100).toFixed(0)}% ` : ""}throughput advantage into real cost savings.
+                              {parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0
+                                ? `Add this to turn the ${parseFloat(roiCcMrr) > parseFloat(roiCompMrr) ? `${(((parseFloat(roiCcMrr) - parseFloat(roiCompMrr)) / parseFloat(roiCompMrr)) * 100).toFixed(0)}% ` : ""}throughput advantage into real cost savings.`
+                                : "Enter both tools' MRR and this to credit the faster tool with cycle-time savings."}
                             </p>
                           )}
                         </div>
