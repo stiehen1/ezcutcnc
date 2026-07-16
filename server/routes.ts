@@ -1091,6 +1091,34 @@ export async function registerRoutes(
       `, [model, maxRpm, hp, taper, drive, xIn, yIn, zIn, baseTq, ratedRpm, notes]);
     }
 
+    // ── Makino legacy A-series horizontals (bare-name, pre-"nx") ──────────────
+    // The older horizontal A-series marketed before the current nx generation.
+    // Distinct from the already-seeded nx HMCs (a51nx/a61nx/…) and the "A51"
+    // and "a40 Special Edition" rows. Specs cross-referenced from Makino
+    // brochures / Techspex / dealer spec sheets (headland a71.a81 PDF,
+    // techspex a40/a71, machinetoolsonline A100E, surplusrecord/tramar A99).
+    // Travels are catalog X/Y/Z; torque is ESTIMATED from HP/kW class — Makino
+    // does not publish full torque curves for these, so curve_confidence='low'.
+    // NOTE: there is no standalone legacy "A63" horizontal — "A63" is the
+    // HSK-A63 spindle taper (already on the a61nx), not a model. Not seeded.
+    // [model, max_rpm, hp, taper, drive, x_in, y_in, z_in, mtype, control, base_tq, peak_tq, peak_rpm, notes]
+    const makinoLegacyHmc: [string, number, number, string, string, number, number, number, string, string, number, number, number, string][] = [
+      ["a40",   12000, 40, "CAT40", "direct", 22.0, 25.2, 25.2, "hmc", "Pro 5", 130, 200, 3000, "Non-ferrous/die-cast HMC; #40 spindle to 12k (SE variant 20k). Travels 560x640x640 mm."],
+      ["a61",   12000, 40, "CAT40", "direct", 28.7, 25.6, 31.5, "hmc", "Pro 5", 130, 210, 3000, "Legacy a61 horizontal (pre-nx); ±0.0025 mm positioning. HSK-A63 spindle optional."],
+      ["a71",   10000, 47, "CAT50", "gear",   28.7, 28.7, 31.5, "hmc", "SGI.3", 260, 340, 1500, "Legacy a71; 730x730x800 mm travels, 360deg B pallet. #50 taper, HSK100A optional. 47 HP 30-min rating."],
+      ["a81",   10000, 60, "CAT50", "gear",   28.7, 28.7, 31.5, "hmc", "SGI.3", 320, 420, 1500, "Legacy a81; shares a71 730x730x800 mm platform; higher-power #50 spindle. HSK100A optional."],
+      ["A99",   12000, 40, "CAT50", "gear",   39.0, 39.0, 37.0, "hmc", "Pro 3", 200, 300, 2000, "Legacy A99 (2000-2001 era); 31.5\" pallets, 40 ATC, 1000 psi TSC, full 4th-axis contouring."],
+      ["A100E", 10000, 60, "CAT50", "gear",   66.9, 53.1, 55.1, "hmc", "Pro/GI",320, 430, 1500, "Large-part legacy HMC; 1700x1350x1400 mm travels, 1000 mm pallet (3000/5000 kg). #50 taper, HSK-A100 optional. GI high-feed."],
+    ];
+    for (const m of makinoLegacyHmc) {
+      const [model, maxRpm, hp, taper, drive, xIn, yIn, zIn, mtype, control, baseTq, peakTq, peakRpm, notes] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, x_travel_in, y_travel_in, z_travel_in, machine_type, control, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, curve_source_note, notes)
+        SELECT 'Makino', $1, $2, $3, $4, $5, $6, '{flood,tsc}', 1000, $7, $8, $9, $10, $11, $12, $13, $14, $2, 'low', 'Estimated spindle curve from HP/kW class; Makino full torque curve not published for legacy A-series — verify with Makino tech docs.', $15
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Makino' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, drive, taper.startsWith("HSK"), xIn, yIn, zIn, mtype, control, baseTq, peakTq, peakRpm, notes]);
+    }
+
     // ── Fadal legacy VMC catalog ─────────────────────────────────────────────
     // Complete legacy VMC family (TRM through 6535), from Fadal maintenance-manual
     // spec pages. All CAT40 (No. 40 taper) except the 6535 50-taper option (own row).
