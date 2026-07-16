@@ -4037,6 +4037,10 @@ export async function registerRoutes(
       // DB upsert above, so no automatic sales@ CC is added on outbound ROI email.
       const ccClean = typeof cc === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cc.trim()) ? cc.trim() : "";
 
+      let emailSent = false;
+      let emailReason: string | undefined;
+      if (!smtpUser || !smtpPass) emailReason = "smtp_not_configured";
+
       if (smtpUser && smtpPass && userEmail) {
         const fmtD = (n: number | undefined) => (n != null ? n.toFixed(2) : "—");
         const fmtFour = (n: number | undefined) => (n != null ? n.toFixed(4) : "—");
@@ -4161,16 +4165,24 @@ export async function registerRoutes(
           host: smtpHost, port: smtpPort, secure: smtpPort === 465,
           auth: { user: smtpUser, pass: smtpPass },
         });
-        await transporter.sendMail({
-          from: `"CoreCutCNC" <${smtpUser}>`,
-          to: userEmail,
-          ...(ccClean ? { cc: ccClean } : {}),
-          subject: `Your CoreCutCNC ROI Summary — ${subjectSavings}`,
-          html: htmlBody,
-        });
+        // FROM must be a Brevo-verified sender — using the raw SMTP login
+        // (smtpUser) gets silently dropped, which is why ROI emails never arrived.
+        try {
+          await transporter.sendMail({
+            from: `"CoreCutCNC" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
+            to: userEmail,
+            ...(ccClean ? { cc: ccClean } : {}),
+            subject: `Your CoreCutCNC ROI Summary — ${subjectSavings}`,
+            html: htmlBody,
+          });
+          emailSent = true;
+        } catch (mailErr: any) {
+          console.error("[ROI] sendMail failed:", mailErr?.message);
+          emailReason = "send_failed";
+        }
       }
 
-      return res.json({ ok: true });
+      return res.json({ ok: true, sent: emailSent, ...(emailReason ? { reason: emailReason } : {}) });
     } catch (e: any) {
       console.error("[ROI] Error:", e?.message);
       return res.status(500).json({ error: "Failed to save ROI comparison." });

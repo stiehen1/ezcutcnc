@@ -1087,8 +1087,8 @@ export default function Mentor() {
           toolDia: form.tool_dia,
           feedIpm: (mentor.data as any)?.customer?.feed_ipm ?? 0,
           machineName: activeMachineName || "",
-          // CC tool geometry (from calc form + SKU)
-          ccEdp: edpText || "",
+          // CC tool geometry (from calc form + SKU). Special tools carry a CC-XXXXX number instead of an EDP.
+          ccEdp: edpText || pdfToolNumber || "",
           ccToolPrice: ccP,
           ccPartsPer: ccN,
           ccMrr: parseFloat(roiCcMrr) || 0,
@@ -1148,7 +1148,7 @@ export default function Mentor() {
     setRoiEmailError("");
     setRoiSaving(true);
     try {
-      await fetch("/api/roi", {
+      const roiResp = await fetch("/api/roi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1174,8 +1174,8 @@ export default function Mentor() {
           toolDia: form.tool_dia,
           feedIpm: (mentor.data as any)?.customer?.feed_ipm ?? 0,
           machineName: activeMachineName || "",
-          // CC tool
-          ccEdp: edpText || "",
+          // CC tool — special tools carry a CC-XXXXX number instead of an EDP.
+          ccEdp: edpText || pdfToolNumber || "",
           ccToolPrice: parseFloat(roiCcPrice),
           ccPartsPer: parseFloat(roiCcParts),
           ccMrr: parseFloat(roiCcMrr) || 0,
@@ -1214,13 +1214,27 @@ export default function Mentor() {
           roiName,
         }),
       });
+      const roiData = await roiResp.json().catch(() => ({} as any));
+      // Only claim success when the server confirms the email actually went out.
+      // Previously we always showed "✓ Email Sent" even on a silent delivery failure.
+      if (!roiResp.ok || roiData?.sent === false) {
+        setRoiEmailError(
+          roiData?.reason === "smtp_not_configured"
+            ? "Email service is not configured — report was saved but not sent."
+            : "We couldn't send the report. Double-check the address and try again."
+        );
+        setRoiSaving(false);
+        return;
+      }
       setRoiEmailSent(true);
       localStorage.setItem("er_email", toAddr.toLowerCase());
       if (ccAddr) localStorage.setItem("roi_cc", ccAddr.toLowerCase());
       else localStorage.removeItem("roi_cc");
       localStorage.removeItem("roi_draft");
       setRoiDraftLoaded(false);
-    } catch { /* silently fail */ }
+    } catch {
+      setRoiEmailError("Network error — please try again.");
+    }
     setRoiSaving(false);
   }
 
@@ -1365,7 +1379,7 @@ export default function Mentor() {
     <thead>
       <tr>
         <th></th>
-        <th class="cc-col">Core Cutter${edpText ? `<br><span style="font-weight:400;font-size:10px">${edpText}</span>` : ""}</th>
+        <th class="cc-col">Core Cutter${(edpText || pdfToolNumber) ? `<br><span style="font-weight:400;font-size:10px">${edpText || pdfToolNumber}</span>` : ""}</th>
         <th class="comp-col">Current Tool${roiCompEdp ? `<br><span style="font-weight:400;font-size:10px">${roiCompEdp}</span>` : ""}</th>
       </tr>
     </thead>
@@ -17148,90 +17162,220 @@ ${stabSection}
                 </select>
               </div>
 
-              {/* 2-column form */}
-              <div className="grid grid-cols-2 gap-4">
-                {/* Left: Core Cutter */}
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-1">Core Cutter</div>
-                  {/* EDP — auto-filled from calc */}
-                  <div className="space-y-1.5">
-                    <RoiLabel hint="Auto-populated from the milling calculator when an EDP# is entered. Identifies which Core Cutter tool is being evaluated.">EDP #</RoiLabel>
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        className="h-7 text-xs pr-10"
-                        placeholder="auto from calc"
-                        value={edpText || ""}
-                        readOnly
-                      />
-                      {edpText && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <RoiLabel required hint="Your list or street price for this Core Cutter tool. Used to calculate cost per part vs. the incumbent.">Tool Price ($)</RoiLabel>
-                    <Input
-                      type="number"
-                      className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 48.50"
-                      value={roiCcPrice}
-                      onChange={e => setRoiCcPrice(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Parts per Tool mode */}
-                  {roiLifeMode === "parts" && (
+              {/* Restructured form — partnered rows share a single bordered box.
+                  A single continuous vertical divider runs down the center, in the
+                  column gap, separating the Core Cutter side from the Current Tool side. */}
+              <div className="relative space-y-3">
+                <div className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-zinc-700 z-0" aria-hidden="true" />
+                {/* 1. IDENTITY ROW — not a bordered pair */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left: Core Cutter identity */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-1">Core Cutter <span className="text-zinc-600 normal-case font-normal">— your tool</span></div>
+                    {/* EDP / CC# — auto-filled from calc. Standard tools use the EDP#;
+                        special tools (uploaded CC-XXXXX prints) use the CC number. */}
                     <div className="space-y-1.5">
-                      <RoiLabel required hint="How many parts this Core Cutter tool produces before it needs to be changed. Ask the customer to run a test or estimate from similar jobs.">Parts per Tool</RoiLabel>
-                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 120" value={roiCcParts} onChange={e => setRoiCcParts(e.target.value)} />
-                    </div>
-                  )}
-
-                  {/* Cut Time per Tool mode */}
-                  {roiLifeMode === "cut_time" && (
-                    <div className="space-y-1.5">
-                      <RoiLabel required hint="Total spindle-on cutting time this tool lasts before it needs to be changed. Auto-filled from the calculator's estimated tool life if available.">Cut Time per Tool (min)</RoiLabel>
+                      <RoiLabel hint="Auto-populated from the milling calculator. For a standard tool this is the EDP#; for a special tool it's the CC-XXXXX number from the uploaded print. Identifies which Core Cutter tool is being evaluated.">{edpText ? "EDP #" : pdfToolNumber ? "CC #" : "EDP / CC #"}</RoiLabel>
                       <div className="relative">
-                        <Input type="number" className="no-spinners h-7 text-xs pr-10" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
-                        {(mentor.data as any)?.engineering?.tool_life_min > 0 && (() => {
-                          const autoVal = String(Math.round((mentor.data as any).engineering.tool_life_min));
-                          const isOverridden = roiCcCutTime !== autoVal;
-                          return isOverridden
-                            ? <button type="button" onClick={() => setRoiCcCutTime(autoVal)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-amber-400 font-semibold hover:text-green-400 transition-colors" title="Reset to auto value">↺ auto</button>
-                            : <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>;
-                        })()}
+                        <Input
+                          type="text"
+                          className="h-7 text-xs pr-10"
+                          placeholder="auto from calc"
+                          value={edpText || pdfToolNumber || ""}
+                          readOnly
+                        />
+                        {(edpText || pdfToolNumber) && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>}
                       </div>
                     </div>
-                  )}
-
-                  {/* Linear Inches mode */}
-                  {roiLifeMode === "linear_in" && (
-                    <div className="space-y-1.5">
-                      <RoiLabel required hint="Total length of material this tool cuts before it needs to be changed. Useful for profiling, slotting, or turning applications where linear travel is the natural metric.">Linear Inches per Tool</RoiLabel>
-                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 250" value={roiCcLinIn} onChange={e => setRoiCcLinIn(e.target.value)} />
-                    </div>
-                  )}
-
-                  {/* MRR — auto-filled, lines up with incumbent MRR */}
-                  <div className="space-y-1.5">
-                    <RoiLabel hint="Metal removal rate in cubic inches per minute. Auto-filled from the calculator. Used to calculate cycle time savings vs. the incumbent if Material Removed per Part is also entered.">MRR (in³/min)</RoiLabel>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        className="no-spinners h-7 text-xs pr-10"
-                        placeholder="auto from calc"
-                        value={roiCcMrr}
-                        onChange={e => setRoiCcMrr(e.target.value)}
-                      />
-                      {result?.customer?.mrr_in3_min > 0 && (() => {
-                        const autoVal = (result.customer.mrr_in3_min as number).toFixed(3);
-                        const isOverridden = roiCcMrr !== autoVal;
-                        return isOverridden
-                          ? <button type="button" onClick={() => setRoiCcMrr(autoVal)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-amber-400 font-semibold hover:text-green-400 transition-colors" title="Reset to auto value">↺ auto</button>
-                          : <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>;
-                      })()}
-                    </div>
                   </div>
 
+                  {/* Right: Incumbent identity */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Their Current Tool <span className="text-zinc-600 normal-case font-normal">— what they run now</span></div>
+                    <div className="space-y-1.5">
+                      <RoiLabel hint="The brand of the tool the customer is currently running. e.g. Kennametal, OSG, Guhring, Sandvik. For reference on the printed report.">Brand</RoiLabel>
+                      <Input
+                        type="text"
+                        className="h-7 text-xs"
+                        placeholder="e.g. Kennametal, OSG, Guhring"
+                        value={roiCompBrand}
+                        onChange={e => setRoiCompBrand(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <RoiLabel hint="The competitor's part number or EDP for the tool currently in use. Appears on the printed ROI report for documentation.">Incumbent EDP / Part #</RoiLabel>
+                      <Input
+                        type="text"
+                        className="h-7 text-xs"
+                        placeholder="e.g. 5537795"
+                        value={roiCompEdp}
+                        onChange={e => setRoiCompEdp(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. TOOL LIFE PAIR — one bordered box wrapping both sides.
+                    Opaque + relative z-10 so the center divider passes behind it. */}
+                <div className="relative z-10 rounded-lg border-2 border-orange-500/70 bg-[#1a1512] p-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-2">Tool Life <span className="text-zinc-500 font-normal normal-case">— tool price ÷ life = cost per part</span></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left: Core Cutter tool life */}
+                    <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <RoiLabel required hint="Your list or street price for this Core Cutter tool. Used to calculate cost per part vs. the incumbent.">Tool Price ($)</RoiLabel>
+                        <Input
+                          type="number"
+                          className="no-spinners h-7 text-xs"
+                          placeholder="e.g. 48.50"
+                          value={roiCcPrice}
+                          onChange={e => setRoiCcPrice(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Parts per Tool mode */}
+                      {roiLifeMode === "parts" && (
+                        <div className="space-y-1.5">
+                          <RoiLabel required hint="How many parts this Core Cutter tool produces before it needs to be changed. Ask the customer to run a test or estimate from similar jobs.">Parts per Tool</RoiLabel>
+                          <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 120" value={roiCcParts} onChange={e => setRoiCcParts(e.target.value)} />
+                        </div>
+                      )}
+
+                      {/* Cut Time per Tool mode */}
+                      {roiLifeMode === "cut_time" && (
+                        <div className="space-y-1.5">
+                          <RoiLabel required hint="Total spindle-on cutting time this tool lasts before it needs to be changed. Auto-filled from the calculator's estimated tool life if available.">Cut Time per Tool (min)</RoiLabel>
+                          <div className="relative">
+                            <Input type="number" className="no-spinners h-7 text-xs pr-10" placeholder="e.g. 45" value={roiCcCutTime} onChange={e => setRoiCcCutTime(e.target.value)} />
+                            {(mentor.data as any)?.engineering?.tool_life_min > 0 && (() => {
+                              const autoVal = String(Math.round((mentor.data as any).engineering.tool_life_min));
+                              const isOverridden = roiCcCutTime !== autoVal;
+                              return isOverridden
+                                ? <button type="button" onClick={() => setRoiCcCutTime(autoVal)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-amber-400 font-semibold hover:text-green-400 transition-colors" title="Reset to auto value">↺ auto</button>
+                                : <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>;
+                            })()}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Linear Inches mode */}
+                      {roiLifeMode === "linear_in" && (
+                        <div className="space-y-1.5">
+                          <RoiLabel required hint="Total length of material this tool cuts before it needs to be changed. Useful for profiling, slotting, or turning applications where linear travel is the natural metric.">Linear Inches per Tool</RoiLabel>
+                          <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 250" value={roiCcLinIn} onChange={e => setRoiCcLinIn(e.target.value)} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Incumbent tool life */}
+                    <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <RoiLabel required hint="What the customer currently pays for the incumbent tool. Combined with tool life, this determines their current cost per part.">Tool Price ($)</RoiLabel>
+                        <Input
+                          type="number"
+                          className="no-spinners h-7 text-xs"
+                          placeholder="e.g. 62.00"
+                          value={roiCompPrice}
+                          onChange={e => setRoiCompPrice(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Parts per Tool mode */}
+                      {roiLifeMode === "parts" && (
+                        <div className="space-y-1.5">
+                          <RoiLabel required hint="How many parts the incumbent tool produces before it needs to be changed. This is the key life comparison number — get this from the customer.">Parts per Tool</RoiLabel>
+                          <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 80" value={roiCompParts} onChange={e => setRoiCompParts(e.target.value)} />
+                        </div>
+                      )}
+
+                      {/* Cut Time per Tool mode */}
+                      {roiLifeMode === "cut_time" && (
+                        <div className="space-y-1.5">
+                          <RoiLabel required hint="Total spindle-on cutting time the incumbent lasts before it needs to be changed.">Cut Time per Tool (min)</RoiLabel>
+                          <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 28" value={roiCompCutTime} onChange={e => setRoiCompCutTime(e.target.value)} />
+                        </div>
+                      )}
+
+                      {/* Linear Inches mode */}
+                      {roiLifeMode === "linear_in" && (
+                        <div className="space-y-1.5">
+                          <RoiLabel required hint="Total length of material the incumbent tool cuts before it needs to be changed.">Linear Inches per Tool</RoiLabel>
+                          <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 180" value={roiCompLinIn} onChange={e => setRoiCompLinIn(e.target.value)} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. THROUGHPUT PAIR — one bordered box wrapping both sides.
+                    Opaque + relative z-10 so the center divider passes behind it. */}
+                <div className="relative z-10 rounded-lg border-2 border-blue-500/70 bg-[#111823] p-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">Throughput <span className="text-zinc-500 font-normal normal-case">— MRR × material per part = cycle-time savings</span></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left: Core Cutter throughput */}
+                    <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <RoiLabel hint="Metal removal rate in cubic inches per minute. Auto-filled from the calculator. Used to calculate cycle time savings vs. the incumbent if Material Removed per Part is also entered.">MRR (in³/min)</RoiLabel>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            className="no-spinners h-7 text-xs pr-10"
+                            placeholder="auto from calc"
+                            value={roiCcMrr}
+                            onChange={e => setRoiCcMrr(e.target.value)}
+                          />
+                          {result?.customer?.mrr_in3_min > 0 && (() => {
+                            const autoVal = (result.customer.mrr_in3_min as number).toFixed(3);
+                            const isOverridden = roiCcMrr !== autoVal;
+                            return isOverridden
+                              ? <button type="button" onClick={() => setRoiCcMrr(autoVal)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-amber-400 font-semibold hover:text-green-400 transition-colors" title="Reset to auto value">↺ auto</button>
+                              : <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-green-500 font-semibold pointer-events-none">auto</span>;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Incumbent throughput + material per part */}
+                    <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <RoiLabel hint="Material removal rate of the incumbent tool in cubic inches per minute. Enter this to unlock cycle time savings calculations. Get it from their current speeds and feeds.">MRR (in³/min)</RoiLabel>
+                        <Input
+                          type="number"
+                          className="no-spinners h-7 text-xs"
+                          placeholder="e.g. 0.180"
+                          value={roiCompMrr}
+                          onChange={e => setRoiCompMrr(e.target.value)}
+                        />
+                      </div>
+                      {/* Material volume per part — REQUIRED to convert the MRR gain into dollars */}
+                      {(parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0) && (
+                        <div className="space-y-1.5">
+                          <RoiLabel hint="Cubic inches of material removed per part — WOC × DOC × pass length is a quick estimate. This is what converts your MRR advantage into dollars-per-part machine-time savings. Without it, the throughput gain shows as a badge but adds $0 to savings.">
+                            Material Removed per Part (in³)
+                            <span className="ml-1 text-amber-400 font-normal">— needed to credit the MRR gain</span>
+                          </RoiLabel>
+                          <Input
+                            type="number"
+                            className={`no-spinners h-7 text-xs ${!(parseFloat(roiMatVolPerPart) > 0) ? "border-amber-600/60" : ""}`}
+                            placeholder="e.g. 2.5"
+                            value={roiMatVolPerPart}
+                            onChange={e => setRoiMatVolPerPart(e.target.value)}
+                          />
+                          {!(parseFloat(roiMatVolPerPart) > 0) && (
+                            <p className="text-[10px] text-amber-400/80 leading-snug">
+                              Both tools have MRR — add this to turn the {parseFloat(roiCcMrr) > parseFloat(roiCompMrr) ? `${(((parseFloat(roiCcMrr) - parseFloat(roiCompMrr)) / parseFloat(roiCompMrr)) * 100).toFixed(0)}% ` : ""}throughput advantage into real cost savings.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. EXTRAS ROW — not a bordered pair */}
+                <div className="grid grid-cols-2 gap-4 items-start">
+                  {/* Left: Reconditioning + Additional Savings */}
+                  <div className="space-y-2">
                   {/* Reconditioning program */}
                   <div className="rounded-lg border border-zinc-700/40 px-2.5 py-2 space-y-1.5">
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -17414,90 +17558,10 @@ ${stabSection}
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Right: Incumbent */}
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Their Current Tool</div>
-                  <div className="space-y-1.5">
-                    <RoiLabel hint="The brand of the tool the customer is currently running. e.g. Kennametal, OSG, Guhring, Sandvik. For reference on the printed report.">Brand</RoiLabel>
-                    <Input
-                      type="text"
-                      className="h-7 text-xs"
-                      placeholder="e.g. Kennametal, OSG, Guhring"
-                      value={roiCompBrand}
-                      onChange={e => setRoiCompBrand(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <RoiLabel hint="The competitor's part number or EDP for the tool currently in use. Appears on the printed ROI report for documentation.">Incumbent EDP / Part #</RoiLabel>
-                    <Input
-                      type="text"
-                      className="h-7 text-xs"
-                      placeholder="e.g. 5537795"
-                      value={roiCompEdp}
-                      onChange={e => setRoiCompEdp(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <RoiLabel required hint="What the customer currently pays for the incumbent tool. Combined with tool life, this determines their current cost per part.">Tool Price ($)</RoiLabel>
-                    <Input
-                      type="number"
-                      className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 62.00"
-                      value={roiCompPrice}
-                      onChange={e => setRoiCompPrice(e.target.value)}
-                    />
                   </div>
 
-                  {/* Parts per Tool mode */}
-                  {roiLifeMode === "parts" && (
-                    <div className="space-y-1.5">
-                      <RoiLabel required hint="How many parts the incumbent tool produces before it needs to be changed. This is the key life comparison number — get this from the customer.">Parts per Tool</RoiLabel>
-                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 80" value={roiCompParts} onChange={e => setRoiCompParts(e.target.value)} />
-                    </div>
-                  )}
-
-                  {/* Cut Time per Tool mode */}
-                  {roiLifeMode === "cut_time" && (
-                    <div className="space-y-1.5">
-                      <RoiLabel required hint="Total spindle-on cutting time the incumbent lasts before it needs to be changed.">Cut Time per Tool (min)</RoiLabel>
-                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 28" value={roiCompCutTime} onChange={e => setRoiCompCutTime(e.target.value)} />
-                    </div>
-                  )}
-
-                  {/* Linear Inches mode */}
-                  {roiLifeMode === "linear_in" && (
-                    <div className="space-y-1.5">
-                      <RoiLabel required hint="Total length of material the incumbent tool cuts before it needs to be changed.">Linear Inches per Tool</RoiLabel>
-                      <Input type="number" className="no-spinners h-7 text-xs" placeholder="e.g. 180" value={roiCompLinIn} onChange={e => setRoiCompLinIn(e.target.value)} />
-                    </div>
-                  )}
-
-                  {/* MRR — manual */}
-                  <div className="space-y-1.5">
-                    <RoiLabel hint="Material removal rate of the incumbent tool in cubic inches per minute. Enter this to unlock cycle time savings calculations. Get it from their current speeds and feeds.">MRR (in³/min)</RoiLabel>
-                    <Input
-                      type="number"
-                      className="no-spinners h-7 text-xs"
-                      placeholder="e.g. 0.180"
-                      value={roiCompMrr}
-                      onChange={e => setRoiCompMrr(e.target.value)}
-                    />
-                  </div>
-                  {/* Material volume per part — unlocks cycle-time savings */}
-                  {(parseFloat(roiCcMrr) > 0 && parseFloat(roiCompMrr) > 0) && (
-                    <div className="space-y-1.5">
-                      <RoiLabel hint="Cubic inches of material removed per part — WOC × DOC × pass length is a quick estimate. Used to convert the MRR difference into dollars-per-part machine time savings. Optional but unlocks a meaningful savings line.">Material Removed per Part (in³)</RoiLabel>
-                      <Input
-                        type="number"
-                        className="no-spinners h-7 text-xs"
-                        placeholder="e.g. 2.5"
-                        value={roiMatVolPerPart}
-                        onChange={e => setRoiMatVolPerPart(e.target.value)}
-                      />
-                    </div>
-                  )}
+                  {/* Right: Annual Volume + Shop Rate + Tool Change Time */}
+                  <div className="space-y-2">
                   {/* Annual volume */}
                   <div className="space-y-1.5">
                     <RoiLabel required hint={roiLifeMode === "cut_time" ? "Total hours per year this tool is actively cutting. Used to scale tool cost and changeover savings to an annual dollar figure." : roiLifeMode === "linear_in" ? "Total linear inches cut per year across all jobs using this tool. Used to scale tool cost savings to an annual figure." : "Total number of parts produced per year using this tool. Used to scale per-part savings into an annual dollar figure."}>
@@ -17530,6 +17594,7 @@ ${stabSection}
                       value={roiChangeTime}
                       onChange={e => setRoiChangeTime(e.target.value)}
                     />
+                  </div>
                   </div>
                 </div>
               </div>
@@ -17599,6 +17664,19 @@ ${stabSection}
                       )}
                     </div>
                   </div>
+
+                  {/* MRR gain present but not yet monetized — needs material volume/part */}
+                  {roiResult.mrrGainPct > 0 && roiResult.mrrTimeSavingsPerPart <= 0 && (
+                    <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2 text-xs">
+                      <span className="text-amber-300 font-semibold">Throughput gain not counted in savings.</span>
+                      <p className="text-zinc-400 text-[11px] mt-0.5 leading-snug">
+                        You're running {roiResult.mrrGainPct.toFixed(1)}% more MRR, but that only becomes a dollar
+                        savings once we know how much material comes off per part. Enter
+                        <span className="text-amber-200 font-medium"> Material Volume / Part (in³)</span> above and
+                        recalculate to credit the faster cycle time.
+                      </p>
+                    </div>
+                  )}
 
                   {/* MRR cycle-time contribution */}
                   {roiResult.mrrTimeSavingsPerPart > 0 && (
@@ -17744,8 +17822,8 @@ ${stabSection}
                     </table>
                   </div>
 
-                  {/* Email recipient — editable To + optional CC */}
-                  {!roiEmailSent && (
+                  {/* Email recipient — always visible so you can send again to another address */}
+                  {(
                     <div className="mb-2 rounded-lg border border-zinc-700/60 bg-zinc-900/50 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-zinc-500 shrink-0 w-8">To:</span>
@@ -17804,10 +17882,10 @@ ${stabSection}
                     <button
                       type="button"
                       onClick={submitRoi}
-                      disabled={roiSaving || roiEmailSent || !roiEmail.trim()}
+                      disabled={roiSaving || !roiEmail.trim()}
                       className="flex-1 rounded-lg border border-green-600/50 bg-green-900/30 hover:bg-green-900/50 disabled:opacity-50 text-green-300 text-xs font-semibold px-3 py-1.5 transition-colors"
                     >
-                      {roiEmailSent ? "✓ Email Sent" : roiSaving ? "Sending…" : "📧 Email ROI Report"}
+                      {roiSaving ? "Sending…" : roiEmailSent ? "📧 Send Again" : "📧 Email ROI Report"}
                     </button>
                     <button
                       type="button"
@@ -17817,6 +17895,11 @@ ${stabSection}
                       🖨 Print / Save PDF
                     </button>
                   </div>
+                  {roiEmailSent && !roiEmailError && (
+                    <p className="mt-1.5 text-xs text-emerald-300">
+                      ✓ Sent to {roiEmail}. Change the address above to send it to someone else.
+                    </p>
+                  )}
                 </div>
               )}
               </>
