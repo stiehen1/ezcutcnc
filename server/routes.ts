@@ -1055,6 +1055,54 @@ export async function registerRoutes(
       SELECT 'Makino', 'V300', 20000, 30, 'HSK-A63', 'direct', true, '{flood,tsc}', 1000, 25.6, 17.7, 13.8, 'vmc', 'Pro 5', 'linear', 75, 140, 6000, 6000, 'low'
       WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Makino' AND model ILIKE 'V300')
     `);
+
+    // ── Fadal legacy VMC catalog ─────────────────────────────────────────────
+    // Complete legacy VMC family (TRM through 6535), from Fadal maintenance-manual
+    // spec pages. All CAT40 (No. 40 taper) except the 6535 50-taper option (own row).
+    // Box ways + gear drive (all 10K machines use an auto 2-speed belt/gear drive;
+    // 7.5K machines a single lower-torque package) → dual_contact false, way_type box.
+    // Torque model: base_torque_ftlb = low-range peak (published), which occurs in the
+    // ~150-500 RPM band (peak_torque_rpm 500); peak_torque_ftlb = optional/HT-package
+    // peak where one exists, else same as base. Travels use the STANDARD Z (20");
+    // optional deeper Z noted in `notes`. Control = 'Fadal' (CNC88/32MP era). TSC was
+    // an option, not standard — base rows are flood-only. Confidence 'medium' (specs
+    // published, but no plotted torque curves).
+    // [model, max_rpm, hp, x_in, y_in, z_in, base_tq, peak_tq, notes]
+    const fadalMachines: [string, number, number, number, number, number, number, number, string][] = [
+      ["VMC TRM",   4000,  5,    30, 14, 14, 28,  28,  "Toolroom mill, CAT/BT40"],
+      ["VMC EMC",   7500,  12,   20, 16, 14, 36,  36,  "Economy machining center"],
+      ["VMC 15",    7500,  15,   20, 16, 20, 75,  75,  "28\" Z optional"],
+      ["VMC 15XT",  7500,  15,   30, 16, 20, 75,  75,  "28\" Z optional"],
+      ["VMC 2016L", 7500,  15,   20, 16, 20, 75,  75,  "28\" Z optional"],
+      ["VMC 2216",  10000, 15,   22, 16, 20, 160, 220, "15K spindle optional; 22.5 HP HT package gives 220 ft-lb; 28\" Z optional"],
+      ["VMC 3016",  10000, 15,   30, 16, 20, 160, 220, "15K spindle optional; 22.5 HP HT package gives 220 ft-lb; 28\" Z optional"],
+      ["VMC 3016L", 7500,  15,   30, 16, 20, 75,  75,  "28\" Z optional"],
+      ["VMC 3020",  10000, 15,   30, 20, 20, 160, 290, "15K spindle optional; HT 22.5 HP gives 290 ft-lb; 24\" Z optional"],
+      ["VMC 4020",  10000, 15,   40, 20, 20, 160, 220, "15K optional; 22.5 HP HT / 30 HP VHT packages; 28\" Z optional"],
+      ["VMC 4020A", 7500,  22.5, 40, 20, 20, 120, 120, "28\" Z optional"],
+      ["VMC 5020A", 7500,  22.5, 50, 20, 20, 120, 120, "28\" Z optional"],
+      ["VMC 4525",  10000, 22.5, 45, 25, 24, 220, 270, "15K optional; 30 HP option gives 270 ft-lb"],
+      ["VMC 6030",  10000, 15,   60, 30, 30, 160, 220, "22.5 HP HT package gives 220 ft-lb"],
+      ["VMC 8030",  10000, 15,   80, 30, 30, 160, 220, "15K optional; 22.5 HP HT gives 220 ft-lb"],
+      ["VMC 6535",  10000, 22.5, 65, 35, 34, 220, 270, "40-taper; 15K optional; 30 HP option gives 270 ft-lb; 15 lb (40 lb on 6535) max tool weight"],
+    ];
+    for (const m of fadalMachines) {
+      const [model, maxRpm, hp, xIn, yIn, zIn, baseTq, peakTq, notes] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, x_travel_in, y_travel_in, z_travel_in, machine_type, control, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, notes)
+        SELECT 'Fadal', $1, $2, $3, 'CAT40', 'gear', false, '{flood}', $4, $5, $6, 'vmc', 'Fadal', 'box', $7, $8, 500, $2, 'medium', $9
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Fadal' AND model ILIKE $1)
+      `, [model, maxRpm, hp, xIn, yIn, zIn, baseTq, peakTq, notes]);
+    }
+    // VMC 6535 50-taper option — materially different spindle package (CAT50,
+    // 7,500 RPM ceiling, 35 HP cont. / 50 HP peak, 24-tool dual-arm changer).
+    await pool.query(`
+      INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, x_travel_in, y_travel_in, z_travel_in, machine_type, control, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, notes)
+      SELECT 'Fadal', 'VMC 6535 (50-taper)', 7500, 35, 'CAT50', 'gear', false, '{flood}', 65, 35, 34, 'vmc', 'Fadal', 'box', 270, 350, 500, 7500, 'medium', '50-taper option; 35 HP continuous / 50 HP peak; 24-tool dual-arm changer; 40 lb max tool weight'
+      WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Fadal' AND model ILIKE 'VMC 6535 (50-taper)')
+    `);
+    // Larger Fadal VMCs (mid-size and up) offered Fadal's "Cool Power" thermal
+    // system with TSC/washdown options — the small TRM/EMC/15-class did not.
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
