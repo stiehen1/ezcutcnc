@@ -4951,11 +4951,52 @@ ${stabSection}
   const feedmillResult = result?.feedmill  ?? null;
 
   // ── Machining Stability Index ─────────────────────────────────────────────
+  // Holder-quality lookups — mirror the engine's TOOLHOLDER_RIGIDITY and
+  // HOLDER_RUNOUT_FACTOR tables (legacy_engine.py). A better interface is
+  // stiffer AND lower-runout; the Rigidity sub-score rewards that directly so
+  // upgrading the holder always raises the Setup Score. (Without this, a better
+  // holder only showed up as a faster feed — which pushed Tool Flex / Spindle
+  // Load DOWN and paradoxically dropped the overall score.)
+  const TOOLHOLDER_LABELS: Record<string, string> = {
+    er_collet: "ER Collet", hp_collet: "HP Collet", weldon: "Weldon / Set Screw",
+    milling_chuck: "Milling Chuck", hydraulic: "Hydraulic Chuck",
+    press_fit: "Press Fit", shrink_fit: "Shrink Fit", capto: "Capto / HSK",
+    right_angle_head: "Right-Angle Head",
+  };
+  // Holder interfaces ranked worst → best. This order IS the ordering the user
+  // sees in the toolholder dropdown (reversed), so the Holder Rigidity sub-score
+  // rises by a fixed step every time they pick a better holder — no surprises
+  // where a physically-stiffer-but-higher-runout holder (e.g. Weldon vs HP
+  // collet) would score lower than the dropdown implies. Both the engine's
+  // rigidity and runout advantages are already reflected in this ordering.
+  const HOLDER_QUALITY_RANK = [
+    "right_angle_head", // gear interface + cantilever — least rigid
+    "er_collet",        // baseline: 3–5 µm TIR, slotted collet
+    "hp_collet",        // precision bearing-nut collet, ~1–2 µm TIR
+    "weldon",           // positive side-lock, moderate runout
+    "milling_chuck",    // full-bore mechanical chuck
+    "hydraulic",        // oil-membrane, excellent damping, 1–2 µm TIR
+    "press_fit",        // lobed press-fit, near shrink-fit
+    "shrink_fit",       // thermal shrink, <1 µm TIR
+    "capto",            // polygon taper + face contact — best
+  ];
+  // Map dropdown rank onto a 0–100 quality band. Worst holder floors at ~40 (a
+  // usable-but-flagged setup), best tops at 100; each step up is ~7.5 points —
+  // comfortably larger than the 1–3 pt dip a faster feed puts on Tool Flex /
+  // Spindle Load, so an upgrade always raises the overall Setup Score.
+  function holderRigidityScore(holder: string | undefined): number {
+    const idx = HOLDER_QUALITY_RANK.indexOf(holder ?? "er_collet");
+    const rank = idx < 0 ? 1 : idx; // unknown holder → treat as ER baseline
+    const span = HOLDER_QUALITY_RANK.length - 1;
+    return Math.round(40 + (rank / span) * 60);
+  }
+
   function calcStabilityIndex(
     stab: typeof result.stability,
     eng: typeof result.engineering,
     cust: typeof result.customer,
-  ): { overall: number; defl: number; load: number; chip: number; ld: number } | null {
+    holder: string | undefined,
+  ): { overall: number; defl: number; load: number; chip: number; ld: number; rigidity: number } | null {
     if (!stab && !eng && !cust) return null;
     // Deflection score (0–100): 0% deflection = 100, 100% = 50, 175%+ = 0
     const deflPct = stab?.deflection_pct ?? 0;
@@ -4975,22 +5016,28 @@ ${stabSection}
     // L/D score: ≤3 = 100, 4 = 88, 5 = 72, 6 = 54, 7 = 36, 8+ = 15
     const ld = stab?.l_over_d ?? 3;
     const ldScore = Math.max(10, Math.min(100, 100 - Math.max(0, ld - 3) * 18));
+    // Holder-interface quality (rigidity + runout). Weighted at 0.25 so a
+    // single-step holder upgrade (~7.5 pts → ~1.9 overall) reliably clears the
+    // 1–3 pt dip in Tool Flex / Spindle Load caused by the higher feed a better
+    // holder unlocks — the score always moves UP on an upgrade, never flat/down.
+    const rigScore = holderRigidityScore(holder);
     // Weight redistribution when machine HP not available
     const overall = loadScore !== null
-      ? Math.round(deflScore * 0.30 + loadScore * 0.20 + chipScore * 0.25 + ldScore * 0.25)
-      : Math.round(deflScore * 0.375 + chipScore * 0.3125 + ldScore * 0.3125);
+      ? Math.round(deflScore * 0.20 + loadScore * 0.12 + chipScore * 0.20 + ldScore * 0.20 + rigScore * 0.28)
+      : Math.round(deflScore * 0.265 + chipScore * 0.2275 + ldScore * 0.2275 + rigScore * 0.28);
     return {
       overall,
       defl:  Math.round(deflScore),
       load:  loadScore !== null ? Math.round(loadScore) : -1,
       chip:  Math.round(chipScore),
       ld:    Math.round(ldScore),
+      rigidity: rigScore,
     };
   }
 
   const stabilityIndex = React.useMemo(() =>
-    calcStabilityIndex(result?.stability, result?.engineering, result?.customer),
-    [result]
+    calcStabilityIndex(result?.stability, result?.engineering, result?.customer, form.toolholder),
+    [result, form.toolholder]
   );
 
   const [camCopied, setCamCopied] = React.useState(false);
@@ -5333,11 +5380,7 @@ ${stabSection}
     if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
     if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
     if (form.tailstock) lines.push(L("Tailstock", "In use — simply-supported (3.5× rigidity boost applied)"));
-    const thLabels: Record<string, string> = {
-      er_collet: "ER Collet", hp_collet: "HP Collet", weldon: "Weldon / Set Screw",
-      milling_chuck: "Milling Chuck", hydraulic: "Hydraulic Chuck",
-      press_fit: "Press Fit", shrink_fit: "Shrink Fit", capto: "Capto / HSK",
-    };
+    const thLabels = TOOLHOLDER_LABELS;
     if (form.toolholder) lines.push(L("Toolholder",   thLabels[form.toolholder] ?? form.toolholder.replace(/_/g, " ")));
     if (form.stickout > 0) lines.push(L("Tool Stickout", `${form.stickout.toFixed(3)}"`));
     if (form.coolant)   lines.push(L("Coolant",       form.coolant.replace(/_/g, " ")));
@@ -16830,6 +16873,13 @@ ${stabSection}
           : ld <= 5 ? `⚠ Stickout is ${ld.toFixed(1)}× diameter — watch for chatter.`
           :           `⚠ Stickout is ${ld.toFixed(1)}× diameter — shorten if possible.`
           : null;
+        const rigScore = stabilityIndex.rigidity;
+        const _holderLbl = (TOOLHOLDER_LABELS[form.toolholder] ?? form.toolholder?.replace(/_/g, " ") ?? "holder");
+        const rigidityResult = rigScore >= 80
+          ? `✓ ${_holderLbl} — low runout and high rigidity. A finish-grade interface.`
+          : rigScore >= 65
+          ? `✓ ${_holderLbl} — solid interface. Shrink-fit or hydraulic would tighten runout further.`
+          : `⚠ ${_holderLbl} — higher runout / lower rigidity. A shrink-fit, hydraulic, or Capto holder improves chatter resistance and finish.`;
 
         return (
           <div className="border-t border-zinc-700/40 px-4 pt-4 pb-5 space-y-3">
@@ -16873,6 +16923,7 @@ ${stabSection}
                 ["Spindle Load", stabilityIndex.load, "How hard the spindle is working vs. what it has available. Under 80% is comfortable. Above 100% the machine will struggle. Only shown when machine HP is entered.", loadResult],
                 ["Chip Health",  stabilityIndex.chip, "Is the tool cutting or rubbing? A chip that's too thin means the tool is skating across the surface — generates heat and kills the edge. Increase feed if this is low.", chipResult],
                 ["Reach",        stabilityIndex.ld,   "Stickout length vs. tool diameter. Under 3× is stiff. Over 5× and you're fighting the tool. Shorter stickout is the most effective single change.", ldResult],
+                ["Holder Rigidity", stabilityIndex.rigidity, "How stiff and low-runout the tool holder interface is. A better holder (hydraulic, shrink-fit, Capto) resists chatter and cuts runout — improving finish and tool life. This is a property of the holder itself, independent of feed.", rigidityResult],
               ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
                 <div key={label} className="flex items-center gap-2">
                   <TooltipProvider delayDuration={200}>
