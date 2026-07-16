@@ -1056,6 +1056,41 @@ export async function registerRoutes(
       WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Makino' AND model ILIKE 'V300')
     `);
 
+    // ── Makino a51nx torque-note correction ──────────────────────────────────
+    // The a51nx row's curve_source_note was copied from the a71nx (378 ft-lb /
+    // 689 rpm). The a51nx is the 400mm-pallet 40-taper class (~240 Nm ≈ 177 ft-lb).
+    // Fix the note text so it references the correct model. (Torque values left as
+    // seeded — flagged 'low' confidence pending a Makino spec sheet.)
+    await pool.query(`
+      UPDATE machines SET
+        curve_source_note = 'Makino a51nx 40-taper direct-drive spindle; torque estimated from HP nameplate — a51nx-specific curve not published, verify with Makino tech docs.'
+      WHERE brand ILIKE 'Makino' AND model ILIKE 'a51nx'
+        AND curve_source_note ILIKE '%a71nx%'
+    `);
+
+    // ── Makino a-series 5-axis variants ──────────────────────────────────────
+    // 5-axis machines built on the nx HMC platform (verified against makino.com
+    // /horizontal-5-axis category pages). Distinct from the already-seeded
+    // a500Z/a800Z/a900Z/a500iR. Travels are workpiece-envelope class figures;
+    // torque estimated from spindle kW class → 'low' confidence.
+    //   a51nx-5XU: BT40/HSK-A63 cutting spindle, 14k/20k, work-pallet magazine.
+    //   a61nx-5E : aluminum/aerospace 5-axis, HSK-A63 class, up to 24k.
+    //   a92-5XR  : 5-axis variant of the a92 (CAT50/HSK-A100 class).
+    // [model, max_rpm, hp, taper, drive, x_in, y_in, z_in, base_tq, rated_rpm, notes]
+    const makino5x: [string, number, number, string, string, number, number, number, number, number, string][] = [
+      ["a51nx-5XU", 14000, 50, "HSK-A63", "direct", 22.0, 22.0, 22.0, 240, 14000, "5-axis on a51nx platform; direct-drive B & C; work-pallet magazine (WPM22). 20k spindle optional."],
+      ["a61nx-5E",  14000, 50, "HSK-A63", "direct", 28.7, 28.7, 26.8, 240, 14000, "5-axis aluminum/aerospace; twin direct-drive rotary; 24k / 80 kW aluminum spindle optional."],
+      ["a92-5XR",   10000, 100, "CAT50",  "gear",   59.8, 49.2, 53.1, 525, 10000, "5-axis variant of the a92; large-part CAT50 platform."],
+    ];
+    for (const m of makino5x) {
+      const [model, maxRpm, hp, taper, drive, xIn, yIn, zIn, baseTq, ratedRpm, notes] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, tsc_psi, x_travel_in, y_travel_in, z_travel_in, machine_type, control, base_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, curve_source_note, notes)
+        SELECT 'Makino', $1, $2, $3, $4, $5, false, '{flood,tsc}', 300, $6, $7, $8, '5axis', 'Fanuc', $9, 1200, $10, 'low', 'Estimated spindle curve from kW class; Makino full curve not published — verify with Makino tech docs.', $11
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Makino' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, drive, xIn, yIn, zIn, baseTq, ratedRpm, notes]);
+    }
+
     // ── Fadal legacy VMC catalog ─────────────────────────────────────────────
     // Complete legacy VMC family (TRM through 6535), from Fadal maintenance-manual
     // spec pages. All CAT40 (No. 40 taper) except the 6535 50-taper option (own row).

@@ -8053,7 +8053,7 @@ ${stabSection}
               <Input
                 ref={machineInputRef}
                 type="text"
-                placeholder="Search catalog — e.g. Haas VF-2, Mazak, DMG..."
+                placeholder="Search for your Machine (Haas VF-3, Mazak Integrex, etc...)"
                 value={machineQuery || (!machineDropOpen ? activeMachineName : "")}
                 onChange={e => { setMachineQuery(e.target.value); setMachineDropOpen(true); }}
                 onFocus={() => {
