@@ -4030,12 +4030,22 @@ export default function Mentor() {
   // Speed preset stops — bias recommended SFM toward tool life or throughput.
   // Clicking sets the preset and immediately re-runs so the user sees the new
   // SFM / tool-life without a separate Re-run click.
-  const SPEED_PRESETS: { key: typeof form.speed_preset; label: string; hint: string }[] = [
+  // In finishing/facing/contouring the presets bias RPM but the engine decouples
+  // feed (higher RPM does NOT raise feed), so the axis reads as a finish control,
+  // not a throughput one. Labels/hints swap accordingly.
+  const _finishSpeedAxis = form.mode === "finish" || form.mode === "face" || form.mode === "surfacing";
+  const SPEED_PRESETS: { key: typeof form.speed_preset; label: string; hint: string }[] = _finishSpeedAxis ? [
+    { key: "max_life",        label: "Good",       hint: "Lowest RPM — good finish, longest tool life" },
+    { key: "better_life",     label: "Better",     hint: "Lower RPM — better finish, longer tool life" },
+    { key: "balanced",        label: "Balanced",   hint: "App-recommended RPM (default)" },
+    { key: "high_throughput", label: "Finer",      hint: "Higher RPM, feed held flat — finer finish" },
+    { key: "max_mrr",         label: "Finest",     hint: "Highest RPM, feed held flat — finest finish, shortest tool life" },
+  ] : [
     { key: "max_life",        label: "Max Life",   hint: "Lowest SFM — longest tool life, lowest MRR" },
     { key: "better_life",     label: "Better",     hint: "Reduced SFM for longer tool life" },
     { key: "balanced",        label: "Balanced",   hint: "App-recommended SFM (default)" },
     { key: "high_throughput", label: "Faster",     hint: "Raised SFM for higher MRR" },
-    { key: "max_mrr",         label: "Max MRR",    hint: "Highest SFM — maximum metal removal, shortest tool life" },
+    { key: "max_mrr",         label: "Fastest",    hint: "Highest SFM — maximum metal removal, shortest tool life" },
   ];
   // Local text state for the manual SFM input so typing doesn't re-run per keystroke.
   const [sfmOverrideInput, setSfmOverrideInput] = React.useState("");
@@ -14831,11 +14841,25 @@ ${stabSection}
 
                           {/* Speed preset selector */}
                           <div className="flex-1 min-w-0 sm:border-l sm:border-zinc-700/50 sm:pl-3">
-                            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-zinc-500 font-medium mb-1">
-                              <span className="text-emerald-400/90">← Tool Life</span>
-                              <span>Speed Preset</span>
-                              <span className="text-orange-400/90">Higher Throughput →</span>
-                            </div>
+                            {/* Direction labels only — the middle "Speed Preset" title
+                                was cramped against them. In finishing/facing/contouring the
+                                axis is about FINISH, not throughput: higher RPM (+finer) trims
+                                feed via the engine decouple, so we reframe the two ends. */}
+                            {(() => {
+                              const _finishAxis = form.mode === "finish" || form.mode === "face" || form.mode === "surfacing";
+                              return (
+                                <div className="flex items-center justify-between gap-4 text-[8px] uppercase tracking-tight font-semibold mb-1">
+                                  <span className="text-emerald-400 whitespace-nowrap flex items-center gap-1">
+                                    <span className="text-[13px] leading-none font-black">←</span>
+                                    {_finishAxis ? "Lower Finish" : "Tool Life"}
+                                  </span>
+                                  <span className="text-orange-400 whitespace-nowrap flex items-center gap-1">
+                                    {_finishAxis ? "Higher Finish" : "Higher MRR"}
+                                    <span className="text-[13px] leading-none font-black">→</span>
+                                  </span>
+                                </div>
+                              );
+                            })()}
                             <div className="grid grid-cols-5 gap-1">
                               {SPEED_PRESETS.map(sp => {
                                 // In manual mode no preset is active (the typed SFM wins).

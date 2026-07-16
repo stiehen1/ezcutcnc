@@ -4604,6 +4604,21 @@ def run(payload=None):
 
     _ipt_frac = IPT_FRAC.get(_mat_key, IPT_FRAC.get(material_group, 0.005))
     ipt = _ipt_frac * data["diameter"]
+    # ── Finishing feed / speed decouple ──────────────────────────────────────
+    # The speed preset biases SFM (→ RPM). Because feed = RPM × FPT × flutes, a
+    # "faster / higher-throughput" preset RAISES feed along with RPM. That's right
+    # for roughing (more MRR) but WRONG for a finish/face/contour pass: the shop
+    # rule for finer finish is HIGHER RPM + LOWER feed. So in these three finishing
+    # modes, when the preset pushes SFM up (factor > 1, preset mode only — a manual
+    # SFM override is an explicit user choice we don't second-guess), divide that
+    # feed-raising portion back out of FPT so the extra spindle speed lands as a
+    # finer scallop, not a heavier chip. The slow side (Max Life, factor < 1) is
+    # left untouched — it lowers RPM by intent and we don't invert that.
+    _finish_modes = ("finish", "face", "surfacing")
+    if mode in _finish_modes and (float(data.get("sfm_override", 0) or 0) <= 0):
+        _preset_f = speed_preset_factor(str(data.get("speed_preset") or "balanced"), material_group)
+        if _preset_f > 1.0:
+            ipt /= _preset_f  # RPM rises with the preset; feed stays flat → finer finish
     # Powder Metal modifier — reduce base chip load for PM (interrupted cut +
     # abrasion want a tougher, slightly lighter chip). Applied to the base IPT so
     # it composes with runout / chip-thinning / HEM downstream. No-op when off.
