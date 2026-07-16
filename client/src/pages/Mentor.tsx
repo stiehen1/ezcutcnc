@@ -5171,6 +5171,10 @@ ${stabSection}
         : (form as any).center_cutting;
       if (_ccVal === true)       lines.push(L("Center Cutting", "Yes"));
       else if (_ccVal === false) lines.push(L("Center Cutting", "No"));
+      if (form.is_tapered) {
+        const _tpa = form.taper_included_angle_deg > 0 ? `${form.taper_included_angle_deg}° included` : "angle not set";
+        lines.push(L("Taper",        `Tapered ballnose / neck (${_tpa})`));
+      }
       lines.push("");
     }
 
@@ -5522,6 +5526,103 @@ ${stabSection}
       if (wocPct)        lines.push(L("Optimal Load",  `${wocPct.toFixed(1)}%`));
       if (isRoughing)    lines.push(L("Stock to Leave","0.010\" radial  /  0.005\" axial  (suggested)"));
       lines.push("");
+
+      // ── FINISHING QUALITY (Ra + wall-taper targets vs. expected) ─────────────
+      // Surface these whenever the user set a target, and show the value the tool
+      // is actually expected to meet when it differs from the target (engine
+      // returns ra_actual_uin / predicted_wall_taper_in on finish/face modes).
+      {
+        const _raTarget = form.target_ra_uin;
+        const _raActual = cust?.ra_actual_uin as number | null | undefined;
+        const _wtTarget = form.max_wall_taper_in;
+        const _wtActual = cust?.predicted_wall_taper_in as number | null | undefined;
+        if (_raTarget > 0 || _wtTarget > 0) {
+          lines.push("FINISHING QUALITY");
+          lines.push(DIV);
+          if (_raTarget > 0) {
+            lines.push(L("Target Surface Finish", `Ra ≤ ${Math.round(_raTarget)} µin`));
+            if (_raActual != null) {
+              // Three cases: tool beats the target (better finish — good), meets it,
+              // or can't reach it. "Theoretical Ra" matches the app's KPI label.
+              const _reachable = _raActual <= _raTarget * 1.05;
+              const _better    = _raActual < _raTarget * 0.95;
+              const _verdict = !_reachable
+                ? "⚠ target not reachable at these params (see notes)"
+                : _better
+                ? "✓ better than target — tool expected to hold a finer finish"
+                : "✓ meets target";
+              lines.push(L("  Theoretical Ra", `≈ ${Math.round(_raActual)} µin  ${_verdict}`));
+            }
+          }
+          if (_wtTarget > 0) {
+            lines.push(L("Max Wall Taper", `≤ ${(_wtTarget * 1000).toFixed(2)} mil  (${_wtTarget.toFixed(4)}")`));
+            if (_wtActual != null) {
+              const _meets = _wtActual <= _wtTarget * 1.2;  // engine flags >1.2× as over
+              lines.push(L("  Expected Taper", _meets
+                ? `≈ ${(_wtActual * 1000).toFixed(2)} mil ±50%  ✓ within target`
+                : `≈ ${(_wtActual * 1000).toFixed(2)} mil ±50%  ⚠ exceeds target (see notes)`));
+            }
+          }
+          lines.push("");
+
+          // ── FINISH DRIVERS — the setup factors that actually govern finish ──────
+          // Holder runout, stickout/rigidity, and workholding drive real-world finish
+          // far more than the theoretical feed-cusp Ra above. Echo them here (framed as
+          // finish drivers, not just setup) and flag the ones working against the target.
+          lines.push("FINISH DRIVERS  (govern the result more than feeds/speeds)");
+          lines.push(DIV);
+
+          // Toolholder runout — highest-leverage factor. ER collet is the highest-runout
+          // common holder; shrink/hydraulic/hp-collet are the finish-grade interfaces.
+          const _hiRunoutHolders = new Set(["er_collet", "weldon"]);
+          const _fineHolders = new Set(["shrink_fit", "hydraulic", "hp_collet"]);
+          const _thLabel = thLabels[form.toolholder] ?? form.toolholder?.replace(/_/g, " ") ?? "—";
+          if (form.runout_in > 0) {
+            const _tirMil = form.runout_in * 1000;
+            const _floorUin = _tirMil * 50; // engine: 5% of TIR in µin ≈ 50 µin per mil
+            lines.push(L("Toolholder Runout (TIR)", `${_tirMil.toFixed(2)} mil measured  ·  sets a ~${Math.round(_floorUin)} µin Ra floor`));
+            if (_raTarget > 0 && _floorUin > _raTarget) {
+              lines.push("  ⚠ This runout floor is ABOVE your Ra target — no feed/speed change can beat it.");
+              lines.push("    A finer-runout holder (shrink-fit / hydraulic) is the only fix.");
+            }
+          } else {
+            // Unmeasured runout — made prominent per the finish-driver responsibility.
+            lines.push(L("Toolholder Runout (TIR)", "NOT MEASURED"));
+            lines.push("  ⚠ Runout not measured — the Ra prediction above is optimistic and may be");
+            lines.push("    50–100% worse in the real cut. Measure TIR at the tool tip; it is the");
+            lines.push("    single biggest lever on surface finish.");
+          }
+          lines.push(L("Toolholder", _fineHolders.has(form.toolholder) ? `${_thLabel}  ✓ finish-grade (<1–2 µm TIR)`
+            : _hiRunoutHolders.has(form.toolholder) ? `${_thLabel}  ⚠ higher-runout interface — a shrink/hydraulic holder finishes finer`
+            : _thLabel));
+
+          // Stickout / rigidity — deflection scales with L³; long L/D prints as finish error.
+          if (form.stickout > 0 && form.tool_dia > 0) {
+            const _ld = form.stickout / form.tool_dia;
+            const _ldFlag = _ld >= 5 ? "  ⚠ long — shorten stickout or use a reduced-neck tool for finish"
+              : _ld >= 4 ? "  ⚠ moderate — shorter is better for finish"
+              : "  ✓ short — good for finish rigidity";
+            lines.push(L("Stickout / Rigidity", `${form.stickout.toFixed(3)}"  (L/D ${_ld.toFixed(1)}×)${_ldFlag}`));
+          }
+
+          // Part & workholding rigidity — a part that moves under cutting force prints
+          // chatter and taper no holder can fix.
+          const _looseWh = new Set(["vise", "toe_clamps", "magnetic", "steady_rest"]);
+          if (form.workholding) {
+            const _whLabel = whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ");
+            lines.push(L("Part / Workholding", _looseWh.has(form.workholding)
+              ? `${_whLabel}  ⚠ verify part is rigidly clamped — flex prints as chatter & taper`
+              : `${_whLabel}  ✓ rigid setup`));
+          }
+
+          lines.push("");
+          lines.push("  Note: toolholder accuracy (runout), tool stickout/rigidity, and part &");
+          lines.push("  workholding rigidity carry the responsibility for finish results — often");
+          lines.push("  more than the programmed feeds and speeds. The Ra/taper figures above are");
+          lines.push("  theoretical best cases that assume a rigid, low-runout setup.");
+          lines.push("");
+        }
+      }
 
       // ── HEM TOOLPATH ACKNOWLEDGMENT ──────────
       // Only for HEM/trochoidal endmill cuts where thinning is live. Records the user's
