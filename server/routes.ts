@@ -1103,6 +1103,38 @@ export async function registerRoutes(
     `);
     // Larger Fadal VMCs (mid-size and up) offered Fadal's "Cool Power" thermal
     // system with TSC/washdown options — the small TRM/EMC/15-class did not.
+
+    // ── Fadal current (relaunched) lineup ────────────────────────────────────
+    // All mills (FG5/FL turning centers dropped from catalog). Relaunched line
+    // uses a dual-belt hi/lo 2-speed drive (→ 'belt', a correction from the
+    // legacy 'gear' rows) except the 30-taper 2015HS (direct integral spindle)
+    // and the 50-taper transmission machines ('gear'). Control = 'Fadal MP'
+    // (backward-compatible with 88HS/MP; some used units carry '64MP').
+    // 4020 named 'VMC 4020 B-II' so it does NOT collide with the legacy 4020.
+    // Where Fadal doesn't publish specs (3320, 4022, 8032, /50T pair, VM5ax320)
+    // unknowns are NULL and confidence 'low' with a verify note. TSC (CTS) is
+    // optional on all → base rows flood-only.
+    // [model, max_rpm, hp, taper, drive, x, y, z, mtype, way, baseTq, peakTq, peakRpm, conf, notes]
+    const fadalCurrentMachines: [string, number, number|null, string|null, string, number|null, number|null, number|null, string, string, number|null, number|null, number|null, string, string][] = [
+      ["VMC 2015HS",   12000, 10,   "BT30",  "direct", 19.7, 15.7, 16, "vmc",   "linear", 43.5, 43.5, 6000, "medium", "Current lineup. High-speed 30-taper; 15K/20K/24K RPM optional; 20-tool dual-arm ATC 1.0s tool-to-tool; 1890 IPM rapids. CTS optional."],
+      ["VMC 2520",     10000, 22.5, "CAT40", "belt",   25.5, 20,   20, "vmc",   "box",    220,  220,  500,  "medium", "Current lineup. 30\" Z optional; dual-belt hi/lo 2-speed; 24-tool dual-arm ATC; rapids 1410/1410/1187 IPM. CTS optional."],
+      ["VMC 4020 B-II", 10000, 22.5, "CAT40", "belt",  40,   20,   20, "vmc",   "box",    220,  300,  500,  "medium", "Current lineup (relaunched 4020, distinct from legacy). CAT40 std / BT40 opt; 15K RPM opt; 30 HP VHT opt gives 300 ft-lb; 30\" Z opt; 1000 IPM rapids. CTS opt."],
+      ["VMC 6032",     10000, 22.5, "CAT40", "belt",   60,   32,   30, "vmc",   "box",    220,  300,  500,  "medium", "Current lineup. CAT40 std / BT40 opt; 15K RPM opt; 30 HP VHT opt gives 300 ft-lb; 50mm ballscrews; 787/787/590 IPM rapids; four chip augers. CTS opt."],
+      ["VMC 8032",     10000, 22.5, "CAT40", "belt",   80,   32,   30, "vmc",   "box",    220,  300,  500,  "low",    "Current lineup. Mirrors 6032 spindle package (CAT40 std / BT40 opt; 15K opt; 30 HP VHT opt); travels/rapids inferred from 6032 family — verify with Fadal (844) 323-2526."],
+      ["VMC 3320",     10000, null, "CAT40", "belt",   null, null, null, "vmc", "box",    null, null, null, "low",    "Current lineup. Specs not published by Fadal — travels/HP/torque UNVERIFIED. Confirm with Fadal (844) 323-2526."],
+      ["VMC 4022",     10000, null, "CAT40", "belt",   null, null, null, "vmc", "box",    null, null, null, "low",    "Current lineup. Specs not published by Fadal — travels/HP/torque UNVERIFIED. Confirm with Fadal (844) 323-2526."],
+      ["VMC 6032/50T", 6000,  null, "CAT50", "gear",   60,   32,   30, "vmc",   "box",    null, null, null, "low",    "Current lineup. 50-taper, 6000 RPM two-speed transmission; HP/torque not published by Fadal — verify (844) 323-2526."],
+      ["VMC 8032/50T", 6000,  null, "CAT50", "gear",   80,   32,   30, "vmc",   "box",    null, null, null, "low",    "Current lineup. 50-taper, 6000 RPM two-speed transmission; HP/torque not published by Fadal — verify (844) 323-2526."],
+      ["VM5ax320",     10000, null, null,    "belt",   null, null, null, "5axis","box",   null, null, null, "low",    "Current lineup. 5-axis machine; spindle/travels/HP/torque not published by Fadal — verify (844) 323-2526."],
+    ];
+    for (const m of fadalCurrentMachines) {
+      const [model, maxRpm, hp, taper, driveType, xIn, yIn, zIn, mtype, wayType, baseTq, peakTq, peakRpm, confidence, notes] = m;
+      await pool.query(`
+        INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, x_travel_in, y_travel_in, z_travel_in, machine_type, control, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, notes)
+        SELECT 'Fadal', $1, $2, $3, $4, $5, $6, '{flood}', $7, $8, $9, $10, 'Fadal MP', $11, $12, $13, $14, $2, $15, $16
+        WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Fadal' AND model ILIKE $1)
+      `, [model, maxRpm, hp, taper, driveType, taper === "BT30", xIn, yIn, zIn, mtype, wayType, baseTq, peakTq, peakRpm, confidence, notes]);
+    }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
   }
