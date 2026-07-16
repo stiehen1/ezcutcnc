@@ -3822,7 +3822,7 @@ export async function registerRoutes(
     try {
       const {
         action, roiSessionId,
-        userEmail, userName, userType,
+        userEmail, cc, userName, userType,
         repId, repName,
         distributorName, distributorCode,
         endUserName, endUserEmail, endUserCompany,
@@ -3841,7 +3841,7 @@ export async function registerRoutes(
       } = (req.body ?? {}) as {
         action?: string;
         roiSessionId?: string;
-        userEmail?: string; userName?: string; userType?: string;
+        userEmail?: string; cc?: string; userName?: string; userType?: string;
         repId?: string; repName?: string;
         distributorName?: string; distributorCode?: string;
         endUserName?: string; endUserEmail?: string; endUserCompany?: string;
@@ -4033,7 +4033,9 @@ export async function registerRoutes(
       const smtpPass = process.env.SMTP_PASS || "";
       const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
-      const salesTo = process.env.QUOTE_TO_EMAIL || "sales@corecutterusa.com";
+      // CC is now user-controlled (optional). Sales lead is still captured via the
+      // DB upsert above, so no automatic sales@ CC is added on outbound ROI email.
+      const ccClean = typeof cc === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cc.trim()) ? cc.trim() : "";
 
       if (smtpUser && smtpPass && userEmail) {
         const fmtD = (n: number | undefined) => (n != null ? n.toFixed(2) : "—");
@@ -4162,7 +4164,7 @@ export async function registerRoutes(
         await transporter.sendMail({
           from: `"CoreCutCNC" <${smtpUser}>`,
           to: userEmail,
-          cc: salesTo,
+          ...(ccClean ? { cc: ccClean } : {}),
           subject: `Your CoreCutCNC ROI Summary — ${subjectSavings}`,
           html: htmlBody,
         });

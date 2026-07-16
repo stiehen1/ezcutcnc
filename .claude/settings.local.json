@@ -11,7 +11,13 @@
       "Bash(git push:*)",
       "Bash(taskkill /PID 3480 /F)",
       "Bash(git check-ignore *)",
-      "Bash(mv \"c:/Users/scott/Documents/corecuttertoolapp/memory/project_center_neck_tools.md\" \"c:/Users/scott/.claude/projects/c--Users-scott-Documents-corecuttertoolapp/memory/project_center_neck_tools.md\" && echo moved)"
+      "Bash(mv \"c:/Users/scott/Documents/corecuttertoolapp/memory/project_center_neck_tools.md\" \"c:/Users/scott/.claude/projects/c--Users-scott-Documents-corecuttertoolapp/memory/project_center_neck_tools.md\" && echo moved)",
+      "mcp__Neon__describe_table_schema",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('legacy_engine.py',encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "WebFetch(domain:machinetoolindex.com)"
     ],
     "additionalDirectories": [
       "c:\\Users\\scott\\.claude\\projects\\c--Users-scott-Documents-corecuttertoolapp\\memory"

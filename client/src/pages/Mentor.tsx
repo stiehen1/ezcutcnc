@@ -1140,6 +1140,12 @@ export default function Mentor() {
 
   async function submitRoi() {
     if (!roiResult) return;
+    const toAddr = roiEmail.trim();
+    const ccAddr = roiCc.trim();
+    if (!toAddr) { setRoiEmailError("Enter a recipient email address."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toAddr)) { setRoiEmailError("Enter a valid email address."); return; }
+    if (ccAddr && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccAddr)) { setRoiEmailError("Enter a valid CC email address."); return; }
+    setRoiEmailError("");
     setRoiSaving(true);
     try {
       await fetch("/api/roi", {
@@ -1148,8 +1154,9 @@ export default function Mentor() {
         body: JSON.stringify({
           action: "email",
           roiSessionId,
-          // Rep
-          userEmail: erEmail,
+          // Recipient (To) + optional CC — sends to any address the user types.
+          userEmail: toAddr,
+          cc: ccAddr || undefined,
           userName: localStorage.getItem("cc_user_name") || "",
           userType: roiUserType,
           repId: roiRepVerified ? roiRepVerified.repId : null,
@@ -1208,6 +1215,9 @@ export default function Mentor() {
         }),
       });
       setRoiEmailSent(true);
+      localStorage.setItem("er_email", toAddr.toLowerCase());
+      if (ccAddr) localStorage.setItem("roi_cc", ccAddr.toLowerCase());
+      else localStorage.removeItem("roi_cc");
       localStorage.removeItem("roi_draft");
       setRoiDraftLoaded(false);
     } catch { /* silently fail */ }
@@ -3079,6 +3089,11 @@ export default function Mentor() {
 
   const [roiSaving, setRoiSaving] = React.useState(false);
   const [roiEmailSent, setRoiEmailSent] = React.useState(false);
+  // ROI email recipient — editable "To" (prefilled with saved email) + optional CC.
+  const [roiEmail, setRoiEmail] = React.useState(() => localStorage.getItem("er_email") || localStorage.getItem("tb_email") || "");
+  const [roiCc, setRoiCc] = React.useState(() => localStorage.getItem("roi_cc") || "");
+  const [roiCcOpen, setRoiCcOpen] = React.useState(() => !!localStorage.getItem("roi_cc"));
+  const [roiEmailError, setRoiEmailError] = React.useState("");
   const [roiPrinting, setRoiPrinting] = React.useState(false);
   const [roiDraftLoaded, setRoiDraftLoaded] = React.useState(false);
   const [roiLifeMode, setRoiLifeMode] = React.useState<"parts" | "cut_time" | "linear_in">("parts");
@@ -17729,12 +17744,67 @@ ${stabSection}
                     </table>
                   </div>
 
+                  {/* Email recipient — editable To + optional CC */}
+                  {!roiEmailSent && (
+                    <div className="mb-2 rounded-lg border border-zinc-700/60 bg-zinc-900/50 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-500 shrink-0 w-8">To:</span>
+                        <input
+                          type="text"
+                          inputMode="email"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          placeholder="recipient@email.com"
+                          value={roiEmail}
+                          onChange={e => { setRoiEmail(e.target.value); setRoiEmailError(""); }}
+                          onKeyDown={e => { if (e.key === "Enter") submitRoi(); }}
+                          disabled={roiSaving}
+                          className="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-green-500"
+                        />
+                      </div>
+                      {!roiCcOpen ? (
+                        <button
+                          type="button"
+                          onClick={() => setRoiCcOpen(true)}
+                          className="mt-1.5 text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2"
+                        >
+                          + CC someone
+                        </button>
+                      ) : (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <span className="text-xs text-zinc-500 shrink-0 w-8">CC:</span>
+                          <input
+                            type="text"
+                            inputMode="email"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            placeholder="colleague@email.com"
+                            value={roiCc}
+                            onChange={e => { setRoiCc(e.target.value); setRoiEmailError(""); }}
+                            onKeyDown={e => { if (e.key === "Enter") submitRoi(); }}
+                            disabled={roiSaving}
+                            className="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-green-500"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setRoiCc(""); setRoiCcOpen(false); setRoiEmailError(""); localStorage.removeItem("roi_cc"); }}
+                            className="text-xs text-zinc-500 hover:text-zinc-300 shrink-0"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                      {roiEmailError && <p className="mt-1 text-xs text-red-400">{roiEmailError}</p>}
+                    </div>
+                  )}
+
                   {/* Action buttons */}
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={submitRoi}
-                      disabled={roiSaving || roiEmailSent}
+                      disabled={roiSaving || roiEmailSent || !roiEmail.trim()}
                       className="flex-1 rounded-lg border border-green-600/50 bg-green-900/30 hover:bg-green-900/50 disabled:opacity-50 text-green-300 text-xs font-semibold px-3 py-1.5 transition-colors"
                     >
                       {roiEmailSent ? "✓ Email Sent" : roiSaving ? "Sending…" : "📧 Email ROI Report"}
