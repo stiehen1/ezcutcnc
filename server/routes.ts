@@ -1120,20 +1120,25 @@ export async function registerRoutes(
       ["VMC 2520",     10000, 22.5, "CAT40", "belt",   25.5, 20,   20, "vmc",   "box",    220,  220,  500,  "medium", "Current lineup. 30\" Z optional; dual-belt hi/lo 2-speed; 24-tool dual-arm ATC; rapids 1410/1410/1187 IPM. CTS optional."],
       ["VMC 4020 B-II", 10000, 22.5, "CAT40", "belt",  40,   20,   20, "vmc",   "box",    220,  300,  500,  "medium", "Current lineup (relaunched 4020, distinct from legacy). CAT40 std / BT40 opt; 15K RPM opt; 30 HP VHT opt gives 300 ft-lb; 30\" Z opt; 1000 IPM rapids. CTS opt."],
       ["VMC 6032",     10000, 22.5, "CAT40", "belt",   60,   32,   30, "vmc",   "box",    220,  300,  500,  "medium", "Current lineup. CAT40 std / BT40 opt; 15K RPM opt; 30 HP VHT opt gives 300 ft-lb; 50mm ballscrews; 787/787/590 IPM rapids; four chip augers. CTS opt."],
-      ["VMC 8032",     10000, 22.5, "CAT40", "belt",   80,   32,   30, "vmc",   "box",    220,  300,  500,  "low",    "Current lineup. Mirrors 6032 spindle package (CAT40 std / BT40 opt; 15K opt; 30 HP VHT opt); travels/rapids inferred from 6032 family — verify with Fadal (844) 323-2526."],
-      ["VMC 3320",     10000, null, "CAT40", "belt",   null, null, null, "vmc", "box",    null, null, null, "low",    "Current lineup. Specs not published by Fadal — travels/HP/torque UNVERIFIED. Confirm with Fadal (844) 323-2526."],
-      ["VMC 4022",     10000, null, "CAT40", "belt",   null, null, null, "vmc", "box",    null, null, null, "low",    "Current lineup. Specs not published by Fadal — travels/HP/torque UNVERIFIED. Confirm with Fadal (844) 323-2526."],
+      ["VMC 8032",     10000, 22.5, "CAT40", "belt",   80,   32,   30, "vmc",   "box",    220,  300,  500,  "medium", "Current lineup. CAT40 std / BT40 opt; 10K std / 15K opt; 22.5 HP std / 30 HP (15K package) peak; 220 std / 300 ft-lb peak; belt drive; rapids 787/787/590 IPM; 24/30/40-tool dual-arm ATC. Travels 80/32/30 and full spindle package CONFIRMED on fadal.com/vmc-8032. CTS optional."],
+      // 3320 = VMC-3320R-II. Dual-belt hi/lo 2-speed: 15 HP/175 ft-lb low, 22.5 HP/220 high.
+      ["VMC 3320",     10000, 22.5, "CAT40", "belt",   33,   20,   20, "vmc",   "box",    175,  220,  500,  "medium", "Current lineup (VMC-3320R-II). CAT40 std / BT40 opt; 10K std / 15K opt; dual-belt hi/lo 2-speed: 15 HP/175 ft-lb low range, 22.5 HP/220 ft-lb high-torque range; 30\" Z opt; rapids 1410/1410/1187 IPM; 24-tool (30 opt) dual-arm ATC ~1.5s. peak_torque_rpm ~500 inferred from 4020 family. CTS optional."],
+      // 4022 travels/rapids CONFIRMED; HP/torque genuinely unpublished by Fadal (do NOT infer from 4020).
+      ["VMC 4022",     10000, null, "CAT40", "belt",   40,   22,   22, "vmc",   "box",    null, null, null, "low",    "Current lineup. CAT40, 10K RPM, belt drive; travels 40/22/22 and rapids 1410/1410/1410 IPM CONFIRMED on fadal.com; 30-tool ATC optional. Spindle HP/torque NOT published by Fadal for the 4022 (do not infer from 4020) — verify (844) 323-2526."],
       ["VMC 6032/50T", 6000,  null, "CAT50", "gear",   60,   32,   30, "vmc",   "box",    null, null, null, "low",    "Current lineup. 50-taper, 6000 RPM two-speed transmission; HP/torque not published by Fadal — verify (844) 323-2526."],
       ["VMC 8032/50T", 6000,  null, "CAT50", "gear",   80,   32,   30, "vmc",   "box",    null, null, null, "low",    "Current lineup. 50-taper, 6000 RPM two-speed transmission; HP/torque not published by Fadal — verify (844) 323-2526."],
-      ["VM5ax320",     10000, null, null,    "belt",   null, null, null, "5axis","box",   null, null, null, "low",    "Current lineup. 5-axis machine; spindle/travels/HP/torque not published by Fadal — verify (844) 323-2526."],
+      // VM5ax320: BIG-PLUS CAT40 (dual-contact), 15K direct-drive, 5-axis trunnion. HP/torque unpublished.
+      ["VM5ax320",     15000, null, "CAT40", "direct", 18.11, 24.01, 20.07, "5axis","linear", null, null, null, "medium", "Current lineup. 5-axis trunnion (A-axis +30/-120 deg, C-axis 360 deg; 320mm/12.6\" rotary table). BIG-PLUS CAT40 (dual-contact), 15,000 RPM direct-drive, CTS-ready; 30-tool swing-arm ATC; 945 IPM feed; work env 400mm dia x 300mm, 220 lb. Travels/taper/RPM CONFIRMED on fadal.com/5-axis. Spindle HP/torque NOT published — verify (844) 323-2526."],
     ];
     for (const m of fadalCurrentMachines) {
       const [model, maxRpm, hp, taper, driveType, xIn, yIn, zIn, mtype, wayType, baseTq, peakTq, peakRpm, confidence, notes] = m;
+      // dual_contact: BT30 face-contact + VM5ax320's BIG-PLUS CAT40 are dual-contact; plain CAT40/CAT50 are not.
+      const dualContact = taper === "BT30" || model === "VM5ax320";
       await pool.query(`
         INSERT INTO machines (brand, model, max_rpm, spindle_hp, taper, drive_type, dual_contact, coolant_types, x_travel_in, y_travel_in, z_travel_in, machine_type, control, way_type, base_torque_ftlb, peak_torque_ftlb, peak_torque_rpm, rated_rpm, curve_confidence, notes)
         SELECT 'Fadal', $1, $2, $3, $4, $5, $6, '{flood}', $7, $8, $9, $10, 'Fadal MP', $11, $12, $13, $14, $2, $15, $16
         WHERE NOT EXISTS (SELECT 1 FROM machines WHERE brand ILIKE 'Fadal' AND model ILIKE $1)
-      `, [model, maxRpm, hp, taper, driveType, taper === "BT30", xIn, yIn, zIn, mtype, wayType, baseTq, peakTq, peakRpm, confidence, notes]);
+      `, [model, maxRpm, hp, taper, driveType, dualContact, xIn, yIn, zIn, mtype, wayType, baseTq, peakTq, peakRpm, confidence, notes]);
     }
   } catch (err: any) {
     console.warn("[live_tool migration]", err?.message ?? err);
