@@ -1386,12 +1386,19 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                     // uses) so the user lands on a filled calculator and just
                                     // clicks Run — which then reveals the pre-filled ROI panel.
                                     const hardnessMatch = /([\d.]+)\s*(\w+)?/.exec(roi.hardness || "");
+                                    const dia = Number(roi.tool_dia) || 0;
+                                    // DB stores WOC/DOC as absolute inches; the form uses
+                                    // woc_pct (% of dia) and doc_xd (× dia). Convert back.
+                                    const wocPct = dia && roi.cc_radial_doc != null ? (Number(roi.cc_radial_doc) / dia) * 100 : undefined;
+                                    const docXd  = dia && roi.cc_axial_doc  != null ? Number(roi.cc_axial_doc) / dia : undefined;
                                     const restore = {
                                       inputs: {
                                         tool_dia: roi.tool_dia ?? undefined,
                                         material: roi.material || undefined,
                                         flutes: roi.cc_num_flutes ?? undefined,
                                         loc: roi.cc_length_of_cut ?? undefined,
+                                        woc_pct: wocPct,
+                                        doc_xd: docXd,
                                         hardness_value: hardnessMatch ? Number(hardnessMatch[1]) : undefined,
                                         hardness_scale: hardnessMatch?.[2] ? hardnessMatch[2].toLowerCase() : undefined,
                                       },
