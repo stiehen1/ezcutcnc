@@ -1069,6 +1069,16 @@ export default function Mentor() {
       : null;
     setRoiMissingFields([]);
     setRoiResult({ ccToolCost, ccMachineCost, ccTotalCost, compToolCost, compMachineCost, compTotalCost, savingsPerPart, monthlySavings, annualSavings, savingsPct, timeSavingsPct, mrrGainPct, reconSavingsPerPart, reconGrinds: grinds, oneTimeSavings, mrrTimeSavingsPerPart, breakevenN });
+    // Full calculator input snapshot — same shape as a saved application — so a
+    // Rerun restores the EXACT setup (all geometry, machine, coating), not just the
+    // subset of columns. Attached to the ROI row as roi_form_snapshot.
+    const roiFormSnapshot = {
+      inputs: form,
+      operation, isoCategory, edpText,
+      skuDescription,
+      toolNumber: pdfToolNumber ?? undefined,
+      activeMachineId, activeMachineName,
+    };
     // Save to DB on every calculate — requires a name to save
     if (erEmail && roiName.trim()) {
       fetch("/api/roi", {
@@ -1077,6 +1087,7 @@ export default function Mentor() {
         body: JSON.stringify({
           action: "calculate",
           roiSessionId,
+          formSnapshot: roiFormSnapshot,
           // Rep (logged-in user)
           userEmail: erEmail,
           userName: localStorage.getItem("cc_user_name") || "",
@@ -1170,6 +1181,14 @@ export default function Mentor() {
         body: JSON.stringify({
           action: "email",
           roiSessionId,
+          // Full calculator snapshot so Rerun restores the exact setup (see submitRoi note above).
+          formSnapshot: {
+            inputs: form,
+            operation, isoCategory, edpText,
+            skuDescription,
+            toolNumber: pdfToolNumber ?? undefined,
+            activeMachineId, activeMachineName,
+          },
           // Recipient (To) + optional CC — sends to any address the user types.
           userEmail: toAddr,
           cc: ccAddr || undefined,

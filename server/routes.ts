@@ -153,6 +153,10 @@ export async function registerRoutes(
       "distributor_zip TEXT",
       "part_name TEXT",
       "part_number TEXT",
+      // Full calculator input snapshot (same shape as a saved application:
+      // { inputs, operation, isoCategory, edpText, skuDescription, activeMachineId,
+      // activeMachineName }) so Rerun restores the exact setup, not just the columns.
+      "roi_form_snapshot JSONB",
       "end_user_name TEXT",
       "end_user_email TEXT",
       "end_user_company TEXT",
@@ -3852,7 +3856,7 @@ export async function registerRoutes(
         repId, repName,
         distributorName, distributorCode,
         distributorContact, distributorAddress, distributorCity, distributorState, distributorZip,
-        partName, partNumber,
+        partName, partNumber, formSnapshot,
         endUserName, endUserEmail, endUserCompany,
         company, phone,
         material, hardness, operation, toolDia, feedIpm, machineName,
@@ -3873,7 +3877,7 @@ export async function registerRoutes(
         repId?: string; repName?: string;
         distributorName?: string; distributorCode?: string;
         distributorContact?: string; distributorAddress?: string; distributorCity?: string; distributorState?: string; distributorZip?: string;
-        partName?: string; partNumber?: string;
+        partName?: string; partNumber?: string; formSnapshot?: unknown;
         endUserName?: string; endUserEmail?: string; endUserCompany?: string;
         company?: string; phone?: string;
         material?: string; hardness?: string; operation?: string;
@@ -3943,7 +3947,7 @@ export async function registerRoutes(
             city, region, country, ip, updated_at,
             emailed_at,
             distributor_contact, distributor_address, distributor_city, distributor_state, distributor_zip,
-            part_name, part_number
+            part_name, part_number, roi_form_snapshot
           ) VALUES (
             $1,
             $2,$3,$4,
@@ -3964,7 +3968,7 @@ export async function registerRoutes(
             $70,$71,$72,$73,now(),
             ${isEmail ? "now()" : "NULL"},
             $74,$75,$76,$77,$78,
-            $79,$80)
+            $79,$80,$81)
           ON CONFLICT (roi_session_id)
           WHERE roi_session_id IS NOT NULL
           DO UPDATE SET
@@ -3981,6 +3985,7 @@ export async function registerRoutes(
             distributor_zip = EXCLUDED.distributor_zip,
             part_name = EXCLUDED.part_name,
             part_number = EXCLUDED.part_number,
+            roi_form_snapshot = EXCLUDED.roi_form_snapshot,
             end_user_name = EXCLUDED.end_user_name,
             end_user_email = EXCLUDED.end_user_email,
             end_user_company = EXCLUDED.end_user_company,
@@ -4083,6 +4088,8 @@ export async function registerRoutes(
             distributorCity || null, distributorState || null, distributorZip || null,
             // $79–$80: part identity
             partName || null, partNumber || null,
+            // $81: full calculator input snapshot (JSONB)
+            formSnapshot != null ? JSON.stringify(formSnapshot) : null,
           ]
         );
       } catch (dbErr: any) {
