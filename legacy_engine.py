@@ -126,8 +126,9 @@ BASE_SFM = {
     "manganese_bronze": 275,  # C86300/C86500 — Mn/Fe intermetallics = abrasive wear; 240–310 SFM range
     "silicon_bronze":   320,  # C65500/C64200 — Si particles; cleaner cut than Mn bronze but still abrasive
     "copper_beryllium": 250,  # C17200/C17300 — extreme abrasion + carcinogenic dust; conservative SFM
-    "steel_mild": 400,              # Plain low-carbon / structural (A36, 1018, 1020, 10xx series)
+    "steel_mild": 400,              # Plain low-carbon / structural (A36, 1018, 1020)
     "steel_free": 425,              # True free-machining (12L14, 1215, 1117 — sulfur-additive grades)
+    "steel_medium_carbon": 390,     # Plain medium/high carbon (1040/1045/1055/1070-95). Anchored to the low end of the published 400-700 SFM band +10% (=440 operating), discounted to our full-slot anchor basis like steel_mild. Sits below free/mild, above alloy — no Cr/Mo carbides to abrade the edge.
     "steel_alloy": 350,             # 4140: 350 SFM confirmed at full-slot (worst case)
     "steel_tool": 150,
     "stainless_fm":          290,   # 303/416 free-machining — midpoint 240–340 SFM
@@ -319,6 +320,7 @@ HP_PER_CUIN = {
     "copper_beryllium": 0.52,
     "steel_mild":       0.82,   # Plain low-carbon — softer than alloy, harder than free-machining
     "steel_free":       0.75,
+    "steel_medium_carbon": 0.88,  # More carbon than mild = higher unit force, but no alloy carbides — below alloy's 1.00
     "steel_alloy":      1.00,  # 4140, 4340 — Machinery's Handbook C=1.0 for alloy steel
     "steel_tool":       1.10,
     "stainless_fm":          0.95,   # 303/416 free-machining
@@ -466,6 +468,7 @@ BASE_LIFE_MIN = {
     "copper_beryllium":  50.0,  # C17200 — most abrasive; also hardest of the three
     "steel_mild":       100.0,   # Plain mild steel — good tool life, predictable wear
     "steel_free":        90.0,
+    "steel_medium_carbon": 90.0,  # Gradual, linear wear (no alloy carbides) — better life than alloy, near free-machining
     "steel_alloy":       75.0,
     "steel_tool":        55.0,
     "stainless_martensitic": 60.0,
@@ -667,6 +670,7 @@ CHAMFER_IPT_MULT = {
     # Carbon / alloy / free-machining steels
     "steel_mild":          1.75,
     "steel_free":          1.75,
+    "steel_medium_carbon": 1.75,
     "steel_alloy":         1.75,
     "steel_tool":          1.35,
     # Tool steels — carbide edge strength governs
@@ -874,6 +878,7 @@ IPT_FRAC = {
     "copper_beryllium": 0.0050,  # 0.50%×D — very conservative; handle as hazardous material
     "steel_mild":       0.0065,   # Plain low-carbon (1018, A36) — between free and alloy chip loads
     "steel_free":       0.007,    # True free-machining (12L14, 1215) — sulfur breaks chips cleanly
+    "steel_medium_carbon": 0.0062,  # 0.62%×D — feed drops far less than SFM across the steel tiers; needs chip thickness to cut under the prior pass
     "steel_alloy":      0.0055,   # 4140 slotting: 0.55%×D confirmed
     "steel_tool":       0.005,    # A2 annealed estimated
     "stainless_fm":          0.0048,  # 303/416 — midpoint 0.0018–0.0030 on 0.5" = 0.48%×D
@@ -936,6 +941,7 @@ HEM_IPT_MULT = {
     "Steel": 2.0,
     "steel_mild": 2.0,
     "steel_alloy": 2.0,
+    "steel_medium_carbon": 2.0,
     "steel_free": 2.0,
     "steel_tool": 2.0,
     "tool_steel_p20": 1.6,   # Tool steels — conservative HEM boost
@@ -1024,6 +1030,7 @@ _ISO_KEY_TO_GROUP = {
     "steel_mild": "Steel",
     "steel_free": "Steel",
     "steel_alloy": "Steel",
+    "steel_medium_carbon": "Steel",   # Plain medium/high carbon (1040-1095) — own tier, between mild and alloy
     "steel_tool": "Steel",
     "stainless_fm":          "Stainless",
     "stainless_ferritic":    "Stainless",
@@ -1832,7 +1839,7 @@ DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
     # Mild steel 1010 / 4140 anchored to MZE Ø.2480: 175 / 160 SFM. 4140 HT (HRC ≥36) handled by hardness_sfm_mult.
-    "steel_mild": 175, "steel_free": 175, "steel_alloy": 160, "steel_tool": 70,
+    "steel_mild": 175, "steel_free": 175, "steel_medium_carbon": 170, "steel_alloy": 160, "steel_tool": 70,
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
     # Stainless 304/316 anchored to MZE Ø.2480: 80 SFM. 316 slightly lower (Mo penalty).
     # Coolant-fed bonus now handles the +13–30% bump from external→internal coolant; no longer baked in here.
@@ -1864,7 +1871,7 @@ DRILL_SFM = {
 DRILL_IPR_BASE = {
     "aluminum_wrought": 0.010, "aluminum_wrought_hs": 0.009, "aluminum_cast": 0.008, "non_ferrous": 0.007,
     "plastic_unfilled": 0.006, "plastic_filled": 0.005, "composite_tpc": 0.002,
-    "steel_mild": 0.0055, "steel_free": 0.006, "steel_alloy": 0.004, "steel_tool": 0.003,
+    "steel_mild": 0.0055, "steel_free": 0.006, "steel_medium_carbon": 0.0050, "steel_alloy": 0.004, "steel_tool": 0.003,
     "armor_milspec": 0.003, "armor_ar400": 0.002, "armor_ar500": 0.0015, "armor_ar600": 0.001,
     # Base = non-coolant-fed target. coolant_fed × 1.10 bonus in run_drilling() brings to through-coolant target.
     # stainless_304 validated: 0.0055 → 0.0046 non-coolant-fed ≈ 0.0045 ref; × 1.10 = 0.0050 coolant-fed ref.
@@ -3023,6 +3030,7 @@ KEYSEAT_SFM = {
     "Steel":             220,
     "steel_mild":        250,   # Plain low-carbon full-slot — between free and alloy
     "steel_free":        280,
+    "steel_medium_carbon": 230,  # Plain medium/high carbon — below mild, above alloy
     "steel_alloy":       200,
     "steel_tool":        120,
     "tool_steel_p20":    220,
@@ -3098,6 +3106,7 @@ FEEDMILL_SFM = {
     "Steel":                  450,
     "steel_mild":            1000,   # 1018/A36 feed-milling runs hot (shop: 900-1200 SFM); RPM ceiling caps it per machine
     "steel_free":             550,
+    "steel_medium_carbon":    475,   # Tracks alloy behavior (carbon, no smearing) more than gummy mild — just above alloy, not the mild hot-running outlier
     "steel_alloy":            425,
     "tool_steel_p20":         375,
     "tool_steel_a2":          300,

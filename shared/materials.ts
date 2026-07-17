@@ -11,6 +11,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "steel_mild":          "Plain low-carbon and structural steels (A36, 1018, 1020, 10xx series). Very consistent — predictable chip load, good tool life. Flood or mist coolant; standard TiAlN coated carbide. A36 hot-rolled can vary heat to heat — check hardness on critical jobs.",
   "steel_free":          "Sulfur-additive free-machining grades (12L14, 1215, 1117). Easiest steel to machine — sulfur breaks chips cleanly at high SFM. Run fast, push the feed, expect excellent tool life. Note: 12L14 is not weldable.",
   "steel_alloy":         "Cr-Mo and NiCrMo alloy steels (4130 Chrom-Moly, 4140, 4340, 8620, 9310 and similar grades). Hardness matters more than the grade name — set it to match your actual condition. 4130 normalized cuts easily; 4140 prehard (~30 HRC) is the most common shop challenge. Variable-pitch geometry and TiAlN coating are the right tool choice for any of these. Never let the tool rub — hardened alloy steel work-hardens at the cut faster than mild steel.",
+  "steel_medium_carbon": "Plain medium/high-carbon steels (1040, 1045, 1055, 1070–1095) — higher carbon than mild steel, no alloy additions. Runs a touch faster than alloy steel (no Cr/Mo carbides to abrade the edge) but slower than mild; the sweet spot for predictability — chips behave, finishes are consistent, and tool wear is gradual and linear. Set hardness to your actual condition (typically ~15–25 HRC as-rolled/normalized, higher if quench-and-tempered). Variable-pitch geometry and TiAlN coating; keep chip load up so the edge cuts rather than plows.",
   "tool_steel_p20":      "Prehardened mold steel (~30 HRC) — cuts like firm alloy steel. Well-suited to long roughing passes with standard TiAlN solid carbide endmills.",
   "tool_steel_a2":       "Air-hardening tool steel — tougher than D2 and more forgiving on cutting edges. Machines consistently at working hardness; AlTiN coating preferred.",
   "tool_steel_h13":      "Hot-work die steel (44–48 HRC typical). Work-hardens at the cut if the tool rubs — keep feed up and never let the tool dwell. AlTiN or AlCrN coating required.",
@@ -87,6 +88,7 @@ export const ISO_SUBCATEGORIES = [
   { iso: "N2" as IsoCategory, key: "copper_beryllium",     label: "Beryllium Copper (C17200, C17300) — Hazmat",   hardness: { value: 36, scale: "hrc" as const } },
   // P — Steel
   { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "steel_medium_carbon",   label: "Medium-Carbon Steel (1040, 1045, 1055, 1070-1095)", hardness: { value: 20, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
   { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (12L14, 1215, 1117)",  hardness: { value: 80, scale: "hrb" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_p20",        label: "P20 Tool Steel (prehardened ~30 HRC)",      hardness: { value: 30, scale: "hrc" as const } },
@@ -152,6 +154,7 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "steel_mild":      { min: 50, max: 90,  scale: "hrb", note: "Mild and structural steels (A36, 1018, 1020) range 50–90 HRB depending on condition. Cold-rolled is harder than hot-rolled of the same grade." },
   "steel_free":      { min: 55, max: 95,  scale: "hrb", note: "Free-machining grades (12L14, 1215, 1117) range 55–95 HRB — sulfur additives improve chip breaking, not hardenability." },
   "steel_alloy":     { min: 18, max: 52,  scale: "hrc", note: "Alloy steels (4140, 4340) range 18–52 HRC depending on temper condition." },
+  "steel_medium_carbon": { min: 10, max: 45, scale: "hrc", note: "Plain carbon steels (1045, 1050, etc.) run ~10–25 HRC as-rolled/normalized and up to ~40–45 HRC quenched-and-tempered. Enter your actual condition; annealed stock reads on the HRB scale (~80–95 HRB)." },
   "tool_steel_p20":  { min: 28, max: 36,  scale: "hrc", note: "P20 is supplied prehardened 28–36 HRC — outside this range it's likely a different condition." },
   "tool_steel_a2":   { min: 54, max: 62,  scale: "hrc", note: "A2 in working condition is hardened 54–62 HRC. Annealed (~92 HRB) is pre-heat treat stock." },
   "tool_steel_h13":  { min: 44, max: 54,  scale: "hrc", note: "H13 die steel typical working range is 44–54 HRC. Below 44 is annealed or under-tempered." },
@@ -312,12 +315,16 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "1117": "steel_free", "1118": "steel_free", "b1112": "steel_free",
   "1213": "steel_free",
   "free machining": "steel_free", "free machining steel": "steel_free",
-  // ── Medium Carbon (harder than mild, no alloy additions) ─────────────────
-  "1030": "steel_alloy", "1035": "steel_alloy", "1040": "steel_alloy",
-  "1045": "steel_alloy", "1055": "steel_alloy",
-  "1070": "steel_alloy", "1080": "steel_alloy",
-  "1090": "steel_alloy", "1095": "steel_alloy",
-  "medium carbon": "steel_alloy", "medium carbon steel": "steel_alloy",
+  // ── Medium / High Carbon (harder than mild, no alloy additions) ──────────
+  // Plain-carbon 10xx share alloy-steel cutting physics but aren't alloy steel —
+  // route to the medium-carbon sub-category so the label is honest (engine key
+  // is normalized back to steel_alloy at run() in legacy_engine.py).
+  "1030": "steel_medium_carbon", "1035": "steel_medium_carbon", "1040": "steel_medium_carbon",
+  "1045": "steel_medium_carbon", "1055": "steel_medium_carbon",
+  "1070": "steel_medium_carbon", "1080": "steel_medium_carbon",
+  "1090": "steel_medium_carbon", "1095": "steel_medium_carbon",
+  "medium carbon": "steel_medium_carbon", "medium carbon steel": "steel_medium_carbon",
+  "high carbon": "steel_medium_carbon", "high carbon steel": "steel_medium_carbon",
   // ── Cr-Mo (Chromoly / 41xx series) ───────────────────────────────────────
   "4130": "steel_alloy", "4135": "steel_alloy",
   "4140": "steel_alloy", "4140 ph": "steel_alloy", "4140 prehard": "steel_alloy",

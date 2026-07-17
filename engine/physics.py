@@ -490,6 +490,7 @@ def cutting_force_per_tooth(material_group, h_eff, helix, hardness_hrc=0, radial
         "aluminum_cast": 32500,
         "non_ferrous": 35000,
         "steel_free": 75000,
+        "steel_medium_carbon": 82500,
         "steel_alloy": 90000,
         "steel_tool": 105000,
         "stainless_martensitic": 97500,
@@ -1221,7 +1222,7 @@ def recommend_drill_cycle(
 REAM_SFM = {
     "aluminum_wrought": 700, "aluminum_wrought_hs": 560, "aluminum_cast": 550, "non_ferrous": 300,
     "plastic_unfilled": 300, "plastic_filled": 220, "composite_tpc": 200,
-    "steel_mild": 250, "steel_free": 275, "steel_alloy": 175, "steel_tool": 75,
+    "steel_mild": 250, "steel_free": 275, "steel_medium_carbon": 225, "steel_alloy": 175, "steel_tool": 75,
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
     "stainless_martensitic": 85, "stainless_fm": 90,
     "stainless_austenitic": 185, "stainless_15_5": 82, "stainless_ph": 75, "stainless_13_8": 68,
@@ -1240,7 +1241,7 @@ REAM_SFM = {
 _REAM_NON_CF_MULT = {
     "aluminum_wrought": 0.96, "aluminum_wrought_hs": 0.96, "aluminum_cast": 0.95, "non_ferrous": 0.97,
     "plastic_unfilled": 0.97, "plastic_filled": 0.96, "composite_tpc": 0.96,
-    "steel_free": 0.95, "steel_alloy": 0.93, "steel_tool": 0.93,
+    "steel_free": 0.95, "steel_medium_carbon": 0.94, "steel_alloy": 0.93, "steel_tool": 0.93,
     "stainless_martensitic": 0.92, "stainless_fm": 0.93,
     "stainless_austenitic": 0.92, "stainless_15_5": 0.92, "stainless_ph": 0.92, "stainless_13_8": 0.90,
     "cast_iron_gray": 0.97, "cast_iron_ductile": 0.96, "cast_iron_malleable": 0.96,

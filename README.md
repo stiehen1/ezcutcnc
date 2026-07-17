@@ -8,6 +8,10 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Materials — Medium-Carbon Steel Sub-Category
+- Split plain-carbon 10xx steels (1040, 1045, 1055, 1070–1095) out of the Alloy Steel bucket into their own **Medium-Carbon Steel** sub-category under P Steel. Previously typing "1045" into Match resolved to *"Alloy Steel (4130…)"*, which was metallurgically wrong and understated the tool life / overstated the abrasion.
+- It runs as its own calibrated tier — SFM/feed/HP/tool-life sit **between** mild and alloy steel across milling, drilling, keyseat, dovetail, feed mill, ream and chamfer paths (no Cr/Mo carbides to abrade the edge, so a touch faster than alloy; feed stays flatter than SFM across the tiers). Anchored to the low end of the published SFM band +10%, interpolated between the shop-validated `steel_mild` and `steel_alloy` anchors.
+
 ### ROI Exports — Reconditioning, Additional Savings & "Higher-Priced Tool" Note
 - The emailed report now shows the **Reconditioning Program** callout (+$/yr, regrind count & price) and an itemized **Additional Value** section (recurring + one-time savings). These were computed and folded into the totals but never displayed in the email — the itemized extras weren't even sent to the server.
 - Added a friendly green note across the on-screen panel, PDF, and email: when the Core Cutter tool costs more than the competitor **but still nets savings**, it reads *"You're saving money even with a higher-priced tool … what matters is total cost per part, not just the sticker price of the tool!"*
