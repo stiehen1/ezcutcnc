@@ -5922,7 +5922,7 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
            END AS _rank
          FROM machines
          WHERE ${tokenConds}
-         ORDER BY _rank, brand, model LIMIT 50`,
+         ORDER BY _rank, brand, model LIMIT 200`,
         [...params, lastTok, lastTokStart]
       );
 

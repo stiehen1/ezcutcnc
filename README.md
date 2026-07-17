@@ -8,7 +8,9 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
-### Stability — Workpiece (Part) Deflection Model
+### Machine Catalog — Mazak VTC Series & Search Limit Fix
+- Added the full **Mazak VTC (Vertical Traveling Column)** family — 14 machines: the US C-series (200C, 300C) and 250D/50, the EU/global C-series (530C, 760C, 820/20, 820/30), the CAT-50 heavy-duty **800/20HD & 800/30HD**, the value-line **VTC-Ez 25 & 30** (SmoothEz), the JP/Asia compact **530/20**, and the 5-axis swivel-head **800/20 SR & 800/30 SR**. Standard 3-axis models are categorized `vmc`; the SR machines are `5axis`.
+- **Fixed a truncation bug in machine search**: the `/api/machines/search` catalog query capped results at 50 rows. With 70+ Mazak machines, a plain "mazak" search alphabetically pushed the VTCs past row 50 — so most of them (and the tail of any large brand) silently vanished from results. Raised the limit to 200 so a single brand no longer overflows the window.
 - The Stability Index only ever modeled *tool* stickout — it assumed the workpiece was rigidly held. A part sticking out of a chuck on a 4th-axis trunnion could break a tool while the score still read *"89 Excellent."* Added a real **Workpiece Rigidity** dimension.
 - Models the **part as a cantilever** off the jaws/trunnion face (`δ = F·L³/3EI`, `I = π·d⁴/64`) in series with a **fixture-loop compliance** term (a 3-jaw-on-rotary is far softer than a bolted fixture — captured even at zero overhang). Material-aware modulus: an aluminum part flexes ~3× a steel one for the same geometry. Far-end support (tailstock / between-centers / steady rest) converts the beam to simply-supported.
 - New **Part Diameter at Overhang** input (appears once a Part Overhang is entered) — a cantilever needs both length and cross-section. Blank falls back to a conservative estimate and says so.
