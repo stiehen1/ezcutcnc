@@ -8,6 +8,10 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### ROI Rerun — Legacy Row Restore
+- ROI Rerun on **legacy rows** (saved before the full-snapshot feature) now restores the **ISO category** from the stored material key so the Material section reflects the grade.
+- These older rows never captured the milling **process**, so Rerun now leaves it unselected (prompting the user) rather than silently defaulting — a Traditional/Slot ROI must not come back as HEM. ROIs saved with a full snapshot continue to restore the exact process.
+
 ### Machine Catalog — Makino & Fadal
 - Added **Makino** legacy A-series horizontals (a40/a61/a71/a81/A99/A100E) and a-series 5-axis variants; fixed the a51nx torque note.
 - Added **Fadal** current (relaunched) lineup plus the legacy VMC catalog (TRM–6535, incl. 50-taper) with verified specs for 3320 / 4022 / 8032 / VM5ax320.

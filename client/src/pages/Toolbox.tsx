@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "wouter";
+import { ISO_SUBCATEGORIES } from "@shared/materials";
 
 type ToolboxItem = {
   id: number;
@@ -1409,6 +1410,16 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                       // woc_pct (% of dia) and doc_xd (× dia). Convert back.
                                       const wocPct = dia && roi.cc_radial_doc != null ? (Number(roi.cc_radial_doc) / dia) * 100 : undefined;
                                       const docXd  = dia && roi.cc_axial_doc  != null ? Number(roi.cc_axial_doc) / dia : undefined;
+                                      // The legacy roi_comparisons columns don't store the ISO
+                                      // category or milling process. Derive the ISO category from
+                                      // the material key so the Material section reflects the
+                                      // restored grade. Do NOT guess the process: leaving mode
+                                      // unset shows "— Select Process —" so the user picks the
+                                      // one they actually ran, rather than us silently defaulting
+                                      // (e.g. a Traditional-roughing ROI must not come back as HEM).
+                                      // Rows saved with a full roi_form_snapshot take the branch
+                                      // above and restore the exact process.
+                                      const isoCat = ISO_SUBCATEGORIES.find(s => s.key === roi.material)?.iso;
                                       restore = {
                                         inputs: {
                                           tool_dia: roi.tool_dia ?? undefined,
@@ -1421,6 +1432,7 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                           hardness_scale: hardnessMatch?.[2] ? hardnessMatch[2].toLowerCase() : undefined,
                                         },
                                         operation: roi.operation || "milling",
+                                        isoCategory: isoCat,
                                         edpText: roi.cc_edp || "",
                                         skuDescription: "",
                                       };
