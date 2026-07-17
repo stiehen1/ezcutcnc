@@ -589,6 +589,15 @@ function recommendSlotStrategy(opts: {
 // optimal-tool scorer then resolves the actual stocked EDP at the chosen diameter.
 const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
 
+// Known competitor cutting-tool brands for the ROI comparison dropdown. Users pick
+// one or type their own (free-add). Alphabetical; edit here to grow the list.
+const ROI_COMPETITOR_BRANDS = [
+  "Accupro", "ATI / Stellram", "Data Flute", "Emuge-Franken", "Fullerton", "Garr Tool",
+  "Guhring", "Harvey Tool", "Helical Solutions", "Iscar", "Kennametal", "Kyocera / SGS",
+  "Lakeshore Carbide", "Mitsubishi", "Niagara Cutter", "OSG", "Sandvik Coromant",
+  "Seco Tools", "SECO / Jabro", "Sumitomo", "Tungaloy", "Walter", "Widia", "YG-1",
+];
+
 // Diameter chip suggestions for the slotting panel. Given the slot width + strategy,
 // returns clickable diameter options so the user can set tool_dia WITHOUT scrolling
 // up to the tool section.
@@ -1083,8 +1092,9 @@ export default function Mentor() {
           distributorZip: roiDistActive ? roiDistZip.trim() : null,
           // End-user / customer (the shop being tested)
           endUserName: roiEndUserName,
-          endUserEmail: roiEndUserEmail,
           endUserCompany: roiEndUserCompany,
+          partName: roiPartName,
+          partNumber: roiPartNumber,
           // Context
           material: form.material,
           hardness: form.hardness_value ? `${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : "",
@@ -1127,8 +1137,9 @@ export default function Mentor() {
     }
     // Auto-save draft to localStorage
     localStorage.setItem("roi_draft", JSON.stringify({
-      lifeMode: roiLifeMode, roiName, roiSessionId,
-      endUserName: roiEndUserName, endUserEmail: roiEndUserEmail, endUserCompany: roiEndUserCompany,
+      lifeMode: roiLifeMode, roiName, roiNameEdited, roiSessionId,
+      partName: roiPartName, partNumber: roiPartNumber,
+      endUserName: roiEndUserName, endUserCompany: roiEndUserCompany,
       userType: roiUserType, distributorName: roiDistributorName, distributorCode: roiDistributorCode,
       ccPrice: roiCcPrice, ccParts: roiCcParts, ccTime: roiCcTime, ccMrr: roiCcMrr,
       ccCutTime: roiCcCutTime, ccLinIn: roiCcLinIn,
@@ -1175,8 +1186,9 @@ export default function Mentor() {
           distributorState: roiDistActive ? roiDistState.trim() : null,
           distributorZip: roiDistActive ? roiDistZip.trim() : null,
           endUserName: roiEndUserName,
-          endUserEmail: roiEndUserEmail,
           endUserCompany: roiEndUserCompany,
+          partName: roiPartName,
+          partNumber: roiPartNumber,
           // Context
           material: form.material,
           hardness: form.hardness_value ? `${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : "",
@@ -1355,6 +1367,8 @@ export default function Mentor() {
       <div class="doc-title">Cost Analysis &amp; ROI Summary</div>
       <div>${date}</div>
       <div>Prepared by: ${rep}</div>
+      ${roiEndUserCompany.trim() ? `<div>For: ${escHtml(roiEndUserCompany.trim())}</div>` : ""}
+      ${roiPartName.trim() || roiPartNumber.trim() ? `<div>Part: ${[roiPartName.trim(), roiPartNumber.trim()].filter(Boolean).map(escHtml).join(" · ")}</div>` : ""}
       ${form.material ? `<div>Material: ${form.material}${form.tool_dia ? ` · Ø${form.tool_dia}"` : ""}</div>` : ""}
     </div>
   </div>
@@ -2710,9 +2724,11 @@ export default function Mentor() {
       if (d.ccMrr) setRoiCcMrr(d.ccMrr);
       if (d.lifeMode) setRoiLifeMode(d.lifeMode);
       if (d.roiName) setRoiName(d.roiName);
+      if (d.roiNameEdited != null) setRoiNameEdited(d.roiNameEdited);
       if (d.roiSessionId) setRoiSessionId(d.roiSessionId);
+      if (d.partName) setRoiPartName(d.partName);
+      if (d.partNumber) setRoiPartNumber(d.partNumber);
       if (d.endUserName) setRoiEndUserName(d.endUserName);
-      if (d.endUserEmail) setRoiEndUserEmail(d.endUserEmail);
       if (d.endUserCompany) setRoiEndUserCompany(d.endUserCompany);
       if (d.reconEnabled != null) setRoiReconEnabled(d.reconEnabled);
       if (d.reconGrinds) setRoiReconGrinds(d.reconGrinds);
@@ -3061,11 +3077,17 @@ export default function Mentor() {
   const [roiReconPrice, setRoiReconPrice] = React.useState(""); // price per regrind (entered by rep — varies by condition)
   const [roiMissingFields, setRoiMissingFields] = React.useState<string[]>([]);
   const [roiName, setRoiName] = React.useState("");
+  // True once the user manually edits the ROI Name — after that we stop
+  // auto-overwriting it from the Company/Part fields.
+  const [roiNameEdited, setRoiNameEdited] = React.useState(false);
   const [roiSessionId, setRoiSessionId] = React.useState(() => crypto.randomUUID());
+  // Part identity — feeds the auto ROI Name and prints on the report.
+  const [roiPartName, setRoiPartName] = React.useState("");
+  const [roiPartNumber, setRoiPartNumber] = React.useState("");
   // End-user / customer info (the shop being tested — distinct from the rep's login)
   const [roiEndUserName, setRoiEndUserName] = React.useState("");
-  const [roiEndUserEmail, setRoiEndUserEmail] = React.useState("");
   const [roiEndUserCompany, setRoiEndUserCompany] = React.useState("");
+  const [roiZipLookupBusy, setRoiZipLookupBusy] = React.useState(false);
   const roiUserType = "end_user" as const;
   const roiDistributorCode = "";
   // Distributor "Generated by" block — opt-in toggle. Persisted on this device so a
@@ -3103,6 +3125,32 @@ export default function Mentor() {
       localStorage.setItem("roiDist.zip", roiDistZip);
     } catch { /* ignore quota / private-mode errors */ }
   }, [roiDistEnabled, roiDistributorName, roiDistContact, roiDistAddress, roiDistCity, roiDistState, roiDistZip]);
+  // Auto-build the ROI Name from Company / Part Name / Part Number until the user
+  // manually edits the field. Format: "Company - Part Name - Part Number ROI Report".
+  React.useEffect(() => {
+    if (roiNameEdited) return;
+    const parts = [roiEndUserCompany, roiPartName, roiPartNumber].map(s => s.trim()).filter(Boolean);
+    const auto = parts.length ? `${parts.join(" - ")} ROI Report` : "";
+    setRoiName(auto);
+  }, [roiEndUserCompany, roiPartName, roiPartNumber, roiNameEdited]);
+  // Zip -> city/state auto-fill (Zippopotam.us, free, no key). Fires on blur.
+  const lookupZip = React.useCallback(async (zip: string) => {
+    const z = zip.trim();
+    if (!/^\d{5}$/.test(z)) return;
+    setRoiZipLookupBusy(true);
+    try {
+      const resp = await fetch(`https://api.zippopotam.us/us/${z}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        const place = data?.places?.[0];
+        if (place) {
+          if (place["place name"]) setRoiDistCity(place["place name"]);
+          if (place["state abbreviation"]) setRoiDistState(place["state abbreviation"]);
+        }
+      }
+    } catch { /* offline / not found — leave city/state as-is for manual entry */ }
+    setRoiZipLookupBusy(false);
+  }, []);
   // Only send distributor data when the toggle is on AND a company name is present.
   const roiDistActive = roiDistEnabled && roiDistributorName.trim().length > 0;
   const [roiCompBrand, setRoiCompBrand] = React.useState("");
@@ -17314,25 +17362,21 @@ ${stabSection}
                   📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
                 </div>
               )}
-              {/* End-user info */}
+              {/* End-user info — company + contact on one row to save vertical space */}
               <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 px-3 py-2.5 space-y-2">
-                <div className="space-y-1">
-                  <RoiLabel hint="The name of the shop or manufacturing company where this tool is being evaluated. Appears on the printed ROI report.">End User Company Name</RoiLabel>
-                  <Input type="text" className="h-7 text-xs"
-                    placeholder="e.g. Acme Machining"
-                    value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <RoiLabel hint="The name of the machinist, engineer, or buyer at the shop. Used to personalize the printed report.">End User Contact Name</RoiLabel>
-                  <Input type="text" className="h-7 text-xs"
-                    placeholder="e.g. John Smith"
-                    value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <RoiLabel hint="Email address for the end user contact. Used to send them a copy of the ROI report.">End User Contact Email</RoiLabel>
-                  <Input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" className="h-7 text-xs"
-                    placeholder="e.g. john@acmemachining.com"
-                    value={roiEndUserEmail} onChange={e => setRoiEndUserEmail(e.target.value)} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <RoiLabel hint="The name of the shop or manufacturing company where this tool is being evaluated. Appears on the printed ROI report.">End User Company Name</RoiLabel>
+                    <Input type="text" className="h-7 text-xs"
+                      placeholder="e.g. Acme Machining"
+                      value={roiEndUserCompany} onChange={e => setRoiEndUserCompany(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <RoiLabel hint="The name of the machinist, engineer, or buyer at the shop. Used to personalize the printed report.">End User Contact Name</RoiLabel>
+                    <Input type="text" className="h-7 text-xs"
+                      placeholder="e.g. John Smith"
+                      value={roiEndUserName} onChange={e => setRoiEndUserName(e.target.value)} />
+                  </div>
                 </div>
               </div>
 
@@ -17370,29 +17414,47 @@ ${stabSection}
                         placeholder="e.g. 123 Industrial Way"
                         value={roiDistAddress} onChange={e => setRoiDistAddress(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                    <div className="grid grid-cols-[auto_1fr_auto] gap-2">
+                      <div className="space-y-1 w-24">
+                        <RoiLabel hint="Enter a 5-digit US ZIP and the city/state fill in automatically. All still editable.">Zip</RoiLabel>
+                        <Input type="text" inputMode="numeric" maxLength={5} className="h-7 text-xs"
+                          placeholder="Zip"
+                          value={roiDistZip}
+                          onChange={e => setRoiDistZip(e.target.value.replace(/[^\d]/g, ""))}
+                          onBlur={e => lookupZip(e.target.value)} />
+                      </div>
                       <div className="space-y-1">
-                        <RoiLabel hint="City for your company address.">City</RoiLabel>
+                        <RoiLabel hint="City — auto-filled from ZIP, editable.">City</RoiLabel>
                         <Input type="text" className="h-7 text-xs"
-                          placeholder="City"
+                          placeholder={roiZipLookupBusy ? "Looking up…" : "City"}
                           value={roiDistCity} onChange={e => setRoiDistCity(e.target.value)} />
                       </div>
                       <div className="space-y-1 w-16">
-                        <RoiLabel hint="State / province.">State</RoiLabel>
+                        <RoiLabel hint="State — auto-filled from ZIP, editable.">State</RoiLabel>
                         <Input type="text" className="h-7 text-xs"
                           placeholder="ST"
                           value={roiDistState} onChange={e => setRoiDistState(e.target.value)} />
                       </div>
-                      <div className="space-y-1 w-24">
-                        <RoiLabel hint="ZIP / postal code.">Zip</RoiLabel>
-                        <Input type="text" inputMode="numeric" className="h-7 text-xs"
-                          placeholder="Zip"
-                          value={roiDistZip} onChange={e => setRoiDistZip(e.target.value)} />
-                      </div>
                     </div>
-                    <p className="text-[10px] text-zinc-600">Saved on this device — you won't need to re-enter it next time.</p>
+                    <p className="text-[10px] text-zinc-600">Enter a ZIP to auto-fill city/state. Saved on this device — you won't need to re-enter it next time.</p>
                   </div>
                 )}
+              </div>
+
+              {/* Part identity — feeds the auto ROI Name and prints on the report */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <RoiLabel hint="The name/description of the part being machined. Used to build the ROI Name and shown on the report.">Part Name</RoiLabel>
+                  <Input type="text" className="h-7 text-xs"
+                    placeholder="e.g. Hydraulic Manifold"
+                    value={roiPartName} onChange={e => setRoiPartName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <RoiLabel hint="The customer's part number or drawing number. Used to build the ROI Name and shown on the report.">Part Number</RoiLabel>
+                  <Input type="text" className="h-7 text-xs"
+                    placeholder="e.g. HM-4471"
+                    value={roiPartNumber} onChange={e => setRoiPartNumber(e.target.value)} />
+                </div>
               </div>
 
               {/* Tool Life Metric selector */}
@@ -17440,14 +17502,18 @@ ${stabSection}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Their Current Tool <span className="text-zinc-600 normal-case font-normal">— what they run now</span></div>
                     <div className="space-y-1.5">
-                      <RoiLabel hint="The brand of the tool the customer is currently running. e.g. Kennametal, OSG, Guhring, Sandvik. For reference on the printed report.">Brand</RoiLabel>
+                      <RoiLabel hint="The brand of the tool the customer is currently running. Pick from the list or type a brand that isn't listed. For reference on the printed report.">Brand</RoiLabel>
                       <Input
                         type="text"
+                        list="roi-competitor-brands"
                         className="h-7 text-xs"
-                        placeholder="e.g. Kennametal, OSG, Guhring"
+                        placeholder="Select or type a brand"
                         value={roiCompBrand}
                         onChange={e => setRoiCompBrand(e.target.value)}
                       />
+                      <datalist id="roi-competitor-brands">
+                        {ROI_COMPETITOR_BRANDS.map(b => <option key={b} value={b} />)}
+                      </datalist>
                     </div>
                     <div className="space-y-1.5">
                       <RoiLabel hint="The competitor's part number or EDP for the tool currently in use. Appears on the printed ROI report for documentation.">Incumbent EDP / Part #</RoiLabel>
@@ -17865,14 +17931,28 @@ ${stabSection}
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-zinc-300 font-semibold">ROI Name <span className="text-red-400">*</span></Label>
-                  <span className="text-[10px] text-zinc-600">required to save — each unique test needs its own name</span>
+                  <span className="text-[10px] text-zinc-600">auto-built from company + part — edit freely</span>
+                  {roiNameEdited && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRoiNameEdited(false);
+                        setRoiSessionId(crypto.randomUUID());
+                        setRoiSessionRecovered(false);
+                        setRoiResult(null);
+                      }}
+                      className="ml-auto text-[10px] text-amber-400 font-semibold hover:text-green-400 transition-colors"
+                      title="Rebuild name from Company / Part Name / Part Number"
+                    >↺ auto</button>
+                  )}
                 </div>
                 <input
                   type="text"
-                  placeholder="e.g. Acme Corp – 6061 AL – Test 1"
+                  placeholder="e.g. Acme Corp - Hydraulic Manifold - HM-4471 ROI Report"
                   value={roiName}
                   onChange={e => {
                     setRoiName(e.target.value);
+                    setRoiNameEdited(true); // stop auto-overwriting once the user types
                     // New name = new session so it saves as a separate row
                     setRoiSessionId(crypto.randomUUID());
                     setRoiSessionRecovered(false); // allow recovery lookup for the new name
