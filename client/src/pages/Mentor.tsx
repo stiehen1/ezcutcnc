@@ -2712,10 +2712,14 @@ export default function Mentor() {
     }
   }, []);
 
-  // Load ROI draft from localStorage on mount
+  // Load ROI draft from localStorage on mount — ONLY when the user explicitly
+  // resumed/reran from the Toolbox (roi_resume flag). A stale draft left in
+  // localStorage must NOT auto-open the ROI panel under an unrun calculator; the
+  // panel should appear after a calc runs or on an explicit resume.
   React.useEffect(() => {
     const draft = localStorage.getItem("roi_draft");
     if (!draft) return;
+    if (!localStorage.getItem("roi_resume")) return; // not resuming — leave panel hidden
     try {
       const d = JSON.parse(draft);
       if (d.ccPrice) setRoiCcPrice(d.ccPrice);
@@ -2750,11 +2754,9 @@ export default function Mentor() {
       if (d.extraSavings) setRoiExtraSavings(d.extraSavings);
       if (d.result) setRoiResult({ mrrTimeSavingsPerPart: 0, breakevenN: null, ...d.result });
       setRoiDraftLoaded(true);
-      // If navigated back via resume, open the panel
-      if (localStorage.getItem("roi_resume")) {
-        setShowRoi(true);
-        localStorage.removeItem("roi_resume");
-      }
+      // We only reach here on an explicit resume — open the panel.
+      setShowRoi(true);
+      localStorage.removeItem("roi_resume");
     } catch { localStorage.removeItem("roi_draft"); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
