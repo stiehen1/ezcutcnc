@@ -3872,7 +3872,8 @@ export async function registerRoutes(
         compToolCost: compToolCostIn, compMachineCost: compMachineCostIn, compTotalCost: compTotalCostIn,
         savingsPerPart, monthlySavings, annualSavings, savingsPct, mrrGainPct,
         mrrTimeSavingsPerPart, matVolPerPart, breakevenN,
-        reconGrinds, reconSavingsPerPart, oneTimeSavings, roiName,
+        reconGrinds, reconSavingsPerPart, reconAnnualSavings, reconRegrindPrice,
+        oneTimeSavings, extraSavings, roiName,
       } = (req.body ?? {}) as {
         action?: string;
         roiSessionId?: string;
@@ -3902,7 +3903,9 @@ export async function registerRoutes(
         compToolCost?: number; compMachineCost?: number; compTotalCost?: number;
         savingsPerPart?: number; monthlySavings?: number; annualSavings?: number; savingsPct?: number; mrrGainPct?: number;
         mrrTimeSavingsPerPart?: number; matVolPerPart?: number; breakevenN?: number | null;
-        reconGrinds?: number; reconSavingsPerPart?: number; oneTimeSavings?: number; roiName?: string;
+        reconGrinds?: number; reconSavingsPerPart?: number; reconAnnualSavings?: number; reconRegrindPrice?: number;
+        oneTimeSavings?: number; extraSavings?: Array<{ label?: string; annualAmt?: number; recurring?: boolean }>;
+        roiName?: string;
       };
 
       const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
@@ -4120,6 +4123,7 @@ export async function registerRoutes(
 
       if (smtpUser && smtpPass && userEmail) {
         const fmtD = (n: number | undefined) => (n != null ? n.toFixed(2) : "—");
+        const fmtI = (n: number | undefined) => (n != null ? Math.round(n).toLocaleString("en-US") : "—");
         const fmtFour = (n: number | undefined) => (n != null ? n.toFixed(4) : "—");
         const subjectSavings = (savingsPerPart ?? 0) >= 0
           ? `CC Saves $${fmtD(savingsPerPart)}/part`
@@ -4290,6 +4294,46 @@ export async function registerRoutes(
               </td>
             </tr>
           </table>
+
+          <!-- Higher CC sticker price but still net savings — worth calling out. -->
+          ${(Number(ccToolPrice) > Number(compPrice) && Number(savingsPerPart) > 0) ? `
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#f0fdf4" style="background:#f0fdf4;border:1px solid #bbf7d0;margin-bottom:16px;">
+            <tr>
+              <td style="padding:11px 14px;font-family:Arial,sans-serif;font-size:12px;color:#166534;line-height:1.5;">
+                <strong>You're saving money even with a higher-priced tool.</strong>
+                The Core Cutter tool costs $${fmtD(Number(ccToolPrice) - Number(compPrice))} more up front, but longer tool life${(mrrGainPct && mrrGainPct > 0) ? " and higher throughput" : ""} more than pay for it — what matters is total cost per ${_lm === "cut_time" ? "minute" : _lm === "linear_in" ? "inch" : "part"}, not just the sticker price of the tool!
+              </td>
+            </tr>
+          </table>` : ""}
+
+          <!-- Reconditioning program — annualized savings already folded into the
+               tool cost above; called out here so the value is visible. -->
+          ${(reconGrinds && reconGrinds > 0 && reconAnnualSavings && reconAnnualSavings > 0) ? `
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#fff7ed" style="background:#fff7ed;border:1px solid #fed7aa;margin-bottom:16px;">
+            <tr>
+              <td style="padding:12px 14px;font-family:Arial,sans-serif;vertical-align:middle;">
+                <div style="font-size:13px;font-weight:700;color:#9a3412;">Reconditioning Program <span style="font-weight:400;color:#c2410c;">(${reconGrinds} regrind${reconGrinds > 1 ? "s" : ""})</span></div>
+                <div style="font-size:11px;color:#9a3412;margin-top:2px;">Up to ${reconGrinds} regrinds at ~$${fmtD(reconRegrindPrice)} each — a properly reground tool can even exceed new-tool performance.</div>
+              </td>
+              <td style="padding:12px 14px;text-align:right;font-family:Arial,sans-serif;vertical-align:middle;white-space:nowrap;">
+                <span style="font-size:16px;font-weight:800;color:#ea580c;">+$${fmtI(reconAnnualSavings)}/yr</span>
+              </td>
+            </tr>
+          </table>` : ""}
+
+          <!-- Additional value — itemized recurring + one-time savings. -->
+          ${(() => {
+            const items = Array.isArray(extraSavings) ? extraSavings.filter(i => Number(i?.annualAmt) > 0) : [];
+            const recurring = items.filter(i => i.recurring !== false);
+            const oneTime = items.filter(i => i.recurring === false);
+            if (!recurring.length && !oneTime.length) return "";
+            const rowFor = (label: string, amt: number, one: boolean, i: number) =>
+              `<tr${i % 2 ? ` style="${rowGray}"` : ""}><td style="${cellL}">${esc(label || "—")}</td><td style="${cellR}text-align:right;font-weight:700;color:#15803d;">+$${fmtI(amt)}${one ? " one-time" : "/yr"}</td></tr>`;
+            const body = [...recurring.map((it, i) => rowFor(it.label || "", Number(it.annualAmt), false, i)),
+                          ...oneTime.map((it, i) => rowFor(it.label || "", Number(it.annualAmt), true, recurring.length + i))].join("");
+            return `<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.4px;font-family:Arial,sans-serif;margin:0 0 6px;">Additional Value</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:20px;border:1px solid #eee;">${body}</table>`;
+          })()}
 
           <!-- Footer -->
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;">

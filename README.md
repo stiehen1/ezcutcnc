@@ -8,6 +8,10 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### ROI Exports — Reconditioning, Additional Savings & "Higher-Priced Tool" Note
+- The emailed report now shows the **Reconditioning Program** callout (+$/yr, regrind count & price) and an itemized **Additional Value** section (recurring + one-time savings). These were computed and folded into the totals but never displayed in the email — the itemized extras weren't even sent to the server.
+- Added a friendly green note across the on-screen panel, PDF, and email: when the Core Cutter tool costs more than the competitor **but still nets savings**, it reads *"You're saving money even with a higher-priced tool … what matters is total cost per part, not just the sticker price of the tool!"*
+
 ### ROI Report — Cost %, MRR Δ Column & UI/Export Parity
 - **Fixed the cost-reduction %**: it divided total savings (tooling + machine time) by tooling-only cost, producing impossible figures (e.g. 1632%). Machine time is now counted on both sides, so the % is bounded and correct.
 - **MRR machine-time cost** is now a real per-part line (was silently excluded while driving most of the savings); Tool + Machine = Total now reconciles everywhere.

@@ -1270,7 +1270,16 @@ export default function Mentor() {
           breakevenN: roiResult.breakevenN ?? null,
           reconGrinds: roiResult.reconGrinds,
           reconSavingsPerPart: roiResult.reconSavingsPerPart,
+          // Annualized recon savings + per-regrind price so the email can render
+          // the same Reconditioning callout the on-screen panel / PDF show.
+          reconAnnualSavings: roiResult.reconSavingsPerPart * (parseFloat(roiAnnualVol) || 0),
+          reconRegrindPrice: parseFloat(roiReconPrice) > 0 ? parseFloat(roiReconPrice) : (parseFloat(roiCcPrice) || 0) * 0.5,
           oneTimeSavings: roiResult.oneTimeSavings,
+          // Itemized extra savings (recurring + one-time) for the email's
+          // Additional Value section — was previously dropped on the floor.
+          extraSavings: roiExtraSavings
+            .filter(i => parseFloat(i.annualAmt) > 0)
+            .map(i => ({ label: i.label || "", annualAmt: parseFloat(i.annualAmt) || 0, recurring: i.recurring !== false })),
           roiName,
         }),
       });
@@ -1504,6 +1513,12 @@ export default function Mentor() {
       <tr class="savings-row ${roiResult.savingsPerPart >= 0 ? "positive" : "negative"}"><td colspan="4" style="text-align:center">${roiResult.savingsPerPart < 0 ? "-" : ""}$${fmtD(Math.abs(roiResult.savingsPerPart))} ${roiResult.savingsPerPart < 0 ? "more" : "saved"} per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"} &nbsp;·&nbsp; ${roiResult.savingsPct < 0 ? "-" : ""}${Math.abs(roiResult.savingsPct).toFixed(1)}% ${roiResult.savingsPct < 0 ? "cost increase" : "cost reduction"}</td></tr>
     </tbody>
   </table>
+
+  ${(parseFloat(roiCcPrice) > parseFloat(roiCompPrice) && roiResult.savingsPerPart > 0) ? `
+  <div style="margin-top:8px;padding:9px 13px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;font-size:12px;color:#166534;">
+    <strong>You're saving money even with a higher-priced tool.</strong>
+    The Core Cutter tool costs $${fmtD(parseFloat(roiCcPrice) - parseFloat(roiCompPrice))} more up front, but longer tool life${roiResult.mrrGainPct > 0 ? " and higher throughput" : ""} more than pay for it — what matters is total cost per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"}, not just the sticker price of the tool!
+  </div>` : ""}
 
   ${roiResult.reconGrinds > 0 && roiResult.reconSavingsPerPart > 0 ? `
   <div class="section-label">Reconditioning Program</div>
@@ -18091,6 +18106,16 @@ ${stabSection}
                       )}
                     </div>
                   </div>
+
+                  {/* Higher CC tool price but still net savings — a point worth making. */}
+                  {parseFloat(roiCcPrice) > parseFloat(roiCompPrice) && roiResult.savingsPerPart > 0 && (
+                    <div className="rounded-lg border border-green-700/40 bg-green-950/20 px-3 py-2 text-xs">
+                      <span className="text-green-300 font-semibold">💡 You're saving money even with a higher-priced tool.</span>
+                      <p className="text-zinc-400 text-[11px] mt-0.5 leading-snug">
+                        The Core Cutter tool costs ${(parseFloat(roiCcPrice) - parseFloat(roiCompPrice)).toFixed(2)} more up front, but longer tool life{roiResult.mrrGainPct > 0 ? " and higher throughput" : ""} more than pay for it — the real number is total cost per {roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"}, not just the sticker price of the tool!
+                      </p>
+                    </div>
+                  )}
 
                   {/* MRR gain present but not yet monetized — needs material volume/part */}
                   {roiResult.mrrGainPct > 0 && roiResult.mrrTimeSavingsPerPart <= 0 && (
