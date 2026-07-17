@@ -199,6 +199,25 @@ export async function registerRoutes(
       const colName = col.split(" ")[0];
       await pool.query(`ALTER TABLE roi_comparisons ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
     }
+    // Same (user_email, roi_name) = same ROI. Dedupe any pre-existing duplicates
+    // (keep the most recently updated row) then enforce it with a UNIQUE index, so a
+    // re-save under an identical name overwrites instead of stacking duplicate rows.
+    try {
+      await pool.query(`
+        DELETE FROM roi_comparisons a
+        USING roi_comparisons b
+        WHERE a.user_email IS NOT NULL AND a.roi_name IS NOT NULL
+          AND LOWER(a.user_email) = LOWER(b.user_email)
+          AND LOWER(a.roi_name) = LOWER(b.roi_name)
+          AND (
+            COALESCE(a.updated_at, a.created_at) < COALESCE(b.updated_at, b.created_at)
+            OR (COALESCE(a.updated_at, a.created_at) = COALESCE(b.updated_at, b.created_at) AND a.id < b.id)
+          )`);
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS roi_comparisons_email_name_uniq
+        ON roi_comparisons (LOWER(user_email), LOWER(roi_name))
+        WHERE user_email IS NOT NULL AND roi_name IS NOT NULL`);
+    } catch (e: any) { console.warn("[DB] roi_comparisons dedupe/index failed:", e?.message); }
   } catch (e: any) { console.warn("[DB] roi_comparisons migration failed:", e?.message); }
 
   // ── Toolbox tables ────────────────────────────────────────────────────────
@@ -3879,10 +3898,28 @@ export async function registerRoutes(
       const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.socket.remoteAddress || "";
       const geo = await geoFromIp(clientIp);
 
-      // Upsert into DB — one row per roi_session_id (name-scoped, new name = new row)
+      // Upsert into DB — one row per (user_email, roi_name). Same name = same ROI,
+      // so re-saving under an identical name OVERWRITES the previous version rather
+      // than creating a duplicate. We enforce this two ways:
+      //   1) Reuse the existing row's roi_session_id when (email, name) already exists,
+      //      so the ON CONFLICT (roi_session_id) path updates it — this is the fix even
+      //      if the client minted a fresh session id (e.g. the user retyped the name).
+      //   2) A UNIQUE index on (lower(user_email), lower(roi_name)) as a hard backstop.
+      let effectiveSessionId = roiSessionId || null;
       try {
         const { pool } = await import("./db");
         const isEmail = action === "email";
+        if (userEmail && roiName) {
+          const existing = await pool.query(
+            `SELECT roi_session_id FROM roi_comparisons
+             WHERE LOWER(user_email) = LOWER($1) AND LOWER(roi_name) = LOWER($2)
+             AND roi_session_id IS NOT NULL
+             ORDER BY updated_at DESC NULLS LAST, created_at DESC
+             LIMIT 1`,
+            [userEmail, roiName]
+          );
+          if (existing.rows[0]?.roi_session_id) effectiveSessionId = existing.rows[0].roi_session_id;
+        }
         await pool.query(
           `INSERT INTO roi_comparisons (
             roi_session_id,
@@ -4012,8 +4049,8 @@ export async function registerRoutes(
             synced_to_sales_app = FALSE
             ${isEmail ? ", emailed_at = COALESCE(roi_comparisons.emailed_at, now())" : ""}`,
           [
-            // $1: session
-            roiSessionId || null,
+            // $1: session — reused from an existing (email, name) row when present
+            effectiveSessionId,
             // $2–$19: user + context
             userEmail || null, userName || null, userType || null,
             repId || null, repName || null,
