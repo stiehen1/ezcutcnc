@@ -6355,7 +6355,7 @@ def run(payload=None):
     _part_supported = bool(payload.get("tailstock", False)) or _wh_key in (
         "between_centers", "tailstock_supported", "steady_rest", "sub_spindle")
 
-    _part_defl, _, _ = workpiece_deflection(
+    _part_defl, _, _, _part_dyn_amp, _part_mass_lb = workpiece_deflection(
         _part_radial_force, _part_so, _part_dia_in,
         iso_group=group_to_iso(material_group),
         fixture_key=_wh_key,
@@ -7200,6 +7200,8 @@ def run(payload=None):
         "part_deflection_limit_in": _wp_lim,
         "part_deflection_pct": _part_defl_pct,
         "part_supported": _part_supported,
+        "part_overhang_mass_lb": round(_part_mass_lb, 3),
+        "part_mass_amp": round(_part_dyn_amp, 2),
         "suggestions": _stab_suggestions,
     }
     # ── end Stability Advisor ────────────────────────────────────────────────

@@ -17246,13 +17246,21 @@ ${stabSection}
         const partPct    = stability.part_deflection_pct ?? 0;
         const partDiaEst = stability.part_dia_estimated ?? false;
         const partSupported = stability.part_supported ?? false;
+        const partMassLb = stability.part_overhang_mass_lb ?? 0;
+        const partMassAmp = stability.part_mass_amp ?? 1;
+        // When the overhung mass is heavy enough to lower the part's natural frequency
+        // (dynamic amplification > ~1.1×), call it out — a big slung-out part is a
+        // pendulum that rings under the cut, independent of the static bending.
+        const massNote = partMassAmp > 1.1
+          ? ` The overhung mass (~${partMassLb.toFixed(1)} lb) is heavy enough to lower the part's natural frequency and amplify vibration ~${partMassAmp.toFixed(1)}× — a lighter or shorter overhang, or supporting the free end, helps most.`
+          : "";
         const wpResult = partSO <= 0
           ? `✓ Part is held rigidly against its workholding — no meaningful overhang.`
           : wpScore >= 70
           ? `✓ Part overhang (${UC(partSO, 25.4, metric ? 1 : 3)}${metric ? "mm" : "\""}) flexes little under cutting force${partSupported ? " (far end supported)" : ""}.`
           : wpScore >= 50
-          ? `⚠ Part is flexing under the cut (${partPct.toFixed(0)}% of chatter limit) — the workpiece, not the tool, is the weak link. Reduce overhang past the jaws, add a steady rest / tailstock, or lighten radial engagement.`
-          : `⚠ Part is the weak link — it's flexing ${(partPct/100).toFixed(1)}× the chatter limit at this overhang. This is a tool-breaking chatter risk: shorten the overhang past the jaws, support the free end (tailstock / steady rest), grip more of the part, or drop DOC/WOC. ${partDiaEst ? "(Enter the part diameter at the overhang for an accurate number.)" : ""}`;
+          ? `⚠ Part is flexing under the cut (${partPct.toFixed(0)}% of chatter limit) — the workpiece, not the tool, is the weak link. Reduce overhang past the jaws, add a steady rest / tailstock, or lighten radial engagement.${massNote}`
+          : `⚠ Part is the weak link — it's flexing ${(partPct/100).toFixed(1)}× the chatter limit at this overhang. This is a tool-breaking chatter risk: shorten the overhang past the jaws, support the free end (tailstock / steady rest), grip more of the part, or drop DOC/WOC.${massNote} ${partDiaEst ? "(Enter the part diameter at the overhang for an accurate number.)" : ""}`;
 
         return (
           <div className="border-t border-zinc-700/40 px-4 pt-4 pb-5 space-y-3">
@@ -17300,7 +17308,7 @@ ${stabSection}
                 ["Holder Rigidity", stabilityIndex.rigidity, "How stiff and low-runout the tool holder interface is. A better holder (hydraulic, shrink-fit, Capto) resists chatter and cuts runout — improving finish and tool life. This is a property of the holder itself, independent of feed.", rigidityResult],
                 ["Workholding",  stabilityIndex.workholding, "How rigidly the part is held against cutting force, scored among the options available on this machine type. A stiffer setup (rigid fixture, tombstone, dialed-in chuck) resists chatter and part movement. A part that flexes prints poor finish no matter how good the tool is.", workholdingResult],
                 ...((stability.part_stickout_in ?? 0) > 0
-                  ? [["Workpiece Rigidity", stabilityIndex.workpiece, "The PART as a cantilever off the chuck jaws / trunnion face. When the part sticks out past its grip, it flexes under cutting force just like an over-long tool does — and as the cut nears the free end, that flex grows. On a soft or long part this can be the real weak link even when the tool, holder, and machine all look great. A poor score here caps the overall index — a wobbly part can't earn 'Excellent'.", wpResult] as [string, number, string, string | null]]
+                  ? [["Workpiece Rigidity", stabilityIndex.workpiece, "The PART as a cantilever off the chuck jaws / trunnion face. When the part sticks out past its grip, it flexes under cutting force just like an over-long tool does — and as the cut nears the free end, that flex grows. A heavy overhung mass makes it worse: it lowers the part's natural frequency, turning a long slung-out part into a pendulum that rings under the cut (so a solid steel part scores worse than the same shape in aluminum). On a soft, long, or heavy part this can be the real weak link even when the tool, holder, and machine all look great. A poor score here caps the overall index — a wobbly part can't earn 'Excellent'.", wpResult] as [string, number, string, string | null]]
                   : []),
               ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
                 <div key={label} className="flex items-center gap-3 py-1.5">

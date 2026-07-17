@@ -686,27 +686,53 @@ FIXTURE_COMPLIANCE = {
 }
 FIXTURE_COMPLIANCE_DEFAULT = 1.0e-6  # unknown workholding → vise-ish
 
+# Workpiece material density by ISO group, lb/in³ — used to estimate the OVERHUNG MASS
+# of the part (ρ·V of the overhang cylinder). Mass drives the dynamic amplification below.
+WORKPIECE_DENSITY = {
+    "P": 0.283,   # steel
+    "M": 0.286,   # stainless
+    "K": 0.260,   # cast iron
+    "N": 0.098,   # aluminum / non-ferrous (Al ~0.098; brass is denser but N is Al-dominant)
+    "S": 0.160,   # titanium (Ti ~0.16; Inconel ~0.30 — Ti as the common S-group part)
+    "H": 0.283,   # hardened steel
+}
+
+# Dynamic amplification tuning. A cantilever's natural frequency fn ∝ √(k/m): the heavier
+# the overhung mass, the lower fn, and the closer tooth-passing excitation sits to
+# resonance — so the SAME cutting force produces a larger vibratory response. We don't run
+# a full stability-lobe/RPM model here; instead we scale the static workpiece deflection by
+# a bounded factor that grows with overhung mass relative to a diameter-scaled reference.
+# A short/light stub → ~1.0× (no penalty); a heavy slung-out part → up to the cap.
+# Constants are DOCUMENTED ESTIMATES, to be shop-calibrated (like FIXTURE_COMPLIANCE).
+_DYN_AMP_K   = 0.9    # strength of the mass penalty
+_DYN_AMP_P   = 0.6    # sub-linear growth (diminishing but unbounded-ish)
+_DYN_AMP_CAP = 2.5    # never amplify more than 2.5× on mass alone
+# Reference mass ∝ dia³ — a "compact stub" of the same diameter (L≈dia). Comparing the
+# actual overhung mass to this makes the penalty a mass-AND-slenderness signal, not just
+# absolute weight: a stubby heavy part barely amplifies, a long slung-out one does.
+_DYN_AMP_REF_DENSITY = 0.283  # steel reference
+
 
 def workpiece_deflection(force, overhang, part_dia, iso_group="P",
                          fixture_key=None, supported=False):
     """Deflect the PART as a cantilever off the chuck jaws / trunnion face, in series
-    with the fixture-loop compliance.
+    with the fixture-loop compliance, then amplify for the overhung mass (dynamic response).
 
     force     — radial cutting force at the tool tip (lbf); we treat the part tip load
                 as the same radial force the tool sees (Newton's third law).
     overhang  — part_stickout: length the part sticks out past the jaws (in).
     part_dia  — solid-round cross-section diameter at the overhang (in). Conservative;
                 a tube is stiffer, a thin web is softer.
-    iso_group — material ISO letter → WORKPIECE_MODULUS.
+    iso_group — material ISO letter → WORKPIECE_MODULUS / WORKPIECE_DENSITY.
     fixture_key — workholding enum key → FIXTURE_COMPLIANCE base give.
     supported — True when a tailstock / live center / steady rest constrains the far end,
                 converting the cantilever to a (much stiffer) simply-supported beam.
 
-    Returns (delta_total, delta_cantilever, delta_fixture) in inches.
+    Returns (delta_total, delta_cantilever, delta_fixture, dyn_amp, overhung_mass_lb).
     """
     import math
     if overhang <= 0 or part_dia <= 0 or force <= 0:
-        return (0.0, 0.0, 0.0)
+        return (0.0, 0.0, 0.0, 1.0, 0.0)
 
     E = WORKPIECE_MODULUS.get(str(iso_group), 30_000_000)
     I_part = (math.pi * float(part_dia) ** 4) / 64.0
@@ -724,7 +750,27 @@ def workpiece_deflection(force, overhang, part_dia, iso_group="P",
     c_fix = FIXTURE_COMPLIANCE.get(str(fixture_key), FIXTURE_COMPLIANCE_DEFAULT)
     delta_fix = c_fix * force
 
-    return (delta_cant + delta_fix, delta_cant, delta_fix)
+    delta_static = delta_cant + delta_fix
+
+    # ── Dynamic mass amplification ───────────────────────────────────────────
+    # Overhung mass as a solid cylinder: m = ρ · π·(d/2)²·L.
+    rho = WORKPIECE_DENSITY.get(str(iso_group), 0.283)
+    overhung_mass = rho * math.pi * (float(part_dia) / 2.0) ** 2 * L
+    # Reference "compact stub" mass at this diameter (L ≈ dia, steel): heavier/longer than
+    # this ratio amplifies; a small stub sits near 1.0. A supported far end kills the
+    # pendulum action, so no mass penalty when supported.
+    m_ref = _DYN_AMP_REF_DENSITY * math.pi * (float(part_dia) / 2.0) ** 2 * float(part_dia)
+    if supported or m_ref <= 0:
+        dyn_amp = 1.0
+    else:
+        # Penalty grows with mass BEYOND the compact-stub reference. Anchored on
+        # (ratio − 1) so it starts at exactly 1.0× when the part is no heavier than a
+        # same-dia stub and grows smoothly from there — no cliff at the boundary.
+        ratio = overhung_mass / m_ref
+        excess = max(0.0, ratio - 1.0)
+        dyn_amp = min(_DYN_AMP_CAP, 1.0 + _DYN_AMP_K * (excess ** _DYN_AMP_P))
+
+    return (delta_static * dyn_amp, delta_cant, delta_fix, dyn_amp, overhung_mass)
 
 _FLUID_FACTOR = {
     "straight_oil":   1.10,
