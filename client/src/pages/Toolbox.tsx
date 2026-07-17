@@ -1332,10 +1332,21 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                   </div>
                                 </div>
                               </div>
-                              <button
-                                className="text-xs bg-green-700/30 hover:bg-green-700/50 text-green-300 border border-green-700/40 rounded px-3 py-1.5 font-semibold"
-                                onClick={() => { localStorage.setItem("roi_resume", "1"); window.location.href = "/"; }}
-                              >Resume →</button>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  className="text-xs bg-green-700/30 hover:bg-green-700/50 text-green-300 border border-green-700/40 rounded px-3 py-1.5 font-semibold"
+                                  onClick={() => { localStorage.setItem("roi_resume", "1"); window.location.href = "/"; }}
+                                >Resume →</button>
+                                <button
+                                  className="text-[11px] px-2 py-1.5 rounded-md bg-red-900/30 hover:bg-red-800/50 text-red-400 font-medium transition-colors"
+                                  onClick={() => {
+                                    if (!confirm("Discard this in-progress ROI draft? This only clears the unsaved draft on this device.")) return;
+                                    localStorage.removeItem("roi_draft");
+                                    localStorage.removeItem("roi_resume");
+                                    setRoiDraft(null);
+                                  }}
+                                >Delete</button>
+                              </div>
                             </div>
                           </div>
                         )}
