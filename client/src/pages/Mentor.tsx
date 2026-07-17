@@ -1037,17 +1037,23 @@ export default function Mentor() {
     const changeTime = parseFloat(roiChangeTime) || 0;
     const ccChangeCost = rate > 0 && changeTime > 0 ? (1 / reconLifecycleUnits) * changeTime * (rate / 60) : 0;
     const compChangeCost = rate > 0 && changeTime > 0 ? (1 / cN) * changeTime * (rate / 60) : 0;
-    const ccMachineCost = ccChangeCost;
-    const compMachineCost = compChangeCost;
-    const ccTotalCost = ccToolCost + ccChangeCost;
-    const compTotalCost = compToolCost + compChangeCost;
-    const toolingSavingsPerPart = compTotalCost - ccTotalCost; // $/unit — tooling cost delta only
-    // MRR → machine time savings per part (only when material volume per part is provided)
+    // MRR → machine-time cost per part (only when material volume per part is
+    // provided). This is the spindle time to remove matVol at each tool's MRR,
+    // priced at the shop rate. It's a real per-part cost, so it belongs in the
+    // Machine Cost line alongside the tool-change cost — otherwise the table
+    // hides the very thing that drives the savings.
     const matVol = parseFloat(roiMatVolPerPart);
-    const mrrTimeSavingsPerPart = (ccMrr > 0 && compMrr > 0 && Number.isFinite(matVol) && matVol > 0 && rate > 0)
-      ? (matVol / compMrr - matVol / ccMrr) * (rate / 60)
-      : 0;
-    const savingsPerPart = toolingSavingsPerPart + mrrTimeSavingsPerPart;
+    const mrrCostEligible = ccMrr > 0 && compMrr > 0 && Number.isFinite(matVol) && matVol > 0 && rate > 0;
+    const ccMrrCost   = mrrCostEligible ? (matVol / ccMrr)   * (rate / 60) : 0;
+    const compMrrCost = mrrCostEligible ? (matVol / compMrr) * (rate / 60) : 0;
+    const ccMachineCost = ccChangeCost + ccMrrCost;
+    const compMachineCost = compChangeCost + compMrrCost;
+    const ccTotalCost = ccToolCost + ccMachineCost;
+    const compTotalCost = compToolCost + compMachineCost;
+    const mrrTimeSavingsPerPart = compMrrCost - ccMrrCost;
+    // savingsPerPart is the full per-part cost delta (tooling + machine time),
+    // consistent with ccTotalCost / compTotalCost above.
+    const savingsPerPart = compTotalCost - ccTotalCost;
     // Annual: cut_time mode annualVol is hours → ×60 to get minutes
     const annualUnits = roiLifeMode === "cut_time" ? annualVol * 60 : annualVol;
     // Extra itemized savings
@@ -1239,6 +1245,19 @@ export default function Mentor() {
           compTimeInCut: roiLifeMode === "cut_time" ? parseFloat(roiCompCutTime) : null,
           // ROI results
           lifeMode: roiLifeMode,
+          // Life-unit values so the server can render the correct per-mode row
+          // (parts / cut-time / linear-inches per tool) instead of assuming parts.
+          ccLifeUnits: roiLifeMode === "cut_time" ? parseFloat(roiCcCutTime) : roiLifeMode === "linear_in" ? parseFloat(roiCcLinIn) : parseFloat(roiCcParts),
+          compLifeUnits: roiLifeMode === "cut_time" ? parseFloat(roiCompCutTime) : roiLifeMode === "linear_in" ? parseFloat(roiCompLinIn) : parseFloat(roiCompParts),
+          // Pre-computed cost breakdown — single source of truth so the emailed
+          // report matches the on-screen panel / PDF exactly (server no longer
+          // recomputes and diverges on the MRR machine-cost term).
+          ccToolCost: roiResult.ccToolCost,
+          ccMachineCost: roiResult.ccMachineCost,
+          ccTotalCost: roiResult.ccTotalCost,
+          compToolCost: roiResult.compToolCost,
+          compMachineCost: roiResult.compMachineCost,
+          compTotalCost: roiResult.compTotalCost,
           shopRate: parseFloat(roiShopRate),
           annualVolume: parseFloat(roiAnnualVol),
           savingsPerPart: roiResult.savingsPerPart,
@@ -1279,6 +1298,45 @@ export default function Mentor() {
     setRoiSaving(false);
   }
 
+  // Single source of truth for the ROI comparison table rows, shared by the
+  // on-screen results panel and the printable/emailed report so they can never
+  // drift. Each row: display label, CC + competitor display strings, the raw
+  // numbers for the Δ column, and whether higher is better (green when good).
+  type RoiRow = { label: string; sub?: string; cc: string; comp: string; ccNum: number; compNum: number; higherIsBetter: boolean; total?: boolean };
+  function buildRoiCompareRows(): RoiRow[] {
+    if (!roiResult) return [];
+    const unit = roiLifeMode === "cut_time" ? "Min" : roiLifeMode === "linear_in" ? "Inch" : "Part";
+    const ccMrrN = parseFloat(roiCcMrr), compMrrN = parseFloat(roiCompMrr);
+    const ccPriceN = parseFloat(roiCcPrice), compPriceN = parseFloat(roiCompPrice);
+    const ccLifeN = roiLifeMode === "cut_time" ? parseFloat(roiCcCutTime)
+      : roiLifeMode === "linear_in" ? parseFloat(roiCcLinIn)
+      : (roiReconEnabled ? (() => { const g = parseInt(roiReconGrinds) || 0; const r = (parseFloat(roiReconRetention) || 90) / 100; let t = parseFloat(roiCcParts); for (let i = 1; i <= g; i++) t += parseFloat(roiCcParts) * Math.pow(r, i); return Math.round(t); })() : parseFloat(roiCcParts));
+    const compLifeN = roiLifeMode === "cut_time" ? parseFloat(roiCompCutTime)
+      : roiLifeMode === "linear_in" ? parseFloat(roiCompLinIn) : parseFloat(roiCompParts);
+    const lifeLabel = roiLifeMode === "cut_time" ? "Cut Time per Tool (min)"
+      : roiLifeMode === "linear_in" ? "Linear Inches per Tool"
+      : `Parts per Tool${roiReconEnabled ? " (lifecycle)" : ""}`;
+    const rows: RoiRow[] = [];
+    if (ccMrrN > 0 || compMrrN > 0)
+      rows.push({ label: "Material Removal Rate", cc: ccMrrN > 0 ? `${ccMrrN.toFixed(3)} in³/min` : "—", comp: compMrrN > 0 ? `${compMrrN.toFixed(3)} in³/min` : "—", ccNum: ccMrrN, compNum: compMrrN, higherIsBetter: true });
+    rows.push({ label: "Tool Price", cc: `$${ccPriceN.toFixed(2)}`, comp: `$${compPriceN.toFixed(2)}`, ccNum: ccPriceN, compNum: compPriceN, higherIsBetter: false });
+    rows.push({ label: lifeLabel, cc: Number.isFinite(ccLifeN) ? String(ccLifeN) : "—", comp: Number.isFinite(compLifeN) ? String(compLifeN) : "—", ccNum: ccLifeN, compNum: compLifeN, higherIsBetter: true });
+    rows.push({ label: `Tool Cost / ${unit}`, sub: roiResult.reconGrinds > 0 ? `incl. ${roiResult.reconGrinds} regrinds` : undefined, cc: `$${roiResult.ccToolCost.toFixed(4)}`, comp: `$${roiResult.compToolCost.toFixed(4)}`, ccNum: roiResult.ccToolCost, compNum: roiResult.compToolCost, higherIsBetter: false });
+    if (roiResult.ccMachineCost > 0 || roiResult.compMachineCost > 0)
+      rows.push({ label: `Machine Cost / ${unit}`, cc: `$${roiResult.ccMachineCost.toFixed(4)}`, comp: `$${roiResult.compMachineCost.toFixed(4)}`, ccNum: roiResult.ccMachineCost, compNum: roiResult.compMachineCost, higherIsBetter: false });
+    rows.push({ label: `Total Cost / ${unit}`, cc: `$${roiResult.ccTotalCost.toFixed(4)}`, comp: `$${roiResult.compTotalCost.toFixed(4)}`, ccNum: roiResult.ccTotalCost, compNum: roiResult.compTotalCost, higherIsBetter: false, total: true });
+    return rows;
+  }
+  // Δ (percent change of CC vs competitor) as {text, good} — arrow direction is
+  // raw, color/good reflects whether that direction helps the customer.
+  function roiDelta(ccNum: number, compNum: number, higherIsBetter: boolean): { text: string; good: boolean | null } {
+    if (!Number.isFinite(ccNum) || !Number.isFinite(compNum) || compNum === 0) return { text: "—", good: null };
+    const pct = ((ccNum - compNum) / Math.abs(compNum)) * 100;
+    if (Math.abs(pct) < 0.05) return { text: "—", good: null };
+    const up = ccNum > compNum;
+    return { text: `${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%`, good: higherIsBetter ? up : !up };
+  }
+
   async function printRoi() {
     if (!roiResult) return;
     // Fetch logo as base64 so it reliably embeds in the print window
@@ -1298,6 +1356,16 @@ export default function Mentor() {
     const fmtI = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
     const fmtC = (n: number) => n.toFixed(4);
     const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Per-KPI delta cell for the comparison table: % change of CC vs the current
+    // tool, arrow = raw direction, color = good/bad for the customer.
+    const deltaTd = (cc: number, comp: number, higherIsBetter: boolean) => {
+      if (!Number.isFinite(cc) || !Number.isFinite(comp) || comp === 0) return `<td style="text-align:right;color:#9ca3af">—</td>`;
+      const pct = ((cc - comp) / Math.abs(comp)) * 100;
+      if (Math.abs(pct) < 0.05) return `<td style="text-align:right;color:#9ca3af">—</td>`;
+      const up = cc > comp;
+      const good = higherIsBetter ? up : !up;
+      return `<td style="text-align:right;font-weight:700;color:${good ? "#15803d" : "#dc2626"};white-space:nowrap">${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%</td>`;
+    };
     const rep = localStorage.getItem("cc_user_name") || erEmail || "Core Cutter LLC";
     const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     const year = new Date().getFullYear();
@@ -1425,15 +1493,15 @@ export default function Mentor() {
         <th></th>
         <th class="cc-col">Core Cutter${(edpText || pdfToolNumber) ? `<br><span style="font-weight:400;font-size:10px">${edpText || pdfToolNumber}</span>` : ""}</th>
         <th class="comp-col">Current Tool${roiCompEdp ? `<br><span style="font-weight:400;font-size:10px">${roiCompEdp}</span>` : ""}</th>
+        <th style="text-align:right">Δ</th>
       </tr>
     </thead>
     <tbody>
-      ${(parseFloat(roiCcMrr) > 0 || parseFloat(roiCompMrr) > 0) ? `<tr class="mrr-row"><td>Material Removal Rate</td><td class="cc-val">${parseFloat(roiCcMrr) > 0 ? parseFloat(roiCcMrr).toFixed(3) + " in³/min" : "—"}</td><td class="comp-val">${parseFloat(roiCompMrr) > 0 ? parseFloat(roiCompMrr).toFixed(3) + " in³/min" : "—"}</td></tr>` : ""}
-      <tr><td>Tool Price</td><td class="cc-val">$${fmtD(parseFloat(roiCcPrice))}${roiReconEnabled ? `<br><span style="font-size:10px;font-weight:400">${roiReconGrinds} regrinds @ $${fmtD(parseFloat(roiReconPrice) > 0 ? parseFloat(roiReconPrice) : parseFloat(roiCcPrice)*0.5)}/regrind</span>` : ""}</td><td class="comp-val">$${fmtD(parseFloat(roiCompPrice))}</td></tr>
-      <tr><td>${roiLifeMode === "cut_time" ? "Cut Time per Tool (min)" : roiLifeMode === "linear_in" ? "Linear Inches per Tool" : `Parts per Tool${roiReconEnabled ? " (lifecycle)" : ""}`}</td><td class="cc-val">${roiLifeMode === "cut_time" ? roiCcCutTime : roiLifeMode === "linear_in" ? roiCcLinIn : roiReconEnabled ? Math.round((() => { const g = parseInt(roiReconGrinds)||0; const r = (parseFloat(roiReconRetention)||90)/100; let t = parseFloat(roiCcParts); for(let i=1;i<=g;i++) t+=parseFloat(roiCcParts)*Math.pow(r,i); return t; })()) : roiCcParts}</td><td class="comp-val">${roiLifeMode === "cut_time" ? roiCompCutTime : roiLifeMode === "linear_in" ? roiCompLinIn : roiCompParts}</td></tr>
-      <tr><td>${roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccToolCost)}</td><td class="comp-val">$${fmtC(roiResult.compToolCost)}</td></tr>
-      <tr class="total-row"><td>${roiLifeMode === "cut_time" ? "Total Cost / Min" : roiLifeMode === "linear_in" ? "Total Cost / Inch" : "Total Cost / Part"}</td><td class="cc-val">$${fmtC(roiResult.ccTotalCost)}</td><td class="comp-val">$${fmtC(roiResult.compTotalCost)}</td></tr>
-      <tr class="savings-row ${roiResult.savingsPerPart >= 0 ? "positive" : "negative"}"><td colspan="3" style="text-align:center">${roiResult.savingsPerPart < 0 ? "-" : ""}$${fmtD(Math.abs(roiResult.savingsPerPart))} ${roiResult.savingsPerPart < 0 ? "more" : "saved"} per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"} &nbsp;·&nbsp; ${roiResult.savingsPct < 0 ? "-" : ""}${Math.abs(roiResult.savingsPct).toFixed(1)}% ${roiResult.savingsPct < 0 ? "cost increase" : "cost reduction"}</td></tr>
+      ${buildRoiCompareRows().map(r => {
+        const sub = r.sub ? `<br><span style="font-size:10px;font-weight:400">${r.sub}</span>` : "";
+        return `<tr${r.total ? ' class="total-row"' : ""}><td>${r.label}${sub}</td><td class="cc-val">${r.cc}</td><td class="comp-val">${r.comp}</td>${deltaTd(r.ccNum, r.compNum, r.higherIsBetter)}</tr>`;
+      }).join("")}
+      <tr class="savings-row ${roiResult.savingsPerPart >= 0 ? "positive" : "negative"}"><td colspan="4" style="text-align:center">${roiResult.savingsPerPart < 0 ? "-" : ""}$${fmtD(Math.abs(roiResult.savingsPerPart))} ${roiResult.savingsPerPart < 0 ? "more" : "saved"} per ${roiLifeMode === "cut_time" ? "minute" : roiLifeMode === "linear_in" ? "inch" : "part"} &nbsp;·&nbsp; ${roiResult.savingsPct < 0 ? "-" : ""}${Math.abs(roiResult.savingsPct).toFixed(1)}% ${roiResult.savingsPct < 0 ? "cost increase" : "cost reduction"}</td></tr>
     </tbody>
   </table>
 
@@ -18041,12 +18109,12 @@ ${stabSection}
                   {roiResult.mrrTimeSavingsPerPart > 0 && (
                     <div className="rounded-lg border border-blue-700/30 bg-blue-950/20 px-3 py-2 text-xs flex items-center justify-between">
                       <div>
-                        <span className="text-blue-300 font-semibold">Faster cycle time</span>
-                        <span className="text-zinc-500 ml-1.5">({roiResult.mrrGainPct.toFixed(1)}% more MRR)</span>
+                        <span className="text-blue-300 font-semibold">Machine Time Savings <span className="text-zinc-400 font-normal">(i.e. throughput)</span></span>
                         <p className="text-zinc-500 text-[10px] mt-0.5">Machine time saved per part × shop rate</p>
                       </div>
-                      <span className="text-blue-300 font-bold shrink-0 ml-3">
-                        +${(roiResult.mrrTimeSavingsPerPart * (roiLifeMode === "cut_time" ? parseFloat(roiAnnualVol) * 60 : parseFloat(roiAnnualVol))).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
+                      <span className="shrink-0 ml-3 whitespace-nowrap">
+                        <span className="text-blue-300 font-bold">+${(roiResult.mrrTimeSavingsPerPart * (roiLifeMode === "cut_time" ? parseFloat(roiAnnualVol) * 60 : parseFloat(roiAnnualVol))).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+                        <span className="text-zinc-500 ml-1.5">({roiResult.mrrGainPct.toFixed(1)}% more MRR)</span>
                       </span>
                     </div>
                   )}
@@ -18129,54 +18197,34 @@ ${stabSection}
                     </div>
                   )}
 
-                  {/* Comparison table */}
+                  {/* Comparison table — mirrors the printed/emailed report exactly
+                      (shared row builder), including the Δ column. */}
                   <div className="rounded-lg border border-zinc-700/50 overflow-hidden text-xs">
                     <table className="w-full">
                       <thead>
                         <tr>
                           <th className="text-left px-3 py-2 bg-zinc-800 text-zinc-400 font-medium"></th>
                           <th className="text-right px-3 py-2 bg-orange-900/40 text-orange-300 font-semibold">Core Cutter</th>
-                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Their Tool</th>
+                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-400 font-medium">Competitor</th>
+                          <th className="text-right px-3 py-2 bg-zinc-800 text-zinc-500 font-medium">Δ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(parseFloat(roiCcMrr) > 0 || parseFloat(roiCompMrr) > 0) && (
-                          <tr className="border-t border-zinc-700/40 bg-blue-950/20">
-                            <td className="px-3 py-1.5 text-zinc-400">MRR (in³/min)</td>
-                            <td className="px-3 py-1.5 text-right text-blue-300 font-semibold">{parseFloat(roiCcMrr) > 0 ? parseFloat(roiCcMrr).toFixed(3) : "—"}</td>
-                            <td className="px-3 py-1.5 text-right text-zinc-300">{parseFloat(roiCompMrr) > 0 ? parseFloat(roiCompMrr).toFixed(3) : "—"}</td>
-                          </tr>
-                        )}
-                        {roiResult.mrrTimeSavingsPerPart > 0 && (
-                          <tr className="border-t border-zinc-700/40 bg-blue-950/10">
-                            <td className="px-3 py-1.5 text-zinc-400">
-                              Cycle Time Savings / Part
-                              <span className="block text-[9px] text-blue-400">from MRR gain × shop rate</span>
-                            </td>
-                            <td className="px-3 py-1.5 text-right text-blue-300 font-semibold">${roiResult.mrrTimeSavingsPerPart.toFixed(4)}</td>
-                            <td className="px-3 py-1.5 text-right text-zinc-500">—</td>
-                          </tr>
-                        )}
-                        <tr className="border-t border-zinc-700/40">
-                          <td className="px-3 py-1.5 text-zinc-400">
-                            {roiLifeMode === "cut_time" ? "Tool Cost / Min" : roiLifeMode === "linear_in" ? "Tool Cost / Inch" : "Tool Cost / Part"}
-                            {roiResult.reconGrinds > 0 && <span className="block text-[9px] text-orange-400">incl. {roiResult.reconGrinds} regrinds</span>}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccToolCost.toFixed(4)}</td>
-                          <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compToolCost.toFixed(4)}</td>
-                        </tr>
-                        {roiResult.ccMachineCost > 0 && (
-                          <tr className="border-t border-zinc-700/40 bg-zinc-800/30">
-                            <td className="px-3 py-1.5 text-zinc-400">Changeover Cost / {roiLifeMode === "cut_time" ? "Min" : roiLifeMode === "linear_in" ? "Inch" : "Part"}</td>
-                            <td className="px-3 py-1.5 text-right text-orange-300">${roiResult.ccMachineCost.toFixed(4)}</td>
-                            <td className="px-3 py-1.5 text-right text-zinc-300">${roiResult.compMachineCost.toFixed(4)}</td>
-                          </tr>
-                        )}
-                        <tr className="border-t border-zinc-700/40">
-                          <td className="px-3 py-1.5 text-zinc-300 font-semibold">Total Cost / {roiLifeMode === "cut_time" ? "Min" : roiLifeMode === "linear_in" ? "Inch" : "Part"}</td>
-                          <td className="px-3 py-1.5 text-right text-orange-400 font-semibold">${roiResult.ccTotalCost.toFixed(4)}</td>
-                          <td className="px-3 py-1.5 text-right text-zinc-200 font-semibold">${roiResult.compTotalCost.toFixed(4)}</td>
-                        </tr>
+                        {buildRoiCompareRows().map((r, i) => {
+                          const d = roiDelta(r.ccNum, r.compNum, r.higherIsBetter);
+                          const dColor = d.good == null ? "text-zinc-500" : d.good ? "text-green-400" : "text-red-400";
+                          return (
+                            <tr key={i} className={`border-t border-zinc-700/40 ${r.total ? "" : "bg-zinc-900/20"}`}>
+                              <td className={`px-3 py-1.5 ${r.total ? "text-zinc-300 font-semibold" : "text-zinc-400"}`}>
+                                {r.label}
+                                {r.sub && <span className="block text-[9px] text-orange-400">{r.sub}</span>}
+                              </td>
+                              <td className={`px-3 py-1.5 text-right ${r.total ? "text-orange-400 font-semibold" : "text-orange-300"}`}>{r.cc}</td>
+                              <td className={`px-3 py-1.5 text-right ${r.total ? "text-zinc-200 font-semibold" : "text-zinc-300"}`}>{r.comp}</td>
+                              <td className={`px-3 py-1.5 text-right font-semibold whitespace-nowrap ${dColor}`}>{d.text}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

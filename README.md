@@ -8,6 +8,14 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### ROI Report — Cost %, MRR Δ Column & UI/Export Parity
+- **Fixed the cost-reduction %**: it divided total savings (tooling + machine time) by tooling-only cost, producing impossible figures (e.g. 1632%). Machine time is now counted on both sides, so the % is bounded and correct.
+- **MRR machine-time cost** is now a real per-part line (was silently excluded while driving most of the savings); Tool + Machine = Total now reconciles everywhere.
+- **Per-KPI Δ column** on every comparison row — ▲/▼ with % change, green when good for the customer (higher MRR/parts, lower cost), red when worse.
+- **Rows adapt to the ROI life mode** (parts / cut-time / linear-inch) and empty rows are hidden instead of showing blank dashes.
+- **One source of truth**: the client sends its computed cost breakdown and both the on-screen panel and the emailed/printed report render from a shared row builder — they can no longer drift.
+- **Email report**: added a **Company** row before Part Name; the blue callout is retitled **"Machine Time Savings (i.e. throughput)"** with the MRR % shown after the annual dollar figure.
+
 ### ROI Rerun — Legacy Row Restore
 - ROI Rerun on **legacy rows** (saved before the full-snapshot feature) now restores the **ISO category** from the stored material key so the Material section reflects the grade.
 - These older rows never captured the milling **process**, so Rerun now leaves it unselected (prompting the user) rather than silently defaulting — a Traditional/Slot ROI must not come back as HEM. ROIs saved with a full snapshot continue to restore the exact process.
