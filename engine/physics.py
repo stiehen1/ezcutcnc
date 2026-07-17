@@ -637,6 +637,94 @@ def tool_deflection(force, stickout, diameter, flutes, loc=None, lbs=None, neck_
 
     return delta
 
+
+# Workpiece (part) elastic modulus by ISO material group, psi.
+# The PART flexes too — on a soft aluminum part it flexes ~3× more than steel for the
+# same geometry. Used by workpiece_deflection to model the part as its own cantilever.
+WORKPIECE_MODULUS = {
+    "P": 30_000_000,   # steel / carbon / alloy
+    "M": 28_000_000,   # stainless
+    "K": 20_000_000,   # cast iron
+    "N": 10_000_000,   # aluminum / non-ferrous
+    "S": 16_500_000,   # titanium / superalloy (Ti ~16.5, Inconel ~31 — use Ti as conservative-flex default)
+    "H": 30_000_000,   # hardened steel
+}
+
+# Fixture-loop compliance, in·lbf⁻¹ of *rotational/base give* at the clamp itself,
+# BEFORE the part cantilever is added. This captures the fact that a 3-jaw chuck on a
+# 4th-axis rotary is not a rigid clamp — the jaws, chuck body, and rotary bearing/brake
+# all deflect under radial load even at zero overhang. Expressed as a linear compliance
+# (in/lbf) at the jaw face; added in series with the part-cantilever compliance.
+# Values are documented starting estimates (softest → stiffest), to be shop-calibrated.
+FIXTURE_COMPLIANCE = {
+    # rotary / trunnion loops — softest (bearing + brake + chuck stack-up)
+    "trunnion_4th":    2.2e-6,
+    "face_plate":      1.8e-6,
+    # standalone chucks
+    "3_jaw_chuck":     1.6e-6,
+    "6_jaw_chuck":     1.3e-6,
+    "4_jaw_chuck":     1.2e-6,
+    "collet_chuck":    0.9e-6,
+    "hydraulic_chuck": 0.9e-6,
+    "power_chuck":     0.9e-6,
+    "expanding_mandrel": 1.1e-6,
+    # vises
+    "soft_jaws":       1.4e-6,
+    "vise":            0.8e-6,
+    "5th_axis_vise":   0.7e-6,
+    "toe_clamps":      1.5e-6,
+    # bolted / doweled — stiffest
+    "dovetail":        0.6e-6,
+    "rigid_fixture":   0.4e-6,
+    "tombstone":       0.4e-6,
+    # bar-support setups — part is held along its length, minimal base give
+    "between_centers": 0.3e-6,
+    "steady_rest":     0.5e-6,
+    "guide_bushing":   0.3e-6,
+    "gang_tooling":    0.6e-6,
+}
+FIXTURE_COMPLIANCE_DEFAULT = 1.0e-6  # unknown workholding → vise-ish
+
+
+def workpiece_deflection(force, overhang, part_dia, iso_group="P",
+                         fixture_key=None, supported=False):
+    """Deflect the PART as a cantilever off the chuck jaws / trunnion face, in series
+    with the fixture-loop compliance.
+
+    force     — radial cutting force at the tool tip (lbf); we treat the part tip load
+                as the same radial force the tool sees (Newton's third law).
+    overhang  — part_stickout: length the part sticks out past the jaws (in).
+    part_dia  — solid-round cross-section diameter at the overhang (in). Conservative;
+                a tube is stiffer, a thin web is softer.
+    iso_group — material ISO letter → WORKPIECE_MODULUS.
+    fixture_key — workholding enum key → FIXTURE_COMPLIANCE base give.
+    supported — True when a tailstock / live center / steady rest constrains the far end,
+                converting the cantilever to a (much stiffer) simply-supported beam.
+
+    Returns (delta_total, delta_cantilever, delta_fixture) in inches.
+    """
+    import math
+    if overhang <= 0 or part_dia <= 0 or force <= 0:
+        return (0.0, 0.0, 0.0)
+
+    E = WORKPIECE_MODULUS.get(str(iso_group), 30_000_000)
+    I_part = (math.pi * float(part_dia) ** 4) / 64.0
+    L = float(overhang)
+
+    # Cantilever tip deflection under an end load: δ = F·L³ / (3·E·I).
+    delta_cant = (force * L ** 3) / (3.0 * E * I_part)
+    if supported:
+        # Simply-supported (both ends held) deflects ~3.5× less at the load point than a
+        # cantilever of the same span — mirrors the tailstock treatment already used for
+        # the tool-side deflection limit.
+        delta_cant /= 3.5
+
+    # Fixture base give: linear compliance × force, added in series with the cantilever.
+    c_fix = FIXTURE_COMPLIANCE.get(str(fixture_key), FIXTURE_COMPLIANCE_DEFAULT)
+    delta_fix = c_fix * force
+
+    return (delta_cant + delta_fix, delta_cant, delta_fix)
+
 _FLUID_FACTOR = {
     "straight_oil":   1.10,
     "semi_synthetic": 1.00,

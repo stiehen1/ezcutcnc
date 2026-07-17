@@ -83,6 +83,13 @@ export const mentorSchemas = {
     speeder_max_torque_nm: z.number().min(0).default(0),
     workholding: z.enum(["rigid_fixture", "tombstone", "dovetail", "vise", "soft_jaws", "toe_clamps", "5th_axis_vise", "3_jaw_chuck", "4_jaw_chuck", "6_jaw_chuck", "collet_chuck", "between_centers", "face_plate", "trunnion_4th", "expanding_mandrel", "sub_spindle", "tailstock_supported", "steady_rest", "hydraulic_chuck", "power_chuck", "form_jaws", "step_jaws", "pie_jaws", "secondary_op_vise", "modular_quickchange", "ijaw", "autochuck", "zero_point", "pyramid", "gang_tooling", "guide_bushing"]).default("vise"),
     tailstock: z.boolean().default(false),
+    // Workpiece cantilever inputs — for 4th-axis / lathe / long-overhang setups where
+    // the PART (not the tool) is the flexible member. part_stickout = length the part
+    // sticks out past the chuck jaws / trunnion face; part_dia_at_overhang = the part's
+    // cross-section diameter at that overhang (drives I_part = π·d⁴/64). 0 = not supplied;
+    // engine falls back to a conservative estimate and flags it.
+    part_stickout: z.number().min(0).default(0),
+    part_dia_at_overhang: z.number().min(0).default(0),
     coolant: z.enum(["dry", "mist", "flood", "tsc_low", "tsc_high"]).default("flood"),
 
     max_rpm: z.number().int().min(0).default(12000),

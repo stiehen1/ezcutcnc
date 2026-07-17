@@ -8,6 +8,7 @@ from engine.physics import (
     engagement_angle,
     cutting_force_per_tooth,
     tool_deflection,
+    workpiece_deflection,
     tool_life,
     enforce_deflection_limit,
     get_mode_defaults,
@@ -1079,6 +1080,19 @@ _ISO_KEY_TO_GROUP = {
     "armor_ar600":   "Steel",
 }
 
+# Material-group name → ISO letter, for the workpiece elastic-modulus lookup
+# (engine/physics.py WORKPIECE_MODULUS). Group names come from get_material_group().
+_GROUP_TO_ISO = {
+    "Steel": "P", "Non-Ferrous": "N", "Aluminum": "N", "Plastics": "N",
+    "Stainless": "M", "Cast Iron": "K", "Inconel": "S", "Titanium": "S",
+    "hardened_lt55": "H", "hardened_gt55": "H", "steel_tool": "H",
+}
+
+
+def group_to_iso(group: str) -> str:
+    return _GROUP_TO_ISO.get(group, "P")
+
+
 def get_material_group(mat):
     if mat in _ISO_KEY_TO_GROUP:
         return _ISO_KEY_TO_GROUP[mat]
@@ -1725,6 +1739,7 @@ def calc_state(rpm, flutes, ipt, doc, woc, data, material_group, rigidity):
         "hp": hp,
         "load": load,
         "force": total_force,
+        "radial_force": radial_force,
         "deflection": deflection,
         "chatter": chatter,
         "chip": chip,
@@ -4265,6 +4280,7 @@ def run(payload=None):
             _default_so = 2.0
         data.setdefault("stickout", round(_default_so, 4))
     data["part_stickout"] = float(payload.get("part_stickout", 0) or 0)
+    data["part_dia_at_overhang"] = float(payload.get("part_dia_at_overhang", 0) or 0)
     data.setdefault("coolant", payload.get("coolant", "flood"))
     data.setdefault("geometry", payload.get("geometry", "standard"))
 
@@ -6315,17 +6331,42 @@ def run(payload=None):
     _wh_key    = str(data.get("workholding", "vise") or "vise")
     _wh_factor = WORKHOLDING_COMPLIANCE.get(_wh_key, 1.0)
 
-    # Part overhang penalty: when the part sticks out beyond the chuck jaws or trunnion
-    # face, it acts as a second cantilever that adds system compliance on top of the
-    # workholding type.  Applies only to chuck/trunnion workholding types.
-    # Scale: +6% per inch of overhang, capped at ×1.50 additional factor.
-    _chuck_wh_keys = {"trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}
-    _part_so = float(data.get("part_stickout", 0) or 0)
-    if _part_so > 0 and _wh_key in _chuck_wh_keys:
-        _part_so_mult = min(1.50, 1.0 + 0.06 * _part_so)
-        _wh_factor *= _part_so_mult
-
     _dlim /= _wh_factor
+
+    # ── Workpiece (part) deflection ──────────────────────────────────────────
+    # The PART is often the flexible member, not the tool — e.g. a part gripped in a
+    # 3-jaw chuck on a 4th-axis rotary, sticking out past the jaws. As the cut nears the
+    # free end, the overhang acts as a cantilever with the cutting force at the tip. This
+    # is invisible to the tool-side deflection model above (which only knows tool stickout),
+    # so a wobbly-part setup can otherwise score "Excellent." Model it explicitly.
+    _part_so = float(data.get("part_stickout", 0) or 0)
+    _part_dia_in = float(data.get("part_dia_at_overhang", 0) or 0)
+    _part_dia_est = False
+    if _part_so > 0 and _part_dia_in <= 0:
+        # Conservative fallback when the user hasn't entered a part diameter: assume a
+        # modest cross-section (~2× tool dia). Flagged so the UI can nudge for the real dia.
+        _part_dia_in = max(0.25, _d * 2.0)
+        _part_dia_est = True
+
+    _part_radial_force = float(state.get("radial_force", 0) or 0)
+    # Far-end (tailstock / live center / steady rest) support turns the part cantilever
+    # into a much stiffer simply-supported beam.
+    _part_supported = bool(payload.get("tailstock", False)) or _wh_key in (
+        "between_centers", "tailstock_supported", "steady_rest", "sub_spindle")
+
+    _part_defl, _, _ = workpiece_deflection(
+        _part_radial_force, _part_so, _part_dia_in,
+        iso_group=group_to_iso(material_group),
+        fixture_key=_wh_key,
+        supported=_part_supported,
+    )
+
+    # Workpiece deflection limit — a chatter threshold, deliberately looser than the
+    # tool's dimensional limit: a roughing part just needs the cut not to chatter/dig, so
+    # anchor at 0.002" (matches the slotting/roughing tool limit). Finishing passes on a
+    # long part are far less common; if the mode is a finish pass, tighten to 0.0008".
+    _wp_lim = 0.0008 if _mode_str in ("finish", "face", "circ_interp", "ballnose") else 0.002
+    _part_defl_pct = round(_part_defl / _wp_lim * 100, 1) if _wp_lim > 0 and _part_defl > 0 else 0.0
 
     # Tailstock / live center support: part is simply-supported (both ends constrained)
     # vs. cantilever (chuck only). Simply-supported beam deflects ~3.5× less at midspan.
@@ -7150,6 +7191,14 @@ def run(payload=None):
         "deflection_in": _defl,
         "deflection_limit_in": _dlim,
         "deflection_pct": _defl_pct,
+        # Workpiece (part) cantilever deflection — separate from the tool above.
+        "part_stickout_in": _part_so,
+        "part_dia_in": _part_dia_in if _part_so > 0 else 0.0,
+        "part_dia_estimated": _part_dia_est,
+        "part_deflection_in": round(_part_defl, 6),
+        "part_deflection_limit_in": _wp_lim,
+        "part_deflection_pct": _part_defl_pct,
+        "part_supported": _part_supported,
         "suggestions": _stab_suggestions,
     }
     # ── end Stability Advisor ────────────────────────────────────────────────

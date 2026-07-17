@@ -8,6 +8,13 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Stability — Workpiece (Part) Deflection Model
+- The Stability Index only ever modeled *tool* stickout — it assumed the workpiece was rigidly held. A part sticking out of a chuck on a 4th-axis trunnion could break a tool while the score still read *"89 Excellent."* Added a real **Workpiece Rigidity** dimension.
+- Models the **part as a cantilever** off the jaws/trunnion face (`δ = F·L³/3EI`, `I = π·d⁴/64`) in series with a **fixture-loop compliance** term (a 3-jaw-on-rotary is far softer than a bolted fixture — captured even at zero overhang). Material-aware modulus: an aluminum part flexes ~3× a steel one for the same geometry. Far-end support (tailstock / between-centers / steady rest) converts the beam to simply-supported.
+- New **Part Diameter at Overhang** input (appears once a Part Overhang is entered) — a cantilever needs both length and cross-section. Blank falls back to a conservative estimate and says so.
+- The new **Workpiece Rigidity** sub-score **hard-caps** the overall index — a flexible part can no longer earn "Excellent" no matter how good the tool, holder, and machine are. No-overhang cuts score exactly as before (the workpiece axis only participates when the part actually sticks out).
+- Fixture-compliance constants are documented starting estimates, to be shop-calibrated.
+
 ### Materials — Medium-Carbon Steel Sub-Category
 - Split plain-carbon 10xx steels (1040, 1045, 1055, 1070–1095) out of the Alloy Steel bucket into their own **Medium-Carbon Steel** sub-category under P Steel. Previously typing "1045" into Match resolved to *"Alloy Steel (4130…)"*, which was metallurgically wrong and understated the tool life / overstated the abrasion.
 - It runs as its own calibrated tier — SFM/feed/HP/tool-life sit **between** mild and alloy steel across milling, drilling, keyseat, dovetail, feed mill, ream and chamfer paths (no Cr/Mo carbides to abrade the edge, so a touch faster than alloy; feed stays flatter than SFM across the tiers). Anchored to the low end of the published SFM band +10%, interpolated between the shop-validated `steel_mild` and `steel_alloy` anchors.

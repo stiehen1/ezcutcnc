@@ -2569,6 +2569,7 @@ export default function Mentor() {
     spindle_drive: "direct" as "direct" | "belt" | "gear",
     stickout: 0,
     part_stickout: 0,
+    part_dia_at_overhang: 0,
     tailstock: false,
 
     existing_hole_dia: 0,
@@ -3373,6 +3374,7 @@ export default function Mentor() {
   const [feedmillStickoutText, setFeedmillStickoutText] = React.useState("");
   const [arborDiaText, setArborDiaText] = React.useState("");
   const [partStickoutText, setPartStickoutText] = React.useState("");
+  const [partDiaText, setPartDiaText] = React.useState("");
   const [neckAutoSuggested, setNeckAutoSuggested] = React.useState(false);
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
   const [stickoutViolation, setStickoutViolation] = React.useState<string | null>(null);
@@ -3441,6 +3443,11 @@ export default function Mentor() {
   React.useEffect(() => {
     setPartStickoutText(form.part_stickout > 0 ? form.part_stickout.toFixed(3) : "");
   }, [form.part_stickout]);
+
+  // Keep part-diameter text display in sync whenever form.part_dia_at_overhang is set programmatically
+  React.useEffect(() => {
+    setPartDiaText((form.part_dia_at_overhang ?? 0) > 0 ? form.part_dia_at_overhang.toFixed(3) : "");
+  }, [form.part_dia_at_overhang]);
 
   // When material (isoCategory) changes in HEM, reset WOC+DOC to optimal for new material
   // so stale values from a prior material don't carry over — but only if user was using a preset
@@ -5280,7 +5287,7 @@ ${stabSection}
     holder: string | undefined,
     workholding: string | undefined,
     machineType: string | undefined,
-  ): { overall: number; defl: number; load: number; chip: number; ld: number; rigidity: number; workholding: number } | null {
+  ): { overall: number; defl: number; load: number; chip: number; ld: number; rigidity: number; workholding: number; workpiece: number } | null {
     if (!stab && !eng && !cust) return null;
     // Deflection score (0–100): 0% deflection = 100, 100% = 50, 175%+ = 0
     const deflPct = stab?.deflection_pct ?? 0;
@@ -5316,10 +5323,42 @@ ${stabSection}
     // unlocks — so the overall score always moves UP on an upgrade, never flat/down.
     const rigScore = holderRigidityScore(holder);
     const whScore  = workholdingRigidityScore(workholding, machineType);
-    // Weight redistribution when machine HP not available
-    const overall = loadScore !== null
-      ? Math.round(deflScore * 0.16 + loadScore * 0.10 + chipScore * 0.18 + ldScore * 0.18 + rigScore * 0.20 + whScore * 0.18)
-      : Math.round(deflScore * 0.215 + chipScore * 0.2025 + ldScore * 0.2025 + rigScore * 0.20 + whScore * 0.18);
+    // Workpiece Rigidity — the PART as a cantilever off the jaws/trunnion. Only meaningful
+    // when the part sticks out past its workholding (part_stickout > 0); otherwise the part
+    // is rigidly held and this axis is a non-issue (score 100, excluded from the cap).
+    // Uses the same 0%→100 / limit→50 / 175%+→0 curve as the tool deflection score.
+    const partDeflPct = stab?.part_deflection_pct ?? 0;
+    const hasWorkpiece = (stab?.part_stickout_in ?? 0) > 0;
+    const wpScore = !hasWorkpiece ? 100 : Math.max(0, Math.min(100, partDeflPct < 100
+      ? 100 - partDeflPct * 0.5
+      : 50 - (partDeflPct - 100) * (50 / 75)));
+    // Blend the sub-scores. The workpiece axis only participates when the part actually
+    // sticks out past its workholding — otherwise its weight is redistributed back onto
+    // the other axes, so a no-overhang cut scores EXACTLY as it did before this axis
+    // existed (preserves the tuned "an upgrade always moves the score up" bands). The
+    // no-HP branch likewise drops the load axis and redistributes.
+    const overall0 = (() => {
+      if (loadScore !== null && hasWorkpiece)
+        return Math.round(deflScore * 0.14 + loadScore * 0.09 + chipScore * 0.16 + ldScore * 0.16 + rigScore * 0.17 + whScore * 0.14 + wpScore * 0.14);
+      if (loadScore !== null)  // HP present, no workpiece — original 6-axis weights
+        return Math.round(deflScore * 0.16 + loadScore * 0.10 + chipScore * 0.18 + ldScore * 0.18 + rigScore * 0.20 + whScore * 0.18);
+      if (hasWorkpiece)  // no HP, workpiece in play
+        return Math.round(deflScore * 0.185 + chipScore * 0.175 + ldScore * 0.175 + rigScore * 0.17 + whScore * 0.14 + wpScore * 0.155);
+      // no HP, no workpiece — original 5-axis weights
+      return Math.round(deflScore * 0.215 + chipScore * 0.2025 + ldScore * 0.2025 + rigScore * 0.20 + whScore * 0.18);
+    })();
+    // HARD CAP: a flexible workpiece can't yield an "Excellent" score no matter how good
+    // the tool/holder/machine are — the part is the weak link and it's what breaks tools.
+    // Mirrors the intent of the Holder Rigidity treatment. Cap only bites when the part is
+    // actually in play and genuinely poor. Bands: wpScore ≥70 no cap; 50–70 → cap 78;
+    // 35–50 → cap 62; <35 → cap 45 (keeps it out of "Excellent"/"Good", flags a real risk).
+    let cap = 100;
+    if (hasWorkpiece) {
+      if (wpScore < 35) cap = 45;
+      else if (wpScore < 50) cap = 62;
+      else if (wpScore < 70) cap = 78;
+    }
+    const overall = Math.min(overall0, cap);
     return {
       overall,
       defl:  Math.round(deflScore),
@@ -5328,6 +5367,7 @@ ${stabSection}
       ld:    Math.round(ldScore),
       rigidity: rigScore,
       workholding: whScore,
+      workpiece: Math.round(wpScore),
     };
   }
 
@@ -9684,6 +9724,34 @@ ${stabSection}
                 }}
               />
               <p className="text-[10px] text-zinc-500 mt-1">Used to adjust workholding compliance in the stability model — longer overhang increases chatter risk.</p>
+            </div>
+          )}
+
+          {/* Part Diameter at Overhang — the cantilever needs BOTH overhang length AND
+              cross-section to compute part deflection (δ = F·L³/3EI, I = π·d⁴/64). Shown
+              only once an overhang is entered. Blank → engine uses a conservative estimate. */}
+          {form.part_stickout > 0 && (
+            <div className="mt-3">
+              <FieldLabel hint="The part's cross-section diameter at the overhang. Combined with the overhang length, this sizes the part as a cantilever — a slender part flexes far more (deflection scales with 1/diameter⁴). Enter the smallest diameter along the overhang for a solid round; leave blank and the model assumes a conservative ~2× tool-diameter stub.">
+                Part Diameter at Overhang (in)
+              </FieldLabel>
+              <Input
+                type="text" inputMode="decimal" className="no-spinners"
+                placeholder="e.g. 1.000 (blank = estimate)"
+                value={partDiaText}
+                onChange={e => setPartDiaText(e.target.value)}
+                onBlur={() => {
+                  const n = parseDim(partDiaText);
+                  if (Number.isFinite(n) && n > 0) {
+                    setForm(p => ({ ...p, part_dia_at_overhang: parseFloat(n.toFixed(3)) }));
+                    setPartDiaText(n.toFixed(3));
+                  } else {
+                    setForm(p => ({ ...p, part_dia_at_overhang: 0 }));
+                    setPartDiaText("");
+                  }
+                }}
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">Drives the part-as-cantilever deflection. Leave blank for a conservative estimate — a real value sharpens the Workpiece Rigidity score.</p>
             </div>
           )}
 
@@ -17167,6 +17235,19 @@ ${stabSection}
           : whScore >= 65
           ? `✓ ${_whLbl} — solid hold. A more rigid fixture would let the part absorb more force.`
           : `⚠ ${_whLbl} — the most compliant option for this machine. A stiffer fixture (rigid plate, dovetail, or dialed-in chuck) resists chatter and improves finish.`;
+        // Workpiece Rigidity — the part as a cantilever off the jaws / trunnion face.
+        const wpScore    = stabilityIndex.workpiece;
+        const partSO     = stability.part_stickout_in ?? 0;
+        const partPct    = stability.part_deflection_pct ?? 0;
+        const partDiaEst = stability.part_dia_estimated ?? false;
+        const partSupported = stability.part_supported ?? false;
+        const wpResult = partSO <= 0
+          ? `✓ Part is held rigidly against its workholding — no meaningful overhang.`
+          : wpScore >= 70
+          ? `✓ Part overhang (${UC(partSO, 25.4, metric ? 1 : 3)}${metric ? "mm" : "\""}) flexes little under cutting force${partSupported ? " (far end supported)" : ""}.`
+          : wpScore >= 50
+          ? `⚠ Part is flexing under the cut (${partPct.toFixed(0)}% of chatter limit) — the workpiece, not the tool, is the weak link. Reduce overhang past the jaws, add a steady rest / tailstock, or lighten radial engagement.`
+          : `⚠ Part is the weak link — it's flexing ${(partPct/100).toFixed(1)}× the chatter limit at this overhang. This is a tool-breaking chatter risk: shorten the overhang past the jaws, support the free end (tailstock / steady rest), grip more of the part, or drop DOC/WOC. ${partDiaEst ? "(Enter the part diameter at the overhang for an accurate number.)" : ""}`;
 
         return (
           <div className="border-t border-zinc-700/40 px-4 pt-4 pb-5 space-y-3">
@@ -17213,6 +17294,9 @@ ${stabSection}
                 ["Reach",        stabilityIndex.ld,   "Stickout length vs. tool diameter. Under 3× is stiff. Over 5× and you're fighting the tool. Shorter stickout is the most effective single change.", ldResult],
                 ["Holder Rigidity", stabilityIndex.rigidity, "How stiff and low-runout the tool holder interface is. A better holder (hydraulic, shrink-fit, Capto) resists chatter and cuts runout — improving finish and tool life. This is a property of the holder itself, independent of feed.", rigidityResult],
                 ["Workholding",  stabilityIndex.workholding, "How rigidly the part is held against cutting force, scored among the options available on this machine type. A stiffer setup (rigid fixture, tombstone, dialed-in chuck) resists chatter and part movement. A part that flexes prints poor finish no matter how good the tool is.", workholdingResult],
+                ...((stability.part_stickout_in ?? 0) > 0
+                  ? [["Workpiece Rigidity", stabilityIndex.workpiece, "The PART as a cantilever off the chuck jaws / trunnion face. When the part sticks out past its grip, it flexes under cutting force just like an over-long tool does — and as the cut nears the free end, that flex grows. On a soft or long part this can be the real weak link even when the tool, holder, and machine all look great. A poor score here caps the overall index — a wobbly part can't earn 'Excellent'.", wpResult] as [string, number, string, string | null]]
+                  : []),
               ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
                 <div key={label} className="flex items-center gap-3 py-1.5">
                   <TooltipProvider delayDuration={200}>
