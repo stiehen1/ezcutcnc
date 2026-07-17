@@ -17328,8 +17328,10 @@ ${stabSection}
       </div>
       </div>} {/* end grid */}
 
-      {/* ROI vs Incumbent */}
-      {erEmail && (mentor.data || roiDraftLoaded) && (
+      {/* ROI vs Incumbent — only available after a calculator run (needs the
+          tool + feed data the calc produces). A resumed draft still restores the
+          field values, but the panel itself doesn't appear until a calc runs. */}
+      {erEmail && mentor.data && (
         <div className="mt-5 rounded-xl border border-green-700/50 bg-green-950/20">
           {/* Header toggle */}
           <button
@@ -17359,9 +17361,9 @@ ${stabSection}
                 Test recorded by: <span className="text-zinc-300 font-semibold">{roiRepVerified.name}</span> <span className="text-zinc-600">({erEmail})</span>
               </div>
 
-              {roiDraftLoaded && !mentor.data && (
+              {roiDraftLoaded && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300">
-                  📋 Resuming in-progress ROI — run a calculation to see the feed rate hint, or fill in all fields and finalize.
+                  📋 Resumed a saved ROI — values below are restored. Adjust and recalculate as needed.
                 </div>
               )}
               {/* End-user info — company + contact on one row to save vertical space */}
