@@ -4963,6 +4963,24 @@ ${stabSection}
     press_fit: "Press Fit", shrink_fit: "Shrink Fit", capto: "Capto / HSK",
     right_angle_head: "Right-Angle Head",
   };
+  const WORKHOLDING_LABELS: Record<string, string> = {
+    vise: "Vise", vise_soft_jaw: "Vise — Soft Jaws", vise_kurt: "Kurt Vise",
+    "3_jaw_chuck": "3-Jaw Chuck", "4_jaw_chuck": "4-Jaw Chuck", "6_jaw_chuck": "6-Jaw Chuck",
+    collet_chuck: "Collet Chuck", face_plate: "Face Plate",
+    trunnion_4th: "4th Axis Trunnion", fixture_plate: "Fixture Plate",
+    magnetic: "Magnetic Chuck", tombstone: "Tombstone",
+    expanding_mandrel: "Expanding Mandrel", sub_spindle: "C-Axis / Sub-Spindle",
+    tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
+    rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
+    "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
+    hydraulic_chuck: "Hydraulic Chuck", power_chuck: "Power Chuck",
+    form_jaws: "Form Jaws", step_jaws: "Step Jaws", pie_jaws: "Pie Jaws",
+    steady_rest: "Steady Rest", secondary_op_vise: "Secondary Op Vise",
+    modular_quickchange: "Modular Quick-Change",
+    ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
+    zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
+    guide_bushing: "Guide Bushing", gang_tooling: "Gang Tooling",
+  };
   // Holder interfaces ranked worst → best. This order IS the ordering the user
   // sees in the toolholder dropdown (reversed), so the Holder Rigidity sub-score
   // rises by a fixed step every time they pick a better holder — no surprises
@@ -4991,22 +5009,90 @@ ${stabSection}
     return Math.round(40 + (rank / span) * 60);
   }
 
+  // Workholding rigidity — a stiffness value per workholding type (LOWER = stiffer,
+  // matching the engine's WORKHOLDING_COMPLIANCE convention where a rigid fixture
+  // multiplies chatter_index by 0.80 and soft jaws by 1.20). The engine only tables
+  // a subset; the rest (lathe/5-axis/mill-turn chucks) are filled in at the same
+  // real-world rigidity tier so every UI option scores sensibly. This is the SAME
+  // fix as the holder Rigidity sub-score: without it, a stiffer fixture only showed
+  // up as a faster feed, which pushed Tool Flex / Spindle Load down and dropped the
+  // overall score. Values below span ~0.72 (stiffest) to ~1.20 (softest).
+  const WORKHOLDING_RIGIDITY_VALUE: Record<string, number> = {
+    // Mill / machining-center (engine-tabled)
+    rigid_fixture: 0.80, tombstone: 0.82, "5th_axis_vise": 0.88, dovetail: 0.90,
+    trunnion_4th: 0.91, face_plate: 0.93, vise: 1.00, "3_jaw_chuck": 1.05,
+    toe_clamps: 1.08, soft_jaws: 1.20,
+    // Mill extras (not engine-tabled — placed by real-world rigidity)
+    zero_point: 0.80, pyramid: 0.84, fixture_plate: 0.80, magnetic: 0.94,
+    vise_kurt: 0.98, vise_soft_jaw: 1.15, secondary_op_vise: 1.02,
+    modular_quickchange: 0.86,
+    // Lathe / turning (between_centers/collet_chuck engine-tabled; rest by tier)
+    between_centers: 0.75, guide_bushing: 0.78, gang_tooling: 0.72,
+    collet_chuck: 0.85, "4_jaw_chuck": 0.88, "6_jaw_chuck": 0.90,
+    power_chuck: 0.90, hydraulic_chuck: 0.88, pie_jaws: 0.95, form_jaws: 0.96,
+    step_jaws: 0.98, expanding_mandrel: 0.92, tailstock_supported: 0.82,
+    steady_rest: 0.86, sub_spindle: 0.90, ijaw: 0.88, autochuck: 0.88,
+  };
+  // Which workholding options each machine type exposes — mirrors the button-row
+  // _allowedWH map in the machine-select handler. Normalizing WITHIN this set
+  // means the machine's own baseline reads as a solid score (a lathe collet chuck
+  // isn't penalized for not being a mill rigid fixture) and every stiffer option
+  // on THAT machine reliably raises the sub-score.
+  const WORKHOLDING_ALLOWED: Record<string, readonly string[]> = {
+    vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","toe_clamps","soft_jaws"],
+    hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","soft_jaws"],
+    "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
+    gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+    hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+    double_column: ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
+    lathe:         ["soft_jaws","form_jaws","6_jaw_chuck","pie_jaws","hydraulic_chuck","power_chuck","collet_chuck","3_jaw_chuck","step_jaws","expanding_mandrel","tailstock_supported","between_centers","steady_rest"],
+    mill_turn:     ["soft_jaws","form_jaws","6_jaw_chuck","pie_jaws","hydraulic_chuck","power_chuck","collet_chuck","3_jaw_chuck","step_jaws","expanding_mandrel","dovetail","rigid_fixture","modular_quickchange","tailstock_supported","between_centers","steady_rest","ijaw","autochuck"],
+    swiss:         ["gang_tooling","guide_bushing","collet_chuck","soft_jaws","step_jaws","expanding_mandrel"],
+  };
+  // Score workholding 0–100, normalized within the current machine type's option
+  // set. Stiffest allowed option → 100, softest → 40; the selected option lands
+  // proportionally between. Band matches the holder sub-score (40–100 floor/ceiling).
+  function workholdingRigidityScore(wh: string | undefined, machineType: string | undefined): number {
+    const key = wh ?? "vise";
+    const val = WORKHOLDING_RIGIDITY_VALUE[key] ?? 1.00;
+    const allowed = WORKHOLDING_ALLOWED[machineType ?? "vmc"] ?? Object.keys(WORKHOLDING_RIGIDITY_VALUE);
+    const vals = allowed.map(k => WORKHOLDING_RIGIDITY_VALUE[k] ?? 1.00);
+    const stiffest = Math.min(...vals, val);  // lowest compliance = best
+    const softest  = Math.max(...vals, val);  // highest compliance = worst
+    if (softest <= stiffest) return 100;       // single-option machine
+    // Invert: lower compliance value → higher score.
+    const norm = (softest - val) / (softest - stiffest);
+    return Math.round(40 + Math.max(0, Math.min(1, norm)) * 60);
+  }
+
   function calcStabilityIndex(
     stab: typeof result.stability,
     eng: typeof result.engineering,
     cust: typeof result.customer,
     holder: string | undefined,
-  ): { overall: number; defl: number; load: number; chip: number; ld: number; rigidity: number } | null {
+    workholding: string | undefined,
+    machineType: string | undefined,
+  ): { overall: number; defl: number; load: number; chip: number; ld: number; rigidity: number; workholding: number } | null {
     if (!stab && !eng && !cust) return null;
     // Deflection score (0–100): 0% deflection = 100, 100% = 50, 175%+ = 0
     const deflPct = stab?.deflection_pct ?? 0;
     const deflScore = Math.max(0, Math.min(100, deflPct < 100
       ? 100 - deflPct * 0.5
       : 50 - (deflPct - 100) * (50 / 75)));
-    // Machine load score — only include when HP data is available
+    // Machine load score — only include when HP data is available.
+    // Roughing WANTS the spindle loaded: 50–80% is the productive sweet spot, not
+    // a problem (the result-line copy already says "Normal ✓" through 80%). The old
+    // curve (100 − load×1.25) hit 0 at 80% and scored a healthy 52% cut as "Fair
+    // 35" — contradicting its own advice. This piecewise curve matches the copy's
+    // tiers: ≤50% light = 100, 50–80% normal stays high (100→82), 80–100% heavy
+    // ramps down (82→35), and only above the limit does it fall to 0 (~115%).
     const hasMachineHp = (cust?.machine_hp ?? 0) > 0;
     const loadPct = cust?.spindle_load_pct ?? 0;
-    const loadScore = hasMachineHp ? Math.max(0, Math.min(100, 100 - loadPct * 1.25)) : null;
+    const loadScore = !hasMachineHp ? null
+      : loadPct <= 50  ? 100
+      : loadPct <= 80  ? 100 - (loadPct - 50) * (18 / 30)   // 50→100 … 80→82
+      : loadPct <= 100 ? 82  - (loadPct - 80) * (47 / 20)   // 80→82 … 100→35
+      :                  Math.max(0, 35 - (loadPct - 100) * (35 / 15)); // 100→35 … 115→0
     // Chip thickness score: below min fpt*0.30 = bad
     const ct = eng?.chip_thickness_in ?? null;
     const minCt = (cust?.fpt ?? 0) * 0.30;
@@ -5016,15 +5102,16 @@ ${stabSection}
     // L/D score: ≤3 = 100, 4 = 88, 5 = 72, 6 = 54, 7 = 36, 8+ = 15
     const ld = stab?.l_over_d ?? 3;
     const ldScore = Math.max(10, Math.min(100, 100 - Math.max(0, ld - 3) * 18));
-    // Holder-interface quality (rigidity + runout). Weighted at 0.25 so a
-    // single-step holder upgrade (~7.5 pts → ~1.9 overall) reliably clears the
-    // 1–3 pt dip in Tool Flex / Spindle Load caused by the higher feed a better
-    // holder unlocks — the score always moves UP on an upgrade, never flat/down.
+    // Holder-interface and workholding quality. Both are weighted heavily enough
+    // (0.18 + 0.15) that a single-step upgrade in either reliably clears the 1–3 pt
+    // dip in Tool Flex / Spindle Load caused by the higher feed a stiffer setup
+    // unlocks — so the overall score always moves UP on an upgrade, never flat/down.
     const rigScore = holderRigidityScore(holder);
+    const whScore  = workholdingRigidityScore(workholding, machineType);
     // Weight redistribution when machine HP not available
     const overall = loadScore !== null
-      ? Math.round(deflScore * 0.20 + loadScore * 0.12 + chipScore * 0.20 + ldScore * 0.20 + rigScore * 0.28)
-      : Math.round(deflScore * 0.265 + chipScore * 0.2275 + ldScore * 0.2275 + rigScore * 0.28);
+      ? Math.round(deflScore * 0.16 + loadScore * 0.10 + chipScore * 0.18 + ldScore * 0.18 + rigScore * 0.20 + whScore * 0.18)
+      : Math.round(deflScore * 0.215 + chipScore * 0.2025 + ldScore * 0.2025 + rigScore * 0.20 + whScore * 0.18);
     return {
       overall,
       defl:  Math.round(deflScore),
@@ -5032,12 +5119,13 @@ ${stabSection}
       chip:  Math.round(chipScore),
       ld:    Math.round(ldScore),
       rigidity: rigScore,
+      workholding: whScore,
     };
   }
 
   const stabilityIndex = React.useMemo(() =>
-    calcStabilityIndex(result?.stability, result?.engineering, result?.customer, form.toolholder),
-    [result, form.toolholder]
+    calcStabilityIndex(result?.stability, result?.engineering, result?.customer, form.toolholder, form.workholding, form.machine_type),
+    [result, form.toolholder, form.workholding, form.machine_type]
   );
 
   const [camCopied, setCamCopied] = React.useState(false);
@@ -5360,23 +5448,7 @@ ${stabSection}
     if (form.spindle_taper) lines.push(L("Taper",       form.spindle_taper + (form.dual_contact ? " · Big-Plus Dual Contact" : "")));
     if (form.machine_hp > 0) lines.push(L("Machine HP", `${form.machine_hp} HP`));
     if (form.max_rpm > 0)   lines.push(L("Max RPM",     `${form.max_rpm.toLocaleString()} RPM`));
-    const whLabels: Record<string, string> = {
-      vise: "Vise", vise_soft_jaw: "Vise — Soft Jaws", vise_kurt: "Kurt Vise",
-      "3_jaw_chuck": "3-Jaw Chuck", "4_jaw_chuck": "4-Jaw Chuck", "6_jaw_chuck": "6-Jaw Chuck",
-      collet_chuck: "Collet Chuck", face_plate: "Face Plate",
-      trunnion_4th: "4th Axis Trunnion", fixture_plate: "Fixture Plate",
-      magnetic: "Magnetic Chuck", tombstone: "Tombstone",
-      expanding_mandrel: "Expanding Mandrel", sub_spindle: "C-Axis / Sub-Spindle",
-      tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
-      rigid_fixture: "Rigid Fixture", dovetail: "Dovetail", toe_clamps: "Toe Clamps",
-      "5th_axis_vise": "5th-Axis Vise", between_centers: "Between Centers",
-      hydraulic_chuck: "Hydraulic Chuck", power_chuck: "Power Chuck",
-      form_jaws: "Form Jaws", step_jaws: "Step Jaws", pie_jaws: "Pie Jaws",
-      steady_rest: "Steady Rest", secondary_op_vise: "Secondary Op Vise",
-      modular_quickchange: "Modular Quick-Change",
-      ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
-      zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
-    };
+    const whLabels = WORKHOLDING_LABELS;
     if (form.workholding) lines.push(L("Workholding",  whLabels[form.workholding] ?? form.workholding.replace(/_/g, " ")));
     if (form.part_stickout > 0) lines.push(L("Part Overhang", `${form.part_stickout.toFixed(3)}" past jaws`));
     if (form.tailstock) lines.push(L("Tailstock", "In use — simply-supported (3.5× rigidity boost applied)"));
@@ -16880,6 +16952,13 @@ ${stabSection}
           : rigScore >= 65
           ? `✓ ${_holderLbl} — solid interface. Shrink-fit or hydraulic would tighten runout further.`
           : `⚠ ${_holderLbl} — higher runout / lower rigidity. A shrink-fit, hydraulic, or Capto holder improves chatter resistance and finish.`;
+        const whScore = stabilityIndex.workholding;
+        const _whLbl = (WORKHOLDING_LABELS[form.workholding] ?? form.workholding?.replace(/_/g, " ") ?? "workholding");
+        const workholdingResult = whScore >= 80
+          ? `✓ ${_whLbl} — a rigid setup. The part is well anchored against cutting force.`
+          : whScore >= 65
+          ? `✓ ${_whLbl} — solid hold. A more rigid fixture would let the part absorb more force.`
+          : `⚠ ${_whLbl} — the most compliant option for this machine. A stiffer fixture (rigid plate, dovetail, or dialed-in chuck) resists chatter and improves finish.`;
 
         return (
           <div className="border-t border-zinc-700/40 px-4 pt-4 pb-5 space-y-3">
@@ -16916,20 +16995,22 @@ ${stabSection}
               <div className={`h-full rounded-full ${barColor}`} style={{ width: `${si}%` }} />
             </div>
 
-            {/* Sub-scores */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] pt-1">
+            {/* Sub-scores — one metric per row, full-width bars. Grouped:
+                cutting conditions (feed-driven) vs. setup rigidity (holder + part). */}
+            <div className="flex flex-col divide-y divide-zinc-800/60 text-[11px] pt-1">
               {([
                 ["Tool Flex",    stabilityIndex.defl, "How much the tool tip flexes under cutting force. High flex causes chatter and poor surface finish. Shortening stickout is the single biggest fix.", deflResult],
                 ["Spindle Load", stabilityIndex.load, "How hard the spindle is working vs. what it has available. Under 80% is comfortable. Above 100% the machine will struggle. Only shown when machine HP is entered.", loadResult],
                 ["Chip Health",  stabilityIndex.chip, "Is the tool cutting or rubbing? A chip that's too thin means the tool is skating across the surface — generates heat and kills the edge. Increase feed if this is low.", chipResult],
                 ["Reach",        stabilityIndex.ld,   "Stickout length vs. tool diameter. Under 3× is stiff. Over 5× and you're fighting the tool. Shorter stickout is the most effective single change.", ldResult],
                 ["Holder Rigidity", stabilityIndex.rigidity, "How stiff and low-runout the tool holder interface is. A better holder (hydraulic, shrink-fit, Capto) resists chatter and cuts runout — improving finish and tool life. This is a property of the holder itself, independent of feed.", rigidityResult],
+                ["Workholding",  stabilityIndex.workholding, "How rigidly the part is held against cutting force, scored among the options available on this machine type. A stiffer setup (rigid fixture, tombstone, dialed-in chuck) resists chatter and part movement. A part that flexes prints poor finish no matter how good the tool is.", workholdingResult],
               ] as [string, number, string, string | null][]).map(([label, score, hint, resultLine]) => (
-                <div key={label} className="flex items-center gap-2">
+                <div key={label} className="flex items-center gap-3 py-1.5">
                   <TooltipProvider delayDuration={200}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="text-zinc-500 w-24 shrink-0 cursor-default flex items-center gap-0.5">
+                        <span className="text-zinc-400 w-28 shrink-0 cursor-default flex items-center gap-0.5">
                           {label}
                           <span className="text-muted-foreground/50 text-[9px] leading-none">ⓘ</span>
                         </span>
@@ -16941,13 +17022,13 @@ ${stabSection}
                     </Tooltip>
                   </TooltipProvider>
                   {score === -1 ? (
-                    <span className="text-zinc-600 italic text-[10px]">enter machine HP</span>
+                    <span className="text-zinc-600 italic text-[10px] flex-1">enter machine HP</span>
                   ) : (
                     <>
-                      <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[50px] overflow-hidden">
+                      <div className="flex-1 h-1.5 rounded-full bg-zinc-800 min-w-[60px] overflow-hidden">
                         <div className={`h-full rounded-full ${score >= 80 ? "bg-emerald-400" : score >= 65 ? "bg-emerald-600" : score >= 35 ? "bg-amber-400" : "bg-red-500"}`} style={{ width: `${score}%` }} />
                       </div>
-                      <span className={`text-right font-semibold w-20 shrink-0 ${score >= 80 ? "text-emerald-400" : score >= 65 ? "text-emerald-600" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>
+                      <span className={`text-right font-semibold w-24 shrink-0 ${score >= 80 ? "text-emerald-400" : score >= 65 ? "text-emerald-600" : score >= 35 ? "text-amber-400" : "text-red-400"}`}>
                         {score >= 80 ? "Excellent" : score >= 65 ? "Good" : score >= 35 ? "Fair" : "Poor"} <span className="font-normal opacity-50">{score}</span>
                       </span>
                     </>
