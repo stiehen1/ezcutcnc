@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 
 type ToolboxItem = {
   id: number;
@@ -96,7 +96,6 @@ function SectionHeader({
 }
 
 export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
-  const [, navigate] = useLocation();
   const [email, setEmail] = React.useState(() => localStorage.getItem("tb_email") || "");
   const [token, setToken] = React.useState(() => localStorage.getItem("tb_token") || "");
   const [step, setStep] = React.useState<"email" | "items">(
@@ -1362,8 +1361,9 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                   onClick={e => {
                                     e.stopPropagation();
                                     const draft: Record<string, unknown> = {
-                                      roiName: roi.roi_name || "", roiSessionId: roi.roi_session_id || undefined,
+                                      roiName: roi.roi_name || "", roiNameEdited: true, roiSessionId: roi.roi_session_id || undefined,
                                       lifeMode: roi.life_mode || "parts",
+                                      partName: roi.part_name || "", partNumber: roi.part_number || "",
                                       ccPrice: String(roi.cc_tool_price ?? ""), ccParts: String(roi.cc_parts_per_tool ?? ""),
                                       ccCutTime: String(roi.cc_time_in_cut ?? ""), ccMrr: String(roi.cc_mrr ?? ""),
                                       reconEnabled: !!roi.recon_enabled, reconGrinds: String(roi.recon_grinds ?? ""),
@@ -1376,12 +1376,16 @@ export default function Toolbox({ onBack }: { onBack?: () => void } = {}) {
                                       matVolPerPart: String(roi.mat_vol_per_part ?? ""),
                                       userType: roi.user_type || "", distributorName: roi.distributor_name || "",
                                       distributorCode: roi.distributor_code || "", endUserName: roi.end_user_name || "",
-                                      endUserEmail: roi.end_user_email || "", endUserCompany: roi.end_user_company || "",
+                                      endUserCompany: roi.end_user_company || "",
                                       _roiLoadedId: roi.id,
                                     };
                                     localStorage.setItem("roi_draft", JSON.stringify(draft));
                                     localStorage.setItem("roi_resume", "1");
-                                    navigate("/");
+                                    // Hard navigation (same as Resume) so the Calculator
+                                    // remounts and its mount effect reads the fresh draft.
+                                    // wouter's client-side navigate() does not reliably
+                                    // re-fire the mount-only draft loader.
+                                    window.location.href = "/";
                                   }}
                                   className="text-[11px] px-2 py-1 rounded-md bg-green-800/50 hover:bg-green-700/60 text-green-300 font-semibold transition-colors"
                                 >Rerun →</button>
