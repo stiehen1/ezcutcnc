@@ -17347,24 +17347,40 @@ ${stabSection}
                   </div>
                 </div>
 
-                {/* 2. TOOL LIFE PAIR — one bordered box wrapping both sides.
+                {/* 2a. TOOL PRICE ROW — sits just above the Tool Life box, one per side.
+                    Not bordered; z-10 so the center divider passes behind it. */}
+                <div className="relative z-10 grid grid-cols-2 gap-4">
+                  {/* Left: Core Cutter price */}
+                  <div className="space-y-1.5">
+                    <RoiLabel required hint="Price for the Core Cutter tool. Used to calculate cost per part vs. the incumbent.">Tool Price ($)</RoiLabel>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 48.50"
+                      value={roiCcPrice}
+                      onChange={e => setRoiCcPrice(e.target.value)}
+                    />
+                  </div>
+                  {/* Right: Incumbent price */}
+                  <div className="space-y-1.5">
+                    <RoiLabel required hint="What the customer currently pays for the incumbent tool. Combined with tool life, this determines their current cost per part.">Tool Price ($)</RoiLabel>
+                    <Input
+                      type="number"
+                      className="no-spinners h-7 text-xs"
+                      placeholder="e.g. 62.00"
+                      value={roiCompPrice}
+                      onChange={e => setRoiCompPrice(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* 2b. TOOL LIFE PAIR — one bordered box wrapping both sides.
                     Opaque + relative z-10 so the center divider passes behind it. */}
                 <div className="relative z-10 rounded-lg border-2 border-orange-500/70 bg-[#1a1512] p-2.5">
                   <div className="text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-2">Tool Life <span className="text-zinc-500 font-normal normal-case">— tool price ÷ life = cost per part</span></div>
                   <div className="grid grid-cols-2 gap-4">
                     {/* Left: Core Cutter tool life */}
                     <div className="space-y-2">
-                      <div className="space-y-1.5">
-                        <RoiLabel required hint="Your list or street price for this Core Cutter tool. Used to calculate cost per part vs. the incumbent.">Tool Price ($)</RoiLabel>
-                        <Input
-                          type="number"
-                          className="no-spinners h-7 text-xs"
-                          placeholder="e.g. 48.50"
-                          value={roiCcPrice}
-                          onChange={e => setRoiCcPrice(e.target.value)}
-                        />
-                      </div>
-
                       {/* Parts per Tool mode */}
                       {roiLifeMode === "parts" && (
                         <div className="space-y-1.5">
@@ -17401,17 +17417,6 @@ ${stabSection}
 
                     {/* Right: Incumbent tool life */}
                     <div className="space-y-2">
-                      <div className="space-y-1.5">
-                        <RoiLabel required hint="What the customer currently pays for the incumbent tool. Combined with tool life, this determines their current cost per part.">Tool Price ($)</RoiLabel>
-                        <Input
-                          type="number"
-                          className="no-spinners h-7 text-xs"
-                          placeholder="e.g. 62.00"
-                          value={roiCompPrice}
-                          onChange={e => setRoiCompPrice(e.target.value)}
-                        />
-                      </div>
-
                       {/* Parts per Tool mode */}
                       {roiLifeMode === "parts" && (
                         <div className="space-y-1.5">
