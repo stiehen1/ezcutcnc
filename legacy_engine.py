@@ -622,6 +622,7 @@ WORKHOLDING_COMPLIANCE = {
     "face_plate":      0.93,  # face plate with clamps
     "vise":            1.00,  # standard Kurt-style vise — baseline
     "3_jaw_chuck":     1.05,  # standard 3-jaw self-centering chuck
+    "3_jaw_on_rotary": 1.12,  # 3-jaw chuck mounted on a 4th-axis rotary — chuck grip + rotary bearing/brake loop
     "toe_clamps":      1.08,  # direct clamping, some flex under radial load
     "soft_jaws":       1.20,  # custom soft jaws — most compliant
 }
@@ -4663,7 +4664,7 @@ def run(payload=None):
     _wh_key_feed = str(data.get("workholding", "vise") or "vise")
     _wh_factor_feed = WORKHOLDING_COMPLIANCE.get(_wh_key_feed, 1.0)
     _part_so_feed = float(data.get("part_stickout", 0) or 0)
-    if _part_so_feed > 0 and _wh_key_feed in {"trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}:
+    if _part_so_feed > 0 and _wh_key_feed in {"trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}:
         _wh_factor_feed *= min(1.50, 1.0 + 0.06 * _part_so_feed)
     _wh_feed_mult = max(0.70, min(1.05, 1.0 / _wh_factor_feed))
     ipt *= _wh_feed_mult
@@ -4816,7 +4817,7 @@ def run(payload=None):
     _wh_key_sol = str(data.get("workholding", "vise") or "vise")
     _wh_factor_sol = WORKHOLDING_COMPLIANCE.get(_wh_key_sol, 1.0)
     _part_so_sol = float(data.get("part_stickout", 0) or 0)
-    if _part_so_sol > 0 and _wh_key_sol in {"trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}:
+    if _part_so_sol > 0 and _wh_key_sol in {"trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate"}:
         _wh_factor_sol *= min(1.50, 1.0 + 0.06 * _part_so_sol)
     _base_dlim /= _wh_factor_sol
     deflection_limit = _base_dlim

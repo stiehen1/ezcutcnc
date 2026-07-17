@@ -658,6 +658,7 @@ WORKPIECE_MODULUS = {
 # Values are documented starting estimates (softest → stiffest), to be shop-calibrated.
 FIXTURE_COMPLIANCE = {
     # rotary / trunnion loops — softest (bearing + brake + chuck stack-up)
+    "3_jaw_on_rotary": 2.6e-6,  # 3-jaw grip give stacked on top of the rotary bearing/brake loop — softest setup
     "trunnion_4th":    2.2e-6,
     "face_plate":      1.8e-6,
     # standalone chucks

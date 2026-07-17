@@ -81,7 +81,7 @@ export const mentorSchemas = {
     speeder_ratio: z.number().min(1).max(20).default(4),
     speeder_max_rpm: z.number().int().min(0).default(40000),
     speeder_max_torque_nm: z.number().min(0).default(0),
-    workholding: z.enum(["rigid_fixture", "tombstone", "dovetail", "vise", "soft_jaws", "toe_clamps", "5th_axis_vise", "3_jaw_chuck", "4_jaw_chuck", "6_jaw_chuck", "collet_chuck", "between_centers", "face_plate", "trunnion_4th", "expanding_mandrel", "sub_spindle", "tailstock_supported", "steady_rest", "hydraulic_chuck", "power_chuck", "form_jaws", "step_jaws", "pie_jaws", "secondary_op_vise", "modular_quickchange", "ijaw", "autochuck", "zero_point", "pyramid", "gang_tooling", "guide_bushing"]).default("vise"),
+    workholding: z.enum(["rigid_fixture", "tombstone", "dovetail", "vise", "soft_jaws", "toe_clamps", "5th_axis_vise", "3_jaw_chuck", "4_jaw_chuck", "6_jaw_chuck", "collet_chuck", "between_centers", "face_plate", "trunnion_4th", "3_jaw_on_rotary", "expanding_mandrel", "sub_spindle", "tailstock_supported", "steady_rest", "hydraulic_chuck", "power_chuck", "form_jaws", "step_jaws", "pie_jaws", "secondary_op_vise", "modular_quickchange", "ijaw", "autochuck", "zero_point", "pyramid", "gang_tooling", "guide_bushing"]).default("vise"),
     tailstock: z.boolean().default(false),
     // Workpiece cantilever inputs — for 4th-axis / lathe / long-overhang setups where
     // the PART (not the tool) is the flexible member. part_stickout = length the part

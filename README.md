@@ -16,6 +16,7 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 - New **Part Diameter at Overhang** input (appears once a Part Overhang is entered) — a cantilever needs both length and cross-section. Blank falls back to a conservative estimate and says so.
 - The new **Workpiece Rigidity** sub-score **hard-caps** the overall index — a flexible part can no longer earn "Excellent" no matter how good the tool, holder, and machine are. No-overhang cuts score exactly as before (the workpiece axis only participates when the part actually sticks out).
 - Fixture-compliance constants are documented starting estimates, to be shop-calibrated.
+- Added a **"3-Jaw on Rotary"** workholding option (VMC/HMC) for the common "chuck mounted on a 4th-axis" setup that the single-select buttons couldn't express — it stacks the 3-jaw grip on the rotary bearing/brake loop (softest of the milling options). Pick this instead of plain "3-Jaw Chuck" when the chuck is on a rotary.
 
 ### Materials — Medium-Carbon Steel Sub-Category
 - Split plain-carbon 10xx steels (1040, 1045, 1055, 1070–1095) out of the Alloy Steel bucket into their own **Medium-Carbon Steel** sub-category under P Steel. Previously typing "1045" into Match resolved to *"Alloy Steel (4130…)"*, which was metallurgically wrong and understated the tool life / overstated the abrasion.

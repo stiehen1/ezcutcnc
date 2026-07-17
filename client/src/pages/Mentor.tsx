@@ -1794,8 +1794,8 @@ export default function Mentor() {
     // default for that lineup — otherwise the orphaned value still drives downstream UI
     // (e.g. the part-overhang field stays visible with no matching button selected).
     const _allowedWH: Record<string, readonly string[]> = {
-      vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","toe_clamps","soft_jaws"],
-      hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","soft_jaws"],
+      vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","toe_clamps","soft_jaws"],
+      hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","soft_jaws"],
       "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
       gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
       hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
@@ -2546,7 +2546,7 @@ export default function Mentor() {
     holder_nose_dia: 0,
     runout_in: 0,  // measured TIR at tool tip in spindle (0 = not measured)
     extension_holder: false,
-    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing" | "hydraulic_chuck" | "power_chuck" | "step_jaws" | "form_jaws" | "pie_jaws" | "steady_rest" | "modular_quickchange" | "secondary_op_vise",
+    workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "3_jaw_on_rotary" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing" | "hydraulic_chuck" | "power_chuck" | "step_jaws" | "form_jaws" | "pie_jaws" | "steady_rest" | "modular_quickchange" | "secondary_op_vise",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
     coolant_fluid: "semi_synthetic" as "water_soluble" | "semi_synthetic" | "synthetic" | "straight_oil",
     coolant_concentration: 10,
@@ -5182,7 +5182,7 @@ ${stabSection}
     vise: "Vise", vise_soft_jaw: "Vise — Soft Jaws", vise_kurt: "Kurt Vise",
     "3_jaw_chuck": "3-Jaw Chuck", "4_jaw_chuck": "4-Jaw Chuck", "6_jaw_chuck": "6-Jaw Chuck",
     collet_chuck: "Collet Chuck", face_plate: "Face Plate",
-    trunnion_4th: "4th Axis Trunnion", fixture_plate: "Fixture Plate",
+    trunnion_4th: "4th Axis Trunnion", "3_jaw_on_rotary": "3-Jaw on Rotary", fixture_plate: "Fixture Plate",
     magnetic: "Magnetic Chuck", tombstone: "Tombstone",
     expanding_mandrel: "Expanding Mandrel", sub_spindle: "C-Axis / Sub-Spindle",
     tailstock_supported: "Tailstock Support", soft_jaws: "Soft Jaws",
@@ -5236,7 +5236,7 @@ ${stabSection}
     // Mill / machining-center (engine-tabled)
     rigid_fixture: 0.80, tombstone: 0.82, "5th_axis_vise": 0.88, dovetail: 0.90,
     trunnion_4th: 0.91, face_plate: 0.93, vise: 1.00, "3_jaw_chuck": 1.05,
-    toe_clamps: 1.08, soft_jaws: 1.20,
+    "3_jaw_on_rotary": 1.12, toe_clamps: 1.08, soft_jaws: 1.20,
     // Mill extras (not engine-tabled — placed by real-world rigidity)
     zero_point: 0.80, pyramid: 0.84, fixture_plate: 0.80, magnetic: 0.94,
     vise_kurt: 0.98, vise_soft_jaw: 1.15, secondary_op_vise: 1.02,
@@ -5254,8 +5254,8 @@ ${stabSection}
   // isn't penalized for not being a mill rigid fixture) and every stiffer option
   // on THAT machine reliably raises the sub-score.
   const WORKHOLDING_ALLOWED: Record<string, readonly string[]> = {
-    vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","toe_clamps","soft_jaws"],
-    hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_chuck","soft_jaws"],
+    vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","toe_clamps","soft_jaws"],
+    hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","soft_jaws"],
     "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
     gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
     hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
@@ -9573,6 +9573,7 @@ ${stabSection}
                       { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                       { key: "vise",          label: "Vise"             },
                       { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
+                      { key: "3_jaw_on_rotary", label: "3-Jaw on Rotary"},
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
                       { key: "soft_jaws",     label: "Soft Jaws"        },
                     ] as const)
@@ -9603,6 +9604,7 @@ ${stabSection}
                       { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
                       { key: "vise",          label: "Vise"             },
                       { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
+                      { key: "3_jaw_on_rotary", label: "3-Jaw on Rotary"},
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
                       { key: "toe_clamps",    label: "Toe Clamps"       },
                       { key: "soft_jaws",     label: "Soft Jaws"        },
@@ -9616,6 +9618,7 @@ ${stabSection}
                     soft_jaws:       "Machinable aluminum or steel jaws bored to match the part profile. Good for odd shapes or second ops but jaw compliance is higher than a solid fixture.",
                     toe_clamps:      "Strap clamps or toe clamps holding the part directly to the table. Convenient but lowest rigidity — part can rock if clamps are not perfectly torqued.",
                     trunnion_4th:    "Rotary 4th-axis trunnion with the axis fully locked for this cut. If the axis is live (contouring), select Vise or Rigid Fixture instead.",
+                    "3_jaw_on_rotary": "3-jaw chuck mounted on a 4th-axis rotary/indexer — the common 'chuck on a trunnion' setup. Softest of the milling options: the chuck's jaw grip stacks on top of the rotary bearing/brake compliance. Pick this (not plain 3-Jaw Chuck) when the chuck is on a rotary and enter the part overhang past the jaws below.",
                     "3_jaw_chuck":   "3-jaw chuck with hard jaws — strong grip, fast loading. Good for roughing but watch jaw interference with radial live tools. Soft jaws are a better choice when precision or clearance matters.",
                     "4_jaw_chuck":   "4-jaw independent chuck — each jaw adjusts separately for precise centering. More rigid than 3-jaw; better for heavy interrupted cuts.",
                     collet_chuck:      "Collet chuck (5C, dead-length, etc.) — best live tool access and concentricity. Low obstruction means radial tools reach the part cleanly. Best for small-to-medium round parts and bar-fed work.",
@@ -9670,7 +9673,7 @@ ${stabSection}
           </div>
 
           {/* Part Stickout — shown when workholding is a chuck or trunnion */}
-          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck","step_jaws","expanding_mandrel","form_jaws","pie_jaws","soft_jaws","tailstock_supported","steady_rest","gang_tooling","guide_bushing"] as string[]).includes(form.workholding) && (
+          {(["trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck","step_jaws","expanding_mandrel","form_jaws","pie_jaws","soft_jaws","tailstock_supported","steady_rest","gang_tooling","guide_bushing"] as string[]).includes(form.workholding) && (
             <div className="mt-3">
               <FieldLabel hint={(() => {
                 const w = form.workholding;
@@ -9682,6 +9685,7 @@ ${stabSection}
                 if (w === "guide_bushing") return "Distance from the guide bushing face to the cut location. Swiss machines work right at the bushing — overhang is normally tiny (<0.5×D). If your cut is far from the bushing, the bar acts as a cantilever again.";
                 if (w === "gang_tooling") return "Distance from the gang slide reference face to the cut location. Gang tooling minimizes this by design — sub-inch overhang is typical.";
                 if (w === "trunnion_4th") return "Distance from the trunnion fixture face to the cut location.";
+                if (w === "3_jaw_on_rotary") return "Distance from the chuck jaws to the cut location. On a chuck-on-rotary setup this is the biggest lever on part flex — as the cut nears the free end, the effective overhang grows and the part wags away from its support.";
                 if (w === "between_centers" || w === "tailstock_supported" || w === "steady_rest") return "Distance from the supported end (chuck/center/rest) to the cut location.";
                 return "Distance from the workholding face to the cut location. Longer part overhang adds compliance — a long part deflects far more than a stubby one.";
               })()}>{(() => {
@@ -9701,6 +9705,7 @@ ${stabSection}
                 if (w === "guide_bushing") return "Overhang Past Guide Bushing (in)";
                 if (w === "gang_tooling") return "Overhang Past Gang Slide (in)";
                 if (w === "trunnion_4th") return "Part Overhang Past Trunnion Face (in)";
+                if (w === "3_jaw_on_rotary") return "Part Overhang Past Jaws (in)";
                 if (w === "expanding_mandrel") return "Part Overhang Past Mandrel Face (in)";
                 if (w === "between_centers" || w === "tailstock_supported" || w === "steady_rest") return "Distance from Support to Cut (in)";
                 if (w === "step_jaws" || w === "form_jaws" || w === "pie_jaws" || w === "soft_jaws") return "Part Overhang Past Jaw Face (in)";
@@ -9756,7 +9761,7 @@ ${stabSection}
           )}
 
           {/* Tailstock checkbox — shown for trunnion, chuck, and lathe workholding */}
-          {(["trunnion_4th","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck"] as string[]).includes(form.workholding) && (
+          {(["trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","4_jaw_chuck","6_jaw_chuck","collet_chuck","face_plate","between_centers","hydraulic_chuck","power_chuck"] as string[]).includes(form.workholding) && (
             <div className="mt-3 flex items-start gap-2.5">
               <input
                 type="checkbox"
