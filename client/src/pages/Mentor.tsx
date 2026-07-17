@@ -17414,7 +17414,19 @@ ${stabSection}
                         placeholder="e.g. 123 Industrial Way"
                         value={roiDistAddress} onChange={e => setRoiDistAddress(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-[auto_1fr_auto] gap-2">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                      <div className="space-y-1">
+                        <RoiLabel hint="City — auto-filled when you enter a ZIP, editable.">City</RoiLabel>
+                        <Input type="text" className="h-7 text-xs"
+                          placeholder={roiZipLookupBusy ? "Looking up…" : "City"}
+                          value={roiDistCity} onChange={e => setRoiDistCity(e.target.value)} />
+                      </div>
+                      <div className="space-y-1 w-16">
+                        <RoiLabel hint="State — auto-filled when you enter a ZIP, editable.">State</RoiLabel>
+                        <Input type="text" className="h-7 text-xs"
+                          placeholder="ST"
+                          value={roiDistState} onChange={e => setRoiDistState(e.target.value)} />
+                      </div>
                       <div className="space-y-1 w-24">
                         <RoiLabel hint="Enter a 5-digit US ZIP and the city/state fill in automatically. All still editable.">Zip</RoiLabel>
                         <Input type="text" inputMode="numeric" maxLength={5} className="h-7 text-xs"
@@ -17422,18 +17434,6 @@ ${stabSection}
                           value={roiDistZip}
                           onChange={e => setRoiDistZip(e.target.value.replace(/[^\d]/g, ""))}
                           onBlur={e => lookupZip(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <RoiLabel hint="City — auto-filled from ZIP, editable.">City</RoiLabel>
-                        <Input type="text" className="h-7 text-xs"
-                          placeholder={roiZipLookupBusy ? "Looking up…" : "City"}
-                          value={roiDistCity} onChange={e => setRoiDistCity(e.target.value)} />
-                      </div>
-                      <div className="space-y-1 w-16">
-                        <RoiLabel hint="State — auto-filled from ZIP, editable.">State</RoiLabel>
-                        <Input type="text" className="h-7 text-xs"
-                          placeholder="ST"
-                          value={roiDistState} onChange={e => setRoiDistState(e.target.value)} />
                       </div>
                     </div>
                     <p className="text-[10px] text-zinc-600">Enter a ZIP to auto-fill city/state. Saved on this device — you won't need to re-enter it next time.</p>
