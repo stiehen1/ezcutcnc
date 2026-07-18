@@ -9469,10 +9469,10 @@ ${stabSection}
                     ? "B-axis milling spindle active — part stays in the A-axis chuck while the B-axis tool mills at compound angles. B-axis introduces angled + multi-directional loads, so conforming workholding matters most. Best choices: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet is great for finishing but low torque capacity under heavy B-axis loads. Dovetail and rigid fixture for special-access or prismatic secondary ops only."
                     : "A-axis main turning spindle. Best choices for off-axis / multi-face loads: Soft Jaws → Form Jaws → 6-Jaw → Pie Jaws → Hydraulic/Power Chuck. Collet and 3-jaw are good for concentric bar work but watch slip under angled cuts. Tailstock, between centers, and steady rest reduce deflection on long parts — critical for shaft work.")
                   : form.machine_type === "hmc"
-                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → 4-Jaw Chuck → Dovetail → 4th-Axis Trunnion (axis locked) → Vise → 3-Jaw Chuck → 3-Jaw on Rotary → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead. Vise note: ensure the jaws make solid, secure contact across the full width of the part — partial contact lets it rock and chatter. A part bridged between widely-spread jaws is also supported only at its ends and the unsupported span can develop harmonics — for a large span add a center support or consider vibration damping."
                   : form.machine_type === "5axis"
-                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Zero-Point / RockLock → Rigid Fixture → Pyramid Fixture → Dovetail → 5th-Axis Vise → Vise → Soft Jaws. Zero-point systems give rigid-fixture rigidity with sub-second changeover."
-                  : /* vmc default */ "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for VMC: Rigid Fixture → Dovetail → 4-Jaw Chuck → Vise → 4th-Axis Trunnion (axis locked) → 3-Jaw Chuck → Toe Clamps → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead."
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Zero-Point / RockLock → Rigid Fixture → Pyramid Fixture → 5th-Axis Vise → Dovetail → Vise → Soft Jaws. Zero-point systems give rigid-fixture rigidity with sub-second changeover."
+                  : /* vmc default */ "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for VMC: Rigid Fixture → 4-Jaw Chuck → Dovetail → 4th-Axis Trunnion (axis locked) → Vise → 3-Jaw Chuck → Toe Clamps → 3-Jaw on Rotary → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead. Vise note: ensure the jaws make solid, secure contact across the full width of the part — partial contact lets it rock and chatter. A part bridged between widely-spread jaws is also supported only at its ends and the unsupported span can develop harmonics — for a large span add a center support or consider vibration damping."
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
                 {(
@@ -9566,24 +9566,24 @@ ${stabSection}
                       ] as const)
                   )
                   : form.machine_type === "hmc"
-                  ? ([
+                  ? (/* hmc — ordered stiffest→softest to match WORKHOLDING_RIGIDITY_VALUE */ [
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
                       { key: "tombstone",     label: "Tombstone"        },
-                      { key: "dovetail",      label: "Dovetail"         },
                       { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
-                      { key: "vise",          label: "Vise"             },
+                      { key: "dovetail",      label: "Dovetail"         },
                       { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
-                      { key: "3_jaw_on_rotary", label: "3-Jaw on Rotary"},
+                      { key: "vise",          label: "Vise"             },
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
+                      { key: "3_jaw_on_rotary", label: "3-Jaw on Rotary"},
                       { key: "soft_jaws",     label: "Soft Jaws"        },
                     ] as const)
                   : form.machine_type === "5axis"
-                  ? ([
+                  ? (/* 5axis — ordered stiffest→softest to match WORKHOLDING_RIGIDITY_VALUE */ [
                       { key: "zero_point",    label: "Zero-Point / RockLock" },
                       { key: "rigid_fixture", label: "Rigid Fixture"         },
                       { key: "pyramid",       label: "Pyramid Fixture"       },
-                      { key: "dovetail",      label: "Dovetail"              },
                       { key: "5th_axis_vise", label: "5th-Axis Vise"         },
+                      { key: "dovetail",      label: "Dovetail"              },
                       { key: "vise",          label: "Vise"                  },
                       { key: "soft_jaws",     label: "Soft Jaws"             },
                     ] as const)
@@ -9598,15 +9598,15 @@ ${stabSection}
                       { key: "zero_point",    label: "Zero-Point / Sub-Plate" },
                       { key: "soft_jaws",     label: "Soft Jaws"         },
                     ] as const)
-                  : /* vmc default */ ([
+                  : /* vmc default — ordered stiffest→softest to match WORKHOLDING_RIGIDITY_VALUE */ ([
                       { key: "rigid_fixture", label: "Rigid Fixture"    },
-                      { key: "dovetail",      label: "Dovetail"         },
                       { key: "4_jaw_chuck",   label: "4-Jaw Chuck"      },
-                      { key: "vise",          label: "Vise"             },
+                      { key: "dovetail",      label: "Dovetail"         },
                       { key: "trunnion_4th",  label: "4th-Axis Trunnion"},
-                      { key: "3_jaw_on_rotary", label: "3-Jaw on Rotary"},
+                      { key: "vise",          label: "Vise"             },
                       { key: "3_jaw_chuck",   label: "3-Jaw Chuck"      },
                       { key: "toe_clamps",    label: "Toe Clamps"       },
+                      { key: "3_jaw_on_rotary", label: "3-Jaw on Rotary"},
                       { key: "soft_jaws",     label: "Soft Jaws"        },
                     ] as const)
                 ).map(({ key, label }) => {
@@ -9614,7 +9614,7 @@ ${stabSection}
                     rigid_fixture:   "Dedicated fixture bolted solid to the table — custom jig, tooling plate with dowel pins, or zero-point pallet. No movable jaw compliance. Highest milling rigidity.",
                     tombstone:       "Vertical tombstone mounted to HMC pallet. Multiple faces allow multi-part or multi-op setups. Rigidity depends on how well the part is fixtured to the tombstone face.",
                     dovetail:        "Dovetail-clamped workholding (e.g. Lang, Pierson, Orange Vise). Part has a matching dovetail ground in — allows 5-sided access with excellent grip and repeatability.",
-                    vise:            "Standard precision vise (Kurt, Chick, etc.). Movable jaw introduces a small amount of compliance — baseline milling rigidity.",
+                    vise:            "Standard precision vise (Kurt, Chick, etc.). Movable jaw introduces a small amount of compliance — baseline milling rigidity. Make sure the jaws make solid, secure contact across the full width of the part — partial or uneven contact lets it rock and chatter no matter the clamp force. A part bridged between widely-spread jaws is supported only at its ends, so a large unsupported span can develop harmonics — add a center support (parallels/step block, a third clamp, or a mid-span damper) or consider vibration damping before pushing feed.",
                     soft_jaws:       "Machinable aluminum or steel jaws bored to match the part profile. Good for odd shapes or second ops but jaw compliance is higher than a solid fixture.",
                     toe_clamps:      "Strap clamps or toe clamps holding the part directly to the table. Convenient but lowest rigidity — part can rock if clamps are not perfectly torqued.",
                     trunnion_4th:    "Rotary 4th-axis trunnion with the axis fully locked for this cut. If the axis is live (contouring), select Vise or Rigid Fixture instead.",
@@ -9628,7 +9628,7 @@ ${stabSection}
                     tailstock_supported: "Tailstock or live center supporting the far end of a long part. Improves turning rigidity on slender shafts but can limit B-axis and live tool access at that end — plan toolpath sequence carefully.",
                     between_centers:   "Part supported at both ends between a drive center and a live tailstock center. Eliminates overhang — highest rigidity for turning long shafts.",
                     face_plate:        "Part bolted directly to a face plate mounted on the spindle. Used for large or irregular parts that won't fit in a chuck.",
-                    "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts.",
+                    "5th_axis_vise": "5th-axis compatible vise (Kurt 5C, Schunk, etc.) designed for simultaneous 5-axis access. Rigid for most ops but check jaw engagement on small parts. Ensure solid full-width jaw contact, and on a part bridged across a wide span watch for harmonics — add a center support or vibration damping if the unsupported span is large.",
                     ijaw:        "DMG MORI iJAW — sensor-driven intelligent clamping with real-time clamping force monitoring. Detects workpiece slip and misloads before the cut starts. Best for high-value parts or unattended operation.",
                     autochuck:   "DMG MORI autoCHUCK 2.0 — automated rapid jaw-change system that eliminates manual jaw swaps between jobs. Reduces setup time significantly in high-mix production. Standard chuck rigidity.",
                     zero_point:  "Zero-point / pallet system (RockLock, EROWA, Schunk VERO-S) — founding plate with precision receiver bores allows sub-second fixture swap at micron-level repeatability. Rigidity equivalent to a rigid fixture. Best choice for 5-axis high-mix or lights-out production.",
@@ -17200,6 +17200,33 @@ ${stabSection}
         const infoItems   = stability.suggestions.filter((s: any) => s.type === "info");
         const firstActionIdx = stability.suggestions.findIndex((s: any) => s.type !== "lbs" && s.type !== "info" && !(lowRpmWarningActive && s.type === "diameter"));
 
+        // Soft rigidity-awareness steps. The tool-flex suggestion engine only fires
+        // when the TOOL is over-flexing (_defl > _dlim), so when holder or workholding
+        // is the weak link — but tool flex is fine — the panel would say nothing about
+        // the two sub-scores actually holding the Setup Score down. Surface an OPTIONAL,
+        // non-prescriptive nudge, but ONLY when that sub-score is Fair or below (< 65).
+        // Framed "possibly / if possible" — many shops can't swap a holder or re-fixture
+        // a part, so this is awareness, not a mandate. Mitigation is implied by the
+        // sub-score's own result line above; these steps point at the root cause.
+        const _rigSub = stabilityIndex.rigidity;
+        const _whSub  = stabilityIndex.workholding;
+        const _rigLblSoft = (TOOLHOLDER_LABELS[form.toolholder] ?? form.toolholder?.replace(/_/g, " ") ?? "current holder");
+        const _whLblSoft  = (WORKHOLDING_LABELS[form.workholding] ?? form.workholding?.replace(/_/g, " ") ?? "current workholding");
+        if (_rigSub < 65) {
+          actionItems.push({
+            type: "holder_soft",
+            label: "Possibly look toward a higher-precision, more rigid tool holder",
+            detail: `Holder Rigidity is scoring ${_rigSub >= 35 ? "Fair" : "low"} (${_rigSub}) with ${_rigLblSoft}. If your machine and budget allow, a shrink-fit, hydraulic, or Capto holder tightens runout and resists chatter — better finish and tool life. Not required if the setup is running clean; it's the next lever if you chase chatter here.`,
+          });
+        }
+        if (_whSub < 65) {
+          actionItems.push({
+            type: "workholding_soft",
+            label: "Possibly use more secure workholding, if the part allows it",
+            detail: `Workholding is scoring ${_whSub >= 35 ? "Fair" : "low"} (${_whSub}) with ${_whLblSoft} — the most compliant option for this machine. First, mitigate without buying anything: back off feed / DOC / WOC, reduce overhang past the jaws, or add support (tailstock / steady rest). If the part can be re-fixtured, a stiffer setup (rigid plate, dovetail, or a dialed-in chuck) resists chatter and part movement.`,
+          });
+        }
+
         const deflPctSub = stability.deflection_pct;
         const ld         = stability.l_over_d;
         const loadPct    = result?.customer?.spindle_load_pct;
@@ -17235,11 +17262,19 @@ ${stabSection}
           : `⚠ ${_holderLbl} — higher runout / lower rigidity. A shrink-fit, hydraulic, or Capto holder improves chatter resistance and finish.`;
         const whScore = stabilityIndex.workholding;
         const _whLbl = (WORKHOLDING_LABELS[form.workholding] ?? form.workholding?.replace(/_/g, " ") ?? "workholding");
-        const workholdingResult = whScore >= 80
+        // Vise-specific caveat: a part clamped across a WIDE jaw span behaves like a
+        // beam supported only at its two ends — the unsupported middle can ring. The
+        // grip can be rigid and still let the bridged span vibrate, so this note fires
+        // for any vise-type hold regardless of the rigidity tier above.
+        const _isViseHold = /vise/.test(form.workholding ?? "");
+        const _viseSpanNote = _isViseHold
+          ? " Note: first make sure the jaws make solid, secure contact across the full width of the part — uneven or partial contact lets it rock and chatter no matter the clamp force. A part bridged between widely-spread vise jaws is also only supported at its ends, so the unsupported span can develop harmonics under the cut. If the span is large, add a center support (parallels/step block under the part, a third clamp, or a mid-span damper) or consider vibration damping before pushing feed."
+          : "";
+        const workholdingResult = (whScore >= 80
           ? `✓ ${_whLbl} — a rigid setup. The part is well anchored against cutting force.`
           : whScore >= 65
           ? `✓ ${_whLbl} — solid hold. A more rigid fixture would let the part absorb more force.`
-          : `⚠ ${_whLbl} — the most compliant option for this machine. A stiffer fixture (rigid plate, dovetail, or dialed-in chuck) resists chatter and improves finish.`;
+          : `⚠ ${_whLbl} — the most compliant option for this machine. A stiffer fixture (rigid plate, dovetail, or dialed-in chuck) resists chatter and improves finish.`) + _viseSpanNote;
         // Workpiece Rigidity — the part as a cantilever off the jaws / trunnion face.
         const wpScore    = stabilityIndex.workpiece;
         const partSO     = stability.part_stickout_in ?? 0;
@@ -17348,9 +17383,14 @@ ${stabSection}
             </p>
 
             {/* Steps */}
-            {actionItems.length > 0 && (
+            {actionItems.length > 0 && (() => {
+              // Header adapts: if every step is a soft rigidity nudge (holder/workholding
+              // is the weak link but tool flex is fine), don't claim they lower tool flex.
+              const _hasFlexStep = actionItems.some((s: any) => s.type !== "holder_soft" && s.type !== "workholding_soft");
+              const _stepsHeader = _hasFlexStep ? "Steps to help lower your tool flex" : "Steps to strengthen this setup";
+              return (
               <div className="border-t border-zinc-700/40 pt-3 space-y-2">
-                <div className="text-xs font-semibold text-zinc-400">Steps to help lower your tool flex</div>
+                <div className="text-xs font-semibold text-zinc-400">{_stepsHeader}</div>
                 <ul className="space-y-3">
                   {actionItems.map((s: any, idx: number) => {
                     const isBest = stability.suggestions.indexOf(s) === firstActionIdx && deflPct >= 175;
@@ -17488,7 +17528,8 @@ ${stabSection}
                   })}
                 </ul>
               </div>
-            )}
+              );
+            })()}
 
             {/* No actionable steps + flex in range → confirm the setup is good
                 (otherwise an empty list after applying a fix looks like the steps vanished). */}
