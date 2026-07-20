@@ -209,11 +209,18 @@ export const mentorSchemas = {
       sfm: z.number().optional().nullable(),
       sfm_target: z.number().optional().nullable(),
       sfm_control: z.object({
-        mode: z.enum(["preset", "manual"]),
+        mode: z.enum(["preset", "manual", "rpm_manual"]),
         clamped: z.boolean(),
         requested: z.number().nullable(),
-        lo: z.number(),
-        hi: z.number(),
+        lo: z.number().nullable(),
+        hi: z.number().nullable(),
+      }).optional().nullable(),
+      // Present (non-null) only when the user pinned an exact RPM.
+      rpm_control: z.object({
+        mode: z.enum(["manual"]),
+        clamped: z.boolean(),
+        requested: z.number().nullable(),
+        cap: z.number().nullable(),
       }).optional().nullable(),
 
       feed_ipm: z.number(),
