@@ -105,6 +105,23 @@ export const mentorSchemas = {
     // Manual SFM override — when > 0, used directly (clamped to the safe envelope)
     // instead of the preset. 0 = use the preset. Engine returns customer.sfm_control.
     sfm_override: z.number().min(0).default(0),
+    // Manual RPM override — when > 0, the engine runs at this exact spindle speed
+    // (clamped to machine max_rpm) and DERIVES the SFM from it, bypassing the SFM
+    // envelope. Mutually exclusive with sfm_override (client sends only one > 0).
+    // 0 = derive RPM from SFM as usual. Engine returns customer.rpm_control.
+    rpm_override: z.number().min(0).default(0),
+
+    // HEM feed level — throttles only the HEM feed boost-above-conventional so
+    // cautious shops can break a tool in and work their way up. mild=75%,
+    // moderate=90%, full=100% (default, unchanged behavior). Only applies in
+    // hem/trochoidal mode; a no-op everywhere else.
+    hem_feed: z.enum(["mild", "moderate", "full"]).default("full"),
+
+    // Traditional roughing feed level — a straight chip-load derate (mild=75%,
+    // moderate=90%, full=100% default). Unlike HEM this has no boost to scale, so
+    // it cuts the recommended chip load directly; the engine floors the effective
+    // chip load to avoid rubbing. Only applies in traditional mode.
+    rough_feed: z.enum(["mild", "moderate", "full"]).default("full"),
 
     loc: z.number().min(0).default(0.75),
     lbs: z.number().min(0).default(0),

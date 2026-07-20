@@ -4623,6 +4623,30 @@ def run(payload=None):
     target_rpm = (base_sfm * 3.82) / _sfm_dia
     rpm_cap = data["max_rpm"] * data["rpm_util_pct"]
     rpm = min(target_rpm, rpm_cap)
+
+    # Manual RPM override — the user pinned an exact spindle speed. It wins over the
+    # SFM-derived RPM (and over any sfm_override; the client sends only one), is
+    # clamped to the machine ceiling, and the SFM is DERIVED back from it so every
+    # downstream calc (feed, tool life) stays consistent. rpm_control feeds the UI.
+    _rpm_control = None
+    try:
+        _rpm_ovr = float(data.get("rpm_override", 0) or 0)
+    except (TypeError, ValueError):
+        _rpm_ovr = 0.0
+    if _rpm_ovr > 0:
+        _rpm_clamped = max(1.0, min(rpm_cap, _rpm_ovr))
+        rpm = _rpm_clamped
+        base_sfm = (rpm * _sfm_dia) / 3.82  # derived SFM drives feed/tool-life below
+        target_rpm = rpm                    # override IS the target — never "RPM-limited"
+        _sfm_info = {"mode": "rpm_manual", "clamped": False, "requested": None,
+                     "lo": _sfm_info.get("lo"), "hi": _sfm_info.get("hi")}
+        _rpm_control = {
+            "mode": "manual",
+            "clamped": abs(_rpm_clamped - _rpm_ovr) > 0.5,
+            "requested": round(_rpm_ovr),
+            "cap": round(rpm_cap),
+        }
+
     sfm_actual = (rpm * _sfm_dia) / 3.82
     # Detect RPM-limited condition — spindle ceiling prevents reaching target SFM
     _rpm_limited = rpm < (target_rpm * 0.97)  # >3% below target = genuinely capped
@@ -4739,8 +4763,38 @@ def run(payload=None):
     data["_hem_force_decouple"] = 1.0
     if data["mode"] in ("hem", "trochoidal"):
         _hem_ipt_mult = HEM_IPT_MULT.get(_mat_key, HEM_IPT_MULT.get(material_group, 2.0))
+        # HEM feed level — throttle only the boost ABOVE conventional (mult - 1.0)
+        # so cautious shops can break a tool in and work up. full=100% (default,
+        # unchanged), moderate=90%, mild=75%. Scaling the excess (not the whole
+        # multiplier) guarantees we never drop below the conventional feed floor.
+        _hem_feed_ramp = {"mild": 0.75, "moderate": 0.90, "full": 1.0}.get(
+            str(data.get("hem_feed") or "full"), 1.0)
+        if _hem_feed_ramp < 1.0 and _hem_ipt_mult > 1.0:
+            _hem_ipt_mult = 1.0 + (_hem_ipt_mult - 1.0) * _hem_feed_ramp
         ipt *= _hem_ipt_mult
+        # Store the SCALED multiplier so the force path divides out exactly the
+        # boost we actually applied — force/deflection stay honest at any level.
         data["_hem_force_decouple"] = _hem_ipt_mult
+    elif data["mode"] == "traditional":
+        # Traditional roughing feed level — a STRAIGHT chip-load derate (no boost to
+        # scale here; the conventional feed IS the baseline). full=100% (default,
+        # unchanged), moderate=90%, mild=75%. This lowers the programmed IPT, so MRR
+        # drops proportionally — that's the point (come out cooler, work up).
+        _rough_feed_ramp = {"mild": 0.75, "moderate": 0.90, "full": 1.0}.get(
+            str(data.get("rough_feed") or "full"), 1.0)
+        if _rough_feed_ramp < 1.0:
+            # Rubbing floor: chip thinning already boosts programmed IPT by 1/RCTF to
+            # keep the ACTUAL deposited chip at nominal, so after this derate the actual
+            # chip is (ramp × nominal). Never let that fall below 50% of nominal or the
+            # edge rubs instead of shears — which runs HOTTER and kills tools, the
+            # opposite of the intent. The 0.75/0.90 levels sit above this; the clamp is
+            # a guard so steeper levels can never be added unsafely.
+            _min_actual_chip = 0.50
+            if _rough_feed_ramp < _min_actual_chip:
+                _rough_feed_ramp = _min_actual_chip
+                data["_rough_feed_floored"] = True
+            ipt *= _rough_feed_ramp
+            data["_rough_feed_ramp"] = _rough_feed_ramp
 
     # Slotting feed pull-back: in clean non-ferrous past 1.0×D the chip load is
     # derated by (1.0 / doc_xd) so MRR holds at the 1×D rate (factor set to 1.0
@@ -6830,7 +6884,7 @@ def run(payload=None):
         if _has_doc_room:
             _imm_suggestions.append({
                 "type": "woc",
-                "label": f"Drop WOC to {_woc_target_hem:.0f}% and step DOC up to {_doc_step:.2f}×D",
+                "label": f"Drop WOC to {_woc_target_hem:g}% and step DOC up to {_doc_step:.2f}×D",
                 "detail": (
                     f"Less radial engagement lowers cutting force and flex. "
                     f"Stepping DOC from {_doc_xd_now:.2f}×D to {_doc_step:.2f}×D offsets the MRR loss — "
@@ -6842,7 +6896,7 @@ def run(payload=None):
         else:
             _imm_suggestions.append({
                 "type": "woc",
-                "label": f"Drop WOC to {_woc_target_hem:.0f}% Ø",
+                "label": f"Drop WOC to {_woc_target_hem:g}% Ø",
                 "detail": (
                     f"Less radial engagement reduces cutting force and tool flex. "
                     f"Already near the HEM DOC cap ({_hem_doc_cap:.1f}×D) so MRR will be slightly lower, "
@@ -6899,7 +6953,7 @@ def run(payload=None):
             _woc_gain = round((1.0 - (_woc_target / _woc_now)) * 100)
             _imm_suggestions.append({
                 "type": "woc",
-                "label": f"Reduce WOC to {_woc_target:.0f}% Ø",
+                "label": f"Reduce WOC to {_woc_target:g}% Ø",
                 "detail": f"~{_woc_gain}% less radial engagement — fewer simultaneous teeth, lower radial force",
                 "woc_pct": round(_woc_target, 1),
             })
@@ -8117,6 +8171,7 @@ def run(payload=None):
             "sfm": sfm_actual,
             "sfm_target": base_sfm,
             "sfm_control": _sfm_info,  # {mode, clamped, requested, lo, hi} for UI
+            "rpm_control": _rpm_control,  # {mode, clamped, requested, cap} when RPM pinned, else None
             "feed_ipm": feed_ipm,
             "doc_in": doc,
             "woc_in": woc,

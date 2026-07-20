@@ -8,6 +8,23 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Speed Card — Manual RPM entry + Speed/Feed layout
+- **Set an exact RPM.** Alongside "Set SFM", the Speed card now has a **Set RPM** box. Enter a spindle speed and the engine (`rpm_override`) runs at exactly that RPM — clamped to the machine's max — and **derives the SFM back from it** so feed and tool-life stay consistent. SFM and RPM entry are **mutually exclusive**: typing one clears the other, and clicking any speed preset clears both.
+- If a manual RPM exceeds the machine ceiling it's clamped, and a ⚠ line shows the requested vs. capped value (mirrors the manual-SFM clamp note).
+- **Layout:** SFM and RPM each show their value with a **Set …** box to the right, RPM styled to match SFM directly beneath it. Speed-preset labels were shortened (Longest / Longer / Balanced / Faster / Fastest) so all five fit one line without wrapping.
+- **No card jump.** Clicking a speed or feed control no longer makes the whole results column jump: the optimal-tool card is kept mounted (with its prior content) during a re-run instead of blanking and remounting, and the collapsing helper notes now reserve their line height.
+
+### Feed Levels — Mild / Moderate / Full (break a tool in, work up)
+- Not every shop wants to run a fresh tool straight at full HEM feed. Added a **Feed Level** control (**Mild / Moderate / Full**) so you can come out cooler and progressively work your way up as you gain confidence in a tool/material combo.
+- **HEM** (`hem_feed`): throttles only the feed *boost above conventional* — Mild = 75% of the boost, Moderate = 90%, **Full = 100% (default, unchanged)**. Because it scales the excess over the conventional feed floor, you never drop below a safe conventional chip load. HEM force/deflection stay **honest** at every level (the force path divides out exactly the boost applied); MRR and HP reflect the gentler feed you actually programmed.
+- **Traditional roughing** (`rough_feed`): a separate control (by design — there's no boost to scale, the conventional feed *is* the baseline), so it's a straight chip-load derate at the same 75 / 90 / 100%. MRR drops proportionally — that's the point — and the effective chip load is **floored at 50% of nominal** so a derate can never push the edge into rubbing (which runs hotter and kills tools, the opposite of the intent).
+- **UI: Speed and Feed are now clearly separated** (see the Speed Card note above). The **Speed** card holds SFM + RPM + the speed presets; a matching **Feed** card below holds the programmed feed + the Mild/Moderate/Full selector. The feed selector only appears in the modes where it applies (HEM/trochoidal, or traditional roughing).
+- Both default to **Full**, so existing results are byte-for-byte unchanged unless you opt down.
+
+### Stability — clickable-WOC recommendation fixes
+- Applying a suggested WOC reduction from the stability panel now also updates the WOC **inches field** and clears the highlighted WOC **quick-button** — previously the last-clicked preset (e.g. "Low 7%") stayed lit after applying a 4.2% suggestion, which was confusing.
+- The suggestion **label now matches the value applied**: labels formatted the target with zero decimals (showing "4%") while the applied value was rounded to one decimal (4.2%). Switched the WOC suggestion labels to `:g` so a whole number still reads "4%" but a fractional target reads "4.2%".
+
 ### Stability — Rigidity-Awareness Steps for Weak Holder / Workholding
 - The "Steps to help lower your tool flex" panel only ever fired when the *tool* itself was over-flexing. So a setup with **Fair** Holder Rigidity or Workholding sub-scores — the two things actually dragging the Setup Score down — got *no* step about them, and the panel instead nudged marginal tool-flex tweaks (bigger diameter, more flutes) even while admitting "flex is already within range."
 - Added optional, non-prescriptive steps that appear **only when Holder Rigidity or Workholding scores Fair or below (< 65)**: *"Possibly look toward a higher-precision, more rigid tool holder"* and *"Possibly use more secure workholding, if the part allows it."*

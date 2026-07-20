@@ -2560,8 +2560,13 @@ export default function Mentor() {
 
     // Speed preset — biases recommended SFM to trade speed for tool life. balanced = no change.
     speed_preset: "balanced" as "max_life" | "better_life" | "balanced" | "high_throughput" | "max_mrr",
+    hem_feed: "full" as "mild" | "moderate" | "full",
+    rough_feed: "full" as "mild" | "moderate" | "full",
     // Manual SFM override — when > 0, used directly (clamped to safe band) instead of the preset.
     sfm_override: 0,
+    // Manual RPM override — when > 0, engine runs at this exact RPM (clamped to machine max)
+    // and derives SFM from it. Mutually exclusive with sfm_override.
+    rpm_override: 0,
 
     machine_hp: 15,
     live_tool_connection: "",
@@ -4237,8 +4242,12 @@ export default function Mentor() {
       lastRunFormRef.current = JSON.stringify(form);
       setFormDirty(false);
       trackCalculation(form.material, form.mode, form.tool_dia);
-      setOptimalRec(null);
-      // Fetch optimal tool recommendation if a specific EDP is locked
+      // Fetch optimal tool recommendation if a specific EDP is locked.
+      // IMPORTANT: do NOT blank the existing card up front — clearing it before
+      // the async fetch returns unmounts the card, briefly shortens the results
+      // column, and makes every re-run (e.g. a feed-level click) jump/flash. Keep
+      // the old recommendation on screen and only replace/clear it once we know
+      // the new result, exactly like the main result's lastResultRef guard.
       const isQtr3 = /^qtr3/i.test(form.tool_series ?? "");
       if (skuLocked && edpText && form.tool_type !== "chamfer_mill" && !isQtr3) {
         setOptimalLoading(true);
@@ -4261,10 +4270,16 @@ export default function Mentor() {
           });
           if (r.ok) {
             const rec = await r.json();
-            if (rec.found) setOptimalRec(rec);
+            // Replace with the fresh rec if found; otherwise clear (no rec applies now).
+            setOptimalRec(rec.found ? rec : null);
+          } else {
+            setOptimalRec(null);
           }
-        } catch { /* silently skip */ }
+        } catch { /* silently skip — leave the prior card in place */ }
         setOptimalLoading(false);
+      } else {
+        // Not applicable to this setup (no locked EDP, chamfer, QTR3): clear it.
+        setOptimalRec(null);
       }
     } catch (e: any) {
       // Server-side error — shown inline in the error box below the button
@@ -4285,14 +4300,15 @@ export default function Mentor() {
     { key: "high_throughput", label: "Finer",      hint: "Higher RPM, feed held flat — finer finish" },
     { key: "max_mrr",         label: "Finest",     hint: "Highest RPM, feed held flat — finest finish, shortest tool life" },
   ] : [
-    { key: "max_life",        label: "Max Life",   hint: "Lowest SFM — longest tool life, lowest MRR" },
-    { key: "better_life",     label: "Better",     hint: "Reduced SFM for longer tool life" },
+    { key: "max_life",        label: "Longest",    hint: "Lowest SFM — longest tool life, lowest MRR" },
+    { key: "better_life",     label: "Longer",     hint: "Reduced SFM for longer tool life" },
     { key: "balanced",        label: "Balanced",   hint: "App-recommended SFM (default)" },
     { key: "high_throughput", label: "Faster",     hint: "Raised SFM for higher MRR" },
     { key: "max_mrr",         label: "Fastest",    hint: "Highest SFM — maximum metal removal, shortest tool life" },
   ];
-  // Local text state for the manual SFM input so typing doesn't re-run per keystroke.
+  // Local text state for the manual SFM / RPM inputs so typing doesn't re-run per keystroke.
   const [sfmOverrideInput, setSfmOverrideInput] = React.useState("");
+  const [rpmOverrideInput, setRpmOverrideInput] = React.useState("");
   // Re-run trigger for speed changes. Handlers bump this AND update the form;
   // an effect below fires the calc only AFTER React commits the new form, so the
   // run always reads the updated speed_preset / sfm_override (no setTimeout race
@@ -4300,11 +4316,28 @@ export default function Mentor() {
   const [speedRerunTick, setSpeedRerunTick] = React.useState(0);
   const speedRerunArmed = React.useRef(false);
   const applySpeedPreset = (preset: typeof form.speed_preset) => {
-    // Clicking a preset exits Manual mode: clear the SFM override (and its input
-    // box) so the engine returns to the preset-biased default numbers.
-    if (preset === form.speed_preset && !form.sfm_override) return;
+    // Clicking a preset exits Manual mode: clear BOTH the SFM and RPM overrides
+    // (and their input boxes) so the engine returns to the preset-biased defaults.
+    if (preset === form.speed_preset && !form.sfm_override && !form.rpm_override) return;
     setSfmOverrideInput("");
-    setForm(p => ({ ...p, speed_preset: preset, sfm_override: 0 }));
+    setRpmOverrideInput("");
+    setForm(p => ({ ...p, speed_preset: preset, sfm_override: 0, rpm_override: 0 }));
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
+  };
+  // HEM feed level (Mild/Moderate/Full) — throttles the HEM feed boost so a shop
+  // can break a tool in and work up. Re-runs via the same armed-tick as SFM.
+  const applyHemFeed = (level: typeof form.hem_feed) => {
+    if (level === form.hem_feed) return;
+    setForm(p => ({ ...p, hem_feed: level }));
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
+  };
+  // Traditional roughing feed level — a straight chip-load derate (Full = 100%),
+  // floored in the engine to avoid rubbing. Separate from HEM by design.
+  const applyRoughFeed = (level: typeof form.rough_feed) => {
+    if (level === form.rough_feed) return;
+    setForm(p => ({ ...p, rough_feed: level }));
     speedRerunArmed.current = true;
     setSpeedRerunTick(t => t + 1);
   };
@@ -4319,8 +4352,28 @@ export default function Mentor() {
       }
       return;
     }
-    if (v === form.sfm_override) return;
-    setForm(p => ({ ...p, sfm_override: v }));
+    if (v === form.sfm_override && !form.rpm_override) return;
+    // A manual SFM wins — clear any RPM override (mutually exclusive) and its box.
+    setRpmOverrideInput("");
+    setForm(p => ({ ...p, sfm_override: v, rpm_override: 0 }));
+    speedRerunArmed.current = true;
+    setSpeedRerunTick(t => t + 1);
+  };
+  const applyRpmOverride = () => {
+    const v = parseInt(rpmOverrideInput, 10);  // RPM is a whole number
+    if (!isFinite(v) || v <= 0) {
+      // Empty/invalid → drop the RPM override; SFM/preset resumes driving RPM.
+      if (form.rpm_override) {
+        setForm(p => ({ ...p, rpm_override: 0 }));
+        speedRerunArmed.current = true;
+        setSpeedRerunTick(t => t + 1);
+      }
+      return;
+    }
+    if (v === form.rpm_override && !form.sfm_override) return;
+    // A manual RPM wins — clear any SFM override (mutually exclusive) and its box.
+    setSfmOverrideInput("");
+    setForm(p => ({ ...p, rpm_override: v, sfm_override: 0 }));
     speedRerunArmed.current = true;
     setSpeedRerunTick(t => t + 1);
   };
@@ -15213,8 +15266,11 @@ ${stabSection}
                           Shown above RPM since it's the primary speed control. */}
                       <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                          {/* Value + manual override */}
-                          <div className="shrink-0 sm:w-40">
+                          {/* Speed values — SFM and RPM, each with its value on the left and a
+                              "Set …" override box on the right. SFM and RPM overrides are mutually
+                              exclusive (typing one clears the other; a preset clears both). */}
+                          <div className="shrink-0 sm:w-44">
+                            {/* ── SFM row ── */}
                             <div className="text-xs text-muted-foreground flex items-center gap-1">
                               <TooltipProvider delayDuration={200}>
                                 <Tooltip>
@@ -15234,16 +15290,16 @@ ${stabSection}
                                 <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold">Manual</span>
                               )}
                             </div>
-                            <div className="mt-1 text-lg font-bold leading-tight">
-                              {UC(headSfm, 0.3048, metric ? 1 : 0)}
-                              {showSub && subSfm != null && (
-                                <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                  {UC(subSfm, 0.3048, metric ? 1 : 0)} {subLabel}
-                                </span>
-                              )}
-                            </div>
-                            {/* Exact SFM entry — clear the field (or click a preset) to resume presets. */}
-                            <div className="mt-1.5 flex items-center gap-1">
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="text-lg font-bold leading-tight min-w-[3.5rem]">
+                                {UC(headSfm, 0.3048, metric ? 1 : 0)}
+                                {showSub && subSfm != null && (
+                                  <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                    {UC(subSfm, 0.3048, metric ? 1 : 0)} {subLabel}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Set SFM — clear the field (or click a preset) to resume presets. */}
                               <input
                                 type="text"
                                 inputMode="numeric"
@@ -15260,6 +15316,54 @@ ${stabSection}
                               <div className="mt-1 text-[9px] leading-tight text-amber-400">
                                 ⚠ {customer.sfm_control.requested} SFM is outside the safe range
                                 ({customer.sfm_control.lo}–{customer.sfm_control.hi}) — clamped to {Math.round(customer.sfm ?? 0)}.
+                              </div>
+                            )}
+                            {/* ── RPM row — same title/format as SFM, its own Set box ── */}
+                            <div className="mt-2 pt-2 border-t border-zinc-700/40 text-xs text-muted-foreground flex items-center gap-1">
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 cursor-default">
+                                      RPM
+                                      <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                                        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                        <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                                      </svg>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">Spindle speed. Normally derived from SFM × tool diameter. Type an exact RPM to run the spindle at that speed — the SFM above is recalculated from it (clamped to your machine's max RPM).</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              {customer.rpm_control?.mode === "manual" && (
+                                <span className="text-[8px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold">Manual</span>
+                              )}
+                            </div>
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="text-lg font-bold leading-tight min-w-[3.5rem]">
+                                {fmtInt(headRpm)}
+                                {showSub && subRpm != null && (
+                                  <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                    {fmtInt(subRpm)} {subLabel}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Set RPM — clear the field (or click a preset) to resume SFM-driven RPM. */}
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="Set RPM"
+                                value={rpmOverrideInput}
+                                disabled={mentor.isPending}
+                                onChange={e => setRpmOverrideInput(e.target.value.replace(/[^0-9]/g, ""))}
+                                onBlur={applyRpmOverride}
+                                onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
+                                className="w-20 text-xs px-1.5 py-1 rounded border border-zinc-600/60 bg-zinc-800/60 text-white placeholder:text-zinc-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+                              />
+                            </div>
+                            {customer.rpm_control?.mode === "manual" && customer.rpm_control?.clamped && (
+                              <div className="mt-1 text-[9px] leading-tight text-amber-400">
+                                ⚠ {fmtInt(customer.rpm_control.requested)} RPM exceeds the machine cap
+                                ({fmtInt(customer.rpm_control.cap)}) — clamped to {fmtInt(customer.rpm ?? 0)}.
                               </div>
                             )}
                           </div>
@@ -15285,10 +15389,10 @@ ${stabSection}
                                 </div>
                               );
                             })()}
-                            <div className="grid grid-cols-5 gap-1">
+                            <div className="grid grid-cols-5 gap-1.5">
                               {SPEED_PRESETS.map(sp => {
-                                // In manual mode no preset is active (the typed SFM wins).
-                                const active = !form.sfm_override && form.speed_preset === sp.key;
+                                // No preset is active when a manual SFM OR RPM is pinned.
+                                const active = !form.sfm_override && !form.rpm_override && form.speed_preset === sp.key;
                                 return (
                                   <button
                                     key={sp.key}
@@ -15296,7 +15400,7 @@ ${stabSection}
                                     title={sp.hint}
                                     disabled={mentor.isPending}
                                     onClick={() => applySpeedPreset(sp.key)}
-                                    className={`min-w-0 text-[10px] leading-tight text-center px-0.5 py-1.5 rounded-md border font-medium transition-colors ${
+                                    className={`min-w-0 whitespace-nowrap text-[9px] leading-tight text-center px-0.5 py-1.5 rounded-md border font-medium transition-colors ${
                                       active
                                         ? "bg-orange-500/90 border-orange-400 text-white"
                                         : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
@@ -15307,80 +15411,149 @@ ${stabSection}
                                 );
                               })}
                             </div>
-                            {form.sfm_override > 0 && (
-                              <div className="mt-1 text-[9px] text-zinc-500 leading-tight">
-                                Manual SFM active — presets paused. Clear the field or click a preset to resume.
-                              </div>
-                            )}
+                            {/* Reserve the line so toggling manual mode / clicking a preset
+                                never resizes the card and shoves the results grid. */}
+                            <div className="mt-1 text-[9px] text-zinc-500 leading-tight min-h-[1.2em]">
+                              {form.sfm_override > 0
+                                ? "Manual SFM active — presets paused. Clear the field or click a preset to resume."
+                                : form.rpm_override > 0
+                                ? "Manual RPM active — presets paused. Clear the field or click a preset to resume."
+                                : ""}
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <Kpi
-                        label="RPM"
-                        hint="Spindle speed in revolutions per minute. Derived from target SFM and tool diameter, capped at your Max RPM × RPM Limiter setting."
-                        value={
-                          <>
-                            {fmtInt(headRpm)}
-                            {showSub && subRpm != null && (
-                              <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                {fmtInt(subRpm)} {subLabel}
-                              </span>
-                            )}
-                          </>
-                        }
-                      />
-                      <Kpi
-                        label={form.mode === "circ_interp" ? UL("▶ Program Feed (IPM)", "▶ Program Feed (mm/min)") : UL("Feed (IPM)", "Feed (mm/min)")}
-                        hint={form.mode === "circ_interp" ? "Centerline feed varies pass-by-pass as the bore opens up — see the Pass Schedule below for the per-pass program feed you'll enter into CAM." : "Programmed table feed rate in inches per minute. Equal to RPM × flutes × chip load per tooth. The ⚠ note shows if the engine had to limit feed (deflection, HP, or RPM cap)."}
-                        value={
-                          form.mode === "circ_interp" ? (
-                            <span className="text-[11px] font-normal text-yellow-300 leading-tight">
-                              see Pass Schedule below
-                            </span>
-                          ) : (
-                            <span>
-                              {UC(displayIpm, 25.4, metric ? 1 : 2)}
-                              {customer.status && !hemLocked ? (
-                                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                  {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
-                                </span>
-                              ) : null}
-                              {/* HEM feed locked: showing the conservative un-thinned feed until the
-                                  user confirms a true HEM/adaptive path. Full explanation lives in
-                                  the warning below the Run button; keep the card itself terse. */}
-                              {hemLocked ? (
-                                <span className="block text-[10px] font-normal leading-tight mt-0.5 text-amber-300">
-                                  Conservative feed — confirm HEM toolpath to unlock
+                      {/* ── FEED card ───────────────────────────────────────────────────
+                          Feed is its OWN axis, separate from Speed (SFM/RPM above). Value on
+                          the left; on the right, a feed-level selector (HEM: throttle the boost;
+                          traditional roughing: derate chip load, floored to avoid rubbing).
+                          The selector only appears in modes where it applies. */}
+                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                          {/* Value */}
+                          <div className="shrink-0 sm:w-40">
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 cursor-default">
+                                      {form.mode === "circ_interp" ? UL("▶ Program Feed", "▶ Program Feed") : UL("Feed (IPM)", "Feed (mm/min)")}
+                                      <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                                        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                        <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                                      </svg>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">{form.mode === "circ_interp" ? "Centerline feed varies pass-by-pass as the bore opens up — see the Pass Schedule below." : "Programmed table feed rate. RPM × flutes × chip load per tooth. ⚠ shows if the engine limited feed (deflection, HP, or RPM cap)."}</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <div className="mt-1 text-lg font-bold leading-tight">
+                              {form.mode === "circ_interp" ? (
+                                <span className="text-[11px] font-normal text-yellow-300 leading-tight">
+                                  see Pass Schedule below
                                 </span>
                               ) : (
-                                <>
-                                  {/* When chip thinning is active the feed is driven by Adj FPT, not base FPT. */}
-                                  {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
-                                    && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                                <span>
+                                  {UC(displayIpm, 25.4, metric ? 1 : 2)}
+                                  {customer.status && !hemLocked ? (
+                                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                      {customer.status === "User input" ? "✓" : `⚠ ${customer.status}`}
+                                    </span>
+                                  ) : null}
+                                  {hemLocked ? (
+                                    <span className="block text-[10px] font-normal leading-tight mt-0.5 text-amber-300">
+                                      Conservative feed — confirm HEM toolpath to unlock
+                                    </span>
+                                  ) : (
                                     <>
-                                      <span className="block text-[10px] font-normal text-muted-foreground leading-tight mt-0.5">
-                                        = RPM × <span className="text-emerald-400 font-semibold">Adj FPT</span> × flutes
-                                        {!(form.mode === "hem" || form.mode === "trochoidal")
-                                          && <span className="text-yellow-300"> (chip-thinned, not base FPT)</span>}
-                                      </span>
-                                      {(form.mode === "hem" || form.mode === "trochoidal") && (
-                                        <span className="block text-[10px] font-normal text-sky-300 leading-tight mt-0.5">
-                                          * see note below
+                                      {form.tool_type !== "chamfer_mill" && customer.adj_fpt != null && customer.fpt != null
+                                        && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
+                                        <>
+                                          <span className="block text-[10px] font-normal text-muted-foreground leading-tight mt-0.5">
+                                            = RPM × <span className="text-emerald-400 font-semibold">Adj FPT</span> × flutes
+                                            {!(form.mode === "hem" || form.mode === "trochoidal")
+                                              && <span className="text-yellow-300"> (chip-thinned, not base FPT)</span>}
+                                          </span>
+                                          {(form.mode === "hem" || form.mode === "trochoidal") && (
+                                            <span className="block text-[10px] font-normal text-sky-300 leading-tight mt-0.5">
+                                              * see note below
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                      {showSub && subIpm != null && (
+                                        <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
+                                          {UC(subIpm, 25.4, metric ? 1 : 2)} {subLabel}
                                         </span>
                                       )}
                                     </>
                                   )}
-                                  {showSub && subIpm != null && (
-                                    <span className="block text-[10px] font-normal text-amber-400/80 leading-tight mt-0.5">
-                                      {UC(subIpm, 25.4, metric ? 1 : 2)} {subLabel}
-                                    </span>
-                                  )}
-                                </>
+                                </span>
                               )}
-                            </span>
-                          )
-                        }
-                      />
+                            </div>
+                          </div>
+                          {/* Feed-level selector — mode-aware; hidden when it doesn't apply. */}
+                          {(() => {
+                            const _isHemMode = form.mode === "hem" || form.mode === "trochoidal";
+                            const _isRoughMode = form.mode === "traditional";
+                            if (!_isHemMode && !_isRoughMode) return null;
+                            const _levels: { key: "mild" | "moderate" | "full"; label: string }[] = [
+                              { key: "mild",     label: "Mild" },
+                              { key: "moderate", label: "Moderate" },
+                              { key: "full",     label: "Full" },
+                            ];
+                            const _cur = _isHemMode ? form.hem_feed : form.rough_feed;
+                            const _apply = _isHemMode ? applyHemFeed : applyRoughFeed;
+                            const _title = _isHemMode ? "HEM Feed Level" : "Roughing Feed Level";
+                            const _note = _cur === "full"
+                              ? (_isHemMode
+                                  ? "Full HEM feed. Pick Mild/Moderate to break a tool in and work up."
+                                  : "Full roughing feed. Pick Mild/Moderate to run cooler and lighter.")
+                              : (_isHemMode
+                                  ? "Throttle the HEM feed boost — start Mild to break a tool in, then work up to Full. Force stays honest; MRR reflects the gentler feed."
+                                  : "Derate roughing chip load — Mild/Moderate run cooler and lighter, Full is the recommended feed. MRR drops with feed; floored to avoid rubbing.");
+                            return (
+                              <div className="flex-1 min-w-0 sm:border-l sm:border-zinc-700/50 sm:pl-3">
+                                <div className="flex items-center justify-between gap-4 text-[8px] uppercase tracking-tight font-semibold mb-1">
+                                  <span className="text-emerald-400 whitespace-nowrap flex items-center gap-1">
+                                    <span className="text-[13px] leading-none font-black">←</span>
+                                    Cooler / Break-In
+                                  </span>
+                                  <span className="text-orange-400 whitespace-nowrap flex items-center gap-1">
+                                    Full Feed
+                                    <span className="text-[13px] leading-none font-black">→</span>
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-1">
+                                  {_levels.map(lv => {
+                                    const active = _cur === lv.key;
+                                    return (
+                                      <button
+                                        key={lv.key}
+                                        type="button"
+                                        title={_title}
+                                        disabled={mentor.isPending}
+                                        onClick={() => _apply(lv.key)}
+                                        className={`min-w-0 text-[10px] leading-tight text-center px-0.5 py-1.5 rounded-md border font-medium transition-colors ${
+                                          active
+                                            ? "bg-orange-500/90 border-orange-400 text-white"
+                                            : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
+                                        } disabled:opacity-50`}
+                                      >
+                                        {lv.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {/* Always reserve two lines so switching levels never grows/shrinks
+                                    the card and shoves the results grid below it up/down. */}
+                                <div className={`mt-1 text-[9px] leading-tight min-h-[2.2em] ${_cur === "full" ? "text-zinc-500" : "text-sky-300/80"}`}>{_note}</div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
                     </>
                   );
                 })()}
@@ -17033,13 +17206,16 @@ ${stabSection}
         </CardContent>
       </Card>}
 
-      {/* Optimal Tool Recommendation Card — between results and stability (hidden for deep pocket) */}
-      {form.mode !== "deep_pocket" && optimalLoading && (
+      {/* Optimal Tool Recommendation Card — between results and stability (hidden for deep pocket).
+          Only show the loading banner on the FIRST fetch (no prior card). On a re-fetch we keep
+          the existing card mounted (below) so the results column doesn't shrink/flash and shove
+          every card up and down on each re-run. */}
+      {form.mode !== "deep_pocket" && optimalLoading && !optimalRec && (
         <div className="mt-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
           Finding optimal tool match…
         </div>
       )}
-      {form.mode !== "deep_pocket" && !optimalLoading && optimalRec && (() => {
+      {form.mode !== "deep_pocket" && optimalRec && (() => {
         const rec = optimalRec;
         const recSku = rec.recommended_sku;
         const recCust = rec.recommended_result?.customer ?? {};
@@ -17411,11 +17587,19 @@ ${stabSection}
                             } else if (s.type === "doc" && s.doc_xd > 0) {
                               apply = () => setForm(p => ({ ...p, doc_xd: Number(s.doc_xd) }));
                             } else if (s.type === "woc" && s.woc_pct > 0) {
-                              apply = () => setForm(p => ({
-                                ...p,
-                                woc_pct: Number(s.woc_pct),
-                                ...(s.doc_xd > 0 ? { doc_xd: Number(s.doc_xd) } : {}),
-                              }));
+                              apply = () => {
+                                const _newWoc = Number(s.woc_pct);
+                                const _dia = form.tool_dia || 0;
+                                setForm(p => ({
+                                  ...p,
+                                  woc_pct: _newWoc,
+                                  ...(s.doc_xd > 0 ? { doc_xd: Number(s.doc_xd) } : {}),
+                                }));
+                                // Keep the WOC inches field and quick-button highlight in sync —
+                                // a suggested WOC is a custom value, so no preset button matches it.
+                                setWocText(_dia > 0 ? ((_newWoc / 100) * _dia).toFixed(4) : "");
+                                setWocPreset(null);
+                              };
                             } else if (s.type === "holder" && s.toolholder) {
                               apply = () => setForm(p => ({ ...p, toolholder: s.toolholder }));
                             }
