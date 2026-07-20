@@ -4775,24 +4775,37 @@ def run(payload=None):
         # Store the SCALED multiplier so the force path divides out exactly the
         # boost we actually applied — force/deflection stay honest at any level.
         data["_hem_force_decouple"] = _hem_ipt_mult
-    elif data["mode"] == "traditional":
-        # Traditional roughing feed level — a STRAIGHT chip-load derate (no boost to
-        # scale here; the conventional feed IS the baseline). full=100% (default,
-        # unchanged), moderate=90%, mild=75%. This lowers the programmed IPT, so MRR
-        # drops proportionally — that's the point (come out cooler, work up).
+    elif data["mode"] in ("traditional", "face", "slot", "finish"):
+        # Feed level (rough_feed: mild/moderate/full) — a STRAIGHT chip-load derate so a
+        # shop can come out cooler and work up. full=100% (default, unchanged),
+        # moderate=90%, mild=75%. Applies to the chip-load-driven modes: roughing,
+        # facing, slotting, and finishing. HEM has its own boost-throttle branch above.
         _rough_feed_ramp = {"mild": 0.75, "moderate": 0.90, "full": 1.0}.get(
             str(data.get("rough_feed") or "full"), 1.0)
         if _rough_feed_ramp < 1.0:
-            # Rubbing floor: chip thinning already boosts programmed IPT by 1/RCTF to
-            # keep the ACTUAL deposited chip at nominal, so after this derate the actual
-            # chip is (ramp × nominal). Never let that fall below 50% of nominal or the
-            # edge rubs instead of shears — which runs HOTTER and kills tools, the
-            # opposite of the intent. The 0.75/0.90 levels sit above this; the clamp is
-            # a guard so steeper levels can never be added unsafely.
-            _min_actual_chip = 0.50
-            if _rough_feed_ramp < _min_actual_chip:
-                _rough_feed_ramp = _min_actual_chip
-                data["_rough_feed_floored"] = True
+            # Rubbing floor. Two floor regimes:
+            #  • finish: the engine already floors the ACTUAL chip at h_min (min chip
+            #    thickness) to keep the edge cutting. Derating below that would drive
+            #    the tool into rubbing and WORSEN the finish — the opposite of intent.
+            #    So clamp the derate so the resulting actual chip never drops under
+            #    h_min, and flag it so the UI can explain why Mild/Moderate did little.
+            #  • other modes: keep actual chip ≥ 50% of nominal (a guard against
+            #    steeper levels ever being added unsafely; 0.75/0.90 sit above it).
+            if data["mode"] == "finish":
+                # Current actual chip after all comp = ipt (programmed) × RCTF.
+                _rctf_now = rctf(float(data.get("woc_pct", 50) or 50), float(data["diameter"]))
+                _h_actual_now = ipt * _rctf_now
+                _hmin_floor = minimum_chip_thickness(material_group) * 1.05
+                # Max derate that keeps actual chip at the floor: ramp_min = h_floor / h_actual.
+                _ramp_min = min(1.0, _hmin_floor / _h_actual_now) if _h_actual_now > 0 else 1.0
+                if _rough_feed_ramp < _ramp_min:
+                    _rough_feed_ramp = _ramp_min
+                    data["_rough_feed_floored"] = True
+            else:
+                _min_actual_chip = 0.50
+                if _rough_feed_ramp < _min_actual_chip:
+                    _rough_feed_ramp = _min_actual_chip
+                    data["_rough_feed_floored"] = True
             ipt *= _rough_feed_ramp
             data["_rough_feed_ramp"] = _rough_feed_ramp
 

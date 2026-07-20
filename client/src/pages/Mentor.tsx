@@ -15493,11 +15493,17 @@ ${stabSection}
                               )}
                             </div>
                           </div>
-                          {/* Feed-level selector — mode-aware; hidden when it doesn't apply. */}
+                          {/* Feed-level selector — mode-aware; hidden when it doesn't apply.
+                              HEM/trochoidal (and HEM slotting) throttle the feed BOOST via hem_feed.
+                              Chip-load modes (traditional / facing / traditional slotting / finishing)
+                              derate the chip load via rough_feed, each floored to avoid rubbing. */}
                           {(() => {
-                            const _isHemMode = form.mode === "hem" || form.mode === "trochoidal";
-                            const _isRoughMode = form.mode === "traditional";
-                            if (!_isHemMode && !_isRoughMode) return null;
+                            const _isHemMode = form.mode === "hem" || form.mode === "trochoidal"
+                              || (form.mode === "slot" && form.slot_strategy === "hem");
+                            const _isChipLoadMode = form.mode === "traditional" || form.mode === "face"
+                              || form.mode === "finish"
+                              || (form.mode === "slot" && form.slot_strategy !== "hem");
+                            if (!_isHemMode && !_isChipLoadMode) return null;
                             const _levels: { key: "mild" | "moderate" | "full"; label: string }[] = [
                               { key: "mild",     label: "Mild" },
                               { key: "moderate", label: "Moderate" },
@@ -15505,14 +15511,21 @@ ${stabSection}
                             ];
                             const _cur = _isHemMode ? form.hem_feed : form.rough_feed;
                             const _apply = _isHemMode ? applyHemFeed : applyRoughFeed;
-                            const _title = _isHemMode ? "HEM Feed Level" : "Roughing Feed Level";
+                            const _modeWord = form.mode === "face" ? "Facing"
+                              : form.mode === "finish" ? "Finish"
+                              : form.mode === "slot" ? "Slotting"
+                              : _isHemMode ? "HEM" : "Roughing";
+                            const _title = `${_modeWord} Feed Level`;
+                            const _isFinish = form.mode === "finish";
                             const _note = _cur === "full"
                               ? (_isHemMode
                                   ? "Full HEM feed. Pick Mild/Moderate to break a tool in and work up."
-                                  : "Full roughing feed. Pick Mild/Moderate to run cooler and lighter.")
+                                  : `Full ${_modeWord.toLowerCase()} feed. Pick Mild/Moderate to run cooler and lighter.`)
                               : (_isHemMode
                                   ? "Throttle the HEM feed boost — start Mild to break a tool in, then work up to Full. Force stays honest; MRR reflects the gentler feed."
-                                  : "Derate roughing chip load — Mild/Moderate run cooler and lighter, Full is the recommended feed. MRR drops with feed; floored to avoid rubbing.");
+                                  : _isFinish
+                                  ? "Lighten the finish feed to run cooler — but it's floored at the minimum chip thickness, so on a light-WOC pass it may barely change (dropping below the floor would rub and worsen the finish)."
+                                  : `Derate the ${_modeWord.toLowerCase()} chip load — Mild/Moderate run cooler and lighter, Full is the recommended feed. MRR drops with feed; floored to avoid rubbing.`);
                             return (
                               <div className="flex-1 min-w-0 sm:border-l sm:border-zinc-700/50 sm:pl-3">
                                 <div className="flex items-center justify-between gap-4 text-[8px] uppercase tracking-tight font-semibold mb-1">
