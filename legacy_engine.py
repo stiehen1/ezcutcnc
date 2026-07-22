@@ -1140,6 +1140,32 @@ def hardness_sfm_mult(hrc: float) -> float:
     return max(0.20, 0.35 - 0.030 * (hrc - 55))        # 0.35 → 0.20 at 65 HRC
 
 
+# Materials whose HRC is INTRINSIC to the alloy spec — their BASE_SFM (in every
+# per-op SFM table) already reflects the hardened/aged/as-supplied condition, so
+# applying hardness_sfm_mult on top would DOUBLE-derate. The main milling, endmill
+# and drilling paths have long carried this exclusion inline; centralize it here so
+# every operation (milling, drilling, reaming, keyseat, dovetail, feedmill) shares
+# ONE list and can't drift. PH stainless is only ever used aged; Ti-6Al-4V's 30–36
+# HRC is inherent; Inconel/tool-steel/hardened-steel/armor baselines are as-run.
+_NO_HRC_PENALTY = frozenset((
+    "Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
+    "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
+    "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+    "cpm_10v", "stainless_15_5", "stainless_ph", "stainless_13_8",
+    "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420",
+    "Titanium", "titanium_64", "titanium_cp", "titanium",
+))
+
+
+def apply_sfm_hardness(base_sfm: float, hrc: float, mat: str, mat_group: str) -> float:
+    """base_sfm × hardness_sfm_mult(hrc), but SKIP the mult for materials whose
+    baseline already bakes in hardness (see _NO_HRC_PENALTY). Prevents the
+    double-derate bug (e.g. 13-8 PH @43HRC would otherwise run 218→140 SFM)."""
+    if mat in _NO_HRC_PENALTY or mat_group in _NO_HRC_PENALTY:
+        return base_sfm
+    return base_sfm * hardness_sfm_mult(hrc)
+
+
 # Generic hardened-steel keys (hardened_lt55 / hardened_gt55) cover wide HRC
 # bands, so a single flat BASE_SFM ignored the user's actual hardness — 50 and
 # 55 HRC gave the same speed. This returns an ABSOLUTE SFM as a function of HRC
@@ -2616,7 +2642,9 @@ def run_reaming(payload: dict) -> dict:
 
     # ── Layer 1: Base SFM and IPR from material ──────────────────────────────
     base_sfm = REAM_SFM.get(mat, REAM_SFM.get(mat_group, 150))
-    base_sfm *= hardness_sfm_mult(hrc)
+    # Skip hardness derate for intrinsically-hard alloys (already in the baseline) —
+    # was double-derating PH stainless / Inconel / Ti / tool steels. See apply_sfm_hardness.
+    base_sfm = apply_sfm_hardness(base_sfm, hrc, mat, mat_group)
     ipr_base = ream_base_ipr(feed_dia)
     ipr_base *= hardness_kc_mult(hrc) ** -0.3
 
@@ -3231,7 +3259,8 @@ def run_keyseat(payload: dict) -> dict:
     # below still rewards slowing down; the speed preset biases only the RPM we
     # actually drive (sfm_actual), via _sfm_preset.
     base_sfm   = KEYSEAT_SFM.get(mat, KEYSEAT_SFM.get(mat_group, 150))
-    sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    # Skip hardness derate for intrinsically-hard alloys — see apply_sfm_hardness.
+    sfm_target = apply_sfm_hardness(base_sfm, hrc, mat, mat_group)
     _sfm_preset = biased_sfm(sfm_target, str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM
@@ -3459,6 +3488,13 @@ def run_dovetail(payload: dict) -> dict:
     mat            = str(payload.get("material", "steel_alloy") or "steel_alloy")
     mat_group      = get_material_group(mat)
 
+    # Hardness (parsed up front — used by the pass-depth conservatism factor below
+    # AND the SFM derate later; previously assigned after its first use here, which
+    # crashed run_dovetail with UnboundLocalError whenever hrc >= 35).
+    _hv  = float(payload.get("hardness_value", 0) or 0)
+    _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
+    hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
+
     # Material toughness factor for pass depth conservatism
     _mat_factor = {"Aluminum": 1.0, "Steel": 1.5, "Stainless": 1.75,
                    "Inconel": 2.5, "Titanium": 2.0, "Cast Iron": 1.3}.get(mat_group, 1.5)
@@ -3484,11 +3520,6 @@ def run_dovetail(payload: dict) -> dict:
     _drive_eff     = SPINDLE_DRIVE_EFF.get(_spindle_drive, 0.92)
     machine_hp     = float(payload.get("machine_hp", 10.0) or 10.0) * _drive_eff
 
-    # Hardness
-    _hv  = float(payload.get("hardness_value", 0) or 0)
-    _hs  = str(payload.get("hardness_scale", "hrc") or "hrc").lower()
-    hrc  = hrb_to_hrc(_hv) if _hs == "hrb" else _hv
-
     # Effective cutting diameter at the widest point of the dovetail
     # For a dovetail with included angle θ: effective_dia = D (tool_dia IS the max dia)
     # RPM based on D (max cutting diameter). Note for user display.
@@ -3497,7 +3528,8 @@ def run_dovetail(payload: dict) -> dict:
     # SFM. sfm_target stays at rated (un-biased) speed for the tool-life ratio;
     # the speed preset biases only the RPM we drive (sfm_actual).
     base_sfm   = DOVETAIL_SFM.get(mat, DOVETAIL_SFM.get(mat_group, 130))
-    sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    # Skip hardness derate for intrinsically-hard alloys — see apply_sfm_hardness.
+    sfm_target = apply_sfm_hardness(base_sfm, hrc, mat, mat_group)
     _sfm_preset = biased_sfm(sfm_target, str(payload.get("speed_preset") or "balanced"), mat_group)
 
     # RPM
@@ -3771,7 +3803,11 @@ def run_feedmill(payload: dict) -> dict:
     # SFM and RPM. sfm_target stays at rated (un-biased) speed for the tool-life
     # ratio; the speed preset biases only the RPM we drive (sfm_actual).
     base_sfm   = FEEDMILL_SFM.get(mat, FEEDMILL_SFM.get(mat_group, 300))
-    sfm_target = base_sfm * hardness_sfm_mult(hrc)
+    # Skip the hardness derate for alloys whose baseline already bakes in hardness
+    # (PH stainless, Inconel, Ti, tool/hardened steels) — run_feedmill was missing
+    # this guard and double-derated them (13-8 PH @43HRC ran 218→140 SFM). See
+    # apply_sfm_hardness / _NO_HRC_PENALTY.
+    sfm_target = apply_sfm_hardness(base_sfm, hrc, mat, mat_group)
     _sfm_preset = biased_sfm(sfm_target, str(payload.get("speed_preset") or "balanced"), mat_group)
     target_rpm = (_sfm_preset * 12.0) / (math.pi * D)
     rpm        = min(target_rpm, max_rpm * rpm_util)
