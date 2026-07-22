@@ -460,7 +460,8 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "15-5": "stainless_15_5", "15-5ph": "stainless_15_5", "15-5 ph": "stainless_15_5",
   "xm-12": "stainless_15_5", "xm12": "stainless_15_5", "s15500": "stainless_15_5",
   "13-8": "stainless_13_8", "13-8mo": "stainless_13_8", "13-8 mo": "stainless_13_8",
-  "13-8 ph": "stainless_13_8", "ph13-8mo": "stainless_13_8", "ph 13-8 mo": "stainless_13_8",
+  "13-8 ph": "stainless_13_8", "13-8ph": "stainless_13_8", "ph13-8mo": "stainless_13_8", "ph 13-8 mo": "stainless_13_8",
+  "ss 13-8ph": "stainless_13_8", "ss 13-8 ph": "stainless_13_8",
   "xm-13": "stainless_13_8", "xm13": "stainless_13_8", "s13800": "stainless_13_8", "1.4534": "stainless_13_8",
   // ── Duplex ────────────────────────────────────────────────────────────────
   "2205": "stainless_duplex", "s31803": "stainless_duplex", "s32205": "stainless_duplex",
