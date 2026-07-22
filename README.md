@@ -8,6 +8,10 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### PDF upload — high-feed mill now routes to the feed-mill engine
+- Uploading a **high-feed mill** print sometimes ran it through the *generic milling* physics instead of the feed-mill path — giving a conventional SFM, no radius-form chip-thinning (CTF), and an inflated cutting-force/deflection reading that throttled the feed. Root cause: the client operation-switch matched the extractor's `tool_type` by exact string (`"feedmill"`), so a descriptive variant (`"high-feed mill"`, `"high_feed_mill"`, `"hfm"`) or an `"endmill"` fallback slipped through.
+- Fix: the server extractor now **normalizes** any feed-mill-shaped `tool_type` (and an endmill carrying a ≤30° lead-angle callout) to the exact `"feedmill"` enum before returning, and the client switch matches feed-mill variants defensively as well. High-feed prints now correctly select the Feed Mill operation on upload — proper SFM, radius-form CTF, and decoupled force.
+
 ### Speed Card — Manual RPM entry + Speed/Feed layout
 - **Set an exact RPM.** Alongside "Set SFM", the Speed card now has a **Set RPM** box. Enter a spindle speed and the engine (`rpm_override`) runs at exactly that RPM — clamped to the machine's max — and **derives the SFM back from it** so feed and tool-life stay consistent. SFM and RPM entry are **mutually exclusive**: typing one clears the other, and clicking any speed preset clears both.
 - If a manual RPM exceeds the machine ceiling it's clamped, and a ⚠ line shows the requested vs. capped value (mirrors the manual-SFM clamp note).

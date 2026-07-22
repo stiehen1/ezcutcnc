@@ -5542,6 +5542,28 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         extracted.lbs = eLoc;
       }
 
+      // Normalize tool_type to the exact enum the client operation-switch keys off
+      // (Mentor.tsx ~2204). The extractor is instructed to emit "feedmill" but LLMs
+      // sometimes return a descriptive variant ("high_feed_mill", "high-feed mill",
+      // "hfm") or fall back to "endmill" for a low-lead corner-radius wheel — any of
+      // which silently drops a high-feed mill into the generic milling physics path
+      // (wrong SFM, no radius-form CTF, inflated cutting force). A "feedmill"-shaped
+      // string, or a lead_angle callout on an endmill, is treated as a feed mill.
+      if (typeof extracted.tool_type === "string") {
+        const _ttNorm = extracted.tool_type.toLowerCase().replace(/[\s-]+/g, "_");
+        const _leadAng = typeof extracted.lead_angle === "number" ? extracted.lead_angle : 0;
+        const _looksFeedmill =
+          _ttNorm.includes("feed_mill") ||
+          _ttNorm.includes("feedmill") ||
+          _ttNorm.includes("high_feed") ||
+          _ttNorm === "hfm" ||
+          (_ttNorm === "endmill" && _leadAng > 0 && _leadAng <= 30);
+        if (_looksFeedmill && extracted.tool_type !== "feedmill") {
+          console.log(`tool_type normalized to "feedmill" (was "${extracted.tool_type}", lead_angle=${_leadAng})`);
+          extracted.tool_type = "feedmill";
+        }
+      }
+
       // QTR3 series tools always have variable pitch + variable helix by design.
       // If the model identified a QTR3 series tool but missed either flag, force both true.
       const _series = typeof extracted.tool_series === "string" ? extracted.tool_series.toUpperCase() : "";

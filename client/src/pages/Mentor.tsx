@@ -2200,13 +2200,17 @@ export default function Mentor() {
             next.hardness_scale = sub.hardness.scale;
           }
         }
-        // Auto-switch operation based on detected tool type
-        const tt = (e.tool_type ?? "").toLowerCase();
+        // Auto-switch operation based on detected tool type. Normalize spacing/dashes
+        // so a high-feed-mill variant string ("high_feed_mill", "high-feed mill", "hfm")
+        // still routes to the feed-mill path — the server also normalizes this, but an
+        // old build or a rerun of a previously-saved extraction may send a variant.
+        const tt = (e.tool_type ?? "").toLowerCase().replace(/[\s-]+/g, "_");
+        const ttIsFeedmill = tt === "feedmill" || tt.includes("feed_mill") || tt.includes("high_feed") || tt === "hfm";
         if (tt === "keyseat") { setOperation("keyseat"); next.operation = "keyseat" as any; }
         else if (tt === "dovetail") { setOperation("dovetail"); next.operation = "dovetail" as any; }
         else if (tt === "drill" || tt === "step_drill") { setOperation("drilling"); next.operation = "drilling"; }
         else if (tt === "reamer") { setOperation("reaming"); next.operation = "reaming"; }
-        else if (tt === "feedmill") {
+        else if (ttIsFeedmill) {
           setOperation("feedmill"); next.operation = "feedmill" as any;
           if (e.lead_angle > 0) next.lead_angle = e.lead_angle;
           if (e.corner_radius > 0) next.feedmill_doc_in = 0; // let engine suggest based on CR
