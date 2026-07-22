@@ -8307,12 +8307,14 @@ ${stabSection}
               </div>
             )}
             {operation === "feedmill" && (() => {
-              // Recommended DOC — MUST mirror run_feedmill in legacy_engine.py.
-              // Targets a productive chip-thinning factor (~2×) rather than the old
-              // 0.8×CR strength heuristic, which on a small corner radius lands right
-              // where CTF collapses to ~1.0× and kills the high-feed advantage.
+              // Recommended DOC preview. The engine (run_feedmill) computes the real
+              // rec from two regimes — a chip-thinning target (small form radius) AND a
+              // force/deflection ceiling (large form radius like R.630) — which needs
+              // the full deflection model. We can't reproduce that faithfully client-side,
+              // so PREFER the engine's returned rec_doc_in after a run and fall back to a
+              // simple CTF-target estimate only as a pre-run placeholder.
               const CTF_TARGET = 2.0;
-              const feedmillRecDoc = (R: number, D: number): number => {
+              const feedmillRecDocEstimate = (R: number, D: number): number => {
                 if (R > 0) {
                   const ctfDoc = R * (1 - Math.sqrt(Math.max(0, 1 - 1 / (CTF_TARGET ** 2))));
                   let rec = Math.min(ctfDoc, R * 0.8, D * 0.12);
@@ -8321,7 +8323,9 @@ ${stabSection}
                 }
                 return Math.max(D * 0.10, D * 0.02);
               };
-              const _recDoc = feedmillRecDoc(form.corner_radius, form.tool_dia);
+              const _recDoc = (feedmillResult?.rec_doc_in && feedmillResult.rec_doc_in > 0)
+                ? feedmillResult.rec_doc_in
+                : feedmillRecDocEstimate(form.corner_radius, form.tool_dia);
               // WOC display value: default to 8% (sweet-spot center) when unset so the
               // feed mill's primary lever is always visible/selected, never a hidden 0.
               const _wocShown = form.woc_pct > 0 ? form.woc_pct : 8;

@@ -3824,12 +3824,55 @@ def run_feedmill(payload: dict) -> dict:
     # can take) and FLOOR at a machinable minimum so we don't program a chip so thin
     # the tool rubs. On a big radius the CTF-target depth is well under 0.8×R, so the
     # strength cap rarely binds; on a tiny radius the floor keeps it cuttable.
-    _CTF_TARGET = 2.0   # aim for ~2x thinning; retune with shop data
+    # There are TWO regimes, and the rec DOC is the shallower (safer) of the two:
+    #
+    #  (1) THINNING-LIMITED (small form radius, e.g. a genuine small-corner insert):
+    #      thinning is only strong at shallow DOC, so target a productive CTF. Invert
+    #      the CTF model for the DOC that yields CTF_target (small-DOC branch, DOC<R):
+    #        sin(theta)=1/CTF -> 1-DOC/R=sqrt(1-1/CTF^2) -> DOC=R*(1-sqrt(1-1/CTF^2)).
+    #
+    #  (2) FORCE/HP-LIMITED (large form radius, e.g. R≈D on a true high-feed cutter
+    #      like CC-14556's R.630): thinning headroom is effectively unlimited — even a
+    #      max-depth cut has CTF>2x — so the binding constraint is cutting force / HP,
+    #      NOT thinning. Force is LINEAR in DOC (feed cancels in the HP->force relation:
+    #      total_force = MRR*hp_unit*kc*33000/(feed/12) and MRR=feed*DOC*WOC, so
+    #      total_force = DOC * WOC_in * hp_unit * kc * 33000 * 12). Invert for the DOC
+    #      that holds force to a target fraction of the machine's HP-equivalent force.
+    #
+    # We take min() of both, then cap at the corner-strength (0.8xR) and axial (0.12xD)
+    # limits, then FLOOR so we never recommend a chip so thin it rubs — critical for
+    # PH stainless, where underfeeding a high-feed cutter burnishes and work-hardens
+    # the material and kills the edge faster than overload does.
+    _CTF_TARGET = 2.0   # aim for >=2x thinning; retune with shop data
     if corner_r > 0:
-        _ctf_doc   = corner_r * (1.0 - math.sqrt(max(0.0, 1.0 - 1.0 / (_CTF_TARGET ** 2))))
-        rec_doc_in = min(_ctf_doc, corner_r * 0.8, D * 0.12) * _ld_doc_factor
-        # Machinable floor so a razor-thin chip doesn't rub: larger of a small
-        # absolute depth, 15% of the corner radius, and 1% of D.
+        _ctf_doc = corner_r * (1.0 - math.sqrt(max(0.0, 1.0 - 1.0 / (_CTF_TARGET ** 2))))
+
+        # Force-limited DOC. Total tangential force is LINEAR in DOC and independent
+        # of feed (feed cancels in the HP->force relation):
+        #   total_force = DOC * WOC_in * hp_unit * kc * 33000 * 12.
+        # Solve for the DOC that holds force to a target ceiling, then that becomes a
+        # candidate rec. The ceiling scales with the deflection limit and the tool's
+        # own stiffness so a rigid/short setup is allowed a deeper cut than a long
+        # slender one: the radial component (0.15*total) should not, by itself, push
+        # deflection past ~60% of the 0.0005" limit at the rec depth. We approximate
+        # the allowable radial force from the tool_deflection model run at unit force.
+        _woc_in_rec  = (woc_pct_for_rec := (min(25.0, max(1.0, float(payload.get("woc_pct", 0.0) or 0.0))) if float(payload.get("woc_pct", 0.0) or 0.0) > 0 else 8.0)) / 100.0 * D
+        _hp_unit_rec = HP_PER_CUIN.get(mat, HP_PER_CUIN.get(mat_group, 1.0)) * hardness_kc_mult(hrc)
+        # Deflection per unit radial lbf for THIS setup (linear model), then the radial
+        # force that reaches 60% of the limit; total force is radial/0.15.
+        _rig_rec       = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
+        _defl_per_lbf  = tool_deflection(1.0, stickout, D, flutes, loc, 0.0, None,
+                                         payload.get("holder_gage_length"), payload.get("holder_nose_dia")) / max(_rig_rec, 1e-6)
+        if _defl_per_lbf > 0 and _woc_in_rec > 0 and _hp_unit_rec > 0:
+            _radial_allow = (0.60 * 0.0005) / _defl_per_lbf     # lbf of radial force at 60% of limit
+            _force_ceiling = _radial_allow / 0.15               # total force ceiling
+            _force_doc     = _force_ceiling / (_woc_in_rec * _hp_unit_rec * 33000.0 * 12.0)
+        else:
+            _force_doc = D * 0.12   # no info -> let the axial cap bind
+
+        rec_doc_in = min(_ctf_doc, _force_doc, corner_r * 0.8, D * 0.12) * _ld_doc_factor
+        # Anti-rubbing / machinable floor: never recommend below what keeps the chip
+        # cutting. Larger of a small absolute depth, 15% of the corner radius, 1% of D.
         rec_doc_in = max(rec_doc_in, min(corner_r * 0.15, 0.004), D * 0.01)
     else:
         rec_doc_in = D * 0.10 * _ld_doc_factor

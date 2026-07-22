@@ -5259,7 +5259,11 @@ CRITICAL RULES — READ CAREFULLY:
    - loc = the axial flute length / cutting height
    - lbs = the reach/TSC dimension if it is a long-reach feed mill with a reduced neck (0 if standard body)
    - lead_angle = the lead angle in degrees — look for a dimension callout on the cutting insert face angle or a note like "20° LEAD", "LEAD ANGLE: 17°", or an angular dimension on the cutting face. Common values: 10, 12, 15, 17, 20. Use 20 if not explicitly shown.
-   - corner_radius = the insert corner radius (from the insert designation or a callout, e.g. "R0.060" → 0.060)
+   - corner_radius = THE CHIP-THINNING FORM RADIUS — this is the feature that gives a high-feed mill its speed, so getting it right matters. CRITICAL: high-feed / form cutters often show MULTIPLE R callouts on the cutting end (e.g. "R.630", "R.315", "R.039" all on one CC-14556-style print). These are NOT interchangeable:
+       * The LARGEST radius is the high-feed FORM radius (the big face-blend arc that thins the chip) — THIS is corner_radius. On the CC-14556 example, that is R.630.
+       * A radius ≈ tool_dia/2 is just the OD corner where the face rolls into the side — do NOT use it as corner_radius unless it is the only/largest one.
+       * A TINY radius (roughly < 10% of the cutting diameter, e.g. R.039 on a Ø.63 tool) is an EDGE-PREP / edge break, NOT the thinning form. Never extract the tiny edge-prep R as corner_radius when a larger form R is present — doing so makes the engine think the tool can barely chip-thin and reports a feed far too low.
+       RULE: when several R callouts appear on the cutting end of a feed mill, set corner_radius = the LARGEST of them. Only fall back to a small R if it is the single radius shown (a genuine small-corner insert cutter).
 
 5. shank_dia is the large cylindrical body at the far end (shank) of the tool.
 
@@ -5561,6 +5565,22 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
         if (_looksFeedmill && extracted.tool_type !== "feedmill") {
           console.log(`tool_type normalized to "feedmill" (was "${extracted.tool_type}", lead_angle=${_leadAng})`);
           extracted.tool_type = "feedmill";
+        }
+      }
+
+      // Feed-mill radius sanity check. The chip-thinning FORM radius is what gives a
+      // high-feed mill its feed; the prompt now tells the model to pick the LARGEST R
+      // on a multi-radius form print (edge-prep R is not the thinning driver). If the
+      // extracted corner_radius still comes back suspiciously small for the diameter
+      // (< 10% of tool_dia — almost always an edge break the model grabbed by mistake,
+      // e.g. R.039 on a Ø.63 form cutter), log it so we can catch extraction regressions.
+      // We can't recover the large R here (only one value is returned), but the warning
+      // surfaces the case for review, and the user can correct the radius in the form.
+      if (extracted.tool_type === "feedmill") {
+        const _cr = typeof extracted.corner_radius === "number" ? extracted.corner_radius : 0;
+        const _td = typeof extracted.tool_dia === "number" ? extracted.tool_dia : 0;
+        if (_cr > 0 && _td > 0 && _cr < 0.10 * _td) {
+          console.warn(`Feed mill ${extracted.tool_number ?? "?"}: corner_radius ${_cr}" is <10% of Ø${_td}" — likely an edge-prep R, not the chip-thinning form radius. Verify the largest form R was extracted.`);
         }
       }
 
