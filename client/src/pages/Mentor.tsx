@@ -2306,9 +2306,14 @@ export default function Mentor() {
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
       }
-      // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style
-      // Skip if mode is slot or face — those lock WOC to fixed values
-      if (form.mode !== "slot" && form.mode !== "face") {
+      // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style.
+      // Skip if mode is slot or face — those lock WOC to fixed values. Also skip for
+      // FEED MILLS: they have their own WOC control that defaults to 8% (sweet-spot
+      // center) and a CTF-target DOC rec — seeding a milling preset here (~9%) would
+      // leave woc_pct at a non-preset value so the 8% default button never highlights.
+      const _seedTt = (e.tool_type ?? "").toLowerCase().replace(/[\s-]+/g, "_");
+      const _seedIsFeedmill = _seedTt === "feedmill" || _seedTt.includes("feed_mill") || _seedTt.includes("high_feed") || _seedTt === "hfm";
+      if (form.mode !== "slot" && form.mode !== "face" && !_seedIsFeedmill) {
         const spMode = (form.dp_cutting_style ?? "hem") === "hem" ? "hem" : "traditional";
         const newFlutes = e.flutes > 0 ? e.flutes : form.flutes;
         const newDia    = _pdfDia > 0 ? _pdfDia : form.tool_dia;
@@ -4228,6 +4233,10 @@ export default function Mentor() {
         chamfer_depth: chamferAxial,
         operation: (["milling","drilling","reaming","threadmilling","keyseat","dovetail","feedmill"].includes(operation) ? operation : "milling") as any,
         flutes: operation === "reaming" ? reamFlutes(form.tool_dia) : (form.flutes > 0 ? form.flutes : 2),
+        // Feed mill: WOC is the primary lever and the UI shows 8% (sweet-spot center)
+        // as the default. Send it explicitly so the engine runs the same value the user
+        // sees, rather than falling back to its internal 8% only when it feels like it.
+        woc_pct: operation === "feedmill" && form.woc_pct <= 0 ? 8 : form.woc_pct,
         // Stickout fallback matches the engine's default (LOC + flute_wash + 0.33×D),
         // NOT loc×1.25 — guards against a stale form.stickout (SKU-apply state race)
         // sending a too-long reach that inflates deflection. LBS/necked: lbs + 0.5×D.
@@ -8313,8 +8322,13 @@ ${stabSection}
                 return Math.max(D * 0.10, D * 0.02);
               };
               const _recDoc = feedmillRecDoc(form.corner_radius, form.tool_dia);
+              // WOC display value: default to 8% (sweet-spot center) when unset so the
+              // feed mill's primary lever is always visible/selected, never a hidden 0.
+              const _wocShown = form.woc_pct > 0 ? form.woc_pct : 8;
               return (
-              <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="space-y-3 mt-3">
+                {/* Lead Angle — full-width row (only relevant to lead-angle insert cutters;
+                    dimmed when a corner radius makes this a radius-form cutter). */}
                 <div className="space-y-2">
                   <FieldLabel hint="Lead angle from the print (degrees). Only used for lead-angle insert feed mills. For radius-form hi-feed cutters (a corner radius is set), chip thinning comes from the radius + DOC instead — this field is ignored.">Lead Angle (°)</FieldLabel>
                   <div className={`flex gap-1.5 flex-wrap ${form.corner_radius > 0 ? "opacity-40 pointer-events-none" : ""}`}>
@@ -8350,7 +8364,10 @@ ${stabSection}
                     </div>
                   )}
                 </div>
-                <div className="space-y-2">
+
+                {/* DOC per Pass — full-width row, boxed (matches the WOC card) and stacked
+                    directly above WOC for clarity so it doesn't get lost. */}
+                <div className="space-y-2 rounded-lg border border-cyan-700/40 bg-cyan-900/10 px-3 py-2.5">
                   <FieldLabel hint="Axial depth per pass (inches). High-feed cutters get their speed from chip thinning, which only works when DOC is SHALLOW relative to the corner radius — the engine recommends a DOC that targets ~2× thinning. Going deeper (up to 1.5×CR) is stronger on the corner but gives up the high-feed advantage. Leave 0 to use the recommended value.">DOC per Pass (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
                     placeholder={form.corner_radius > 0 ? `rec. ${_recDoc.toFixed(4)}"` : "e.g. 0.040"}
@@ -8372,29 +8389,62 @@ ${stabSection}
                     </div>
                   )}
                 </div>
-                {/* WOC — the feed mill's primary control knob. The engine defaults to 8%
-                    when this is 0; radius-form thinning is weak on a small corner radius,
-                    so WOC (not feed) is how you raise MRR. Engine clamps to 6–25%. */}
-                <div className="space-y-2">
-                  <FieldLabel hint="Radial width of cut as a % of tool diameter. This is the feed mill's main control knob — sweet spot is 6–12%, up to ~15% on rigid setups. Leave 0 to use the engine default (8%). MRR scales directly with WOC; if the cut sounds light, raise WOC before touching feed.">WOC (% of Ø)</FieldLabel>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[6, 8, 10, 12, 15].map(w => (
-                      <button key={w} type="button"
-                        onClick={() => { setForm(p => ({ ...p, woc_pct: w })); setWocText(((w / 100) * form.tool_dia).toFixed(4)); }}
-                        className={`px-2.5 py-1 rounded text-xs font-semibold border transition-all ${Math.round(form.woc_pct) === w ? "bg-indigo-600 border-indigo-500 text-white" : "bg-zinc-800 border-zinc-600 text-zinc-300 hover:border-indigo-500"}`}
-                      >{w}%</button>
-                    ))}
-                    <Input type="number" step="1" className="no-spinners w-16 h-7 text-xs"
-                      placeholder="%"
-                      value={form.woc_pct || ""}
-                      onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n >= 0) { setForm(p => ({ ...p, woc_pct: n })); setWocText(((n / 100) * form.tool_dia).toFixed(4)); } }}
-                    />
+
+                {/* WOC — the feed mill's primary control knob, styled like the SFM preset
+                    row: a Conservative → Aggressive axis caption over a horizontal preset
+                    grid. Defaults to 8% (sweet-spot center). MRR scales with WOC; raise it
+                    before touching feed. Engine clamps 1–25%. */}
+                <div className="space-y-1.5 rounded-lg border border-indigo-700/40 bg-indigo-900/10 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <FieldLabel hint="Radial width of cut as a % of tool diameter — the feed mill's main control knob. Sweet spot is 6–12%, up to ~15% on rigid setups. MRR scales directly with WOC: if the cut sounds light, raise WOC before touching feed. Defaults to 8% (sweet-spot center).">WOC — Radial Engagement (% of Ø)</FieldLabel>
+                    {/* Only offer the reset once the user has moved off the 8% default. */}
+                    {form.woc_pct > 0 && Math.round(form.woc_pct) !== 8 && (
+                      <button type="button"
+                        onClick={() => { setForm(p => ({ ...p, woc_pct: 0 })); setWocText(((8 / 100) * form.tool_dia).toFixed(4)); }}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline underline-offset-2 whitespace-nowrap"
+                      >↺ Return to default (8%)</button>
+                    )}
                   </div>
-                  {form.tool_dia > 0 && (
-                    <div className="text-[10px] text-zinc-500">
-                      {(form.woc_pct > 0 ? form.woc_pct : 8).toFixed(0)}% = {(((form.woc_pct > 0 ? form.woc_pct : 8) / 100) * form.tool_dia).toFixed(4)}" radial{form.woc_pct <= 0 ? " (engine default)" : ""}
+                  <div className="flex items-center justify-between gap-4 text-[8px] uppercase tracking-tight font-semibold mb-1">
+                    <span className="text-emerald-400 whitespace-nowrap flex items-center gap-1">
+                      <span className="text-[13px] leading-none font-black">←</span>
+                      Conservative
+                    </span>
+                    <span className="text-orange-400 whitespace-nowrap flex items-center gap-1">
+                      Aggressive
+                      <span className="text-[13px] leading-none font-black">→</span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[6, 8, 10, 12, 15].map(w => {
+                      const active = Math.round(_wocShown) === w;
+                      return (
+                        <button key={w} type="button"
+                          title={`${w}% of Ø${form.tool_dia > 0 ? ` = ${((w / 100) * form.tool_dia).toFixed(4)}" radial` : ""}`}
+                          onClick={() => { setForm(p => ({ ...p, woc_pct: w })); setWocText(((w / 100) * form.tool_dia).toFixed(4)); }}
+                          className={`min-w-0 whitespace-nowrap text-[10px] leading-tight text-center px-0.5 py-1.5 rounded-md border font-semibold transition-colors ${
+                            active
+                              ? "bg-orange-500/90 border-orange-400 text-white"
+                              : "bg-zinc-700/40 border-zinc-600/50 text-zinc-300 hover:bg-zinc-600/60 hover:text-white"
+                          }`}
+                        >{w}%</button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <span className="text-[10px] text-zinc-500">
+                      {form.tool_dia > 0 ? `${_wocShown.toFixed(0)}% = ${((_wocShown / 100) * form.tool_dia).toFixed(4)}" radial` : `${_wocShown.toFixed(0)}% of Ø`}
+                      {form.woc_pct <= 0 && " (default)"}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-zinc-500">Custom:</span>
+                      <Input type="number" step="1" className="no-spinners w-16 h-7 text-xs"
+                        placeholder="%"
+                        value={form.woc_pct || ""}
+                        onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n >= 0) { setForm(p => ({ ...p, woc_pct: n })); setWocText(((n / 100) * form.tool_dia).toFixed(4)); } }}
+                      />
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
               );
