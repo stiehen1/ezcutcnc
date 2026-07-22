@@ -3796,13 +3796,44 @@ def run_feedmill(payload: dict) -> dict:
     # DOC — two constraints: corner radius geometry limit + axial depth limit
     # CR limit: max = 1.5×CR (overloads dual-radius contact zone beyond this)
     # Axial limit: max = 0.15×D (shop-validated for solid carbide HFM)
-    # Recommended: 0.10×D or 0.8×CR, whichever is smaller
     # Resolved BEFORE chip thinning so the radius-form CTF can key off DOC.
     cr_max_doc   = corner_r * 1.5 if corner_r > 0 else D * 0.15
     axial_max    = D * 0.15
     max_doc_in   = min(cr_max_doc, axial_max) * _ld_doc_factor
-    rec_doc_in   = min(corner_r * 0.8 if corner_r > 0 else D * 0.10, D * 0.12) * _ld_doc_factor
-    rec_doc_in   = max(rec_doc_in, D * 0.02)   # floor: at least 2% dia
+
+    # Recommended DOC.
+    #
+    # The whole point of a high-feed / radius-form cutter is chip thinning: run
+    # shallow so the round corner presents an effective lead angle that shortens
+    # the chip and lets you program a much higher feed. The engine's radius CTF is
+    # CTF = 1/sin(theta), theta = acos(1 - DOC/R). Thinning is strong ONLY when
+    # DOC is small relative to R; as DOC -> R the CTF collapses to ~1.0x.
+    #
+    # The old rec (0.8×CR) was a corner-STRENGTH heuristic borrowed from big
+    # round-insert face mills, where 0.8×R is still shallow in absolute terms. On a
+    # small solid-carbide corner it lands at DOC ≈ 0.8×R — exactly the depth where
+    # CTF ≈ 1.0x and the tool loses its high-feed advantage (the case Scott hit on
+    # CC-14556: R0.039", old rec 0.031" = 0.8×R -> CTF 1.02×, feed no better than a
+    # conventional endmill).
+    #
+    # New rec targets a productive CTF instead. Invert the CTF model for the DOC
+    # that yields CTF_target (small-DOC branch, DOC < R):
+    #   sin(theta) = 1/CTF  ->  1 - DOC/R = sqrt(1 - 1/CTF^2)  ->
+    #   DOC = R × (1 - sqrt(1 - 1/CTF^2))
+    # then CAP at the 0.8×R strength limit (never recommend deeper than the corner
+    # can take) and FLOOR at a machinable minimum so we don't program a chip so thin
+    # the tool rubs. On a big radius the CTF-target depth is well under 0.8×R, so the
+    # strength cap rarely binds; on a tiny radius the floor keeps it cuttable.
+    _CTF_TARGET = 2.0   # aim for ~2x thinning; retune with shop data
+    if corner_r > 0:
+        _ctf_doc   = corner_r * (1.0 - math.sqrt(max(0.0, 1.0 - 1.0 / (_CTF_TARGET ** 2))))
+        rec_doc_in = min(_ctf_doc, corner_r * 0.8, D * 0.12) * _ld_doc_factor
+        # Machinable floor so a razor-thin chip doesn't rub: larger of a small
+        # absolute depth, 15% of the corner radius, and 1% of D.
+        rec_doc_in = max(rec_doc_in, min(corner_r * 0.15, 0.004), D * 0.01)
+    else:
+        rec_doc_in = D * 0.10 * _ld_doc_factor
+        rec_doc_in = max(rec_doc_in, D * 0.02)   # floor: at least 2% dia
 
     doc_in = float(payload.get("feedmill_doc_in", 0.0) or 0.0)
     if doc_in <= 0:
@@ -3844,10 +3875,13 @@ def run_feedmill(payload: dict) -> dict:
     # Feed rate
     feed_ipm = rpm * flutes * programmed_fpt
 
-    # WOC — HFM sweet spot is 6–12% of diameter. Default to 8%.
+    # WOC — HFM sweet spot is 6–12% of diameter. Default to 8% when unset (0).
     # Do NOT use the standard milling woc_pct (50%) — that would destroy a feed mill.
+    # A caller value is CLAMPED to 1–25% (not discarded): a stray high WOC from the
+    # generic milling form must not silently pass through, but a deliberate 12–15%
+    # from the feed-mill WOC control must be honored rather than reset to 8%.
     _woc_payload = float(payload.get("woc_pct", 0.0) or 0.0)
-    woc_pct = _woc_payload if (_woc_payload > 0 and _woc_payload <= 25.0) else 8.0
+    woc_pct = min(25.0, max(1.0, _woc_payload)) if _woc_payload > 0 else 8.0
     woc_in  = (woc_pct / 100.0) * D
 
     # MRR

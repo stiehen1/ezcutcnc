@@ -8297,7 +8297,23 @@ ${stabSection}
                 </div>
               </div>
             )}
-            {operation === "feedmill" && (
+            {operation === "feedmill" && (() => {
+              // Recommended DOC — MUST mirror run_feedmill in legacy_engine.py.
+              // Targets a productive chip-thinning factor (~2×) rather than the old
+              // 0.8×CR strength heuristic, which on a small corner radius lands right
+              // where CTF collapses to ~1.0× and kills the high-feed advantage.
+              const CTF_TARGET = 2.0;
+              const feedmillRecDoc = (R: number, D: number): number => {
+                if (R > 0) {
+                  const ctfDoc = R * (1 - Math.sqrt(Math.max(0, 1 - 1 / (CTF_TARGET ** 2))));
+                  let rec = Math.min(ctfDoc, R * 0.8, D * 0.12);
+                  rec = Math.max(rec, Math.min(R * 0.15, 0.004), D * 0.01);
+                  return rec;
+                }
+                return Math.max(D * 0.10, D * 0.02);
+              };
+              const _recDoc = feedmillRecDoc(form.corner_radius, form.tool_dia);
+              return (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="space-y-2">
                   <FieldLabel hint="Lead angle from the print (degrees). Only used for lead-angle insert feed mills. For radius-form hi-feed cutters (a corner radius is set), chip thinning comes from the radius + DOC instead — this field is ignored.">Lead Angle (°)</FieldLabel>
@@ -8316,9 +8332,9 @@ ${stabSection}
                   </div>
                   {form.corner_radius > 0 ? (() => {
                     // Radius-form: effective lead angle at the contact point = acos(1 - DOC/R).
-                    // Preview uses the DOC the engine will use (typed, else rec = 0.8×CR).
+                    // Preview uses the DOC the engine will use (typed, else the CTF-target rec).
                     const R = form.corner_radius;
-                    const doc = form.feedmill_doc_in > 0 ? form.feedmill_doc_in : R * 0.8;
+                    const doc = form.feedmill_doc_in > 0 ? form.feedmill_doc_in : _recDoc;
                     const dr = Math.max(1e-4, Math.min(1, doc / R));
                     const effLead = Math.acos(Math.max(-1, Math.min(1, 1 - dr))) * 180 / Math.PI;
                     const ctf = Math.max(1, Math.min(4, 1 / Math.max(0.25, Math.sin(effLead * Math.PI / 180))));
@@ -8335,9 +8351,9 @@ ${stabSection}
                   )}
                 </div>
                 <div className="space-y-2">
-                  <FieldLabel hint="Axial depth per pass (inches). Feed mills run shallow — typically 0.8–1.5× corner radius. The engine will suggest a safe starting DOC based on the corner radius from your print. Leave 0 to use the recommended value.">DOC per Pass (in)</FieldLabel>
+                  <FieldLabel hint="Axial depth per pass (inches). High-feed cutters get their speed from chip thinning, which only works when DOC is SHALLOW relative to the corner radius — the engine recommends a DOC that targets ~2× thinning. Going deeper (up to 1.5×CR) is stronger on the corner but gives up the high-feed advantage. Leave 0 to use the recommended value.">DOC per Pass (in)</FieldLabel>
                   <Input type="text" inputMode="decimal" className="no-spinners"
-                    placeholder={form.corner_radius > 0 ? `rec. ${(form.corner_radius * 0.8).toFixed(4)}"` : "e.g. 0.040"}
+                    placeholder={form.corner_radius > 0 ? `rec. ${_recDoc.toFixed(4)}"` : "e.g. 0.040"}
                     value={feedmillDocText !== "" ? feedmillDocText : (form.feedmill_doc_in > 0 ? form.feedmill_doc_in.toFixed(4) : "")}
                     onChange={(e) => {
                       setFeedmillDocText(e.target.value);
@@ -8352,12 +8368,37 @@ ${stabSection}
                   />
                   {form.corner_radius > 0 && (
                     <div className="text-[10px] text-zinc-500">
-                      Rec: {(form.corner_radius * 0.8).toFixed(4)}" · Max: {(form.corner_radius * 1.5).toFixed(4)}"
+                      Rec: {_recDoc.toFixed(4)}" (≈{(_recDoc / form.corner_radius * 100).toFixed(0)}% of R, ~2× thinning) · Max: {(form.corner_radius * 1.5).toFixed(4)}"
+                    </div>
+                  )}
+                </div>
+                {/* WOC — the feed mill's primary control knob. The engine defaults to 8%
+                    when this is 0; radius-form thinning is weak on a small corner radius,
+                    so WOC (not feed) is how you raise MRR. Engine clamps to 6–25%. */}
+                <div className="space-y-2">
+                  <FieldLabel hint="Radial width of cut as a % of tool diameter. This is the feed mill's main control knob — sweet spot is 6–12%, up to ~15% on rigid setups. Leave 0 to use the engine default (8%). MRR scales directly with WOC; if the cut sounds light, raise WOC before touching feed.">WOC (% of Ø)</FieldLabel>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[6, 8, 10, 12, 15].map(w => (
+                      <button key={w} type="button"
+                        onClick={() => { setForm(p => ({ ...p, woc_pct: w })); setWocText(((w / 100) * form.tool_dia).toFixed(4)); }}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold border transition-all ${Math.round(form.woc_pct) === w ? "bg-indigo-600 border-indigo-500 text-white" : "bg-zinc-800 border-zinc-600 text-zinc-300 hover:border-indigo-500"}`}
+                      >{w}%</button>
+                    ))}
+                    <Input type="number" step="1" className="no-spinners w-16 h-7 text-xs"
+                      placeholder="%"
+                      value={form.woc_pct || ""}
+                      onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n >= 0) { setForm(p => ({ ...p, woc_pct: n })); setWocText(((n / 100) * form.tool_dia).toFixed(4)); } }}
+                    />
+                  </div>
+                  {form.tool_dia > 0 && (
+                    <div className="text-[10px] text-zinc-500">
+                      {(form.woc_pct > 0 ? form.woc_pct : 8).toFixed(0)}% = {(((form.woc_pct > 0 ? form.woc_pct : 8) / 100) * form.tool_dia).toFixed(4)}" radial{form.woc_pct <= 0 ? " (engine default)" : ""}
                     </div>
                   )}
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Feed Mill — Pocket Depth (optional, requires uploaded print so LBS is known) */}
             {operation === "feedmill" && form.lbs > 0 && (() => {
