@@ -6488,18 +6488,19 @@ ${stabSection}
     setErError("");
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? undefined;
     try {
-      // Sender identity for the "<Name> via Core Cutter" From + Reply-To. Derive it
-      // from the address the user actually typed in the send box (erEmail) — NOT
-      // blindly from localStorage. On a shared shop browser, cc_user_name/er_email
-      // can be a PRIOR user's leftover values; trusting them stamped one person's
-      // results email with another person's Reply-To (Paul's address on Scott's send).
-      // Only attach the cached NAME when the cached email matches what's being sent to,
-      // so we never pair the wrong name with an address.
-      const typedEmail = erEmail.trim().toLowerCase();
-      const cachedName = (localStorage.getItem("cc_user_name") || "").trim();
-      const cachedEmail = (localStorage.getItem("er_email") || "").trim().toLowerCase();
-      const senderEmail = typedEmail;
-      const senderName = cachedEmail && cachedEmail === typedEmail ? cachedName : "";
+      // Sender identity for the "<Name> via Core Cutter" From + Reply-To. Use the
+      // REGISTERED user of this browser — cc_user_name + er_email, which are written
+      // together at registration, so they're a consistent name/email PAIR (never a
+      // mismatched name from one person + email from another). This personalizes the
+      // sender as whoever registered this browser, regardless of which address the
+      // copy is being sent TO — so sharing a result to a colleague still reads as
+      // "from <you>". Only use the pair when BOTH exist and the email is valid; a
+      // half-populated cache falls back to the generic app sender.
+      const regName = (localStorage.getItem("cc_user_name") || "").trim();
+      const regEmail = (localStorage.getItem("er_email") || "").trim();
+      const regEmailValid = !!regEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail);
+      const senderEmail = regEmailValid ? regEmail : "";
+      const senderName = regEmailValid && regName ? regName : "";
       const resp = await fetch("/api/results/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
