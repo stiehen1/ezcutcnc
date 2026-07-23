@@ -3314,13 +3314,27 @@ export async function registerRoutes(
       const geo = await geoFromIp(clientIp);
       try {
         const { pool } = await import("./db");
+        // leads.email is UNIQUE. A plain INSERT threw (and was swallowed below) for
+        // any recipient already in the table — i.e. every previously-registered user —
+        // so results-email activity for returning users was NEVER recorded. Upsert so
+        // a repeat recipient updates their latest operation/material/machine instead.
         await pool.query(
-          `INSERT INTO leads (email, operation, material, machine_name, results_text, ip, city, region, country, postal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          `INSERT INTO leads (email, operation, material, machine_name, results_text, ip, city, region, country, postal)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (email) DO UPDATE SET
+             operation    = COALESCE(EXCLUDED.operation, leads.operation),
+             material     = COALESCE(EXCLUDED.material, leads.material),
+             machine_name = COALESCE(EXCLUDED.machine_name, leads.machine_name),
+             results_text = COALESCE(EXCLUDED.results_text, leads.results_text),
+             city         = COALESCE(EXCLUDED.city, leads.city),
+             region       = COALESCE(EXCLUDED.region, leads.region),
+             country       = COALESCE(EXCLUDED.country, leads.country),
+             postal       = COALESCE(EXCLUDED.postal, leads.postal)`,
           [email.toLowerCase().trim(), operation ?? null, material ?? null, machine_name ?? null, results_text ?? null,
            clientIp, geo.city, geo.region, geo.country, geo.postal]
         );
       } catch (dbErr: any) {
-        console.warn("[Results Email] DB insert failed:", dbErr?.message);
+        console.warn("[Results Email] DB upsert failed:", dbErr?.message);
       }
 
       // Internal staff get the results email but skip the sales lead notification
@@ -3727,7 +3741,11 @@ export async function registerRoutes(
           ? `<br><br><strong>Screenshot:</strong><br><img src="${screenshot}" style="max-width:600px;border:1px solid #444;border-radius:4px;" alt="${screenshotName || 'screenshot'}"/>`
           : "";
         await transporter.sendMail({
-          from: `"CoreCutCNC Feedback" <${smtpUser}>`,
+          // From MUST be the verified/authenticated sender, NOT the raw Brevo SMTP
+          // login (9f5c4c001@smtp-brevo.com) — that address is unauthenticated for
+          // our domain and trips inbound spam/firewall filters.
+          from: `"CoreCutCNC Feedback" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
+          ...(email ? { replyTo: email } : {}),
           to: "scott@corecutterusa.com",
           subject: `[${type || "Feedback"}] CoreCutCNC — ${email || "anonymous"}`,
           html: `<p><strong>Type:</strong> ${type || "—"}</p><p><strong>From:</strong> ${email || "anonymous"}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${message.trim()}</p>${screenshotHtml}`,
@@ -3770,7 +3788,7 @@ export async function registerRoutes(
           auth: { user: smtpUser, pass: smtpPass },
         });
         await transporter.sendMail({
-          from: `"CoreCutCNC" <${smtpUser}>`,
+          from: `"CoreCutCNC" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
           to: "scott@corecutterusa.com",
           subject: `STEP file request — ${tool_number || "unknown tool"}`,
           text: `STEP file requested by: ${email}\nTool number: ${tool_number || "not specified"}\n\nSend the .STEP file to: ${email}`,
@@ -3831,7 +3849,7 @@ export async function registerRoutes(
             auth: { user: smtpUser, pass: smtpPass },
           });
           await transporter.sendMail({
-            from: `"CoreCutCNC" <${smtpUser}>`,
+            from: `"CoreCutCNC" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
             to: "scott@corecutterusa.com",
             subject: "New beta signup — CoreCutCNC",
             text: `New email signup from the beta feedback nudge:\n\n${email}`,
