@@ -960,6 +960,13 @@ export default function Mentor() {
     localStorage.setItem("cc_user_name", fullName);
     localStorage.setItem("cc_first_name", welcomeFirstName.trim());
     localStorage.setItem("cc_last_name", welcomeLastName.trim());
+    // Dedicated registered-identity email that pairs with cc_user_name. Kept SEPARATE
+    // from er_email: er_email doubles as the "last address typed in the send box"
+    // prefill and gets overwritten on every results/contact send, so it drifts away
+    // from the registered user. cc_user_email is written ONLY here at registration,
+    // so (cc_user_name, cc_user_email) stays a reliable matched pair for the "<Name>
+    // via Core Cutter" sender personalization.
+    localStorage.setItem("cc_user_email", welcomeEmail.trim().toLowerCase());
     localStorage.setItem("er_email", welcomeEmail.trim().toLowerCase());
     localStorage.setItem("cc_company", welcomeCompany.trim());
     localStorage.setItem("cc_zip", welcomeZip.trim());
@@ -1644,6 +1651,20 @@ export default function Mentor() {
   const [editStatusNote, setEditStatusNote] = React.useState("");
   const [editMaintenanceDate, setEditMaintenanceDate] = React.useState("");
   const [activeJobNo, setActiveJobNo] = React.useState("");
+
+  // One-time backfill of cc_user_email for browsers registered BEFORE that key
+  // existed. Runs on load, before any results/contact send can clobber er_email:
+  // if we have a registered name but no cc_user_email yet, seed it from the current
+  // er_email so the "<Name> via Core Cutter" personalization has a stable, matched
+  // identity. Guarded so it never overwrites an existing cc_user_email.
+  React.useEffect(() => {
+    if (localStorage.getItem("cc_user_email")) return;
+    const nm = (localStorage.getItem("cc_user_name") || "").trim();
+    const em = (localStorage.getItem("er_email") || "").trim();
+    if (nm && em && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+      localStorage.setItem("cc_user_email", em.toLowerCase());
+    }
+  }, []);
 
   // Auto-auth Toolbox for users who already registered via welcome modal or have a known email
   React.useEffect(() => {
@@ -6489,15 +6510,16 @@ ${stabSection}
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? undefined;
     try {
       // Sender identity for the "<Name> via Core Cutter" From + Reply-To. Use the
-      // REGISTERED user of this browser — cc_user_name + er_email, which are written
-      // together at registration, so they're a consistent name/email PAIR (never a
-      // mismatched name from one person + email from another). This personalizes the
-      // sender as whoever registered this browser, regardless of which address the
-      // copy is being sent TO — so sharing a result to a colleague still reads as
-      // "from <you>". Only use the pair when BOTH exist and the email is valid; a
-      // half-populated cache falls back to the generic app sender.
+      // REGISTERED user of this browser as a matched pair. Prefer the dedicated
+      // cc_user_email (written ONLY at registration, alongside cc_user_name) — do NOT
+      // use er_email here: it's overwritten with the last-typed recipient on every
+      // send (line ~6535) so it drifts off the registered user (this is why a send to
+      // sdtt1966@ showed the generic name — er_email had been clobbered). Fall back to
+      // er_email only for users registered before cc_user_email existed. Personalizes
+      // regardless of who the copy is sent TO, so sharing to a colleague still reads
+      // "from <you>". Requires BOTH a name and a valid email, else generic sender.
       const regName = (localStorage.getItem("cc_user_name") || "").trim();
-      const regEmail = (localStorage.getItem("er_email") || "").trim();
+      const regEmail = (localStorage.getItem("cc_user_email") || localStorage.getItem("er_email") || "").trim();
       const regEmailValid = !!regEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail);
       const senderEmail = regEmailValid ? regEmail : "";
       const senderName = regEmailValid && regName ? regName : "";
