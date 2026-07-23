@@ -1880,49 +1880,42 @@ def hem_typical_woc_range_pct(material_group, flutes):
 DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
-    # Mild steel 1010 / 4140 anchored to MZE Ø.2480: 175 / 160 SFM. 4140 HT (HRC ≥36) handled by hardness_sfm_mult.
-    # steel_tool (annealed A2/D2/H13 stock) raised 70→98 (2026-07-23): delivered was only ~95 @ Ø.25
-    # vs shop-ref low-end 150 for annealed tool steel. 98 → ~134 @ Ø.25 / ~177 @ Ø.50.
-    "steel_mild": 175, "steel_free": 175, "steel_medium_carbon": 170, "steel_alloy": 160, "steel_tool": 98,
+    # Base = EXTERNAL-coolant anchor (coolant_fed bonus adds through-coolant credit on top). Calibrated to the
+    # LOW end of the shop external-coolant reference (2026-07-23 sweep): mild 220, alloy 150, tool-steel 110.
+    # steel_alloy 4140 carries a 0.92 HRC derate @28 HRC, so base 165 → ~152 delivered (external ref low 150).
+    "steel_mild": 220, "steel_free": 220, "steel_medium_carbon": 200, "steel_alloy": 165, "steel_tool": 110,
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
-    # Stainless 304/316 anchored to MZE Ø.2480. 316 slightly lower (Mo penalty).
-    # Coolant-fed bonus now handles the +13–30% bump from external→internal coolant; no longer baked in here.
-    # 304 raised 80→95 (2026-07-23): delivered SFM (base×coolant bonus) landed only ~107 @ Ø.236 vs a
-    # shop-reference through-coolant band of 150–220 for austenitic. 95 gives ~127 @ Ø.236 / ~190 @ Ø.75 —
-    # a safe LOW-END starting value that never overshoots at large dia (base 112 hit 150 @ Ø.236 but ran to
-    # 224 @ Ø.75). Starting speeds, not final; user creeps up via SFM presets. See project_drill_sfm_sweep.md.
-    # 316 raised 70→90 (2026-07-23): delivered ~95 @ Ø.25 vs austenitic ref low-end 150; 90 → ~123 @ Ø.25.
-    # Kept just under 304 (95) for the Mo penalty. Starting value; users creep up via presets.
-    "stainless_304": 95, "stainless_316": 90, "manganese_steel": 45,
+    # Stainless bases = external-coolant reference low-end (2026-07-23): austenitic 100, duplex 70, PH 90.
+    # 316 held equal to 304 (both austenitic; Mo penalty is a tool-life effect, not an SFM ceiling at these speeds).
+    "stainless_304": 100, "stainless_316": 100, "manganese_steel": 45,
     "stainless_410": 90, "stainless_trimrite": 85, "stainless_420": 85, "stainless_440c": 70,
     "stainless_martensitic": 90, "stainless_fm": 100, "stainless_ferritic": 95,
-    # stainless_ph (17-4) raised 65→80 (2026-07-23): delivered ~89 @ Ø.25 vs PH ref low-end 120; 80 → ~109 @ Ø.25.
-    "stainless_15_5": 72, "stainless_ph": 80, "stainless_13_8": 59,
-    "stainless_duplex": 60, "stainless_superduplex": 50,
-    "stainless_austenitic": 70,
-    # Cast iron gray/ductile anchored to MZE Ø.2480: 195 / 175 SFM.
-    "cast_iron_gray": 195, "cast_iron_ductile": 175, "cast_iron_cgi": 145, "cast_iron_malleable": 170,
-    # titanium_64 raised 45→55 (2026-07-23): delivered ~61 @ Ø.25 vs Ti-6-4 ref low-end 100; 55 → ~75 @ Ø.25.
-    # Still conservative — Ti is chip-evac limited and punishes speed; users push up only if chips stay healthy.
-    "titanium_cp": 60, "titanium_64": 55,
+    "stainless_15_5": 82, "stainless_ph": 90, "stainless_13_8": 68,
+    "stainless_duplex": 70, "stainless_superduplex": 58,
+    "stainless_austenitic": 100,
+    # Cast iron bases = external-coolant reference low-end (2026-07-23): gray 250, ductile 200.
+    "cast_iron_gray": 250, "cast_iron_ductile": 200, "cast_iron_cgi": 170, "cast_iron_malleable": 195,
+    # titanium_64 = Ti-6-4 external ref low-end 70 (2026-07-23). Ti is chip-evac limited; through-coolant bonus
+    # (chip_limited class, now with a higher stainless/Ti cap) lifts it toward the 100-150 through band.
+    "titanium_cp": 70, "titanium_64": 70,
     "hiTemp_fe": 30, "hiTemp_co": 25,
-    # Inconel 718 anchored to MZE Ø.2480: 80 SFM nominal. Engine uses conservative 60 as a
-    # starting point — users can push up if their setup proves rigid and chips are healthy.
-    "inconel_625": 60, "inconel_718": 60,
+    # inconel_718 = external ref low-end 40 (2026-07-23; was 60, which was ABOVE the external band). The through-
+    # coolant lift to the 60-100 band now comes from a modest heat-limited-with-TSC bonus (see physics.py),
+    # NOT from an inflated base. inconel_625 kept at 60 (different, more machinable grade).
+    "inconel_625": 60, "inconel_718": 40,
     "monel_k500": 75, "hastelloy_x": 55, "inconel_617": 50, "waspaloy": 40, "mp35n": 35,
     # Hardened steel 40–55 HRC (H13/L6) anchored to MZE Ø.2480: 80 SFM. Engine 75.
-    "hardened_lt55": 75, "hardened_gt55": 30,
-    # Annealed tool steels raised 2026-07-23 toward shop-ref low-end 150 @ Ø.25 (a2/d2/h13 were ~89–116):
-    # a2 85→100, h13 80→100, d2 65→85. p20/s7 left (already ~136/116, in-band). These are in _NO_HRC_PENALTY
-    # so the base IS the annealed condition — no derate double-count.
-    "tool_steel_p20": 100, "tool_steel_a2": 100, "tool_steel_h13": 100,
-    "tool_steel_s7": 85, "tool_steel_d2": 85, "cpm_10v": 45,
-    # Bronzes raised 2026-07-23 toward brass/bronze ref band (300–600, low-end): manganese_bronze 110→180,
-    # silicon_bronze 130→180. These are "moderate" coolant class (cap 1.50), so delivered @ Ø.25 → ~219.
-    "manganese_bronze": 180, "silicon_bronze": 180, "copper_beryllium": 200,  # BeCu AT/HT centerline per Materion guide (C17200 aged HRC 36–45)
-    # Legacy group fallbacks
-    "Aluminum": 350, "Non-Ferrous": 250, "Abrasive Non-Ferrous": 110, "Steel": 160, "Stainless": 80,
-    "Cast Iron": 175, "Titanium": 50, "Inconel": 60, "Plastics": 150,
+    # Hardened steel = external ref low-end (2026-07-23): 45-52 HRC → 80, 52-60 HRC → 50. Heat-limited (physics.py):
+    # through-coolant gives a modest bonus, not the full chip climb.
+    "hardened_lt55": 80, "hardened_gt55": 50,
+    # Annealed tool steels = external ref low-end 110 (2026-07-23). In _NO_HRC_PENALTY so base IS annealed condition.
+    "tool_steel_p20": 110, "tool_steel_a2": 110, "tool_steel_h13": 110,
+    "tool_steel_s7": 110, "tool_steel_d2": 110, "cpm_10v": 90,
+    # Bronzes = brass/bronze external ref low-end 250 (2026-07-23). "moderate" coolant class (cap 1.50).
+    "manganese_bronze": 250, "silicon_bronze": 250, "copper_beryllium": 200,  # BeCu AT/HT centerline per Materion guide (C17200 aged HRC 36–45)
+    # Legacy group fallbacks — Stainless/Steel raised to match the austenitic/mild external anchors above.
+    "Aluminum": 400, "Non-Ferrous": 250, "Abrasive Non-Ferrous": 250, "Steel": 220, "Stainless": 100,
+    "Cast Iron": 200, "Titanium": 70, "Inconel": 40, "Plastics": 150,
 }
 
 # IPR base for 0.5" diameter solid carbide drill — scales with dia^0.6

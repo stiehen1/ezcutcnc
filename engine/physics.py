@@ -1035,7 +1035,8 @@ def drill_micro_sfm_bonus(D: float) -> float:
 #   "heat_limited" — Inconel, Ti beta, hardened steel ≥50HRC. No SFM bonus.
 #                    (Coolant still helps tool life, but engine doesn't model that here.)
 _COOLANT_FED_CLASS = {
-    # Heat-limited — flat at 1.00 across all sizes
+    # Heat-limited — modest climbing bonus, cap 1.50 (heat, not chip evac, is the limit; but
+    # high-pressure TSC still removes enough heat to lift the SFM band — shop ref: Inconel 40→60-100).
     "Inconel":     "heat_limited",
     "hiTemp_fe":   "heat_limited",
     "hiTemp_co":   "heat_limited",
@@ -1047,21 +1048,24 @@ _COOLANT_FED_CLASS = {
     "Non-Ferrous": "moderate",
     "Abrasive Non-Ferrous": "moderate",  # BeCu, Mn bronze, Si bronze — chip-limited but free-cutting
     "Plastics":    "moderate",
-    # Chip-limited — biggest bonus; SFM curve climbs fastest with diameter
+    # Chip-limited — biggest bonus; SFM curve climbs with diameter
     "Steel":       "chip_limited",
-    "Stainless":   "chip_limited",
     "Cast Iron":   "chip_limited",
-    "Titanium":    "chip_limited",  # Ti CP / Ti-6-4 — chip evac IS the limit; beta-Ti drops to heat_limited (see material override)
+    # chip_limited_high — stainless & Ti: gummy/work-hardening chips benefit from coolant even at small
+    # dia, so the curve floor+mid are raised (shop ref demands ~1.50× external→through at Ø.25, vs the
+    # standard chip_limited 1.36×). Cap still 2.0 at large dia. (2026-07-23)
+    "Stainless":   "chip_limited_high",
+    "Titanium":    "chip_limited_high",  # Ti CP / Ti-6-4; beta-Ti drops to heat_limited (see material override)
 }
 
 # Per-material override (when group-level class is wrong for a specific alloy)
 _COOLANT_FED_CLASS_MATERIAL = {
     "titanium_beta": "heat_limited",  # beta titanium: thermally limited
-    # Hardened steels — group is "Steel" (chip_limited), but ≥40 HRC is heat-limited: coolant
-    # keeps the tool alive, it does NOT let you drill faster. The _COOLANT_FED_CLASS entries for
-    # these keys (below) were DEAD — that table is looked up by mat_group, never material-key —
-    # so hardened steel wrongly got the full chip bonus (delivered 102/135 SFM). Fixed 2026-07-23
-    # by moving them into this material-override table, which IS keyed by material-key.
+    # Hardened steels — group is "Steel" (chip_limited), but ≥40 HRC is HEAT-limited. Assigned via this
+    # material-key table because _COOLANT_FED_CLASS is looked up by mat_group ("Steel") — a group entry
+    # would be dead code (that was the bug fixed 2026-07-23; hardened steel had wrongly gotten the full
+    # chip climb). heat_limited now gives a MODEST climbing bonus (cap 1.50), not flat 1.0 — matches the
+    # shop ref showing through-coolant lifts hardened-steel SFM (45-52 HRC: 80→100-180 external→through).
     "hardened_lt55": "heat_limited",
     "hardened_gt55": "heat_limited",
     # Hardened tool steels — already in heat_limited via group fallback but explicit for clarity
@@ -1103,35 +1107,34 @@ def drill_coolant_fed_sfm_bonus(D: float, mat: str, mat_group: str, coolant: str
     if cls is None:
         cls = _COOLANT_FED_CLASS.get(mat_group, "chip_limited")
 
-    if cls == "heat_limited":
-        return 1.00
+    # Per-class curve anchors: (floor @ Ø≤.10, mid @ Ø.50, cap @ Ø≥.75).
+    # Delivered @ Ø.25 falls out of the (floor→mid) linear segment.
+    #   chip_limited       — steel/cast-iron: coolant helps mostly at larger dia (chip evac dominant)
+    #   chip_limited_high  — stainless/Ti: coolant helps even at small dia (gummy/work-hardening chips);
+    #                        floor+mid raised so Ø.25 hits ~1.50× (shop ref demands 1.50 external→through)
+    #   moderate           — aluminum/bronze: saturates lower
+    #   heat_limited       — Inconel/hardened: heat is the limit, but high-pressure TSC still buys some
+    #                        speed (shop ref: Inconel 40→60-100 external→through). Modest climb, cap 1.50.
+    #   (2026-07-23: heat_limited was flat 1.00; the shop through-coolant reference showed a real lift.)
+    _CURVE_ANCHORS = {
+        "chip_limited":      (1.10, 1.802, 2.00),
+        "chip_limited_high": (1.30, 1.75,  2.00),
+        "moderate":          (1.10, 1.412, 1.50),
+        "heat_limited":      (1.35, 1.55,  1.65),
+    }
+    floor, mid_at_050, cap = _CURVE_ANCHORS.get(cls, _CURVE_ANCHORS["chip_limited"])
 
-    # Diameter curve — same shape for chip_limited and moderate, scaled to different caps
-    if cls == "moderate":
-        cap = 1.50
-    else:  # chip_limited
-        cap = 2.00
-
-    # Piecewise linear in D, anchored at:
-    #   D ≤ 0.10 → 1.10
-    #   D = 0.25 → 1.10 + (cap-1.10) × 0.45
-    #   D = 0.50 → 1.10 + (cap-1.10) × 0.78
-    #   D ≥ 0.75 → cap
+    # Piecewise linear in D: (0.10, floor) → (0.50, mid_at_050) → (0.75, cap), clamped outside.
     if D <= 0.10:
-        raw = 1.10
+        raw = floor
     elif D >= 0.75:
         raw = cap
+    elif D <= 0.50:
+        frac = (D - 0.10) / (0.50 - 0.10)
+        raw = floor + (mid_at_050 - floor) * frac
     else:
-        # Linear in two segments: (0.10, 1.10) → (0.50, mid) → (0.75, cap)
-        mid_at_050 = 1.10 + (cap - 1.10) * 0.78
-        if D <= 0.50:
-            # 0.10 → 1.10, 0.50 → mid_at_050
-            frac = (D - 0.10) / (0.50 - 0.10)
-            raw = 1.10 + (mid_at_050 - 1.10) * frac
-        else:
-            # 0.50 → mid_at_050, 0.75 → cap
-            frac = (D - 0.50) / (0.75 - 0.50)
-            raw = mid_at_050 + (cap - mid_at_050) * frac
+        frac = (D - 0.50) / (0.75 - 0.50)
+        raw = mid_at_050 + (cap - mid_at_050) * frac
 
     # Scale the earned bonus (raw − 1.0) by delivery pressure. tsc_high = full credit;
     # tsc_low keeps 70%. Baseline 1.0 is never touched — only the bonus is derated.
