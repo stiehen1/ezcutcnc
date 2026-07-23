@@ -6488,12 +6488,18 @@ ${stabSection}
     setErError("");
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? undefined;
     try {
-      // Pass the logged-in sender's identity so the email reads "<Name> via Core
-      // Cutter" with Reply-To pointing back at them — feels like it came from the
-      // user, while the actual From stays our authenticated sender (deliverability
-      // is unchanged). Falls back to the generic app sender if these are blank.
-      const senderName = (localStorage.getItem("cc_user_name") || "").trim();
-      const senderEmail = (localStorage.getItem("er_email") || "").trim();
+      // Sender identity for the "<Name> via Core Cutter" From + Reply-To. Derive it
+      // from the address the user actually typed in the send box (erEmail) — NOT
+      // blindly from localStorage. On a shared shop browser, cc_user_name/er_email
+      // can be a PRIOR user's leftover values; trusting them stamped one person's
+      // results email with another person's Reply-To (Paul's address on Scott's send).
+      // Only attach the cached NAME when the cached email matches what's being sent to,
+      // so we never pair the wrong name with an address.
+      const typedEmail = erEmail.trim().toLowerCase();
+      const cachedName = (localStorage.getItem("cc_user_name") || "").trim();
+      const cachedEmail = (localStorage.getItem("er_email") || "").trim().toLowerCase();
+      const senderEmail = typedEmail;
+      const senderName = cachedEmail && cachedEmail === typedEmail ? cachedName : "";
       const resp = await fetch("/api/results/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
