@@ -6689,6 +6689,7 @@ ${stabSection}
               <button type="button" onClick={() => {
                 localStorage.removeItem("cc_user_name"); localStorage.removeItem("cc_first_name");
                 localStorage.removeItem("cc_last_name"); localStorage.removeItem("er_email");
+                localStorage.removeItem("cc_user_email");
                 localStorage.removeItem("tb_email"); localStorage.removeItem("tb_token");
                 localStorage.removeItem("welcome_seen");
                 setTbEmail(""); setTbToken(""); setErEmail(""); setTeamEmail(null);
