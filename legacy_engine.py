@@ -1881,19 +1881,30 @@ DRILL_SFM = {
     "aluminum_wrought": 400, "aluminum_wrought_hs": 320, "aluminum_cast": 350, "non_ferrous": 250,
     "plastic_unfilled": 150, "plastic_filled": 120, "composite_tpc": 280,
     # Mild steel 1010 / 4140 anchored to MZE Ø.2480: 175 / 160 SFM. 4140 HT (HRC ≥36) handled by hardness_sfm_mult.
-    "steel_mild": 175, "steel_free": 175, "steel_medium_carbon": 170, "steel_alloy": 160, "steel_tool": 70,
+    # steel_tool (annealed A2/D2/H13 stock) raised 70→98 (2026-07-23): delivered was only ~95 @ Ø.25
+    # vs shop-ref low-end 150 for annealed tool steel. 98 → ~134 @ Ø.25 / ~177 @ Ø.50.
+    "steel_mild": 175, "steel_free": 175, "steel_medium_carbon": 170, "steel_alloy": 160, "steel_tool": 98,
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
-    # Stainless 304/316 anchored to MZE Ø.2480: 80 SFM. 316 slightly lower (Mo penalty).
+    # Stainless 304/316 anchored to MZE Ø.2480. 316 slightly lower (Mo penalty).
     # Coolant-fed bonus now handles the +13–30% bump from external→internal coolant; no longer baked in here.
-    "stainless_304": 80, "stainless_316": 70, "manganese_steel": 45,
+    # 304 raised 80→95 (2026-07-23): delivered SFM (base×coolant bonus) landed only ~107 @ Ø.236 vs a
+    # shop-reference through-coolant band of 150–220 for austenitic. 95 gives ~127 @ Ø.236 / ~190 @ Ø.75 —
+    # a safe LOW-END starting value that never overshoots at large dia (base 112 hit 150 @ Ø.236 but ran to
+    # 224 @ Ø.75). Starting speeds, not final; user creeps up via SFM presets. See project_drill_sfm_sweep.md.
+    # 316 raised 70→90 (2026-07-23): delivered ~95 @ Ø.25 vs austenitic ref low-end 150; 90 → ~123 @ Ø.25.
+    # Kept just under 304 (95) for the Mo penalty. Starting value; users creep up via presets.
+    "stainless_304": 95, "stainless_316": 90, "manganese_steel": 45,
     "stainless_410": 90, "stainless_trimrite": 85, "stainless_420": 85, "stainless_440c": 70,
     "stainless_martensitic": 90, "stainless_fm": 100, "stainless_ferritic": 95,
-    "stainless_15_5": 72, "stainless_ph": 65, "stainless_13_8": 59,
+    # stainless_ph (17-4) raised 65→80 (2026-07-23): delivered ~89 @ Ø.25 vs PH ref low-end 120; 80 → ~109 @ Ø.25.
+    "stainless_15_5": 72, "stainless_ph": 80, "stainless_13_8": 59,
     "stainless_duplex": 60, "stainless_superduplex": 50,
     "stainless_austenitic": 70,
     # Cast iron gray/ductile anchored to MZE Ø.2480: 195 / 175 SFM.
     "cast_iron_gray": 195, "cast_iron_ductile": 175, "cast_iron_cgi": 145, "cast_iron_malleable": 170,
-    "titanium_cp": 60, "titanium_64": 45,
+    # titanium_64 raised 45→55 (2026-07-23): delivered ~61 @ Ø.25 vs Ti-6-4 ref low-end 100; 55 → ~75 @ Ø.25.
+    # Still conservative — Ti is chip-evac limited and punishes speed; users push up only if chips stay healthy.
+    "titanium_cp": 60, "titanium_64": 55,
     "hiTemp_fe": 30, "hiTemp_co": 25,
     # Inconel 718 anchored to MZE Ø.2480: 80 SFM nominal. Engine uses conservative 60 as a
     # starting point — users can push up if their setup proves rigid and chips are healthy.
@@ -1901,9 +1912,14 @@ DRILL_SFM = {
     "monel_k500": 75, "hastelloy_x": 55, "inconel_617": 50, "waspaloy": 40, "mp35n": 35,
     # Hardened steel 40–55 HRC (H13/L6) anchored to MZE Ø.2480: 80 SFM. Engine 75.
     "hardened_lt55": 75, "hardened_gt55": 30,
-    "tool_steel_p20": 100, "tool_steel_a2": 85, "tool_steel_h13": 80,
-    "tool_steel_s7": 85, "tool_steel_d2": 65, "cpm_10v": 45,
-    "manganese_bronze": 110, "silicon_bronze": 130, "copper_beryllium": 200,  # BeCu AT/HT centerline per Materion guide (C17200 aged HRC 36–45)
+    # Annealed tool steels raised 2026-07-23 toward shop-ref low-end 150 @ Ø.25 (a2/d2/h13 were ~89–116):
+    # a2 85→100, h13 80→100, d2 65→85. p20/s7 left (already ~136/116, in-band). These are in _NO_HRC_PENALTY
+    # so the base IS the annealed condition — no derate double-count.
+    "tool_steel_p20": 100, "tool_steel_a2": 100, "tool_steel_h13": 100,
+    "tool_steel_s7": 85, "tool_steel_d2": 85, "cpm_10v": 45,
+    # Bronzes raised 2026-07-23 toward brass/bronze ref band (300–600, low-end): manganese_bronze 110→180,
+    # silicon_bronze 130→180. These are "moderate" coolant class (cap 1.50), so delivered @ Ø.25 → ~219.
+    "manganese_bronze": 180, "silicon_bronze": 180, "copper_beryllium": 200,  # BeCu AT/HT centerline per Materion guide (C17200 aged HRC 36–45)
     # Legacy group fallbacks
     "Aluminum": 350, "Non-Ferrous": 250, "Abrasive Non-Ferrous": 110, "Steel": 160, "Stainless": 80,
     "Cast Iron": 175, "Titanium": 50, "Inconel": 60, "Plastics": 150,
@@ -2328,12 +2344,12 @@ def run_drilling(payload: dict) -> dict:
     # hardness_sfm_mult excludes materials whose HRC is intrinsic to the alloy spec
     # (Inconel/superalloys, hardened tool steels, named tool steels, age-hardened BeCu).
     # The base SFM already accounts for their hardness; applying the mult double-counts it.
-    _drill_no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
-                             "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
-                             "copper_beryllium",
-                             # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; DRILL_SFM already reflects it
-                             "Titanium", "titanium_64", "titanium_cp", "titanium",
-                             "manganese_steel")  # A128 — work-hardens at the cut; DRILL_SFM already conservative
+    # Use the CENTRAL _NO_HRC_PENALTY frozenset so the drill path can't drift from the rest
+    # of the engine (fixed 2026-07-23 — the old drill-local tuple was narrower and missing
+    # cpm_10v / stainless_440c / 15_5 / ph / 13_8 / duplex / superduplex / armor_*, which
+    # double-derated them: cpm_10v delivered 12 SFM, 440c 25 SFM). Adds the two drill-only
+    # exclusions not in the central set: copper_beryllium (aged BeCu) and manganese_steel (A128).
+    _drill_no_hrc_penalty = _NO_HRC_PENALTY | {"copper_beryllium", "manganese_steel"}
     if mat_group not in _drill_no_hrc_penalty and mat not in _drill_no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(hrc)
     base_sfm *= cool_factor * geo_factor  # PA factor applies to IPR only, not SFM

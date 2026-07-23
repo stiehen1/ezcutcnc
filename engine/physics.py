@@ -1039,8 +1039,9 @@ _COOLANT_FED_CLASS = {
     "Inconel":     "heat_limited",
     "hiTemp_fe":   "heat_limited",
     "hiTemp_co":   "heat_limited",
-    "hardened_lt55": "heat_limited",  # 40–55 HRC steels
-    "hardened_gt55": "heat_limited",  # 55+ HRC
+    # NOTE: hardened_lt55/gt55 are handled in _COOLANT_FED_CLASS_MATERIAL (keyed by material-key).
+    # This table is keyed by mat_group; both keys map to group "Steel", so entries here would be
+    # dead. Kept out deliberately — see the material-override table above.
     # Moderate — aluminum / non-ferrous, modest bonus at large dia only
     "Aluminum":    "moderate",
     "Non-Ferrous": "moderate",
@@ -1056,6 +1057,13 @@ _COOLANT_FED_CLASS = {
 # Per-material override (when group-level class is wrong for a specific alloy)
 _COOLANT_FED_CLASS_MATERIAL = {
     "titanium_beta": "heat_limited",  # beta titanium: thermally limited
+    # Hardened steels — group is "Steel" (chip_limited), but ≥40 HRC is heat-limited: coolant
+    # keeps the tool alive, it does NOT let you drill faster. The _COOLANT_FED_CLASS entries for
+    # these keys (below) were DEAD — that table is looked up by mat_group, never material-key —
+    # so hardened steel wrongly got the full chip bonus (delivered 102/135 SFM). Fixed 2026-07-23
+    # by moving them into this material-override table, which IS keyed by material-key.
+    "hardened_lt55": "heat_limited",
+    "hardened_gt55": "heat_limited",
     # Hardened tool steels — already in heat_limited via group fallback but explicit for clarity
     "tool_steel_d2": "chip_limited",  # annealed D2 is still chip-limited
     "tool_steel_h13": "chip_limited",
