@@ -3294,9 +3294,9 @@ export async function registerRoutes(
   // ── Email Results (lead capture) ─────────────────────────────────────────
   app.post("/api/results/email", async (req, res) => {
     try {
-      const { email, cc, operation, material, machine_name, results_text } = (req.body ?? {}) as {
+      const { email, cc, operation, material, machine_name, results_text, sender_name, sender_email } = (req.body ?? {}) as {
         email?: string; cc?: string; operation?: string; material?: string;
-        machine_name?: string; results_text?: string;
+        machine_name?: string; results_text?: string; sender_name?: string; sender_email?: string;
       };
 
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -3356,17 +3356,37 @@ export async function registerRoutes(
         auth: { user: smtpUser, pass: smtpPass },
       });
 
+      // Personalize the sender so the email reads as coming from the logged-in user
+      // ("<Name> via Core Cutter"), with replies routed back to them — while the
+      // ACTUAL From address stays our authenticated sender (FROM_EMAIL) so SPF/DKIM/
+      // DMARC still pass. We NEVER put the user's own address in From (their domain
+      // doesn't authorize us → would fail auth / get spam-filed). Display name only.
+      const fromAddr   = process.env.FROM_EMAIL || "scott@corecutterusa.com";
+      const senderName = typeof sender_name === "string" ? sender_name.trim() : "";
+      const senderEmail = typeof sender_email === "string" ? sender_email.trim() : "";
+      const senderEmailValid = senderEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(senderEmail);
+      // Sanitize the display name — strip characters that could break the header.
+      const safeName = senderName.replace(/["\r\n<>]/g, "").slice(0, 60);
+      const fromHeader = safeName
+        ? `"${safeName} via Core Cutter" <${fromAddr}>`
+        : `"Core Cutter Machining App" <${fromAddr}>`;
+      const introLine = safeName
+        ? `${safeName} sent you these machining parameters from the Core Cutter Machining App.`
+        : "Here are your machining parameters from the Core Cutter Machining App.";
+
       // Send results to user (including internal staff). Surface failures to the
       // caller instead of swallowing them — a silent {ok:true} made a failed send
       // indistinguishable from a successful one during dev testing.
       try {
         await transporter.sendMail({
-          from: `"Core Cutter Machining App" <${process.env.FROM_EMAIL || "scott@corecutterusa.com"}>`,
+          from: fromHeader,
+          // Replies go back to the sending user (not the recipient — that was a bug).
+          ...(senderEmailValid ? { replyTo: senderEmail } : {}),
           to: email,
           ...(ccClean ? { cc: ccClean } : {}),
           subject: "Your Core Cutter Speeds & Feeds Results",
           text: [
-            "Here are your machining parameters from the Core Cutter Machining App.",
+            introLine,
             "",
             results_text ?? "(no results attached)",
             "",

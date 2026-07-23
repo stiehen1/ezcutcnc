@@ -6488,6 +6488,12 @@ ${stabSection}
     setErError("");
     const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? form.material ?? undefined;
     try {
+      // Pass the logged-in sender's identity so the email reads "<Name> via Core
+      // Cutter" with Reply-To pointing back at them — feels like it came from the
+      // user, while the actual From stays our authenticated sender (deliverability
+      // is unchanged). Falls back to the generic app sender if these are blank.
+      const senderName = (localStorage.getItem("cc_user_name") || "").trim();
+      const senderEmail = (localStorage.getItem("er_email") || "").trim();
       const resp = await fetch("/api/results/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -6498,6 +6504,8 @@ ${stabSection}
           material: matLabel,
           machine_name: activeMachineName || undefined,
           results_text: buildResultsText() ?? undefined,
+          sender_name: senderName || undefined,
+          sender_email: senderEmail || undefined,
         }),
       });
       const d = await resp.json().catch(() => ({}));
