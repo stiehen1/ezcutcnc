@@ -3431,6 +3431,12 @@ export default function Mentor() {
   const [optimalRec, setOptimalRec] = React.useState<any>(null);
   const [optimalLoading, setOptimalLoading] = React.useState(false);
   const [optimalExpanded, setOptimalExpanded] = React.useState(false);
+  // Which stability step (by index) is currently hovered — drives the inline
+  // Current-vs-Optimized preview chart under that step.
+  const [hoveredStepIdx, setHoveredStepIdx] = React.useState<number | null>(null);
+  // Which recommended-tool EDP chip is hovered (keyed "stepIdx:edp") — drives the
+  // per-tool preview estimated from that EDP's {dia, loc, flutes} metadata.
+  const [hoveredEdpKey, setHoveredEdpKey] = React.useState<string | null>(null);
   // Slotting diameter chips: best stocked EDP per candidate Ø (keyed by dia string).
   // Populated only once a material is selected (before that, chips show Ø + pass count
   // only — the EDP can't be trusted without knowing the material). See /api/slot-dia-tools.
@@ -13572,7 +13578,13 @@ ${stabSection}
                     // Flag it so RPM × FPT × flutes back-calcs don't confuse the two.
                     const thinActive = tool.tool_type !== "chamfer_mill" && mil.adj_fpt != null && mil.fpt != null
                       && Math.abs((mil.adj_fpt as number) - (mil.fpt as number)) > 0.000005;
-                    const feedNote = feedReduced
+                    // Engine already trimmed the feed for chatter/flex — surface that HERE, on
+                    // the Feed value it applies to, rather than as a stability "step" (it's not
+                    // an action, it's a confirmation of what the shown number already reflects).
+                    const chatterPct = Math.round(Number((mil as any).chatter_feed_applied_pct ?? 0));
+                    const feedNote = chatterPct >= 5
+                      ? `already trimmed ${chatterPct}% for chatter${thinActive ? ", chip-thinned" : ""}`
+                      : feedReduced
                       ? `calc ${mil.feed_ipm!.toFixed(1)} → ${Math.round(feedMult*100)}% for stability`
                       : thinActive ? "= RPM × Adj FPT × flutes (chip-thinned)" : null;
 
@@ -17396,16 +17408,13 @@ ${stabSection}
         </CardContent>
       </Card>}
 
-      {/* Optimal Tool Recommendation Card — between results and stability (hidden for deep pocket).
-          Only show the loading banner on the FIRST fetch (no prior card). On a re-fetch we keep
-          the existing card mounted (below) so the results column doesn't shrink/flash and shove
-          every card up and down on each re-run. */}
-      {form.mode !== "deep_pocket" && optimalLoading && !optimalRec && (
-        <div className="mt-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-400 animate-pulse">
-          Finding optimal tool match…
-        </div>
-      )}
-      {form.mode !== "deep_pocket" && optimalRec && (() => {
+      {/* Optimal Tool Recommendation banner REMOVED — its "worth looking at too" tool swap
+          could contradict the stability advisor (e.g. recommend a longer / higher-flute tool
+          while the stability panel says shorten LOC). The stability steps below are now the
+          single source of recommendations: hover previews the Current-vs-Optimized numbers,
+          clicking applies + re-runs. The /api/optimal-tool endpoint + PDF "Optimized (EDP#)"
+          column remain for the printed quote. */}
+      {false && form.mode !== "deep_pocket" && optimalRec && (() => {
         const rec = optimalRec;
         const recSku = rec.recommended_sku;
         const recCust = rec.recommended_result?.customer ?? {};
@@ -17578,11 +17587,15 @@ ${stabSection}
         const _whSub  = stabilityIndex.workholding;
         const _rigLblSoft = (TOOLHOLDER_LABELS[form.toolholder] ?? form.toolholder?.replace(/_/g, " ") ?? "current holder");
         const _whLblSoft  = (WORKHOLDING_LABELS[form.workholding] ?? form.workholding?.replace(/_/g, " ") ?? "current workholding");
-        if (_rigSub < 65) {
+        // Only show the soft holder nudge when there's NO hard holder recommendation already
+        // (the engine fires a real "Upgrade to X" step whenever flex is over-limit, which
+        // already covers the holder story — a second, vaguer holder note is just clutter).
+        const _hasHardHolderRec = stability.suggestions.some((s: any) => s.type === "holder" && s.hard_holder_rec);
+        if (_rigSub < 65 && !_hasHardHolderRec) {
           actionItems.push({
             type: "holder_soft",
-            label: "Possibly look toward a higher-precision, more rigid tool holder",
-            detail: `Holder Rigidity is scoring ${_rigSub >= 35 ? "Fair" : "low"} (${_rigSub}) with ${_rigLblSoft}. If your machine and budget allow, a shrink-fit, hydraulic, or Capto holder tightens runout and resists chatter — better finish and tool life. Not required if the setup is running clean; it's the next lever if you chase chatter here.`,
+            label: "Possibly look toward a more rigid tool holder",
+            detail: `Holder Rigidity is scoring ${_rigSub >= 35 ? "Fair" : "low"} (${_rigSub}) with ${_rigLblSoft}. If your machine and budget allow, a stiffer holder (milling chuck / hydraulic, or press-fit) tightens runout and resists chatter — better finish and tool life. Not required if the setup is running clean; it's the next lever if you chase chatter here.`,
           });
         }
         if (_whSub < 65) {
@@ -17754,6 +17767,88 @@ ${stabSection}
               // is the weak link but tool flex is fine), don't claim they lower tool flex.
               const _hasFlexStep = actionItems.some((s: any) => s.type !== "holder_soft" && s.type !== "workholding_soft");
               const _stepsHeader = _hasFlexStep ? "Steps to help lower your tool flex" : "Steps to strengthen this setup";
+
+              // Estimate a Current-vs-Optimized preview for a specific recommended tool from
+              // its {dia, loc, flutes} meta, using the SAME physics as the engine's step
+              // preview (flute core-ratio map). Client-side approximation (no engine round-
+              // trip): force ∝ flutes; stiffness ∝ core_ratio(flutes)^4; a shorter flute/reach
+              // cuts the cantilever (L³). Good enough to show direction + rough magnitude;
+              // the real numbers land when the user clicks the EDP and it re-runs.
+              const CORE_RATIO: Record<number, number> = { 2:0.60,3:0.65,4:0.70,5:0.75,6:0.80,7:0.82,8:0.84,9:0.86,10:0.87,11:0.88,12:0.89 };
+              const estToolPreview = (m: any) => {
+                if (!m) return null;
+                const curFl = Number(form.flutes) || 0;
+                const newFl = Number(m.flutes) || curFl;
+                const curLoc = Number(form.loc) || 0;
+                const newLoc = Number(m.loc) || curLoc;
+                const curSo  = Number(form.stickout) || 0;
+                if (!curFl || !newFl) return null;
+                // Flute effect: force & feed & mrr scale with flute count; stiffness with core^4.
+                const fluteForce = newFl / curFl;
+                const crCur = CORE_RATIO[curFl] ?? 0.70;
+                const crNew = CORE_RATIO[newFl] ?? 0.70;
+                const stiffGain = Math.pow(crNew / crCur, 4);
+                // Reach effect: a shorter flute lets the tool sit shorter (approx: stickout drops
+                // by the LOC saved, floored so we don't over-credit). L³ stiffness on stickout.
+                let reachFlex = 1;
+                if (curSo > 0 && newLoc > 0 && newLoc < curLoc - 0.02) {
+                  const newSo = Math.max(curSo - (curLoc - newLoc), curSo * 0.5);
+                  reachFlex = Math.pow(newSo / curSo, 3);
+                }
+                const deflRatio = (fluteForce / stiffGain) * reachFlex;
+                return {
+                  defl_ratio: deflRatio,
+                  force_ratio: fluteForce,      // more teeth engaged → more total force
+                  mrr_ratio: fluteForce,        // more flutes → higher feed → more MRR
+                  feed_ratio: fluteForce,
+                };
+              };
+
+              // Shared 4-row Current-vs-Optimized chart. `p` is a ratio object
+              // {defl_ratio, force_ratio, mrr_ratio, feed_ratio}; applied to the current
+              // displayed values. Changed dimension colored green (better) / amber (worse).
+              const renderPreviewChart = (p: any) => {
+                if (!p) return null;
+                const curFlex = stability.deflection_pct ?? null;
+                const curForce = result?.engineering?.force_lbf ?? null;
+                const curMrr = customer?.mrr_in3_min ?? null;
+                const curFeed = customer?.feed_ipm ?? null;
+                const defs: [string, number | null, number | null, (n: number) => string, boolean][] = [
+                  ["Tool Flex", curFlex, p.defl_ratio ?? null, (n) => `${Math.round(n)}%`, true],
+                  ["Force (lbf)", curForce, p.force_ratio ?? null, (n) => Math.round(n).toString(), true],
+                  ["MRR (in³/min)", curMrr, p.mrr_ratio ?? null, (n) => n.toFixed(3), false],
+                  ["Feed (IPM)", curFeed, p.feed_ratio ?? null, (n) => n.toFixed(1), false],
+                ];
+                const rows = defs
+                  .filter(([, cur, ratio]) => cur != null && ratio != null)
+                  .map(([label, cur, ratio, fmt, lowerBetter]) => {
+                    const after = (cur as number) * (ratio as number);
+                    const changed = Math.abs((ratio as number) - 1) > 0.01;
+                    const better = changed && (lowerBetter ? after < (cur as number) : after > (cur as number));
+                    const worse = changed && !better;
+                    return { label, cur: fmt(cur as number), after: fmt(after), better, worse };
+                  });
+                if (!rows.length) return null;
+                return (
+                  <div className="mt-2 rounded-lg overflow-hidden border border-zinc-700/50 text-xs">
+                    <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                      <span></span>
+                      <span className="text-center">Current</span>
+                      <span className="text-center text-emerald-400">If applied</span>
+                    </div>
+                    {rows.map((r) => (
+                      <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                        <span className="text-zinc-400">{r.label}</span>
+                        <span className="text-center text-zinc-300">{r.cur}</span>
+                        <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : r.worse ? "text-amber-400" : "text-zinc-300"}`}>
+                          {r.after}{r.better ? " ✓" : r.worse ? " ⚠" : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              };
+
               return (
               <div className="border-t border-zinc-700/40 pt-3 space-y-2">
                 <div className="text-xs font-semibold text-zinc-400">{_stepsHeader}</div>
@@ -17761,7 +17856,10 @@ ${stabSection}
                   {actionItems.map((s: any, idx: number) => {
                     const isBest = stability.suggestions.indexOf(s) === firstActionIdx && deflPct >= 175;
                     return (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
+                      <li key={idx} className="flex items-start gap-2 text-sm"
+                        onMouseEnter={() => setHoveredStepIdx(idx)}
+                        onMouseLeave={() => setHoveredStepIdx(h => (h === idx ? null : h))}
+                      >
                         <span className="mt-0.5 text-[11px] font-bold text-zinc-600 w-4 shrink-0 text-center">{idx + 1}</span>
                         <span className="flex-1">
                           {(() => {
@@ -17809,6 +17907,14 @@ ${stabSection}
                           {s.detail && (
                             <div className="text-xs text-zinc-500 mt-0.5">
                               {s.detail}
+                              {/* Shorter-LOC step where no stocked shorter tool leaves enough
+                                  shank to grip (need ≥1.5×D in the holder) — point to the
+                                  reduced-neck tool as the better fit. */}
+                              {s.grip_insufficient && (
+                                <div className="mt-1 text-amber-400">
+                                  ⚠ A shorter stock tool wouldn't leave enough shank to hold (need ≥1.5×D grip). A reduced-neck tool is the better fit here — full shank to grip, thin neck for reach, short flute for stiffness. See the reduced-neck step above.
+                                </div>
+                              )}
                               {(() => {
                                 const edps = s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [];
                                 const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;
@@ -17821,6 +17927,7 @@ ${stabSection}
                                   : "Try:";
                                 const meta = s.suggested_edp_meta ?? {};
                                 return (
+                                  <>
                                   <span className="ml-2 inline-flex items-center gap-x-2 gap-y-1 flex-wrap">
                                     <span className={shortLoc ? "text-amber-300 font-medium" : "text-zinc-600"}>{tryLabel}</span>
                                     {edps.map((edp: string) => {
@@ -17828,11 +17935,17 @@ ${stabSection}
                                       const dims = m
                                         ? [m.dia != null ? `${Number(m.dia).toFixed(3)}"Ø` : null,
                                            m.flutes != null ? `${Number(m.flutes)}fl` : null,
-                                           m.loc != null ? `${Number(m.loc).toFixed(3)}" LOC` : null]
+                                           m.loc != null ? `${Number(m.loc).toFixed(3)}" LOC` : null,
+                                           // LBS (reach) — the defining spec for a reduced-neck tool.
+                                           m.lbs != null && Number(m.lbs) > 0 ? `${Number(m.lbs).toFixed(3)}" LBS` : null]
                                           .filter(Boolean).join(" · ")
                                         : "";
+                                      const edpKey = `${idx}:${edp.trim()}`;
                                       return (
-                                        <span key={edp} className="inline-flex items-baseline gap-1">
+                                        <span key={edp} className="inline-flex items-baseline gap-1"
+                                          onMouseEnter={() => setHoveredEdpKey(edpKey)}
+                                          onMouseLeave={() => setHoveredEdpKey(k => (k === edpKey ? null : k))}
+                                        >
                                           <button type="button"
                                             className="font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer"
                                             onClick={async () => {
@@ -17851,7 +17964,25 @@ ${stabSection}
                                     {s.suggested_cr_note && (
                                       <span className="text-zinc-400">({s.suggested_cr_note})</span>
                                     )}
-                                  </span>
+                                    </span>
+                                    {/* Per-tool "If applied" preview — shows when an EDP chip on
+                                        THIS step is hovered, estimated from that tool's meta. */}
+                                    {(() => {
+                                      if (!hoveredEdpKey || !hoveredEdpKey.startsWith(`${idx}:`)) return null;
+                                      const hEdp = hoveredEdpKey.slice(String(idx).length + 1);
+                                      const hm = meta[hEdp] ?? meta[hEdp.trim()];
+                                      const pv = estToolPreview(hm);
+                                      if (!pv) return null;
+                                      const chart = renderPreviewChart(pv);
+                                      if (!chart) return null;
+                                      return (
+                                        <div className="mt-1">
+                                          <div className="text-[10px] text-zinc-500">If you run EDP {hEdp} (estimated):</div>
+                                          {chart}
+                                        </div>
+                                      );
+                                    })()}
+                                  </>
                                 );
                               })()}
                               {/* Chipbreaker variants for a HEM-slot step-up — surfaced
@@ -17896,6 +18027,12 @@ ${stabSection}
                               })()}
                             </div>
                           )}
+                          {/* Hover preview — Current vs Optimized for THIS step's parameter
+                              change (DOC/WOC/stickout/holder/flute). Suppressed while hovering a
+                              specific tool EDP on this step (that chip shows its own tool preview). */}
+                          {hoveredStepIdx === idx && s.preview
+                            && !(hoveredEdpKey && hoveredEdpKey.startsWith(`${idx}:`))
+                            && renderPreviewChart(s.preview)}
                         </span>
                       </li>
                     );

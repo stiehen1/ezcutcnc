@@ -1999,6 +1999,9 @@ export async function registerRoutes(
               dia: r.cutting_diameter_in != null ? Number(r.cutting_diameter_in) : null,
               loc: r.loc_in != null ? Number(r.loc_in) : null,
               flutes: r.flutes != null ? Number(r.flutes) : null,
+              // LBS (reach below shank) — the defining spec for a reduced-neck tool; shown
+              // on the chip so the user sees the reach a necked EDP actually provides.
+              lbs: r.lbs_in != null ? Number(r.lbs_in) : null,
             };
           }
         };
@@ -2041,7 +2044,7 @@ export async function registerRoutes(
               if (s.type === "tool" && currentEdp.length > 1 && /^\d/.test(currentEdp)) {
                 const derivedBase = String(flutes) + currentEdp.slice(1, -1); // all but last char
                 const q = await pool.query(
-                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                    ${cbClause}
@@ -2068,12 +2071,15 @@ export async function registerRoutes(
                 ? corner
                 : String(parseFloat(cr.toFixed(4)));  // "0.03", "0.06", etc.
 
-              // Shorter-LOC same tool: find shortest stocked LOC >= required minimum but < input LOC.
-              // Same flutes, dia, corner — just a shorter-reach version of the same tool.
+              // Shorter-LOC same tool: find the SHORTEST stocked LOC that still covers the
+              // depth of cut (loc_in >= required = DOC) but is shorter than the current tool.
+              // Same flutes, dia, corner. Shortest LOC = stiffest, so surface just the top few
+              // shortest options (not every longer length) — the shortest that covers the cut
+              // is the answer; extra longer ones are clutter for a "use a shorter tool" step.
               if (s.type === "shorter_loc") {
                 const inputLoc = Number((parsed.data as any).loc ?? 999);
                 const qsl = await pool.query(
-                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.oal_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND s.flutes = $1
@@ -2081,14 +2087,33 @@ export async function registerRoutes(
                      AND LOWER(s.corner_condition) = LOWER($3)
                      AND COALESCE(s.loc_in, 0) >= $4
                      AND COALESCE(s.loc_in, 0) < $5 - 0.05
+                     AND COALESCE(s.lbs_in, 0) = 0
                      ${cbClause}
                      ${noBLK}
                      ${crFilterS}
                    ORDER BY s.loc_in ASC, s.edp`,
                   [flutes, dia, cornerStr, loc, inputLoc]
                 );
-                if (qsl.rows.length > 0) {
-                  setSuggestedEdps(s, qsl.rows);
+                // Grip check: the tool must project `stickout` from the holder face and still
+                // leave >= 1.5xD of shank in the holder to hold onto. grip = OAL - stickout.
+                // Keep only candidates that can actually be held; if a candidate's OAL is
+                // unknown we keep it (can't disprove) but note it.
+                const gripStickout = Number(s.grip_stickout_in ?? 0);
+                const gripMin      = Number(s.grip_min_in ?? 0);
+                const gripOk = (row: any) => {
+                  const oal = row.oal_in != null ? Number(row.oal_in) : null;
+                  if (oal == null || gripStickout <= 0 || gripMin <= 0) return true; // unknown → don't exclude
+                  return (oal - gripStickout) >= gripMin - 1e-4;
+                };
+                const holdable = qsl.rows.filter(gripOk);
+                if (holdable.length > 0) {
+                  setSuggestedEdps(s, holdable.slice(0, 3));
+                } else if (qsl.rows.length > 0) {
+                  // Shorter standard tools exist but NONE leave enough shank to grip — a
+                  // reduced-neck tool is the better fit here. Flag it so the UI can say so
+                  // and lean the user toward the reduced-neck step instead of a stubby tool
+                  // that can't be held. (Don't surface un-holdable EDPs.)
+                  s.grip_insufficient = true;
                 }
                 continue;
               }
@@ -2243,7 +2268,7 @@ export async function registerRoutes(
               } else {
               // Non-diameter suggestions: find the closest LOC
               const q2 = await pool.query(
-                `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                  JOIN sku_uploads u ON s.upload_id = u.id
                  WHERE u.is_current = TRUE
                    AND s.flutes = $1
@@ -2272,7 +2297,7 @@ export async function registerRoutes(
                 // Fallback: ignore corner, just match flutes + dia + closest LOC
                 // Still enforce LBS requirement so we don't return a short-reach tool for an LBS job
                 const q3 = await pool.query(
-                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND s.flutes = $1
@@ -2303,7 +2328,7 @@ export async function registerRoutes(
                   // Final fallback: no tool meets lbs >= lookupLbs — use highest available LBS
                   // (user may have manually entered a larger LBS than any stocked tool)
                   const q4 = await pool.query(
-                    `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                    `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND s.flutes = $1
