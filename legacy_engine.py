@@ -2317,7 +2317,10 @@ def run_drilling(payload: dict) -> dict:
     # Coolant-fed (through-the-drill) supersedes external coolant — when the drill has internal
     # coolant, that IS the dominant delivery path. Don't stack external coolant multipliers on top.
     if coolant_fed:
-        cool_factor = drill_coolant_fed_sfm_bonus(sfm_dia, mat, mat_group)
+        # Through-coolant bonus is now pressure-aware — TSC1000 gets full MZE/MZS credit,
+        # TSC300 keeps 70% of the earned bonus. The coolant picker is gated to tsc_low/tsc_high
+        # for coolant-fed tools in the UI, so `coolant` here is the machine's TSC pressure.
+        cool_factor = drill_coolant_fed_sfm_bonus(sfm_dia, mat, mat_group, coolant)
     else:
         cool_factor = DRILL_COOLANT_SFM.get(coolant, 1.00)
     geo_factor  = DRILL_GEOMETRY_SFM.get(drill_geometry, 1.00)

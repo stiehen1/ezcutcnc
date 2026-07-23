@@ -3968,6 +3968,17 @@ export default function Mentor() {
       return;
     }
 
+    // Coolant-fed drill requires a TSC pressure selection. The through-coolant SFM bonus
+    // is pressure-aware (TSC1000 = full MZE/MZS credit, TSC300 = 70% of the earned bonus),
+    // so the engine can't size speeds & feeds honestly without knowing the machine's TSC
+    // pressure. Force the user to pick 300 or 1000 psi rather than silently assuming one.
+    if (operation === "drilling" && form.drill_coolant_fed
+        && form.coolant !== "tsc_low" && form.coolant !== "tsc_high") {
+      setRunBlocked(true);
+      setRunWarnings(["This is a coolant-through (through-the-drill) tool — select your machine's TSC pressure (TSC 300psi or TSC 1000psi) in the Coolant section. The through-coolant speed bonus depends on delivery pressure, so we can't size feeds & speeds until you pick one."]);
+      return;
+    }
+
     // Slotting safety block — chip packing risk with too many flutes
     // Full-width (traditional) slotting gates — chip-clearance limits that come from
     // the tool plowing the whole slot. These do NOT apply to HEM/trochoidal slotting,
@@ -9542,15 +9553,27 @@ ${stabSection}
             {/* Coolant */}
             <div className="rounded-lg bg-zinc-800/40 border border-zinc-700/30 border-l-4 border-l-amber-500 p-3 space-y-2">
               <FieldLabel hint="Coolant delivery method affects tool life and surface finish. TSC (through-spindle coolant) significantly extends tool life in tough materials.">Coolant</FieldLabel>
+              {/* Coolant-fed drill gate — through-the-drill tools must run on TSC, and the
+                  speed bonus is pressure-dependent, so restrict the picker to TSC300/TSC1000
+                  and require an explicit pick (see the run-block in the validation effect). */}
+              {(() => {
+                const coolantFedGate = operation === "drilling" && form.drill_coolant_fed;
+                return (
+              <>
+              {coolantFedGate && (
+                <p className="text-[10px] text-amber-400 -mt-1">
+                  Coolant-through tool detected — select your machine’s TSC pressure. Feeds &amp; speeds scale with pressure (TSC 1000psi = full through-coolant bonus, TSC 300psi ≈ 70%).
+                </p>
+              )}
               {/* Row 1: Delivery */}
               <div className="flex flex-wrap gap-1.5">
-                {([
+                {(([
                   { key: "dry",      label: "Dry",         hint: null },
                   { key: "mist",     label: "Mist",        hint: null },
                   { key: "flood",    label: "Flood",       hint: null },
                   { key: "tsc_low",  label: "TSC 300psi",  hint: "Through-Spindle Coolant — pumped at high pressure through the spindle and toolholder, exiting at the cutting edge. 300 psi is effective for aluminum and mild steel." },
                   { key: "tsc_high", label: "TSC 1000psi", hint: "Through-Spindle Coolant at high pressure — coolant blasts directly at the cutting edge through the tool body. Dramatically extends tool life in stainless, titanium, and Inconel." },
-                ] as const).map(({ key, label, hint }) => {
+                ] as const).filter(o => !coolantFedGate || o.key === "tsc_low" || o.key === "tsc_high")).map(({ key, label, hint }) => {
                   const btn = (
                     <button
                       key={key}
@@ -9575,6 +9598,9 @@ ${stabSection}
                   );
                 })}
               </div>
+              </>
+                );
+              })()}
 
               {/* Row 2: Fluid Type (hidden when dry) */}
               {form.coolant !== "dry" && (

@@ -1065,7 +1065,7 @@ _COOLANT_FED_CLASS_MATERIAL = {
 }
 
 
-def drill_coolant_fed_sfm_bonus(D: float, mat: str, mat_group: str) -> float:
+def drill_coolant_fed_sfm_bonus(D: float, mat: str, mat_group: str, coolant: str = "tsc_high") -> float:
     """Coolant-fed (through-the-drill) SFM bonus, diameter- and material-aware.
 
     Replaces the previous flat 1.15× multiplier. Calibrated against MZE/MZS
@@ -1079,6 +1079,16 @@ def drill_coolant_fed_sfm_bonus(D: float, mat: str, mat_group: str) -> float:
 
     Moderate materials (aluminum, non-ferrous): curve saturates lower (max 1.50× at large dia).
     Heat-limited materials (Inconel, hardened, Ti beta): flat 1.00× — no SFM bonus.
+
+    PRESSURE SCALING — the MZE/MZS curve represents HIGH-PRESSURE internal coolant
+    (~1000 psi class). A through-coolant drill on a lower-pressure pump evacuates
+    chips less aggressively, so the bonus ABOVE 1.0 is scaled by delivery pressure:
+      tsc_high (~1000 psi) → 1.00 of the bonus (full MZE/MZS credit)
+      tsc_low  (~300 psi)  → 0.70 of the bonus (shop-set 2026-07-23; 300 psi evacuates
+                             well but not to the 1000-psi ceiling)
+      anything else        → 0.70 (treated as low-pressure; coolant-fed tools are gated
+                             in the UI to TSC300/TSC1000 so this is a safety fallback)
+    The 1.0 baseline is never scaled — only the earned bonus is derated.
     """
     # Resolve coolant-fed class — material-specific override wins, then group fallback
     cls = _COOLANT_FED_CLASS_MATERIAL.get(mat)
@@ -1100,18 +1110,25 @@ def drill_coolant_fed_sfm_bonus(D: float, mat: str, mat_group: str) -> float:
     #   D = 0.50 → 1.10 + (cap-1.10) × 0.78
     #   D ≥ 0.75 → cap
     if D <= 0.10:
-        return 1.10
-    if D >= 0.75:
-        return cap
-    # Linear in two segments: (0.10, 1.10) → (0.50, mid) → (0.75, cap)
-    mid_at_050 = 1.10 + (cap - 1.10) * 0.78
-    if D <= 0.50:
-        # 0.10 → 1.10, 0.50 → mid_at_050
-        frac = (D - 0.10) / (0.50 - 0.10)
-        return 1.10 + (mid_at_050 - 1.10) * frac
-    # 0.50 → mid_at_050, 0.75 → cap
-    frac = (D - 0.50) / (0.75 - 0.50)
-    return mid_at_050 + (cap - mid_at_050) * frac
+        raw = 1.10
+    elif D >= 0.75:
+        raw = cap
+    else:
+        # Linear in two segments: (0.10, 1.10) → (0.50, mid) → (0.75, cap)
+        mid_at_050 = 1.10 + (cap - 1.10) * 0.78
+        if D <= 0.50:
+            # 0.10 → 1.10, 0.50 → mid_at_050
+            frac = (D - 0.10) / (0.50 - 0.10)
+            raw = 1.10 + (mid_at_050 - 1.10) * frac
+        else:
+            # 0.50 → mid_at_050, 0.75 → cap
+            frac = (D - 0.50) / (0.75 - 0.50)
+            raw = mid_at_050 + (cap - mid_at_050) * frac
+
+    # Scale the earned bonus (raw − 1.0) by delivery pressure. tsc_high = full credit;
+    # tsc_low keeps 70%. Baseline 1.0 is never touched — only the bonus is derated.
+    pressure_scale = 1.00 if str(coolant).lower() == "tsc_high" else 0.70
+    return 1.0 + (raw - 1.0) * pressure_scale
 
 
 # Minimum IPR by material group — below this the cutting edge rubs instead of shearing.
