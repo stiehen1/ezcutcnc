@@ -580,6 +580,41 @@ SPINDLE_TORQUE_CAPACITY = {
     "BMT65":  550,
 }
 
+# Max endmill diameter we will RECOMMEND for a diameter step-up, keyed by spindle taper.
+# This caps only the "Increase Tool Diameter" stability suggestion — the user can still
+# manually run any tool. A CV40 (CAT40/BT40 class) machine shouldn't be told to swing a
+# 1" endmill: the torque/rigidity envelope is built around ~3/4" and under, and a bigger
+# tool means a much pricier cutter customers won't buy. 50-taper and big HSK carry it.
+# Any taper not listed falls back to TAPER_MAX_ENDMILL_DIA_DEFAULT.
+TAPER_MAX_ENDMILL_DIA = {
+    "CAT30": 0.500, "BT30": 0.500, "HSK32": 0.500, "HSK50": 0.500, "VDI30": 0.500,
+    "CAT40": 0.750, "BT40": 0.750, "HSK63": 0.750, "VDI40": 0.750,
+    "CAT50": 2.000, "BT50": 2.000, "HSK100": 2.000, "HSK125": 2.000, "KM80": 2.000,
+    "VDI50": 1.000, "BMT45": 0.750, "BMT55": 1.000, "BMT65": 1.250,
+    # Sandvik Capto — C6 ~ 40-taper class; C8 is a large, rigid interface (heavy Integrex).
+    "CAPTO C6": 0.750, "CAPTO C8": 2.000,
+}
+TAPER_MAX_ENDMILL_DIA_DEFAULT = 0.750  # unknown taper → treat as 40-class (conservative)
+
+def taper_max_endmill_dia(taper):
+    """Max diameter the step-up suggestion may recommend for a given spindle taper.
+    HSK-A80 and other unlisted HSK sizes interpolate by the trailing size number."""
+    if not taper:
+        return TAPER_MAX_ENDMILL_DIA_DEFAULT
+    t = str(taper).upper().strip()
+    if t in TAPER_MAX_ENDMILL_DIA:
+        return TAPER_MAX_ENDMILL_DIA[t]
+    # HSK sizes not explicitly listed (e.g. HSK80): scale off the numeric size.
+    if t.startswith("HSK"):
+        digits = "".join(c for c in t if c.isdigit())
+        if digits:
+            n = int(digits)
+            if n <= 50:  return 0.500
+            if n <= 63:  return 0.750
+            if n <= 80:  return 1.000
+            return 2.000
+    return TAPER_MAX_ENDMILL_DIA_DEFAULT
+
 # Holder runout correction: factor applied to IPT (1.0 = full rated chip load).
 # Lower runout → all flutes share the cut → more of the rated chip load is usable;
 # higher runout → one flute bites deepest → back off fpt to protect it. The best
@@ -7213,8 +7248,27 @@ def run(payload=None):
         _fl_stiff_gain = (_new_cr / _cur_cr) ** 4
         if _fl_stiff_gain < 1.06:   # skip if gain is negligible (<6%)
             continue
-        _defl_fl_pct = round(_defl / _fl_stiff_gain / _dlim * 100, 1) if _dlim > 0 else 0
+        # Deflection = force / stiffness, and BOTH move with flute count. A fatter core
+        # (more flutes) is stiffer, but more flutes also puts more teeth in the cut at the
+        # same chip load, so total radial force rises ~proportionally to flute count
+        # (see teeth = arc/2π × flutes → total_force = force/tooth × teeth). Netting the
+        # two is what the score actually sees when you re-run — a stiffness-only estimate
+        # over-promises and can even predict a drop where flex really rises.
+        _fl_force_ratio = (float(_nf) / float(_cur_flutes)) if _cur_flutes > 0 else 1.0
+        _fl_net_defl_mult = _fl_force_ratio / _fl_stiff_gain   # <1 = real improvement
+        _fl_helps_flex = _fl_net_defl_mult < 0.97   # ≥3% net improvement to claim it
+        # A stability recommendation must never make the score go DOWN. Adding flutes is
+        # only a flex fix when the fatter core beats the extra engaged-tooth force on net;
+        # for finishing passes it usually loses (stiffness ~+21% but force ~+29% at 7→9fl),
+        # which is exactly the "I followed it and my score dropped" case. When it doesn't
+        # help flex, don't offer it here at all — the added-flute feed/MRR upside surfaces
+        # in the speeds/feeds output, not in the "lower your tool flex" list.
+        if not _fl_helps_flex:
+            continue
+        _defl_fl_pct = round(_defl * _fl_net_defl_mult / _dlim * 100, 1) if _dlim > 0 else 0
         _fl_pct_gain = round((_fl_stiff_gain - 1.0) * 100)
+        # Net flex change after accounting for the added engaged-tooth force.
+        _fl_net_gain_pct = round((1.0 / _fl_net_defl_mult - 1.0) * 100)  # +ve = flex drops
         # Always note WOC/DOC limits so the user knows what the suggested tool requires
         _fl_note = ""
         if _woc_pct_stab >= 90.0:
@@ -7225,10 +7279,16 @@ def run(payload=None):
         else:
             _fl_note = f" — max {_nf_max_woc:.0f}% WOC for chip clearance"
         _lbs_label_note = f" (use RN — need ≥{_lbs:.3f}\" reach)" if _lbs > 0 else ""
+        # Honest framing: a fatter core is stiffer, but more flutes = more engaged teeth =
+        # more radial force. We only reach here when the NET (force ÷ stiffness) improves.
+        _fl_detail = (
+            f"~{_fl_pct_gain}% stiffer core (nets ~{_fl_net_gain_pct}% less flex after the "
+            f"added engaged-tooth force) — est. deflection drops to {_defl_fl_pct}% of limit{_fl_note}"
+        )
         _hw_suggestions.append({
             "type": "tool",
             "label": f"Use {_nf}-flute tool (same diameter){_lbs_label_note}",
-            "detail": f"~{_fl_pct_gain}% stiffer core — est. deflection drops to {_defl_fl_pct}% of limit{_fl_note}",
+            "detail": _fl_detail,
             "suggested_flutes": _nf,
             "lookup_dia": _d,
             "lookup_loc": float(data.get("loc", 0) or 0),
@@ -7249,6 +7309,11 @@ def run(payload=None):
     _hem_in_slot     = _mode_str.lower() in ("hem", "trochoidal") and _slot_width_diam > _d + 1e-6
     _full_slotting   = float(data.get("woc_pct", 0) or 0) >= 90.0
     _common = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5, 2.0]
+    # Cap the recommendable diameters to what this machine's taper should swing. A CV40
+    # keeps 3/4" as its max — never surface a 1" step-up on a 40-taper. If the current
+    # tool already meets/exceeds the taper cap, there's no valid step-up to offer.
+    _taper_dia_cap = taper_max_endmill_dia(data.get("spindle_taper"))
+    _common = [s for s in _common if s <= _taper_dia_cap + 1e-6]
     # Custom/special tools aren't offered in larger stock diameters — suppress the step-up.
     _next_d = None if _is_special_tool else next((s for s in _common if s > _d + 1e-4), None)
     if _next_d and _hem_in_slot:
@@ -7315,7 +7380,12 @@ def run(payload=None):
                 "hem_slot_stepup": True,
                 "lookup_flute_opts": _sd_flute_opts,
             })
-    elif _next_d and not _full_slotting:
+    elif _next_d and not _full_slotting and _defl > _dlim * 0.90:
+        # Only recommend a bigger (pricier) tool when flex is actually the limiter — i.e.
+        # deflection is within 10% of the limit or over it. If flex is comfortably in range,
+        # a larger diameter just costs more and burns spindle power for no real gain, and
+        # customers won't buy up on diameter for that. Don't push it. (Taper cap on _common
+        # above already prevents e.g. a 1" recommendation on a CV40.)
         _d_gain = round((_next_d / _d) ** 4, 1)
         # Spindle-load caveat: a larger tool at the same engagement (WOC% and DOC xD)
         # removes ~(_next_d/_d)^2 more material per pass, so HP draw scales up roughly the
@@ -7329,8 +7399,6 @@ def run(payload=None):
                 f" — but draws ~{_mrr_mult}x the spindle power "
                 f"(load ~{_proj_load}% of available HP); best only if flex is your limiter, not power"
             )
-        elif _defl <= _dlim:
-            _d_load_note = " — note: flex is already within range, so a bigger tool mainly adds spindle load for little stability gain"
         else:
             _d_load_note = f" — note: draws ~{_mrr_mult}x the spindle power at the same engagement"
         _hw_suggestions.append({

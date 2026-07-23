@@ -8,6 +8,11 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Stability suggestions can no longer lower your score
+Two fixes so that following a "steps to lower your tool flex" recommendation always helps — or isn't shown.
+- **Flute-count swap now nets force against stiffness.** The "Use N-flute tool (same diameter)" step used to promise "~21% stiffer core → deflection drops" from core geometry alone. But deflection is *force ÷ stiffness*, and both rise with flute count: more flutes put more teeth in the cut, so radial force climbs ~proportionally. Going 7→9 flute is ~+21% stiffer core but ~+29% more engaged-tooth force — a **net ~6% *increase* in flex**. That's why a bumped flute count could drop the score instead of raising it. The suggestion now computes the net (force ÷ stiffness) and is **suppressed entirely when it doesn't actually reduce flex** (its feed/MRR upside still shows in speeds & feeds). Governing rule: a stability recommendation must never make the score go down.
+- **Diameter step-up is taper-capped and need-gated.** The step-up now respects the machine's spindle taper — a **CV40 / 40-taper keeps 3/4" as its max recommended diameter** (never a 1" tool); 30-class caps at 1/2", 50-taper / big HSK / Capto C8 carry up to 2". It's also only offered when tool flex is actually the limiter (within 10% of the deflection limit or over) — no more pushing a bigger, pricier cutter when flex is already fine.
+
 ### Drill SFM — full two-table recalibration + three bug fixes
 Validated the drilling speeds against **two** shop references — one for **external/flood** coolant and one for **through-coolant** — which map cleanly onto the engine's two-parameter model: the per-material **base SFM is the external anchor**, and the **coolant-fed bonus** adds the through-coolant lift on top. Now the base matches the external reference *and* base×bonus matches the through-coolant reference, across P/M/K/N/S/H.
 - **Bases re-anchored to the external-coolant reference low-end** (starting values; users push up via presets): e.g. 304/316 →100, 17-4 PH →90, duplex →70, mild steel →220, alloy →165, annealed tool steels →110, gray iron →250, ductile →200, bronzes →250, Ti-6-4 →70, Inconel 718 →40, hardened 45-52 HRC →80 / 52-60 HRC →50.
