@@ -3935,10 +3935,51 @@ export default function Mentor() {
   // stickoutOverride: a user value from that tool's card; when >0 it wins,
   // otherwise the tool falls back to its own reach-based default (each tool in
   // the kit has its own reach — there is no single global stickout).
-  const deepPocketToolParams = React.useCallback((tool: any, isHem: boolean, thinWall: boolean, stickoutOverride: number) => {
+  const deepPocketToolParams = React.useCallback((tool: any, isHem: boolean, thinWall: boolean, stickoutOverride: number, hasPreDrill: boolean) => {
     const bandDepth = tool.depth_band_to - tool.depth_band_from;
-    const docIn = Math.min(bandDepth, tool.loc_in);
-    const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
+    // Total axial material this tool clears in its band (capped at its flute length).
+    const bandDocIn = Math.min(bandDepth, tool.loc_in);
+
+    // Per-pass axial DOC for the STABILITY/deflection model. The band is cleared in
+    // multiple axial step-downs, NOT one full-depth plunge — modeling deflection at
+    // the whole band (e.g. 2.5" = 3.3×D) produces a false "607% chatter" flag that
+    // contradicts the card's own "step down by LOC per pass" note.
+    //
+    //   HEM: its whole advantage is deep axial at LIGHT radial WOC, so the full flute
+    //     depth is legitimately stable — model at the band DOC (light WOC keeps force low).
+    //   Traditional in a closed pocket is really SLOT-to-open then SIDE-MILL-to-widen:
+    //     - With a pre-drill: the tool drops into the hole, so there's NO slotting phase
+    //       → per-pass ceiling is the side-mill limit (~2× the full-slot ceiling; side
+    //       milling at WOC<90% tolerates deeper axial than a full-width slot).
+    //     - Without a pre-drill (closed): the tool must SLOT to open the channel, so the
+    //       shallower full-slot DOC ceiling governs the per-pass step.
+    // Base ceiling = flute/geometry/material full-slot ceiling (mirrors slot_doc_ceiling).
+    const _matKey = String(form.material || "").toLowerCase();
+    const _cleanNF = _matKey.startsWith("aluminum") || _matKey === "brass" || _matKey === "copper" || _matKey === "non_ferrous" || _matKey === "non-ferrous";
+    const _isTi = isoCategory === "S";
+    const _isCb = tool.geometry === "chipbreaker" || tool.geometry === "truncated_rougher";
+    const _fl = tool.flutes || 4;
+    const slotCeilXd = (() => {
+      if (_fl >= 6) return 0.15;
+      if (_fl === 5) return _isTi ? 0.4 : 0.5;
+      if (_cleanNF) { if (_fl <= 2) return 1.35; return _isCb ? 1.35 : 1.0; }
+      if (_isTi) return _isCb ? 1.0 : 0.75;
+      if (_fl === 4) return _isCb ? 1.25 : 1.0;
+      return 1.25;
+    })();
+    const bandDocXd = tool.dia > 0 ? bandDocIn / tool.dia : 1.0;
+    // Side-mill per-pass ceiling: ~2× the full-slot ceiling, bounded [0.5, 2.0]×D.
+    const sideMillDocXd = Math.min(2.0, Math.max(0.5, slotCeilXd * 2.0));
+    // Traditional per-pass ceiling: pre-drill removes the slot phase → side-mill limit;
+    // no pre-drill → the tool must slot to open, so the full-slot ceiling governs.
+    const tradDocXd = hasPreDrill ? sideMillDocXd : slotCeilXd;
+    // HEM models the full band (light WOC); Traditional clamps to its per-pass ceiling.
+    const modelDocXd = isHem ? bandDocXd : Math.min(bandDocXd, tradDocXd);
+    const docXd = modelDocXd;
+    // How the band is actually cleared, for display: N axial passes at the per-pass step.
+    const perPassDocIn = modelDocXd * tool.dia;
+    const axialPasses = perPassDocIn > 0 ? Math.max(1, Math.ceil(bandDocIn / perPassDocIn)) : 1;
+    const tradSlotsToOpen = !isHem && !hasPreDrill;  // Traditional opening phase is slotting
     // Reach-based default stickout for THIS tool (necked → LBS+0.5D, else reach+0.33D).
     const reachDefault = tool.lbs_in > 0
       ? tool.lbs_in + 0.5 * tool.dia
@@ -3956,12 +3997,12 @@ export default function Mentor() {
     let wocPct = Math.min(wocFromDepth, wocCapByFlutes);
     if (thinWall) wocPct = Math.max(minWoc, wocPct * 0.50);
     const iptMult = ldEst > 7 ? 0.50 : ldEst > 6 ? 0.60 : ldEst > 5 ? 0.70 : ldEst > 4 ? 0.85 : 1.00;
-    return { docXd, wocPct, soEst, ldEst, iptMult, reachDefault };
-  }, []);
+    return { docXd, wocPct, soEst, ldEst, iptMult, reachDefault, bandDocIn, perPassDocIn, axialPasses, tradSlotsToOpen };
+  }, [form.material, isoCategory]);
 
   // Build the engine payload for one sequenced pocket tool, at a given stickout.
-  const dpToolPayload = React.useCallback((tool: any, isHem: boolean, thinWall: boolean, stickoutOverride: number) => {
-    const { docXd, wocPct, soEst } = deepPocketToolParams(tool, isHem, thinWall, stickoutOverride);
+  const dpToolPayload = React.useCallback((tool: any, isHem: boolean, thinWall: boolean, stickoutOverride: number, hasPreDrill: boolean) => {
+    const { docXd, wocPct, soEst } = deepPocketToolParams(tool, isHem, thinWall, stickoutOverride, hasPreDrill);
     return {
       ...form,
       mode: (isHem ? "hem" : "traditional") as any,
@@ -3988,13 +4029,14 @@ export default function Mentor() {
   // Re-run physics for a SINGLE pocket tool after its stickout is edited on the card.
   const rerunPocketTool = React.useCallback(async (tool: any, stickoutOverride: number) => {
     const isHem = form.dp_cutting_style === "hem";
+    const hasPreDrill = !!(form.dp_closed_pocket && form.dp_pre_drill);
     try {
-      const physResult = await mentor.mutateAsync(dpToolPayload(tool, isHem, form.dp_thin_wall, stickoutOverride));
+      const physResult = await mentor.mutateAsync(dpToolPayload(tool, isHem, form.dp_thin_wall, stickoutOverride, hasPreDrill));
       setDpPhysics(prev => ({ ...prev, [tool.edp]: physResult }));
     } catch {
       /* leave the prior card physics in place on failure */
     }
-  }, [form.dp_cutting_style, form.dp_thin_wall, mentor, dpToolPayload]);
+  }, [form.dp_cutting_style, form.dp_thin_wall, form.dp_closed_pocket, form.dp_pre_drill, mentor, dpToolPayload]);
 
   const run = async () => {
     setRunBlocked(false);   // reset; set true only on a hard "can't run" block below
@@ -4225,10 +4267,11 @@ export default function Mentor() {
         // Each tool defaults to its OWN reach-based stickout (see deepPocketToolParams).
         // A per-tool override the user typed on a prior card is preserved across re-runs.
         const isHem = form.dp_cutting_style === "hem";
+        const hasPreDrill = !!(form.dp_closed_pocket && form.dp_pre_drill);
         await Promise.all(allTools.map(async (tool: any) => {
           try {
             const soOverride = dpToolStickout[tool.edp] ?? 0;
-            const physResult = await mentor.mutateAsync(dpToolPayload(tool, isHem, form.dp_thin_wall, soOverride));
+            const physResult = await mentor.mutateAsync(dpToolPayload(tool, isHem, form.dp_thin_wall, soOverride, hasPreDrill));
             physicsMap[tool.edp] = physResult;
           } catch {
             // physics failed for this tool — still show card without params
@@ -6169,6 +6212,47 @@ ${stabSection}
         // Pocketing returns a tool KIT — each tool runs at its own speeds/feeds.
         // A single block would be ambiguous ("which tool are these for?"), so emit
         // one sub-block per tool, pulled from that tool's own physics (dpPhysics[edp]).
+        // Cycle-time map — ONE pocket volume, no double-count (mirrors on-screen
+        // dpCycleTimes): rougher unique depth slices at each tool's effMRR; finisher
+        // = wall skin + floor skim. +35% non-cut overhead.
+        const _cyc: Record<string, number> = {};
+        (() => {
+          const bulks = dpResult?.bulk_tools ?? [];
+          if (!bulks.length) return;
+          const Lp = form.dp_pocket_length || 0, Wp = form.dp_pocket_width || 0;
+          const fp = Lp * Wp; const depthTot = form.dp_target_depth || 0; const OH = 1.35;
+          const effMrrOf = (edp: string) => {
+            const pc = dpPhysics[edp]?.customer; const ps = dpPhysics[edp]?.stability;
+            if (!pc?.mrr_in3_min) return 0;
+            const d = ps?.deflection_pct ?? null;
+            const fm = d == null ? 1 : d >= 175 ? 0.60 : d >= 130 ? 0.75 : d >= 100 ? 0.85 : 1;
+            return pc.mrr_in3_min * fm;
+          };
+          const rs = [...bulks].map((t: any) => ({ t, from: t.depth_band_from ?? 0, to: Math.min(t.depth_band_to ?? depthTot, depthTot) })).sort((a, b) => a.to - b.to);
+          let cov = 0;
+          for (const r of rs) {
+            const slice = Math.max(0, r.to - Math.max(r.from, cov)); cov = Math.max(cov, r.to);
+            const em = effMrrOf(r.t.edp); if (!em) continue;
+            const v = fp > 0 ? fp * slice : 0; if (v > 0) _cyc[r.t.edp] = (v / em) * OH;
+          }
+          const cf = dpResult?.corner_tool;
+          if (cf) {
+            // Finish pass = path length ÷ feed (feed-rate-limited, not MRR). Wall + floor.
+            const pc = dpPhysics[cf.edp]?.customer; const ps = dpPhysics[cf.edp]?.stability;
+            if (pc?.feed_ipm) {
+              const dpc = ps?.deflection_pct ?? null;
+              const fm2 = dpc == null ? 1 : dpc >= 175 ? 0.60 : dpc >= 130 ? 0.75 : dpc >= 100 ? 0.85 : 1;
+              const feed = pc.feed_ipm * fm2;
+              const perim = Lp > 0 && Wp > 0 ? 2 * (Lp + Wp) - 4 * cf.dia : 0;
+              const wallPasses = Math.max(1, Math.ceil(depthTot / (cf.dia * 1.0)));
+              const wallPath = perim * wallPasses;
+              const floorStep = cf.dia * 0.7;
+              const floorPath = fp > 0 && floorStep > 0 ? fp / floorStep : 0;
+              if (feed > 0) _cyc[cf.edp] = ((wallPath + floorPath) / feed) * OH;
+            }
+          }
+        })();
+        let totalCycMin = 0;
         allKitTools.forEach((t: any, i: number) => {
           const idx = i + 1;
           const isCorner = t.role === "corner_finish";
@@ -6204,10 +6288,20 @@ ${stabSection}
               const soOv = dpToolStickout[t.edp] ?? 0;
               lines.push(L("  Stickout", `${ps.stickout_in.toFixed(3)}"${ps.l_over_d != null ? `  (L/D ${ps.l_over_d.toFixed(1)}×)` : ""}${soOv > 0 ? "  — user override" : "  — reach default"}`));
             }
+            // Per-tool cycle-time from the shared no-double-count map.
+            const cycMin = _cyc[t.edp] ?? 0;
+            if (cycMin > 0) {
+              totalCycMin += cycMin;
+              lines.push(L("  Est. Cut Time", `${cycMin < 1 ? `${(cycMin * 60).toFixed(0)} sec` : `${cycMin.toFixed(1)} min`}  (incl. ~35% non-cut)`));
+            }
           }
           if (t.entry?.type) lines.push(L("  Entry", String(t.entry.type).replace(/_/g, " ")));
           if (i < allKitTools.length - 1) lines.push("");
         });
+        if (totalCycMin > 0) {
+          lines.push("");
+          lines.push(L("Est. Total Pocket Time", `${totalCycMin.toFixed(1)} min  (roughing + finishing, cutting est. + ~35% non-cut)`));
+        }
         lines.push("");
       } else {
       const _txtSc = STOCK_CONDITION_INFO[form.stock_condition];
@@ -13521,6 +13615,72 @@ ${stabSection}
 
       {/* ── DEEP POCKET OUTPUT ─────────────────────────────────────────────── */}
       {form.mode === "deep_pocket" && !(dpSpecialTool && pdfExtracted) && (dpLoading || dpResult || dpError) && (() => {
+        // ── Cycle-time model — ONE pocket volume, no double-count ──────────────
+        // The pocket holds a single bulk volume (footprint × depth − pre-drill hole).
+        // Roughers' depth bands can OVERLAP (a shallow pocket lets every tool reach
+        // full depth), so summing footprint×band per tool double-counts. Instead we
+        // walk the UNION of bands bottom-up: each depth slice is removed ONCE, by the
+        // tool that owns it, at that tool's effective MRR. The finisher is a wall skin
+        // + floor skim (perimeter × WOC × depth + footprint × one floor pass), added
+        // on top. Returns minutes per EDP + a total. +35% for non-cutting overhead.
+        const dpCycleTimes = (() => {
+          const out: { perEdp: Record<string, number>; total: number; anyMissing: boolean } = { perEdp: {}, total: 0, anyMissing: false };
+          if (!dpResult?.bulk_tools?.length) return out;
+          const L = form.dp_pocket_length || 0, W = form.dp_pocket_width || 0;
+          const footprint = L * W;
+          const depthTot = form.dp_target_depth || 0;
+          const OVERHEAD = 1.35;
+          const effMrrOf = (edp: string) => {
+            const pc = dpPhysics[edp]?.customer; const ps = dpPhysics[edp]?.stability;
+            if (!pc?.mrr_in3_min) return 0;
+            const dp = ps?.deflection_pct ?? null;
+            const fMult = dp == null ? 1 : dp >= 175 ? 0.60 : dp >= 130 ? 0.75 : dp >= 100 ? 0.85 : 1;
+            return pc.mrr_in3_min * fMult;
+          };
+          // Roughers sorted by band bottom; allocate each unique depth slice once.
+          const roughers = [...(dpResult.bulk_tools ?? [])]
+            .map((t: any) => ({ t, from: t.depth_band_from ?? 0, to: Math.min(t.depth_band_to ?? depthTot, depthTot) }))
+            .sort((a, b) => a.to - b.to);
+          let coveredTo = 0;
+          for (const r of roughers) {
+            const uniqueSlice = Math.max(0, r.to - Math.max(r.from, coveredTo));
+            coveredTo = Math.max(coveredTo, r.to);
+            const effMrr = effMrrOf(r.t.edp);
+            if (!effMrr) { out.anyMissing = true; continue; }
+            const vol = footprint > 0 ? footprint * uniqueSlice : 0;
+            const min = vol > 0 ? (vol / effMrr) * OVERHEAD : 0;
+            out.perEdp[r.t.edp] = min;
+            out.total += min;
+          }
+          // Finisher — a FINISH pass is feed-rate-limited, not MRR-limited: it removes
+          // only thin skins, so the tool's time is spent TRAVELLING the walls and floor,
+          // not hogging volume. Model as cutting PATH LENGTH ÷ feed rate (the roughers
+          // above are genuinely volume/MRR-limited; the finisher is not).
+          //   Wall finish: perimeter × (depth ÷ axial step per pass, ~1×D).
+          //   Floor finish: floor area ÷ radial stepover (~0.7×D) = raster path length.
+          // Assumes finishing BOTH wall and floor (the common case).
+          const cf = dpResult.corner_tool;
+          if (cf) {
+            const pc = dpPhysics[cf.edp]?.customer;
+            if (!pc?.feed_ipm) { out.anyMissing = true; }
+            else {
+              const ps = dpPhysics[cf.edp]?.stability;
+              const dpc = ps?.deflection_pct ?? null;
+              const fMult = dpc == null ? 1 : dpc >= 175 ? 0.60 : dpc >= 130 ? 0.75 : dpc >= 100 ? 0.85 : 1;
+              const feed = pc.feed_ipm * fMult;
+              const perim = L > 0 && W > 0 ? 2 * (L + W) - 4 * cf.dia : 0;
+              const wallPasses = Math.max(1, Math.ceil(depthTot / (cf.dia * 1.0)));   // ~1×D axial step
+              const wallPath = perim * wallPasses;
+              const floorStep = cf.dia * 0.7;                                          // finish stepover
+              const floorPath = footprint > 0 && floorStep > 0 ? footprint / floorStep : 0;
+              const min = feed > 0 ? ((wallPath + floorPath) / feed) * OVERHEAD : 0;
+              if (min > 0) { out.perEdp[cf.edp] = min; out.total += min; }
+            }
+          }
+          return out;
+        })();
+        const fmtMin = (m: number) => m <= 0 ? "—" : m < 1 ? `${(m * 60).toFixed(0)} sec` : `${m.toFixed(1)} min`;
+
         // Helper: render one tool card
         const renderToolCard = (tool: any, idx: number, total: number, role: "bulk" | "corner_finish" | "closest_reach") => {
           const phys = dpPhysics[tool.edp];
@@ -13690,7 +13850,7 @@ ${stabSection}
 
               {/* Physics params */}
               {mil ? (
-                <div className="grid grid-cols-4 gap-px mt-2 border-t border-zinc-700/60">
+                <div className="grid grid-cols-3 gap-px mt-2 border-t border-zinc-700/60">
                   {(() => {
                     const stabPctEarly = phys?.stability?.deflection_pct ?? null;
                     // Feed reduction based on stability score
@@ -13718,15 +13878,38 @@ ${stabSection}
                       ? `calc ${mil.feed_ipm!.toFixed(1)} → ${Math.round(feedMult*100)}% for stability`
                       : thinActive ? "= RPM × Adj FPT × flutes (chip-thinned)" : null;
 
+                    // ── Per-pass DOC + band total ──
+                    // doc_in is the STABILITY-modeled per-pass axial step (clamped).
+                    // The tool clears its full depth band in N such passes.
+                    const bandFrom = tool.depth_band_from ?? 0;
+                    const bandTo   = tool.depth_band_to ?? form.dp_target_depth ?? 0;
+                    const bandDepthIn = Math.max(0, bandTo - bandFrom);
+                    const perPassDoc = mil.doc_in ?? 0;
+                    const nPasses = perPassDoc > 0 && bandDepthIn > 0 ? Math.max(1, Math.ceil(bandDepthIn / perPassDoc)) : 1;
+                    const docNote = mil.doc_in != null && tool.dia > 0
+                      ? (nPasses > 1 ? `${nPasses}× to ${bandDepthIn.toFixed(2)}" band` : "single pass")
+                      : null;
+
+                    // ── Per-tool cycle time ── from the shared dpCycleTimes model, which
+                    // removes the pocket volume ONCE (dedupes overlapping rougher bands) and
+                    // treats the finisher as a wall-skin + floor-skim pass. No double-count.
+                    const cycMin = dpCycleTimes.perEdp[tool.edp] ?? 0;
+                    const cycStr = fmtMin(cycMin);
+                    const isFinisherRole = role === "corner_finish" || role === "closest_reach";
+                    // A finish pass removes thin skins (fast); roughing is where the time goes.
+                    const cycNote = cycMin <= 0 ? null
+                      : isFinisherRole ? "wall + floor finish" : "bulk roughing";
+
                     return [
                       ["RPM", mil.rpm != null ? Math.round(mil.rpm).toLocaleString() : "—"],
                       ["Feed (IPM)", adjFeed != null ? adjFeed.toFixed(1) : "—", feedNote],
                       ["IPT (in)", adjIpt != null ? adjIpt.toFixed(5) : mil.adj_fpt != null ? mil.adj_fpt.toFixed(5) : mil.fpt != null ? mil.fpt.toFixed(5) : "—", thinActive ? "Adj FPT (chip-thinned)" : null],
                       ["SFM", mil.sfm != null ? mil.sfm.toFixed(0) : "—"],
                       ["WOC", mil.woc_in != null && tool.dia > 0 ? `${mil.woc_in.toFixed(3)} (${((mil.woc_in/tool.dia)*100).toFixed(0)}%)` : "—"],
-                      ["DOC", mil.doc_in != null && tool.dia > 0 ? `${mil.doc_in.toFixed(2)} (${(mil.doc_in/tool.dia).toFixed(1)}×D)` : mil.doc_in != null ? `${mil.doc_in.toFixed(2)}` : "—"],
+                      ["DOC / pass", mil.doc_in != null && tool.dia > 0 ? `${mil.doc_in.toFixed(2)} (${(mil.doc_in/tool.dia).toFixed(1)}×D)` : mil.doc_in != null ? `${mil.doc_in.toFixed(2)}` : "—", docNote],
                       ["HP Req", mil.hp_required != null ? mil.hp_required.toFixed(2) : "—"],
                       ["MRR", mil.mrr_in3_min != null ? (mil.mrr_in3_min * feedMult).toFixed(2) : "—"],
+                      ["Est. Time", cycStr, cycNote],
                     ].map(([label, val, note]) => (
                       <div key={label} className="flex flex-col items-center py-2 bg-zinc-800/60">
                         <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
@@ -13785,6 +13968,39 @@ ${stabSection}
                         )}
                       </div>
                     </div>
+
+                    {/* Chatter-risk mitigation — tool-specific levers, cheapest/most-effective first.
+                       Shown only when this tool is flagged (≥100% of deflection limit). */}
+                    {stabPct != null && stabPct >= 100 && (() => {
+                      const ld = phys?.stability?.l_over_d ?? 0;
+                      const so = phys?.stability?.stickout_in ?? 0;
+                      const wocPctNow = mil.woc_in && tool.dia > 0 ? (mil.woc_in / tool.dia) * 100 : 0;
+                      const docXdNow = mil.doc_in && tool.dia > 0 ? mil.doc_in / tool.dia : 0;
+                      const isHemNow = form.dp_cutting_style === "hem";
+                      const holder: string = form.toolholder || "";
+                      const holderUnset = holder === "";
+                      const weakHolder = holder === "er_collet" || holder === "hp_collet" || holder === "weldon" || holder === "press_fit" || holderUnset;
+                      const severe = stabPct >= 175;
+                      const tips: string[] = [];
+                      // 1) Stickout / reach — the #1 driver (deflection ∝ L³).
+                      if (ld > 3) tips.push(`Shorten stickout — at L/D ${ld.toFixed(1)}× deflection scales with length³; pulling the tool in even 0.25" is the single biggest gain. A reduced-neck tool gets reach from a thin neck while keeping a short, stiff cutting length.`);
+                      // 2) Holder rigidity — only if they're on a weaker interface.
+                      if (weakHolder) tips.push(`Go to a more rigid holder — a hydraulic chuck, milling chuck, or shrink-fit is far stiffer and lower-runout than a ${holderUnset ? "collet" : holder.replace(/_/g, " ")}, which directly cuts deflection and chatter.`);
+                      // 3) Radial engagement — reduce WOC (biggest force lever after reach).
+                      if (wocPctNow > (isHemNow ? 10 : 25)) tips.push(`Lighten the radial WOC (now ${wocPctNow.toFixed(0)}% of dia) — less radial force per tooth. ${isHemNow ? "HEM already runs light; drop another few % and let the deeper axial cut carry the MRR." : "Trade width for more axial passes to hold MRR."}`);
+                      // 4) Axial per-pass — reduce DOC/pass.
+                      if (docXdNow > 1.0) tips.push(`Reduce the axial step (now ${docXdNow.toFixed(1)}×D per pass) — take the band in more, shallower passes to lower the engaged cutting length and the moment arm.`);
+                      return (
+                        <div className={`rounded-md px-2.5 py-2 text-[10px] leading-relaxed ${severe ? "border border-red-500/40 bg-red-500/5 text-red-200/90" : "border border-amber-500/40 bg-amber-500/5 text-amber-200/90"}`}>
+                          <div className="font-semibold mb-1 uppercase tracking-wider text-[9px]">
+                            {severe ? "High chatter risk — reduce before running" : "Chatter risk — ways to steady this tool"}
+                          </div>
+                          <ul className="list-disc pl-3.5 space-y-0.5">
+                            {tips.map((t, i) => <li key={i}>{t}</li>)}
+                          </ul>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -13991,6 +14207,17 @@ ${stabSection}
                   </div>
                 );
               })()}
+
+              {/* ── Total pocket cycle-time estimate (shared model — no double-count) ── */}
+              {dpCycleTimes.total > 0 && (
+                <div className="mt-2 flex items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2">
+                  <span className="text-[11px] uppercase tracking-wider text-zinc-400">Est. Total Pocket Time</span>
+                  <span className="text-sm font-bold text-white">
+                    ~{fmtMin(dpCycleTimes.total)}
+                    <span className="ml-1.5 text-[10px] font-normal text-zinc-500">cutting est. + ~35% non-cut{dpCycleTimes.anyMissing ? " · partial (some tools pending)" : ""}</span>
+                  </span>
+                </div>
+              )}
 
               {/* ── Notes & Advisories ── consolidated block */}
               {dpResult && (() => {
