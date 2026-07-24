@@ -4422,21 +4422,22 @@ def run(payload=None):
         data.setdefault("_lt_damping",  1.0)
         data.setdefault("_lt_class",    None)
 
-    # Default stickout: when the user/payload didn't supply one, derive it from
-    # the tool geometry instead of a flat 2.0" — LOC + flute_wash + 0.33×D keeps
-    # the flutes clear of the holder without overstating reach (a blanket 2.0"
-    # made short-LOC tools look far less rigid than they run). Falls back to 2.0"
-    # only when LOC is unknown (no SKU selected). Matches the min-stickout floor
-    # formula (which uses a tighter 0.15×D clearance as the hard minimum).
+    # Default stickout: when the user/payload didn't supply one, derive it from tool
+    # geometry = floor + 0.20×D working clearance (the app-wide rule). Floor = LBS for
+    # reduced-neck tools (shank meets neck), else LOC + flute_wash (shank meets flutes).
+    # The +0.20×D is the practical buffer; the hard MINIMUM is the bare floor (see
+    # _min_so below). Falls back to 2.0" only when neither LBS nor LOC is known.
     _payload_so = payload.get("stickout", None)
     if _payload_so is not None and float(_payload_so or 0) > 0:
         data.setdefault("stickout", float(_payload_so))
     else:
         _loc_so = float(data.get("loc", payload.get("loc", 0)) or 0)
         _wash_so = float(data.get("flute_wash", payload.get("flute_wash", 0)) or 0)
+        _lbs_so = float(data.get("lbs", payload.get("lbs", 0)) or 0)
         _dia_so = float(data.get("diameter", payload.get("tool_dia", 0.5)) or 0.5)
-        if _loc_so > 0:
-            _default_so = _loc_so + _wash_so + 0.33 * _dia_so
+        _floor_so = _lbs_so if _lbs_so > 0 else (_loc_so + _wash_so if _loc_so > 0 else 0.0)
+        if _floor_so > 0:
+            _default_so = _floor_so + 0.20 * _dia_so
         else:
             _default_so = 2.0
         data.setdefault("stickout", round(_default_so, 4))
@@ -5107,9 +5108,8 @@ def run(payload=None):
         loc = float(data.get("loc", 0) or 0)
         flute_wash = float(data.get("flute_wash", 0) or 0)
         lbs = float(data.get("lbs", 0) or 0)
-        # When flute_wash unknown (no SKU data), use 33%D clearance to stay clear of holder
-        _clearance = diameter * (0.15 if flute_wash > 0 else 0.33)
-        _min_L = max(lbs, loc + flute_wash + _clearance)
+        # Hard floor: LBS (necked) or LOC + flute_wash (standard) — bury to the transition.
+        _min_L = lbs if lbs > 0 else (loc + flute_wash)
         targets = []
         for frac in (0.90, 0.80, 0.70):
             L_new = max(L_old * frac, _min_L)
@@ -6722,23 +6722,19 @@ def run(payload=None):
 
     _lbs = float(data.get("lbs", 0) or 0)  # Length Below Shoulder (neck reach)
 
-    # Minimum stickout: LOC + flute_wash + clearance buffer
-    # When flute_wash unknown (no SKU data), use 33%D to stay clear of holder
+    # Minimum stickout = the bare geometric FLOOR (the +0.20×D working buffer removed).
+    #   reduced-neck → LBS (shank meets the neck)
+    #   standard     → LOC + flute_wash (shank meets the flutes)
+    # This is the hard limit the tool can't go below; the practical DEFAULT is
+    # floor + 0.20×D (see _default_so above).
     _loc_for_min = float(data.get("loc", 0) or 0)
     _flute_wash_for_min = float(data.get("flute_wash", 0) or 0)
-    _clearance_buf = _d * (0.15 if _flute_wash_for_min > 0 else 0.33)
-    # Necked tool: you grip the shank just behind the neck, so the holder face sits
-    # ~0.5×D past the reach (LBS) — you can't bury the neck in the collet. The true
-    # minimum stickout is LBS + that grip clearance, not LBS exactly. Standard tool:
-    # LOC + flute_wash + clearance as before.
-    _lbs_grip_clear = _d * 0.5
-    _min_so = max(_lbs + _lbs_grip_clear if _lbs > 0 else 0.0,
-                  _loc_for_min + _flute_wash_for_min + _clearance_buf)
+    _min_so = _lbs if _lbs > 0 else (_loc_for_min + _flute_wash_for_min)
     if _lbs > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
-            "label": f'Minimum stickout = {_min_so:.3f}" (LBS + grip clearance)',
-            "detail": f"Necked tool — grip the shank just behind the neck, so stickout can't go below {_min_so:.3f}\". Suggestions below respect this limit.",
+            "label": f'Minimum stickout = {_min_so:.3f}" (LBS — shank to neck)',
+            "detail": f"Necked tool — you can bury the shank right to the neck, so stickout can't go below {_min_so:.3f}\". Suggestions below respect this limit.",
         })
 
     _doc_now = float(state.get("doc", 0) or 0)
@@ -6912,10 +6908,10 @@ def run(payload=None):
     _tool_series_upper = str(data.get("tool_series", "") or "").upper()
     _stickout_is_fixed = _tool_series_upper in _fixed_stickout_series
     _seen_stickout = set()
-    # Necked tool is "at the floor" once stickout is within ~0.3×D of the LBS-grip minimum.
-    # A fixed 0.05" band was too tight — the natural grip clearance (~0.5×D past LBS) sat
-    # just outside it, so "reduce stickout" fired on tools already chucked as deep as the
-    # neck allows. You can't shorten a necked tool's reach; the neck dictates it.
+    # Necked tool is "at the floor" once stickout is within ~0.3×D of the LBS minimum
+    # (_min_so = LBS). A small tolerance band so "reduce stickout" doesn't fire on tools
+    # already chucked as deep as the neck allows — you can't shorten a necked tool past
+    # the neck; the neck dictates its reach.
     _at_lbs_floor = _lbs > 0 and _so <= _min_so + max(0.05, _d * 0.30)
 
     # Tailstock active: part is simply-supported — suppress stickout reduction suggestions

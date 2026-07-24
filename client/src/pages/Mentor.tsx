@@ -589,6 +589,22 @@ function recommendSlotStrategy(opts: {
 // optimal-tool scorer then resolves the actual stocked EDP at the chosen diameter.
 const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
 
+// ── Stickout geometry (app-wide, single source of truth; mirrors legacy_engine.py) ──
+// FLOOR (hard minimum): reduced-neck → LBS (shank meets neck); standard → LOC + flute_wash
+//   (shank meets flutes). The operator can't go below this — burying past it fouls the holder.
+// DEFAULT (practical working value): floor + 0.20×D clearance, for BOTH tool types.
+// Specials with odd geometry (tapered reduced-shank, scanned prints) are estimated separately
+// from their scanned dimensions — not through this floor model.
+function stickoutFloor(dia: number, loc: number, fluteWash: number, lbs: number): number {
+  if (lbs > 0) return lbs;
+  if (loc > 0) return loc + (fluteWash || 0);
+  return 0;
+}
+function stickoutDefault(dia: number, loc: number, fluteWash: number, lbs: number): number {
+  const floor = stickoutFloor(dia, loc, fluteWash, lbs);
+  return floor > 0 ? floor + 0.20 * dia : 0;
+}
+
 // Known competitor cutting-tool brands for the ROI comparison dropdown. Users pick
 // one or type their own (free-add). Alphabetical; edit here to grow the list.
 const ROI_COMPETITOR_BRANDS = [
@@ -2320,14 +2336,11 @@ export default function Mentor() {
             _defaultSo = Math.ceil((_pdfLbs + taperLen + 0.52 * _pdfShankDia) * 200) / 200;
           }
         } else if (_isNeckedTool) {
-          // Necked endmill (lbs = shank-face to tip): you grip the shank just behind the
-          // neck, so the floor is lbs + ~0.5×D grip clearance. Match the engine's _min_so
-          // formula exactly (legacy_engine.py ~5944) so the auto-filled value IS the stated
-          // minimum — otherwise the stability advisor offers a redundant "shorten" step that
-          // lands right back at this floor.
-          _defaultSo = Math.ceil((_pdfLbs + 0.5 * _pdfDia) * 200) / 200;
+          // Necked endmill: app-wide default = LBS + 0.20×D (floor LBS + working buffer).
+          _defaultSo = Math.ceil(stickoutDefault(_pdfDia, 0, 0, _pdfLbs) * 200) / 200;
         } else {
-          _defaultSo = Math.ceil((_pdfLoc + _fwEst + 0.33 * _pdfDia) * 200) / 200;
+          // Standard: LOC + flute_wash + 0.20×D.
+          _defaultSo = Math.ceil(stickoutDefault(_pdfDia, _pdfLoc, _fwEst, 0) * 200) / 200;
         }
         setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
         setStickoutText(_defaultSo.toFixed(3));
@@ -3657,14 +3670,12 @@ export default function Mentor() {
     const _hasDbStickout = _dbStickout != null;
     // LBS (necked) tools: stickout = LBS + 0.5×D (matches engine _min_so floor — grip
     // the shank just behind the neck). QTR3: always use DB value, never formula.
-    // Other series: DB value if present, else formula.
+    // Other series: DB value if present, else the app-wide default = floor + 0.20×D.
     const defaultStickout: number | null = _hasDbStickout
       ? _dbStickout
-      : _hasLbs
-        ? Math.ceil((_lbs + 0.5 * _dia) * 200) / 200
-        : _isQtr3
-          ? null   // QTR3 with missing DB value — leave blank rather than use formula
-          : Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200;
+      : _isQtr3 && !_hasLbs
+        ? null   // QTR3 with missing DB value — leave blank rather than use formula
+        : Math.ceil(stickoutDefault(_dia, _loc, _fw, _hasLbs ? _lbs : 0) * 200) / 200;
     const _stickoutVal: number = defaultStickout ?? 0;
 
     setEdpText(sku.EDP ?? (sku as any).edp ?? "");
@@ -3980,10 +3991,8 @@ export default function Mentor() {
     const perPassDocIn = modelDocXd * tool.dia;
     const axialPasses = perPassDocIn > 0 ? Math.max(1, Math.ceil(bandDocIn / perPassDocIn)) : 1;
     const tradSlotsToOpen = !isHem && !hasPreDrill;  // Traditional opening phase is slotting
-    // Reach-based default stickout for THIS tool (necked → LBS+0.5D, else reach+0.33D).
-    const reachDefault = tool.lbs_in > 0
-      ? tool.lbs_in + 0.5 * tool.dia
-      : (tool.reach_in ?? tool.loc_in ?? 0) + 0.33 * tool.dia;
+    // Default stickout = PRACTICAL working value = floor + 0.20×D (shared helper).
+    const reachDefault = stickoutDefault(tool.dia, tool.loc_in ?? 0, (tool.flute_wash ?? 0) || 0, tool.lbs_in ?? 0);
     const soEst = stickoutOverride > 0 ? stickoutOverride : reachDefault;
     const staticLd = tool.dia > 0 ? soEst / tool.dia : 3;
     const effectiveDepth = Math.max(tool.depth_band_to ?? 0, (tool.reach_in ?? 0) * 0.5);
@@ -4299,8 +4308,9 @@ export default function Mentor() {
       const _loc = form.loc || 0;
       const _fw  = form.flute_wash || 0;
       const _lbs = form.lbs || 0;
-      if (_lbs > 0 && _dia > 0) return Math.ceil((_lbs + 0.5 * _dia) * 200) / 200;       // necked — matches engine _min_so floor
-      if (_loc > 0 && _dia > 0) return Math.ceil((_loc + _fw + 0.33 * _dia) * 200) / 200; // standard
+      // App-wide default = floor + 0.20×D (floor = LBS, or LOC+flute_wash).
+      const _def = _dia > 0 ? stickoutDefault(_dia, _loc, _fw, _lbs) : 0;
+      if (_def > 0) return Math.ceil(_def * 200) / 200;
       return form.loc > 0 ? form.loc * 1.25 : 2.0;                                         // last resort
     };
 
@@ -10747,10 +10757,10 @@ ${stabSection}
                         const fw = Number.isFinite(n) && n >= 0 ? n : pdfFluteWash;
                         setPdfFluteWash(fw);
                         setPdfFluteWashText(fw > 0 ? fw.toFixed(4) : "0.0000");
-                        // Recompute default stickout with corrected flute wash
+                        // Recompute default stickout with corrected flute wash (LOC+fw+0.20×D).
                         const loc = form.loc; const dia = form.tool_dia;
                         if (loc > 0 && dia > 0) {
-                          const so = Math.ceil((loc + fw + 0.33 * dia) * 200) / 200;
+                          const so = Math.ceil(stickoutDefault(dia, loc, fw, form.lbs || 0) * 200) / 200;
                           setForm(p => ({ ...p, stickout: so, flute_wash: fw }));
                           setStickoutText(so.toFixed(3));
                         }
@@ -11953,17 +11963,34 @@ ${stabSection}
                 let val = metric ? n / 25.4 : n;
                 if (Number.isFinite(val) && val > 0) {
                   const _fw = (form as any).flute_wash ?? 0;
-                  const _minSo = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
+                  // Hard minimum = the bare floor (buffer removed): LBS, or LOC + flute_wash.
+                  const _minSo = form.tool_dia > 0 ? stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0) : 0;
                   if (_minSo > 0 && val < _minSo) {
                     val = _minSo;
                     const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                    setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                    setStickoutViolation((form.lbs || 0) > 0
+                      ? `Adjusted to minimum — necked tool bottoms at LBS ${form.lbs.toFixed(3)}" (shank to the neck).`
+                      : `Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} (shank to the flutes). Can't go shorter without fouling the holder.`);
                   } else { setStickoutViolation(null); }
                   setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
                 } else setStickoutText(form.stickout > 0 ? (metric ? (form.stickout * 25.4).toFixed(1) : form.stickout.toFixed(3)) : "");
               }}
             />
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
+            {/* Default + minimum hint — mirrors the deep-pocket cards. Field defaults to
+                floor + 0.20×D; the ( ) shows the shortest this tool physically allows. */}
+            {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0) && (() => {
+              const _fw = (form as any).flute_wash ?? 0;
+              const _floor = stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0);
+              const _def = stickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0);
+              if (_floor <= 0) return null;
+              const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+              return (
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Default {cv(_def)} <span className="text-zinc-600">(shortest allowed {cv(_floor)}{(form.lbs || 0) > 0 ? " — reduced-neck, shank to neck" : ""})</span>
+                </p>
+              );
+            })()}
           </div>
           </>)}
           <div className="flex items-center gap-3 my-7">
@@ -13297,18 +13324,16 @@ ${stabSection}
                   let val = metric ? n / 25.4 : n;
                   if (Number.isFinite(val) && val > 0) {
                     const _fw = (form as any).flute_wash ?? 0;
-                    // Standard floor: LOC + flute_wash + 15% dia clearance (flutes clear of holder)
-                    const _floorStd = form.loc > 0 && form.tool_dia > 0 ? form.loc + _fw + 0.15 * form.tool_dia : 0;
-                    // Necked-tool floor: LBS + 15% dia clearance (necked section must clear holder face)
-                    const _floorNeck = form.lbs > 0 && form.tool_dia > 0 ? form.lbs + 0.15 * form.tool_dia : 0;
-                    const _minSo = Math.max(_floorStd, _floorNeck);
+                    // Hard minimum = the bare floor (buffer removed): LBS (necked) or LOC + flute_wash.
+                    const _isNeck = (form.lbs || 0) > 0;
+                    const _minSo = form.tool_dia > 0 ? stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0) : 0;
                     if (_minSo > 0 && val < _minSo) {
                       val = _minSo;
-                      if (_floorNeck > _floorStd) {
-                        setStickoutViolation(`Adjusted to minimum — necked tool requires stickout > LBS (${form.lbs.toFixed(3)}") + 15% dia clearance so the neck clears the holder face.`);
+                      if (_isNeck) {
+                        setStickoutViolation(`Adjusted to minimum — necked tool bottoms at LBS ${form.lbs.toFixed(3)}" (bury the shank right to the neck).`);
                       } else {
                         const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} + 15% dia clearance. Flutes must stay clear of the holder.`);
+                        setStickoutViolation(`Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} (shank to the flutes). Can't go shorter without fouling the holder.`);
                       }
                     } else { setStickoutViolation(null); }
                     setForm((p) => ({ ...p, stickout: val })); setStickoutText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
@@ -13316,6 +13341,19 @@ ${stabSection}
                 }}
               />
               {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
+              {/* Default + minimum hint (same as the primary stickout field). */}
+              {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0) && (() => {
+                const _fw = (form as any).flute_wash ?? 0;
+                const _floor = stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0);
+                const _def = stickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0);
+                if (_floor <= 0) return null;
+                const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+                return (
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    Default {cv(_def)} <span className="text-zinc-600">(shortest allowed {cv(_floor)}{(form.lbs || 0) > 0 ? " — reduced-neck, shank to neck" : ""})</span>
+                  </p>
+                );
+              })()}
             </div>
           </>)}
 
@@ -13707,11 +13745,14 @@ ${stabSection}
           const taper = dpResult?.woc_taper;
 
           // Per-tool stickout: each tool defaults to its own reach-based value
-          // (necked → LBS+0.5D, else reach+0.33D). The user can override it on the
-          // card; that re-runs just this tool's physics.
-          const soDefault = tool.lbs_in > 0
-            ? tool.lbs_in + 0.5 * tool.dia
-            : (tool.reach_in ?? tool.loc_in ?? 0) + 0.33 * tool.dia;
+          // The user can override stickout on the card; that re-runs this tool's physics.
+          // Two numbers, from the shared app-wide helpers (single source of truth):
+          //   soDefault — practical working value = floor + 0.20×D (field default + physics)
+          //   soFloor   — hard minimum ("shortest allowed") = bare floor, buffer removed:
+          //               reduced-neck → LBS (shank to neck) ; standard → LOC + flute_wash
+          const soFluteWash = (tool.flute_wash ?? 0) || 0;
+          const soFloor = stickoutFloor(tool.dia, tool.loc_in ?? 0, soFluteWash, tool.lbs_in ?? 0);
+          const soDefault = stickoutDefault(tool.dia, tool.loc_in ?? 0, soFluteWash, tool.lbs_in ?? 0);
           const soOverride = dpToolStickout[tool.edp] ?? 0;
           const soActive = soOverride > 0 ? soOverride : soDefault;
 
@@ -13751,7 +13792,8 @@ ${stabSection}
                   Depth band: <span className="text-zinc-300">{tool.depth_band_from.toFixed(3)}" – {tool.depth_band_to.toFixed(3)}"</span>
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
-                {/* Per-tool stickout — defaults to this tool's reach; adjustable if you hold it longer/shorter */}
+                {/* Per-tool stickout — defaults to the SHORTEST this tool allows (stiffest);
+                    lengthen it if your real setup needs to. Can't go shorter than the floor. */}
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-[11px] text-zinc-500">Stickout:</span>
                   <Input
@@ -13763,8 +13805,10 @@ ${stabSection}
                     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                     onBlur={(e) => {
                       const n = parseDim(e.target.value);
-                      const next = Number.isFinite(n) && n > 0 ? n : 0;   // 0 → clear override, back to default
-                      if (next === soOverride) return;                    // no change
+                      let next = Number.isFinite(n) && n > 0 ? n : 0;      // 0 → clear override, back to default
+                      // Can't set shorter than the tool's HARD floor — clamp up to it.
+                      if (next > 0 && next < soFloor) next = soFloor;
+                      if (next === soOverride) return;                     // no change
                       setDpToolStickout(prev => {
                         const copy = { ...prev };
                         if (next > 0) copy[tool.edp] = next; else delete copy[tool.edp];
@@ -13775,8 +13819,8 @@ ${stabSection}
                   />
                   <span className="text-[11px] text-zinc-600">
                     {soOverride > 0
-                      ? <>override · default {soDefault.toFixed(3)}"</>
-                      : <>default (reach-based) · {soActive.toFixed(3)}"</>}
+                      ? <>set · shortest allowed {soFloor.toFixed(3)}"</>
+                      : <>default {soActive.toFixed(3)}" · shortest allowed {soFloor.toFixed(3)}"</>}
                   </span>
                 </div>
                 {tool.entry?.type === "helical" && mil?.feed_ipm != null && mil?.rpm != null && (() => {
@@ -13973,7 +14017,6 @@ ${stabSection}
                        Shown only when this tool is flagged (≥100% of deflection limit). */}
                     {stabPct != null && stabPct >= 100 && (() => {
                       const ld = phys?.stability?.l_over_d ?? 0;
-                      const so = phys?.stability?.stickout_in ?? 0;
                       const wocPctNow = mil.woc_in && tool.dia > 0 ? (mil.woc_in / tool.dia) * 100 : 0;
                       const docXdNow = mil.doc_in && tool.dia > 0 ? mil.doc_in / tool.dia : 0;
                       const isHemNow = form.dp_cutting_style === "hem";
@@ -13982,14 +14025,43 @@ ${stabSection}
                       const weakHolder = holder === "er_collet" || holder === "hp_collet" || holder === "weldon" || holder === "press_fit" || holderUnset;
                       const severe = stabPct >= 175;
                       const tips: string[] = [];
-                      // 1) Stickout / reach — the #1 driver (deflection ∝ L³).
-                      if (ld > 3) tips.push(`Shorten stickout — at L/D ${ld.toFixed(1)}× deflection scales with length³; pulling the tool in even 0.25" is the single biggest gain. A reduced-neck tool gets reach from a thin neck while keeping a short, stiff cutting length.`);
+                      // 1) Stickout / reach — the #1 driver (deflection ∝ L³). Quote the
+                      // Compare the CURRENT effective stickout (soActive) against the HARD
+                      // floor (soFloor = shortest allowed: LBS, or LOC+flute_wash). Only
+                      // suggest "shorten" when there's genuine room above that floor. If
+                      // already at it, don't tell them to go shorter — that was the bug.
+                      const isRnTool = (tool.lbs_in ?? 0) > 0;
+                      const room = soActive > 0 && soFloor > 0 ? soActive - soFloor : 0;
+                      const atFloor = room <= 0.03;
+                      // Only suggest shortening when there's genuine room above the floor.
+                      // If the tool is already AT its minimum, drop the stickout bullet entirely
+                      // — no "shorten" (impossible) and no nag — and let WOC/holder carry it.
+                      if (ld > 3 && !atFloor) {
+                        tips.push(`Shorten stickout — at L/D ${ld.toFixed(1)}× deflection scales with length³. This tool can come in to ~${soFloor.toFixed(3)}" (${isRnTool ? `LBS ${tool.lbs_in.toFixed(3)}" — shank right to the neck` : "shank right up to where the flutes end"}) — ~${room.toFixed(3)}" shorter than the current ${soActive.toFixed(3)}". Biggest single gain here.`);
+                      }
                       // 2) Holder rigidity — only if they're on a weaker interface.
                       if (weakHolder) tips.push(`Go to a more rigid holder — a hydraulic chuck, milling chuck, or shrink-fit is far stiffer and lower-runout than a ${holderUnset ? "collet" : holder.replace(/_/g, " ")}, which directly cuts deflection and chatter.`);
-                      // 3) Radial engagement — reduce WOC (biggest force lever after reach).
-                      if (wocPctNow > (isHemNow ? 10 : 25)) tips.push(`Lighten the radial WOC (now ${wocPctNow.toFixed(0)}% of dia) — less radial force per tooth. ${isHemNow ? "HEM already runs light; drop another few % and let the deeper axial cut carry the MRR." : "Trade width for more axial passes to hold MRR."}`);
-                      // 4) Axial per-pass — reduce DOC/pass.
-                      if (docXdNow > 1.0) tips.push(`Reduce the axial step (now ${docXdNow.toFixed(1)}×D per pass) — take the band in more, shallower passes to lower the engaged cutting length and the moment arm.`);
+                      // 3) & 4) Engagement levers — differ by toolpath:
+                      //   HEM: WOC is THE lever (DOC is off-limits — reducing it kills the MRR
+                      //     the deep-axial strategy depends on). Trimming a few % of an already
+                      //     light WOC cuts radial force hard and barely costs cycle time.
+                      //   TRADITIONAL: BOTH WOC and DOC are yours to dial. Lighter WOC drops
+                      //     radial force; shallower DOC shortens the engaged cutting length and
+                      //     moment arm. Trade either against more passes to hold MRR.
+                      if (isHemNow) {
+                        if (wocPctNow > 6) {
+                          // >6% → room to trim before the ~5% HEM rubbing floor.
+                          tips.push(`Lighten the radial WOC (now ${wocPctNow.toFixed(0)}% of dia) — the biggest chatter lever on an HEM path. Radial force drops fast, and since the deep axial DOC is doing the material removal, dropping WOC a couple points (keep it ≥ ~5% to avoid rubbing) barely touches your cycle time. Leave the DOC alone — that's where HEM's MRR comes from.`);
+                        }
+                      } else {
+                        // Traditional — both adjustable.
+                        if (wocPctNow > 15) tips.push(`Lighten the radial WOC (now ${wocPctNow.toFixed(0)}% of dia) — the biggest force lever. Trade width for more side passes to hold MRR.`);
+                        if (docXdNow > 0.5) tips.push(`Reduce the axial DOC (now ${docXdNow.toFixed(1)}×D per pass) — shallower passes shorten the engaged cutting length and the moment arm, cutting deflection. On a traditional path both WOC and DOC are yours to dial; step down and take more passes.`);
+                      }
+                      // If every lever is already maxed (at stickout floor, WOC at the rubbing
+                      // limit, rigid holder), there's nothing actionable to push — don't render
+                      // an empty box. The stability tile still shows the risk on its own.
+                      if (tips.length === 0) return null;
                       return (
                         <div className={`rounded-md px-2.5 py-2 text-[10px] leading-relaxed ${severe ? "border border-red-500/40 bg-red-500/5 text-red-200/90" : "border border-amber-500/40 bg-amber-500/5 text-amber-200/90"}`}>
                           <div className="font-semibold mb-1 uppercase tracking-wider text-[9px]">
