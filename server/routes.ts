@@ -6473,12 +6473,14 @@ ${catalogList}`
   // ── Deep Pocket / Thin Wall sequence advisor ─────────────────────────────
   app.post("/api/deep-pocket/sequence", async (req, res) => {
     try {
-      const { target_depth, corner_radius, floor_radius, cutting_style, thin_wall, closed_pocket, pocket_length, pocket_width, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive } = req.body as {
+      const { target_depth, corner_radius, floor_radius, cutting_style, thin_wall, closed_pocket, pocket_length, pocket_width, pre_drill_dia, material, iso_category, flutes, tool_dia, stickout, toolholder, machine_hp, machine_max_rpm, spindle_drive, units, spindle_taper } = req.body as {
         target_depth: number; corner_radius: number; floor_radius: number; cutting_style: "hem" | "traditional";
         thin_wall: boolean; closed_pocket: boolean; pocket_length: number; pocket_width: number;
         pre_drill_dia: number; material: string; iso_category: string;
         flutes: number; tool_dia: number; stickout: number; toolholder: string;
         machine_hp: number; machine_max_rpm: number; spindle_drive: string;
+        units?: "imperial" | "metric";
+        spindle_taper?: string;
       };
 
       if (!(target_depth > 0)) return res.status(400).json({ error: "target_depth required" });
@@ -6518,12 +6520,45 @@ ${catalogList}`
       //
       // The corner finisher MUST be ≤ wall-to-wall fit to produce the radius —
       // enforced in the corner picker via maxCornerDia, not here.
+      // ── Spindle-taper diameter cap ─────────────────────────────────────────
+      // No 1" endmill in a 40-taper: the largest tool a spindle can hold rigidly
+      // is a property of its taper. Mirrors legacy_engine.py TAPER_MAX_ENDMILL_DIA
+      // so the sequencer and the stability engine agree. Unknown taper → 40-class
+      // (0.750") conservative default.
+      const TAPER_MAX_ENDMILL_DIA: Record<string, number> = {
+        "CAT30": 0.500, "BT30": 0.500, "HSK32": 0.500, "HSK50": 0.500, "VDI30": 0.500,
+        "CAT40": 0.750, "BT40": 0.750, "HSK63": 0.750, "VDI40": 0.750,
+        "CAT50": 2.000, "BT50": 2.000, "HSK100": 2.000, "HSK125": 2.000, "KM80": 2.000,
+        "VDI50": 1.000, "BMT45": 0.750, "BMT55": 1.000, "BMT65": 1.250,
+        "CAPTO C6": 0.750, "CAPTO C8": 2.000,
+      };
+      const taperMaxDia = (taper?: string): number => {
+        if (!taper) return 0.750;
+        const t = taper.toUpperCase().trim();
+        if (t in TAPER_MAX_ENDMILL_DIA) return TAPER_MAX_ENDMILL_DIA[t];
+        if (t.startsWith("HSK")) {
+          const digits = t.replace(/\D/g, "");
+          if (digits) {
+            const n = parseInt(digits, 10);
+            if (n <= 50) return 0.500;
+            if (n <= 63) return 0.750;
+            if (n <= 80) return 1.000;
+            return 2.000;
+          }
+        }
+        return 0.750;
+      };
+      const taperCap = taperMaxDia(spindle_taper);
+
+      // HEM keeps its 0.625" force-management cap; both styles are then bounded by
+      // what the spindle taper can physically hold.
       const hemDiaCap = cutting_style === "hem" ? 0.625 : Infinity;
       const roughCornerCap = corner_radius > 0 ? corner_radius * 3.0 : Infinity;
       const maxBulkDia = Math.min(
         pocketCeilingDia < Infinity ? pocketCeilingDia : 2.0,
         hemDiaCap,
-        roughCornerCap
+        roughCornerCap,
+        taperCap
       );
 
       // ── Material-appropriate coating + flute filters ───────────────────────
@@ -6598,6 +6633,41 @@ ${catalogList}`
       // Higher flute count tools have larger core dia → stiffer → effectively better L/D,
       // but we use a single target and let flute-count sorting pick the best EDP within it.
       const ldTarget = cutting_style === "hem" ? 5.0 : 4.0;
+
+      // ── HEM step-down: prefer the next-smaller stocked diameter ─────────────
+      // HEM's whole advantage is light WOC + full-depth passes, which lets a
+      // SMALLER tool clear the same pocket — and smaller carbide is cheaper and
+      // more available. So for HEM we don't grab the biggest tool that fits; we
+      // step down ONE stocked size from the largest-that-fits — but only if a
+      // tool at that smaller diameter still reaches a useful depth at a sensible
+      // L/D (reduced-neck tools shine here: stiff thin neck, short LOC per band,
+      // full shank in the holder). If stepping down wouldn't reach sensibly, we
+      // keep the larger size. Traditional is unchanged (heavier WOC wants the
+      // larger, shorter, stiffer tool).
+      //
+      // The result is fed to buildBulkSequence as bulkPickCap. The greedy loop,
+      // reach checks, and extended-pool fallback all still run underneath — so a
+      // deep band the smaller tool can't reach still gets a larger reach tool
+      // exactly as before. This only nudges the TOP-of-pocket pick smaller.
+      let bulkPickCap = maxBulkDia;
+      if (cutting_style === "hem") {
+        // Largest stocked dia that fits under the HEM cap.
+        const fitsDesc = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= maxBulkDia);
+        const largestFit = fitsDesc.length ? parseFloat(fitsDesc[0].cutting_diameter_in) : 0;
+        // Next stocked dia strictly below it (coverage is sorted DESC).
+        const oneDown = fitsDesc.find(r => parseFloat(r.cutting_diameter_in) < largestFit);
+        if (oneDown) {
+          const downDia = parseFloat(oneDown.cutting_diameter_in);
+          const downReach = parseFloat(oneDown.max_reach || "0");
+          // "Reaches sensibly": a tool at the smaller dia can cover at least the
+          // first band (≥1×D of useful depth, or the whole pocket if shallow) at
+          // L/D ≤ ldTarget. Its own max reach must clear that sensible depth.
+          const sensibleDepth = Math.min(target_depth, downDia * ldTarget);
+          const reachesSensibly = downReach >= Math.min(target_depth, downDia * 1.0)
+            && sensibleDepth / downDia <= ldTarget;
+          if (reachesSensibly) bulkPickCap = downDia;
+        }
+      }
 
       const findBestCornerDia = (maxDia: number, cov: Array<{ cutting_diameter_in: string; max_reach: string }>): typeof cov[0] | null => {
         for (const row of cov) {
@@ -6714,7 +6784,10 @@ ${catalogList}`
 
       const buildBulkSequence = async (): Promise<SeqTool[]> => {
         // Build candidate list: all diameters <= maxBulkDia that have any reach > 0, sorted largest first
-        const candidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= maxBulkDia);
+        // Primary candidates: for HEM this is the stepped-down cap (bulkPickCap ≤
+        // maxBulkDia); for Traditional bulkPickCap === maxBulkDia. Either way the
+        // spindle taper already bounds maxBulkDia, so no oversized tool appears.
+        const candidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= bulkPickCap);
         if (!candidates.length) return [];
 
         // Extended pool — used when no in-cap candidate reaches the remaining depth.
@@ -6724,12 +6797,15 @@ ${catalogList}`
         // final-reach band — but conservatively. Going too big (1"+ on a 4" deep HEM pocket)
         // creates a 4×D+ chatter risk that defeats the purpose.
         //
+        // Hard-bounded by the spindle taper: the extended pool may reach past the
+        // HEM force cap to cover a deep band, but never past what the taper holds.
         const extendedCap = Math.min(
           maxBulkDia * 1.5,  // step up by at most 50% from the HEM force-management cap
           closed_pocket && pocket_length > 0 && pocket_width > 0
             ? Math.min(pocket_length, pocket_width) * 0.65
             : 1.0,
-          1.0  // absolute ceiling — past 1" tools, the L/D for deep work is unmanageable
+          1.0,       // absolute ceiling — past 1" tools, the L/D for deep work is unmanageable
+          taperCap   // never exceed what the spindle taper can hold
         );
         const extendedCandidates = coverage.filter(r => parseFloat(r.cutting_diameter_in) <= extendedCap);
 
@@ -6789,7 +6865,7 @@ ${catalogList}`
             );
             for (const row of extendedAsc) {
               const dia = parseFloat(row.cutting_diameter_in);
-              if (dia <= maxBulkDia) continue;  // already tried in the main loop
+              if (dia <= bulkPickCap) continue;  // already tried in the main (primary-cap) loop
               const maxReach = parseFloat(row.max_reach || "0");
               if (maxReach < target_depth) continue;
               const remaining = target_depth - depthCovered;
@@ -7108,21 +7184,55 @@ ${catalogList}`
         1.4219,1.4375,1.4531,1.4688,1.4844,1.5000,1.5625,1.6250,1.6875,1.7500,1.8125,1.8750,
         1.9375,2.0000,2.0625,2.1250,2.1875,2.2500,2.3125,2.3750,2.4375,2.5000,
       ];
-      const snapDrillDown = (maxDia: number): number | null => {
-        const fits = STANDARD_DRILLS_IN.filter(d => d <= maxDia);
-        return fits.length > 0 ? fits[fits.length - 1] : null;
+      // Snap UP to a clean shop drill size: next 1/16" for inch shops, next whole
+      // mm for metric shops. A pre-drill for a hog-out is a "grab the next round
+      // size" move — no one reaches for a 39/64 or letter drill here — and the
+      // extra floor stock the larger hole leaves is cleaned up by the endmill anyway.
+      const isMetric = units === "metric";
+      const snapCleanUp = (minDia: number): number => {
+        if (isMetric) {
+          const minMm = minDia * 25.4;
+          const mm = Math.ceil(minMm - 1e-6); // next whole mm ≥ min
+          return mm / 25.4;                    // back to inches (canonical unit)
+        }
+        const step = 1 / 16;
+        return Math.ceil((minDia - 1e-6) / step) * step; // next 1/16" ≥ min
       };
-      const drillMaxDia = pocketCeilingDia < Infinity ? Math.min(pocketCeilingDia, maxBulkDia) : maxBulkDia;
-      const recommended_pre_drill_dia = closed_pocket
-        ? snapDrillDown(drillMaxDia * 0.99) // tiny margin so we're clearly under ceiling
-        : null;
+
+      // ── Pre-drill diameter recommendation ────────────────────────────────
+      // The pre-drill is the plunge/clearance hole the FIRST roughing endmill
+      // drops into. It MUST be at least a hair LARGER than that endmill's dia,
+      // never smaller — a hole smaller than the tool defeats the whole point
+      // (the tool can't enter and you'd be back to ramping/helixing full stock).
+      //
+      // Rule: floor the recommendation at largestBulkDia × 1.05 (5% radial
+      // clearance so the tool free-drops without rubbing), then snap UP to the
+      // next clean drill size (1/16" or 1mm). Cap at the pocket ceiling so we
+      // never exceed the hole the pocket can physically hold. If even one clean
+      // step over the tool won't fit the pocket, fall back to the tightest
+      // standard drill that still clears the tool AND fits; if none, null (note
+      // falls back to helical entry).
+      const largestBulkDia = bulk_tools.length > 0 ? bulk_tools[0].dia : null;
+      const pocketDrillCeiling = pocketCeilingDia < Infinity ? pocketCeilingDia : null;
+      let recommended_pre_drill_dia: number | null = null;
+      if (closed_pocket && largestBulkDia) {
+        const clearanceDia = largestBulkDia * 1.05; // 5% radial clearance for free drop-in
+        const cleanUp = snapCleanUp(clearanceDia);
+        if (pocketDrillCeiling == null || cleanUp <= pocketDrillCeiling) {
+          recommended_pre_drill_dia = +cleanUp.toFixed(4);
+        } else {
+          // Clean size doesn't fit — fall back to tightest standard drill that
+          // both clears the tool and fits the pocket.
+          const fit = STANDARD_DRILLS_IN.filter(d => d >= clearanceDia && d <= pocketDrillCeiling);
+          if (fit.length > 0) recommended_pre_drill_dia = fit[0];
+        }
+      }
       // Depth = pocket depth - 5% — leaves floor stock for endmill to clean up
       const recommended_pre_drill_depth = closed_pocket
         ? +( target_depth * 0.95).toFixed(4)
         : null;
 
       // Min clearance dia — endmill needs at least this to drop in (kept for warning logic)
-      const largestBulkDia = bulk_tools.length > 0 ? bulk_tools[0].dia : null;
       const required_pre_drill_dia = closed_pocket && largestBulkDia
         ? +( largestBulkDia * 1.05).toFixed(4)
         : null;
@@ -7137,7 +7247,15 @@ ${catalogList}`
           pocket_ceiling_dia: pocketCeilingDia === Infinity ? null : +pocketCeilingDia.toFixed(4),
           bulk_dia: bulk_tools[0]?.dia ?? null,
           corner_dia: cornerRow ? parseFloat(cornerRow.cutting_diameter_in) : null,
+          taper_cap: +taperCap.toFixed(4),
+          spindle_taper: spindle_taper || "CAT40",
         },
+        // HEM step-down: did we pick a smaller bulk tool than the largest that fits?
+        // bulk_pick_cap < max_bulk_dia means yes — surfaced in a note so the smaller
+        // tool doesn't read as a bug.
+        hem_step_down: cutting_style === "hem" && bulkPickCap < maxBulkDia
+          ? { from_cap: +maxBulkDia.toFixed(4), to_cap: +bulkPickCap.toFixed(4) }
+          : null,
         needs_special,
         special_note,
         bulk_tools,

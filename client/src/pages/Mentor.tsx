@@ -2048,6 +2048,11 @@ export default function Mentor() {
   }, []);
   // Per-tool physics results keyed by edp
   const [dpPhysics, setDpPhysics] = React.useState<Record<string, any>>({});
+  // Per-tool stickout OVERRIDES keyed by edp. Empty/absent → the tool uses its own
+  // reach-based default (each tool in the kit has its own reach, so one global
+  // stickout can't be right for all of them). Editing a tool card's stickout writes
+  // here and re-runs just that tool's physics.
+  const [dpToolStickout, setDpToolStickout] = React.useState<Record<string, number>>({});
 
   // ── PDF Print Upload ──────────────────────────────────────────────────────
   const [pdfUploading, setPdfUploading] = React.useState(false);
@@ -3141,29 +3146,33 @@ export default function Mentor() {
   //     a Z gap (pre-drill depth < pocket depth), also seed helical for the Z move.
   React.useEffect(() => {
     if (form.mode !== "deep_pocket" || !form.dp_closed_pocket) return;
+    const isHem = form.dp_cutting_style === "hem";
     if (form.dp_pre_drill) {
-      // Pre-drill on: ensure sweep (XY) is present. Hide straight plunge (always wrong here).
+      // Pre-drill on: ensure the correct XY breakout is present, and hide moves that
+      // don't fit the style. Straight plunge is always wrong here.
+      //   HEM → sweep (tangential roll-in into trochoidal); never straight-radial (that's slotting).
+      //   Traditional → straight-radial stepover; never sweep (no open edge, not trochoidal).
       setEntryTypes(p => {
-        const cleaned = p.filter(k => k !== "straight");
-        const withSweep = cleaned.includes("sweep") || cleaned.includes("xy_radial")
-          ? cleaned
-          : [...cleaned, "sweep"];
+        // Drop straight plunge and the wrong-style XY move.
+        let cleaned = p.filter(k => k !== "straight" && k !== (isHem ? "xy_radial" : "sweep"));
+        const xyKey = isHem ? "sweep" : "xy_radial";
+        if (!cleaned.includes(xyKey)) cleaned = [...cleaned, xyKey];
         const pocketDepth = form.dp_target_depth || 0;
         const effDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : pocketDepth * 0.95;
         const hasZGap = pocketDepth > 0 && (pocketDepth - effDepth) > 0.001;
-        if (hasZGap && !withSweep.includes("helical") && !withSweep.includes("ramp")) {
-          return [...withSweep, "helical"];
+        if (hasZGap && !cleaned.includes("helical") && !cleaned.includes("ramp")) {
+          return [...cleaned, "helical"];
         }
-        return withSweep;
+        return cleaned;
       });
     } else {
-      // Closed, no pre-drill: strip sweep, fall back to helical.
+      // Closed, no pre-drill: strip both XY breakouts, fall back to helical.
       setEntryTypes(p => {
         const cleaned = p.filter(k => k !== "sweep" && k !== "xy_radial");
         return cleaned.length > 0 ? cleaned : ["helical"];
       });
     }
-  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill, form.dp_target_depth, form.dp_pre_drill_depth]);
+  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill, form.dp_target_depth, form.dp_pre_drill_depth, form.dp_cutting_style]);
   React.useEffect(() => {
     if (form.mode === "slot") setEntryTypes([]);
     else if (form.mode === "circ_interp") {
@@ -3919,6 +3928,74 @@ export default function Mentor() {
   // Keep ref in sync so deferred calls always use the latest form state
   React.useEffect(() => { runRef.current = run; });
 
+  // ── Deep-pocket per-tool parameter math ──────────────────────────────────
+  // Shared by the initial sequence run and the per-tool stickout re-run so the
+  // two never drift. Given a sequenced tool and the current pocket options,
+  // returns the DOC/WOC/stickout/IPT the engine call should use for that tool.
+  // stickoutOverride: a user value from that tool's card; when >0 it wins,
+  // otherwise the tool falls back to its own reach-based default (each tool in
+  // the kit has its own reach — there is no single global stickout).
+  const deepPocketToolParams = React.useCallback((tool: any, isHem: boolean, thinWall: boolean, stickoutOverride: number) => {
+    const bandDepth = tool.depth_band_to - tool.depth_band_from;
+    const docIn = Math.min(bandDepth, tool.loc_in);
+    const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
+    // Reach-based default stickout for THIS tool (necked → LBS+0.5D, else reach+0.33D).
+    const reachDefault = tool.lbs_in > 0
+      ? tool.lbs_in + 0.5 * tool.dia
+      : (tool.reach_in ?? tool.loc_in ?? 0) + 0.33 * tool.dia;
+    const soEst = stickoutOverride > 0 ? stickoutOverride : reachDefault;
+    const staticLd = tool.dia > 0 ? soEst / tool.dia : 3;
+    const effectiveDepth = Math.max(tool.depth_band_to ?? 0, (tool.reach_in ?? 0) * 0.5);
+    const ldEst = tool.dia > 0 ? Math.min(staticLd, effectiveDepth / tool.dia + 0.5) : 3;
+    const depthRatio = tool.dia > 0 ? (tool.depth_band_to ?? 0) / tool.dia : 0;
+    const baseWoc = isHem ? 12 : 40;
+    const kPull = isHem ? 1.5 : 4.0;
+    const minWoc = isHem ? 5 : 10;
+    const wocFromDepth = Math.max(minWoc, baseWoc - depthRatio * kPull);
+    const wocCapByFlutes = tool.flutes >= 7 ? 10 : tool.flutes === 6 ? 25 : tool.flutes === 5 ? 35 : 50;
+    let wocPct = Math.min(wocFromDepth, wocCapByFlutes);
+    if (thinWall) wocPct = Math.max(minWoc, wocPct * 0.50);
+    const iptMult = ldEst > 7 ? 0.50 : ldEst > 6 ? 0.60 : ldEst > 5 ? 0.70 : ldEst > 4 ? 0.85 : 1.00;
+    return { docXd, wocPct, soEst, ldEst, iptMult, reachDefault };
+  }, []);
+
+  // Build the engine payload for one sequenced pocket tool, at a given stickout.
+  const dpToolPayload = React.useCallback((tool: any, isHem: boolean, thinWall: boolean, stickoutOverride: number) => {
+    const { docXd, wocPct, soEst } = deepPocketToolParams(tool, isHem, thinWall, stickoutOverride);
+    return {
+      ...form,
+      mode: (isHem ? "hem" : "traditional") as any,
+      tool_dia: tool.dia,
+      flutes: tool.flutes,
+      loc: tool.loc_in,
+      lbs: tool.lbs_in || 0,
+      stickout: soEst,
+      shank_dia: tool.shank_dia || 0,
+      helix_angle: tool.helix || 0,
+      variable_pitch: tool.variable_pitch,
+      variable_helix: tool.variable_helix,
+      geometry: tool.geometry as any,
+      tool_series: tool.series || "",
+      doc_xd: docXd,
+      woc_pct: wocPct,
+      edp: tool.edp,
+      operation: "milling" as any,
+      center_cutting: (form as any).center_cutting ?? undefined,
+      debug: false,
+    };
+  }, [form, deepPocketToolParams]);
+
+  // Re-run physics for a SINGLE pocket tool after its stickout is edited on the card.
+  const rerunPocketTool = React.useCallback(async (tool: any, stickoutOverride: number) => {
+    const isHem = form.dp_cutting_style === "hem";
+    try {
+      const physResult = await mentor.mutateAsync(dpToolPayload(tool, isHem, form.dp_thin_wall, stickoutOverride));
+      setDpPhysics(prev => ({ ...prev, [tool.edp]: physResult }));
+    } catch {
+      /* leave the prior card physics in place on failure */
+    }
+  }, [form.dp_cutting_style, form.dp_thin_wall, mentor, dpToolPayload]);
+
   const run = async () => {
     setRunBlocked(false);   // reset; set true only on a hard "can't run" block below
     // Must have an EDP or CC print PDF (not required for deep pocket — tools are selected by the sequencer)
@@ -4129,6 +4206,10 @@ export default function Mentor() {
             machine_hp: form.machine_hp || 0,
             machine_max_rpm: form.max_rpm || 0,
             spindle_drive: form.spindle_drive || "direct",
+            // Drives the pre-drill snap grid: "metric" → next whole mm, else next 1/16".
+            units,
+            // Spindle taper caps the largest endmill dia (no 1" tool in a 40-taper).
+            spindle_taper: form.spindle_taper || "CAT40",
           }),
         });
         const seqData = await seqRes.json();
@@ -4141,94 +4222,13 @@ export default function Mentor() {
           ...(seqData.corner_tool ? [seqData.corner_tool] : []),
         ];
         const physicsMap: Record<string, any> = {};
+        // Each tool defaults to its OWN reach-based stickout (see deepPocketToolParams).
+        // A per-tool override the user typed on a prior card is preserved across re-runs.
+        const isHem = form.dp_cutting_style === "hem";
         await Promise.all(allTools.map(async (tool: any) => {
           try {
-            // Use HEM or Traditional mode per cutting style
-            const toolMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
-            // DOC for this tool = its depth band height, capped at LOC
-            const bandDepth = tool.depth_band_to - tool.depth_band_from;
-            const docIn = Math.min(bandDepth, tool.loc_in);
-            const docXd = tool.dia > 0 ? docIn / tool.dia : 1.0;
-            const isHem = toolMode === "hem";
-            // Effective L/D for WOC sizing — use the deepest point this tool reaches,
-            // not the full tool stickout. A tool covering 0-1" band (top of pocket)
-            // experiences less effective overhang than a tool covering 3-4" band,
-            // because deflection scales with the depth the cutter is actually engaged at.
-            //   L/D effective = max(depth_band_to, reach×0.5) / dia, capped at stickout/dia
-            const soEst = form.stickout > 0 ? form.stickout : tool.reach_in + tool.dia * 0.33;
-            const staticLd = tool.dia > 0 ? soEst / tool.dia : 3;
-            const effectiveDepth = Math.max(tool.depth_band_to ?? 0, tool.reach_in * 0.5);
-            const ldEst = tool.dia > 0 ? Math.min(staticLd, effectiveDepth / tool.dia + 0.5) : 3;
-            // As L/D increases, deflection dominates — strategy shifts to:
-            //   - Fewer WOC (less radial force)
-            //   - Reduced IPT (lighter chip load, less cutting force)
-            //   - More flutes already handled by sequencer (larger core = stiffer)
-            //
-            // WOC — graduated by depth-into-pocket (depth_band_to / dia) and
-            // bounded by per-flute chip-clearance limits. Not a snap-to-cap value.
-            //
-            // Base WOC (shallow, low effective L/D):
-            //   HEM:         12% (light, adaptive)
-            //   Traditional: 40% (heavy peripheral)
-            //
-            // Pull-back: WOC is reduced by depthRatio × kPull. depthRatio is the
-            // tool's deepest engagement in ×D (e.g. 4" deep with 1" tool = 4×D).
-            // kPull = 1.5% per ×D for HEM, 4.0% per ×D for Traditional.
-            //
-            // Example (Traditional, 1" tool):
-            //   1×D depth: 40 - 1×4 = 36% WOC
-            //   2.5×D:    40 - 2.5×4 = 30% WOC
-            //   4×D:      40 - 4×4 = 24% WOC
-            //
-            // Then clamp by per-flute chip-clearance:
-            //   2-4 fl: 50%, 5 fl: 35%, 6 fl: 25%, 7+ fl: 10%
-            const depthRatio = tool.dia > 0 ? (tool.depth_band_to ?? 0) / tool.dia : 0;
-            const baseWoc = isHem ? 12 : 40;
-            const kPull = isHem ? 1.5 : 4.0;
-            const minWoc = isHem ? 5 : 10;  // floor — below this is rubbing
-            const wocFromDepth = Math.max(minWoc, baseWoc - depthRatio * kPull);
-            const wocCapByFlutes =
-              tool.flutes >= 7 ? 10 :
-              tool.flutes === 6 ? 25 :
-              tool.flutes === 5 ? 35 :
-              50;
-            let wocPct = Math.min(wocFromDepth, wocCapByFlutes);
-            // Thin Wall: scale down the bulk WOC so the rougher doesn't deflect a fragile
-            // wall during bulk removal. ~50% of the depth-tapered value, floored at the
-            // rubbing limit. The taper schedule below the card describes the near-wall
-            // step-down separately (handled by the finishing tool's passes).
-            if (form.dp_thin_wall) {
-              wocPct = Math.max(minWoc, wocPct * 0.50);
-            }
-
-            // IPT feed multiplier — scale down with L/D to reduce cutting force
-            //   L/D ≤ 4: full feed (1.00×)
-            //   L/D 4–5: 0.85×
-            //   L/D 5–6: 0.70×
-            //   L/D 6–7: 0.60×
-            //   L/D > 7: 0.50×
-            const iptMult = ldEst > 7 ? 0.50 : ldEst > 6 ? 0.60 : ldEst > 5 ? 0.70 : ldEst > 4 ? 0.85 : 1.00;
-            const physResult = await mentor.mutateAsync({
-              ...form,
-              mode: toolMode as any,
-              tool_dia: tool.dia,
-              flutes: tool.flutes,
-              loc: tool.loc_in,
-              lbs: tool.lbs_in || 0,
-              stickout: soEst,
-              shank_dia: tool.shank_dia || 0,
-              helix_angle: tool.helix || 0,
-              variable_pitch: tool.variable_pitch,
-              variable_helix: tool.variable_helix,
-              geometry: tool.geometry as any,
-              tool_series: tool.series || "",
-              doc_xd: docXd,
-              woc_pct: wocPct,
-              edp: tool.edp,
-              operation: "milling" as any,
-              center_cutting: (form as any).center_cutting ?? undefined,
-              debug: false,
-            });
+            const soOverride = dpToolStickout[tool.edp] ?? 0;
+            const physResult = await mentor.mutateAsync(dpToolPayload(tool, isHem, form.dp_thin_wall, soOverride));
             physicsMap[tool.edp] = physResult;
           } catch {
             // physics failed for this tool — still show card without params
@@ -5724,10 +5724,20 @@ ${stabSection}
           const drillDepthStr = form.dp_pre_drill_depth > 0
             ? `${form.dp_pre_drill_depth.toFixed(3)}"`
             : `~${effDepth.toFixed(3)}" (auto, 95% of pocket depth)`;
+          const recDrillDia = dpResult?.recommended_pre_drill_dia ?? null;
+          const reqDrillDia = dpResult?.required_pre_drill_dia ?? null;   // absolute min to clear the tool
+          const firstRougherDia = dpResult?.constraints?.bulk_dia ?? null;
           if (form.dp_pre_drill_dia > 0) {
-            lines.push(L("Pre-Drill",     `Ø${form.dp_pre_drill_dia.toFixed(4)}" × ${drillDepthStr} deep`));
+            lines.push(L("Pre-Drill",         `Ø${form.dp_pre_drill_dia.toFixed(4)}" × ${drillDepthStr} deep`));
+            if (reqDrillDia && form.dp_pre_drill_dia < reqDrillDia) {
+              lines.push(L("  ⚠ Too small",   `≥Ø${reqDrillDia.toFixed(4)}" needed to clear the ⌀${Number(firstRougherDia).toFixed(4)}" rougher — endmill will helical-ramp instead`));
+            }
+          } else if (recDrillDia) {
+            // Lead with a clear ≥ recommendation so the shop knows the minimum drill to grab.
+            lines.push(L("Recommended Drill", `≥Ø${recDrillDia.toFixed(4)}"  (next clean size over the ⌀${Number(firstRougherDia).toFixed(4)}" first rougher so it drops straight in)`));
+            lines.push(L("Pre-Drill Depth",   `${drillDepthStr}`));
           } else {
-            lines.push(L("Pre-Drill",     `auto Ø × ${drillDepthStr} deep`));
+            lines.push(L("Pre-Drill",         `auto Ø × ${drillDepthStr} deep`));
           }
           // Entry plan: Z + XY moves
           const xyLabel = entryTypes.includes("xy_radial") && !entryTypes.includes("sweep")
@@ -6155,6 +6165,51 @@ ${stabSection}
       // ── SPEEDS & FEEDS ───────────────────────
       lines.push("SPEEDS & FEEDS");
       lines.push(DIV);
+      if (isPocketing && allKitTools.length > 0) {
+        // Pocketing returns a tool KIT — each tool runs at its own speeds/feeds.
+        // A single block would be ambiguous ("which tool are these for?"), so emit
+        // one sub-block per tool, pulled from that tool's own physics (dpPhysics[edp]).
+        allKitTools.forEach((t: any, i: number) => {
+          const idx = i + 1;
+          const isCorner = t.role === "corner_finish";
+          const roleLabel = isCorner ? "Corner / Floor Finisher" : "Bulk Rougher";
+          const p   = dpPhysics[t.edp] ?? {};
+          const pc  = p.customer    ?? null;
+          const ps  = p.stability   ?? null;
+          lines.push(`#${idx}  ${roleLabel}  —  EDP ${t.edp}  (⌀${Number(t.dia).toFixed(4)}", ${t.flutes ?? "—"} fl)`);
+          if (!pc || pc.rpm == null) {
+            lines.push(L("  Speeds/Feeds", "run the sequence to populate"));
+          } else {
+            // Match the tool card: engine-trimmed feed for chatter/stability is folded in.
+            const thin = pc.adj_fpt != null && pc.fpt != null && Math.abs(pc.adj_fpt - pc.fpt) > 0.000005;
+            const dp = ps?.deflection_pct ?? null;
+            const fMult = dp == null ? 1.0 : dp >= 175 ? 0.60 : dp >= 130 ? 0.75 : dp >= 100 ? 0.85 : 1.0;
+            const feedShown = pc.feed_ipm != null ? pc.feed_ipm * fMult : null;
+            const dia = Number(t.dia) || 0;
+            lines.push(L("  Spindle Speed", `${Math.round(pc.rpm).toLocaleString()} RPM`));
+            if (pc.sfm != null)   lines.push(L("  SFM",       String(Math.round(pc.sfm))));
+            if (feedShown != null) lines.push(L("  Feed Rate", `${feedShown.toFixed(2)} IPM${thin ? "  (chip-thinned)" : ""}${fMult < 1.0 ? `  — trimmed to ${Math.round(fMult*100)}% for stability` : ""}`));
+            if (pc.fpt != null)   lines.push(L(thin ? "  Base Chipload (FPT)" : "  Chipload (FPT)", `${pc.fpt.toFixed(5)}"`));
+            if (thin && pc.adj_fpt != null) lines.push(L("  Adj Chipload", `${pc.adj_fpt.toFixed(5)}"  (chip-thinned)`));
+            if (pc.woc_in != null) lines.push(L("  WOC (Radial)", `${pc.woc_in.toFixed(4)}"${dia > 0 ? `  (${((pc.woc_in/dia)*100).toFixed(1)}% ⌀)` : ""}`));
+            if (pc.doc_in != null) lines.push(L("  DOC (Axial)",  `${pc.doc_in.toFixed(4)}"${dia > 0 ? `  (${(pc.doc_in/dia).toFixed(2)}×D)` : ""}`));
+            if (pc.mrr_in3_min != null) lines.push(L("  MRR", `${(pc.mrr_in3_min * fMult).toFixed(3)} in³/min`));
+            if (pc.hp_required != null) lines.push(L("  HP Required", `${pc.hp_required.toFixed(2)} HP`));
+            if (dp != null) {
+              const stabWord = dp >= 175 ? "High Chatter Risk" : dp >= 100 ? "Chatter Risk" : "Stable";
+              lines.push(L("  Stability", `${stabWord}  (${Math.round(dp)}% of deflection limit)`));
+            }
+            if (ps?.deflection_in != null)   lines.push(L("  Deflection", `${ps.deflection_in.toFixed(5)}"`));
+            if (ps?.stickout_in != null) {
+              const soOv = dpToolStickout[t.edp] ?? 0;
+              lines.push(L("  Stickout", `${ps.stickout_in.toFixed(3)}"${ps.l_over_d != null ? `  (L/D ${ps.l_over_d.toFixed(1)}×)` : ""}${soOv > 0 ? "  — user override" : "  — reach default"}`));
+            }
+          }
+          if (t.entry?.type) lines.push(L("  Entry", String(t.entry.type).replace(/_/g, " ")));
+          if (i < allKitTools.length - 1) lines.push("");
+        });
+        lines.push("");
+      } else {
       const _txtSc = STOCK_CONDITION_INFO[form.stock_condition];
       const _txtSkinSfmMult = _txtSc ? effectiveSkinSfmMult(_txtSc, form.stock_condition, form.hardness_value) : 1.0;
       const _txtSkinActive = !!_txtSc && (_txtSkinSfmMult < 1.0 || _txtSc.iptMult < 1.0) && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0;
@@ -6246,6 +6301,7 @@ ${stabSection}
       if (cust.peripheral_feed_ipm != null)
         lines.push(L("Peripheral Feed",`${cust.peripheral_feed_ipm.toFixed(2)} IPM`));
       lines.push("");
+      } // end non-pocketing SPEEDS & FEEDS
 
       // ── BORE INTERPOLATION (circ_interp only — pass summary) ──
       if (form.mode === "circ_interp") {
@@ -11778,8 +11834,12 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Rigidity Setup — stickout lives here (tool setup), not in Cut Engagement ── */}
+          {/* ── Rigidity Setup — stickout lives here (tool setup), not in Cut Engagement ──
+             Hidden for deep_pocket: that mode picks a multi-tool KIT, and each tool has
+             its own reach/stickout (set on its sequence card). One global stickout can't
+             be right for the kit, so we don't show it here. ── */}
           {operation === "milling" && form.tool_type !== "chamfer_mill" && (<>
+          {form.mode !== "deep_pocket" && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-sky-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Rigidity Setup</div>
@@ -11811,6 +11871,7 @@ ${stabSection}
             />
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
           </div>
+          </>)}
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
             <div className="text-xs font-bold uppercase tracking-widest text-orange-500">{form.mode === "deep_pocket" ? "Pocketing Workflow" : "Cut Engagement"}</div>
@@ -13015,9 +13076,9 @@ ${stabSection}
                       <div className="pl-2 space-y-1">
                         <div className="flex gap-2">
                           <div className="flex-1">
-                            <FieldLabel hint="Pre-drill diameter. Leave blank to use sequencer recommendation.">Dia (in)</FieldLabel>
+                            <FieldLabel hint="Pre-drill diameter. Recommendation = next clean drill size (1/16&quot; or, in metric, whole mm) just over the first roughing endmill so the tool drops straight in. Leave blank to use it; run the sequence to populate.">Dia (in)</FieldLabel>
                             <Input type="text" inputMode="decimal" className="no-spinners"
-                              placeholder="auto"
+                              placeholder={dpResult?.recommended_pre_drill_dia ? (metric ? `~${(dpResult.recommended_pre_drill_dia * 25.4).toFixed(2)}mm` : `~${dpResult.recommended_pre_drill_dia.toFixed(4)}"`) : "auto"}
                               value={dpPreDrillText}
                               onChange={e => { setDpPreDrillText(e.target.value); const n = parseDim(e.target.value); setForm(p => ({ ...p, dp_pre_drill_dia: Number.isFinite(n) && n > 0 ? n : 0 })); }}
                               onBlur={() => {
@@ -13233,6 +13294,7 @@ ${stabSection}
 
                 if (isPreDrill) {
                   // Pre-drill: split into Z-entry (only if gap remains) and XY-entry (always).
+                  const isHem = form.dp_cutting_style === "hem";
                   return (
                     <div className="space-y-3">
                       {hasZGap && (
@@ -13244,6 +13306,9 @@ ${stabSection}
                             {renderChip(opts.helical)}
                             {renderChip(opts.ramp)}
                           </div>
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            This is just the roughers reaching the last {zGap.toFixed(3)}" of floor stock the drill left behind — the ~5% you hold off the bottom is cleaned up by the floor finisher.
+                          </p>
                         </div>
                       )}
                       {!hasZGap && pocketDepth > 0 && (
@@ -13255,10 +13320,32 @@ ${stabSection}
                         <div className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1.5">
                           XY-entry from pre-drilled hole to pocket wall
                         </div>
-                        <div className="flex flex-wrap gap-3">
-                          {renderChip({ ...opts.sweep, recommended: form.tool_type !== "chamfer_mill" })}
-                          {renderChip(opts.xy_radial)}
-                        </div>
+                        {isHem ? (
+                          // HEM is selected → the toolpath sweeps out of the hole tangentially and
+                          // immediately begins trochoidal moves. Straight Radial is a slotting move
+                          // (full-width breakout) and is wrong for HEM — don't offer it as a co-equal.
+                          <>
+                            <div className="flex flex-wrap gap-3">
+                              {renderChip({ ...opts.sweep, recommended: form.tool_type !== "chamfer_mill" })}
+                            </div>
+                            <p className="text-[10px] text-emerald-400/80 mt-1.5">
+                              HEM selected — the tool rolls tangentially out of the pre-drilled hole and goes straight into trochoidal (adaptive) moves. No straight-radial breakout: feeding straight to the wall would be a full-width slotting cut, which defeats the whole point of HEM.
+                            </p>
+                          </>
+                        ) : (
+                          // Traditional + closed pre-drill → NO sweep. There's no open edge to
+                          // roll in from, and traditional isn't trochoidal. The tool is already
+                          // at depth in the drilled hole; it steps radially out to the wall at a
+                          // conventional stepover. Sweep/Roll-in is an HEM concept only.
+                          <>
+                            <div className="flex flex-wrap gap-3">
+                              {renderChip({ ...opts.xy_radial, recommended: true })}
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-1.5">
+                              Traditional programming — the tool is already down in the drilled hole, so it steps radially out to the wall at a conventional stepover (no tangential roll-in). Sweep/Roll-in needs an open stock edge and only makes sense on an HEM path.
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -13326,22 +13413,28 @@ ${stabSection}
           <div className="border-t border-zinc-700 mt-8 pt-6" />
 
           {/* Actions */}
-          {!skuLocked && !pdfExtracted && (
-            <div className="mb-2">
-              <p className="text-xs text-amber-400">
-                {operation === "milling"
-                  ? "Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."
-                  : "Upload a CC print PDF to run the calculator."}
-              </p>
-              <button
-                type="button"
-                onClick={() => { setShowContactModal(true); setContactStatus("idle"); }}
-                className="mt-1 text-xs text-zinc-400 hover:text-orange-400 underline underline-offset-2 transition-colors"
-              >
-                Not sure which tool? Contact us →
-              </button>
-            </div>
-          )}
+          {/* Deep-pocket Standard Tool mode picks the kit from geometry — no EDP/PDF needed,
+             so the "enter an EDP" banner is wrong there. It still applies to Special Tool mode. */}
+          {(() => {
+            const dpStandard = form.mode === "deep_pocket" && !dpSpecialTool;
+            if (skuLocked || pdfExtracted || dpStandard) return null;
+            return (
+              <div className="mb-2">
+                <p className="text-xs text-amber-400">
+                  {operation === "milling"
+                    ? "Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."
+                    : "Upload a CC print PDF to run the calculator."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setShowContactModal(true); setContactStatus("idle"); }}
+                  className="mt-1 text-xs text-zinc-400 hover:text-orange-400 underline underline-offset-2 transition-colors"
+                >
+                  Not sure which tool? Contact us →
+                </button>
+              </div>
+            );
+          })()}
           <div className="flex gap-2">
             <Button
               className={`w-full transition-all text-black font-semibold ${
@@ -13453,6 +13546,15 @@ ${stabSection}
           // Thin wall WOC schedule
           const taper = dpResult?.woc_taper;
 
+          // Per-tool stickout: each tool defaults to its own reach-based value
+          // (necked → LBS+0.5D, else reach+0.33D). The user can override it on the
+          // card; that re-runs just this tool's physics.
+          const soDefault = tool.lbs_in > 0
+            ? tool.lbs_in + 0.5 * tool.dia
+            : (tool.reach_in ?? tool.loc_in ?? 0) + 0.33 * tool.dia;
+          const soOverride = dpToolStickout[tool.edp] ?? 0;
+          const soActive = soOverride > 0 ? soOverride : soDefault;
+
           return (
             <div key={tool.edp} className="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden">
               {/* Header */}
@@ -13489,6 +13591,34 @@ ${stabSection}
                   Depth band: <span className="text-zinc-300">{tool.depth_band_from.toFixed(3)}" – {tool.depth_band_to.toFixed(3)}"</span>
                 </p>
                 <p className="text-[11px] text-zinc-500">Entry: <span className="text-zinc-300">{entryLabel}</span></p>
+                {/* Per-tool stickout — defaults to this tool's reach; adjustable if you hold it longer/shorter */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[11px] text-zinc-500">Stickout:</span>
+                  <Input
+                    key={`so-${tool.edp}-${soOverride}`}
+                    type="text" inputMode="decimal"
+                    className="no-spinners h-6 w-20 text-[11px] px-1.5 py-0"
+                    placeholder={soDefault.toFixed(3)}
+                    defaultValue={soOverride > 0 ? soOverride.toFixed(3) : ""}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    onBlur={(e) => {
+                      const n = parseDim(e.target.value);
+                      const next = Number.isFinite(n) && n > 0 ? n : 0;   // 0 → clear override, back to default
+                      if (next === soOverride) return;                    // no change
+                      setDpToolStickout(prev => {
+                        const copy = { ...prev };
+                        if (next > 0) copy[tool.edp] = next; else delete copy[tool.edp];
+                        return copy;
+                      });
+                      rerunPocketTool(tool, next);
+                    }}
+                  />
+                  <span className="text-[11px] text-zinc-600">
+                    {soOverride > 0
+                      ? <>override · default {soDefault.toFixed(3)}"</>
+                      : <>default (reach-based) · {soActive.toFixed(3)}"</>}
+                  </span>
+                </div>
                 {tool.entry?.type === "helical" && mil?.feed_ipm != null && mil?.rpm != null && (() => {
                   // L/D-based conservatism: longer/skinnier tools need shallower ramp + slower feed
                   // Use stickout L/D from physics if available; otherwise approximate from reach
@@ -13724,6 +13854,45 @@ ${stabSection}
               {dpError && (
                 <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{dpError}</div>
               )}
+
+              {/* ── Step 0: Pre-Drill ── dedicated box BEFORE the roughing tools ── */}
+              {dpResult?.closed_pocket && dpResult?.required_pre_drill_dia && (() => {
+                const userDia   = form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia : null;
+                const userDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : null;
+                const recDia    = dpResult.recommended_pre_drill_dia;
+                const recDepth  = dpResult.recommended_pre_drill_depth;
+                const showDia   = userDia ?? (recDia ?? dpResult.required_pre_drill_dia);
+                const showDepth = userDepth ?? recDepth;
+                const largestBulk = dpResult.constraints?.bulk_dia;
+                const tooSmall  = userDia != null && userDia < dpResult.required_pre_drill_dia;
+                // Unit-aware drill-dia formatter — mm for metric shops, else inches.
+                const dfmt = (inches: number) => metric ? `⌀${(inches * 25.4).toFixed(2)}mm` : `⌀${inches.toFixed(4)}"`;
+                const gridWord = metric ? "next whole millimetre" : "next 1/16\"";
+                return (
+                  <div className="rounded-xl border border-sky-500/40 bg-sky-500/5 p-3">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-sky-500/20 text-sky-300 text-xs font-bold flex-shrink-0">0</span>
+                      <span className="text-sm font-semibold text-sky-300">Pre-Drill First — clears the bulk of the pocket axially</span>
+                    </div>
+                    <div className="pl-8 text-[13px] text-zinc-200 leading-relaxed">
+                      Drill <span className="font-semibold text-white">{dfmt(showDia)}</span>
+                      {showDepth ? <> × <span className="font-semibold text-white">{metric ? `${(showDepth * 25.4).toFixed(1)}mm` : `${showDepth.toFixed(4)}"`} deep</span></> : <> to full depth</>}
+                      {userDepth ? " (you specified this depth)" : showDepth ? " — pocket depth −5%, leaving floor stock the finisher cleans up." : "."}
+                      {!userDia && Number(largestBulk) > 0 && (
+                        <div className="mt-1 text-[11px] text-zinc-400">
+                          Recommended ⌀ is the {gridWord} above the first roughing endmill ({dfmt(Number(largestBulk))}), so the endmill drops straight into the hole. Drilling is the fastest way to hog out axial material — do it before the endmill sequence starts.
+                        </div>
+                      )}
+                      {tooSmall && (
+                        <div className="mt-1 text-[11px] text-amber-400">
+                          ⚠ {dfmt(userDia!)} is smaller than the first roughing tool ({dfmt(Number(largestBulk))}) — the endmill can't drop in, so it will helical-ramp instead (slower, higher tool stress). Use ≥ {dfmt(recDia ?? dpResult.required_pre_drill_dia)}.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Full sequence — roughing tools + finishing tool, numbered together */}
               {(dpResult?.bulk_tools ?? []).length > 0 && (() => {
                 const totalTools = dpResult.bulk_tools.length + (dpResult.corner_tool ? 1 : 0);
@@ -13836,24 +14005,21 @@ ${stabSection}
                   });
                 }
 
-                if (dpResult.closed_pocket && dpResult.required_pre_drill_dia) {
-                  const userDia   = form.dp_pre_drill_dia > 0 ? form.dp_pre_drill_dia : null;
-                  const userDepth = form.dp_pre_drill_depth > 0 ? form.dp_pre_drill_depth : null;
-                  const recDia    = dpResult.recommended_pre_drill_dia;
-                  const recDepth  = dpResult.recommended_pre_drill_depth;
-                  const showDia   = userDia ?? (recDia ?? dpResult.required_pre_drill_dia);
-                  const showDepth = userDepth ?? recDepth;
+                // Pre-drill now has its own dedicated "Step 0" box above the tool cards —
+                // no longer duplicated here in the notes block.
+
+                // HEM step-down — explain why the bulk tool is smaller than the max that fits.
+                if (dpResult.hem_step_down) {
+                  const firstBulkDia = dpResult.bulk_tools?.[0]?.dia;
+                  const isRnFirst = (dpResult.bulk_tools?.[0]?.lbs_in ?? 0) > 0;
                   notes.push({
-                    color: "sky",
-                    title: "Closed Pocket — Pre-Drill First",
+                    color: "indigo",
+                    title: "HEM Step-Down — Smaller Tool On Purpose",
                     body: <>
-                      Pre-drill <span className="font-semibold text-white">⌀{showDia.toFixed(4)}"</span>
-                      {showDepth ? <> × <span className="font-semibold text-white">{showDepth.toFixed(4)}" deep</span></> : null}
-                      {userDepth ? " (user specified)" : showDepth ? " (pocket depth −5% — leaves floor stock for endmill)" : " to full depth"}.
-                      {!userDia && <> Drill is the fastest way to clear axial material — go as large and as deep as the pocket allows before the endmill sequence starts.</>}
-                      {userDia && userDia < dpResult.required_pre_drill_dia && (
-                        <span className="block mt-1 text-amber-400">⚠ ⌀{userDia.toFixed(4)}" is smaller than the largest bulk tool (⌀{dpResult.constraints.bulk_dia}") — helical entry will be used for that tool.</span>
-                      )}
+                      HEM runs a light radial WOC, so a <span className="font-semibold text-white">smaller tool clears this pocket</span> nearly as fast as the largest that fits
+                      {firstBulkDia ? <> — we stepped the bulk rougher down to <span className="font-semibold text-white">⌀{Number(firstBulkDia).toFixed(4)}"</span></> : null}.
+                      Smaller carbide is cheaper and more available, and the shorter, stiffer tool holds better tolerance{isRnFirst ? <> (this is a <span className="text-white">reduced-neck</span> tool — stiff thin neck, full shank in the holder, taking the depth in stacked LOC passes)</> : null}.
+                      {" "}The pre-drill size tracks this smaller tool automatically.
                     </>,
                   });
                 }
