@@ -2330,7 +2330,11 @@ export default function Mentor() {
       // Falls back to taper geometry formula (30° included = 15° half-angle) if no DB match.
       // Necked tools (lbs > loc, equal shank/cutter dia): lbs + 1×D minimum.
       // Standard tools: LOC + flute_wash + 0.33×cutting_dia
-      if (_pdfLoc > 0 && _pdfDia > 0) {
+      // ALWAYS produce a preferred stickout for a special/scanned tool, even when the
+      // print doesn't give enough to derive a minimum. An estimate the operator can see
+      // and adjust beats an empty field (which silently falls back to a payload default).
+      // Requires only a diameter; LOC/LBS refine it when present.
+      if (_pdfDia > 0) {
         let _defaultSo: number;
         if (_isReducedShank && _pdfLbs > 0 && _pdfShankDia > 0) {
           // Try DB lookup — QTR3-RN first (necked tools have lbs), then QTR3
@@ -2353,11 +2357,21 @@ export default function Mentor() {
         } else if (_isNeckedTool) {
           // Necked endmill: app-wide default = LBS + 0.20×D (floor LBS + working buffer).
           _defaultSo = Math.ceil(stickoutDefault(_pdfDia, 0, 0, _pdfLbs) * 200) / 200;
+        } else if (_pdfLoc > 0 || _pdfLbs > 0) {
+          // Standard: LOC + flute_wash + 0.20×D (or LBS when that's all the print gave).
+          _defaultSo = Math.ceil(stickoutDefault(_pdfDia, _pdfLoc, _fwEst, _pdfLbs) * 200) / 200;
         } else {
-          // Standard: LOC + flute_wash + 0.20×D.
-          _defaultSo = Math.ceil(stickoutDefault(_pdfDia, _pdfLoc, _fwEst, 0) * 200) / 200;
+          // Neither LOC nor LBS parsed off the print — no floor to build from. Fall back
+          // to a conservative reach-based estimate (3×D, a common short-endmill setup) so
+          // the field still shows a usable starting point the operator can correct.
+          _defaultSo = Math.ceil(_pdfDia * 3.0 * 200) / 200;
         }
-        setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst }));
+        // Specials/scanned prints: the stickout is ESTIMATED from parsed print dimensions
+        // (taper geometry, or a nearest-SKU lookup) and flute_wash is itself an estimate,
+        // so there is no trustworthy hard floor to quote. Flag it — the hint line shows
+        // "estimated from print" instead of asserting a measured minimum, and the min
+        // clamp stays off so the operator isn't blocked by a guessed number.
+        setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst, stickout_is_estimate: true, stickout_estimate_base: _defaultSo }));
         setStickoutText(_defaultSo.toFixed(3));
       }
       // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style.
@@ -2549,6 +2563,14 @@ export default function Mentor() {
     // cutter on a bigger shank) the shoulder can bottom on the collet before the flutes
     // do, so the geometric floor can read shorter than the tool can physically go.
     min_stickout_override: 0,
+    // True when stickout came from parsing a special/uploaded PRINT rather than catalog
+    // geometry. Specials give an ESTIMATED preferred value and no trustworthy minimum,
+    // so the UI must not assert a hard floor for them.
+    stickout_is_estimate: false,
+    // The originally-estimated preferred stickout for a special/print tool, kept so
+    // "Restore default" still works after the operator edits the field (form.stickout
+    // moves; this doesn't). 0 for catalog tools — they derive it from geometry.
+    stickout_estimate_base: 0,
     corner_condition: "square" as "square" | "corner_radius" | "ball",
     corner_radius: 0,
     geometry: "standard" as "standard" | "chipbreaker" | "truncated_rougher",
@@ -3736,7 +3758,9 @@ export default function Mentor() {
     // them compute a floor that was short by the wash (e.g. 1.250" vs 1.389" on
     // a Ø.500 LOC 1.250 wash .139 tool), which told the operator to bury flutes
     // in the collet. Deep-pocket cards read tool.flute_wash directly and were fine.
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr }));
+    // Catalog SKU → real geometry, so clear any "estimated from print" flag left by a
+    // prior special/PDF tool.
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, stickout_is_estimate: false, stickout_estimate_base: 0 }));
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
@@ -4021,8 +4045,12 @@ export default function Mentor() {
     const perPassDocIn = modelDocXd * tool.dia;
     const axialPasses = perPassDocIn > 0 ? Math.max(1, Math.ceil(bandDocIn / perPassDocIn)) : 1;
     const tradSlotsToOpen = !isHem && !hasPreDrill;  // Traditional opening phase is slotting
-    // Default stickout = PRACTICAL working value = floor + 0.20×D (shared helper).
-    const reachDefault = stickoutDefault(tool.dia, tool.loc_in ?? 0, (tool.flute_wash ?? 0) || 0, tool.lbs_in ?? 0);
+    // Preferred stickout = floor + 0.20×D, unless this tool carries shop-measured
+    // Preferred/Minimum values from the SKU upload — those win (resolve* helpers).
+    const reachDefault = resolveStickoutDefault(
+      tool.dia, tool.loc_in ?? 0, (tool.flute_wash ?? 0) || 0, tool.lbs_in ?? 0,
+      tool.min_stickout_in ?? 0, tool.default_stickout_in ?? 0,
+    );
     const soEst = stickoutOverride > 0 ? stickoutOverride : reachDefault;
     const staticLd = tool.dia > 0 ? soEst / tool.dia : 3;
     const effectiveDepth = Math.max(tool.depth_band_to ?? 0, (tool.reach_in ?? 0) * 0.5);
@@ -11980,7 +12008,7 @@ ${stabSection}
             <div className="flex-1 border-t-2 border-sky-500" />
           </div>
           <div className="max-w-sm space-y-2">
-            <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
+            <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Preferred Tool Projection / Stickout (in)", "Preferred Tool Projection / Stickout (mm)")}</FieldLabel>
             <Input
               type="text" inputMode="decimal"
               className="no-spinners"
@@ -11995,7 +12023,10 @@ ${stabSection}
                   const _fw = (form as any).flute_wash ?? 0;
                   // Hard minimum = the bare floor (buffer removed): LBS, or LOC + flute_wash.
                   const _mo = form.min_stickout_override || 0;
-                  const _minSo = form.tool_dia > 0 ? resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo) : 0;
+                  // Specials/scanned prints: the floor is a guess, so don't clamp the
+                  // operator's typed value against it.
+                  const _minSo = form.tool_dia > 0 && !form.stickout_is_estimate
+                    ? resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo) : 0;
                   if (_minSo > 0 && val < _minSo) {
                     val = _minSo;
                     const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
@@ -12010,18 +12041,46 @@ ${stabSection}
               }}
             />
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-            {/* Default + minimum hint — mirrors the deep-pocket cards. Field defaults to
-                floor + 0.20×D; the ( ) shows the shortest this tool physically allows. */}
-            {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0) && (() => {
+            {/* Minimum hint. The MINIMUM is what the operator actually needs here (how
+                short can this tool go), so it always shows. The preferred value is only
+                worth naming when the field has been moved OFF it — otherwise it just
+                repeats the number already in the box. Same pattern as the pocket cards. */}
+            {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0 || form.stickout_is_estimate) && (() => {
               const _fw = (form as any).flute_wash ?? 0;
               const _mo = form.min_stickout_override || 0;
               const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
-              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
-              if (_floor <= 0) return null;
+              // Specials: no floor to derive, so the PREFERRED value is whatever the print
+              // estimate put in the field. Still show it — an estimate the operator can see
+              // and correct is more useful than a blank line.
+              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo)
+                || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
+              if (_floor <= 0 && !(form.stickout_is_estimate && _def > 0)) return null;
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+              const _offPreferred = _def > 0 && Math.abs((form.stickout || 0) - _def) > 0.0005;
+              const _restore = () => {
+                setForm((p) => ({ ...p, stickout: _def }));
+                setStickoutText(metric ? (_def * 25.4).toFixed(1) : _def.toFixed(3));
+                setStickoutViolation(null);
+              };
               return (
                 <p className="text-[10px] text-zinc-500 mt-1">
-                  Default {cv(_def)} <span className="text-zinc-600">(shortest allowed {cv(_floor)}{(form.lbs || 0) > 0 ? " — reduced-neck, shank to neck" : ""})</span>
+                  {form.stickout_is_estimate
+                    ? <span className="text-zinc-600">Preferred {cv(_def)} — estimated from print dimensions; verify against the actual tool</span>
+                    : <>Minimum stickout is {cv(_floor)}</>}
+                  {!form.stickout_is_estimate && (form.lbs || 0) > 0 && <span className="text-zinc-600"> (reduced-neck, shank to neck)</span>}
+                  {_offPreferred && (
+                    <>
+                      <span className="text-zinc-600"> | </span>
+                      <button
+                        type="button"
+                        onClick={_restore}
+                        className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-sky-400 transition-colors"
+                        title={`Restore the preferred stickout (${cv(_def)})`}
+                      >
+                        Restore default {cv(_def)}
+                      </button>
+                    </>
+                  )}
                 </p>
               );
             })()}
@@ -13345,7 +13404,7 @@ ${stabSection}
               <div className="flex-1 border-t-2 border-sky-500" />
             </div>
             <div className="max-w-sm space-y-2">
-              <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Tool Projection / Stickout (in)", "Tool Projection / Stickout (mm)")}</FieldLabel>
+              <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Preferred Tool Projection / Stickout (in)", "Preferred Tool Projection / Stickout (mm)")}</FieldLabel>
               <Input
                 type="text" inputMode="decimal"
                 className="no-spinners"
@@ -13378,7 +13437,7 @@ ${stabSection}
                 }}
               />
               {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-              {/* Default + minimum hint (same as the primary stickout field). */}
+              {/* Minimum hint (same as the primary stickout field). */}
               {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0) && (() => {
                 const _fw = (form as any).flute_wash ?? 0;
                 const _mo = form.min_stickout_override || 0;
@@ -13386,9 +13445,29 @@ ${stabSection}
                 const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
                 if (_floor <= 0) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+                const _offPreferred = _def > 0 && Math.abs((form.stickout || 0) - _def) > 0.0005;
+                const _restore = () => {
+                  setForm((p) => ({ ...p, stickout: _def }));
+                  setStickoutText(metric ? (_def * 25.4).toFixed(1) : _def.toFixed(3));
+                  setStickoutViolation(null);
+                };
                 return (
                   <p className="text-[10px] text-zinc-500 mt-1">
-                    Default {cv(_def)} <span className="text-zinc-600">(shortest allowed {cv(_floor)}{(form.lbs || 0) > 0 ? " — reduced-neck, shank to neck" : ""})</span>
+                    Minimum stickout is {cv(_floor)}
+                    {(form.lbs || 0) > 0 && <span className="text-zinc-600"> (reduced-neck, shank to neck)</span>}
+                    {_offPreferred && (
+                      <>
+                        <span className="text-zinc-600"> | </span>
+                        <button
+                          type="button"
+                          onClick={_restore}
+                          className="underline decoration-dotted hover:text-sky-400 transition-colors"
+                          title={`Restore the preferred stickout (${cv(_def)})`}
+                        >
+                          Restore default {cv(_def)}
+                        </button>
+                      </>
+                    )}
                   </p>
                 );
               })()}
@@ -13785,12 +13864,13 @@ ${stabSection}
           // Per-tool stickout: each tool defaults to its own reach-based value
           // The user can override stickout on the card; that re-runs this tool's physics.
           // Two numbers, from the shared app-wide helpers (single source of truth):
-          //   soDefault — practical working value = floor + 0.20×D (field default + physics)
-          //   soFloor   — hard minimum ("shortest allowed") = bare floor, buffer removed:
+          //   soDefault — preferred working value = floor + 0.20×D (field default + physics)
+          //   soFloor   — hard minimum = bare floor, buffer removed:
           //               reduced-neck → LBS (shank to neck) ; standard → LOC + flute_wash
+          // Shop-measured Preferred/Minimum from the SKU upload override both when present.
           const soFluteWash = (tool.flute_wash ?? 0) || 0;
-          const soFloor = stickoutFloor(tool.dia, tool.loc_in ?? 0, soFluteWash, tool.lbs_in ?? 0);
-          const soDefault = stickoutDefault(tool.dia, tool.loc_in ?? 0, soFluteWash, tool.lbs_in ?? 0);
+          const soFloor = resolveStickoutFloor(tool.dia, tool.loc_in ?? 0, soFluteWash, tool.lbs_in ?? 0, tool.min_stickout_in ?? 0);
+          const soDefault = resolveStickoutDefault(tool.dia, tool.loc_in ?? 0, soFluteWash, tool.lbs_in ?? 0, tool.min_stickout_in ?? 0, tool.default_stickout_in ?? 0);
           const soOverride = dpToolStickout[tool.edp] ?? 0;
           const soActive = soOverride > 0 ? soOverride : soDefault;
 
@@ -13833,7 +13913,7 @@ ${stabSection}
                 {/* Per-tool stickout — defaults to the SHORTEST this tool allows (stiffest);
                     lengthen it if your real setup needs to. Can't go shorter than the floor. */}
                 <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[11px] text-zinc-500">Stickout:</span>
+                  <span className="text-[11px] text-zinc-500">Preferred stickout:</span>
                   <Input
                     key={`so-${tool.edp}-${soOverride}`}
                     type="text" inputMode="decimal"
@@ -13855,10 +13935,31 @@ ${stabSection}
                       rerunPocketTool(tool, next);
                     }}
                   />
+                  {/* Same wording as the main stickout fields: the MINIMUM always shows
+                      (it's the operating limit), and the preferred value is only named
+                      when the field has been moved off it — as a click-to-restore. */}
                   <span className="text-[11px] text-zinc-600">
-                    {soOverride > 0
-                      ? <>set · shortest allowed {soFloor.toFixed(3)}"</>
-                      : <>default {soActive.toFixed(3)}" · shortest allowed {soFloor.toFixed(3)}"</>}
+                    Minimum stickout is {soFloor.toFixed(3)}"
+                    {soOverride > 0 && (
+                      <>
+                        {" | "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDpToolStickout(prev => {
+                              const copy = { ...prev };
+                              delete copy[tool.edp];
+                              return copy;
+                            });
+                            rerunPocketTool(tool, 0);
+                          }}
+                          className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[11px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-sky-400 transition-colors"
+                          title={`Restore the preferred stickout (${soDefault.toFixed(3)}")`}
+                        >
+                          Restore default {soDefault.toFixed(3)}"
+                        </button>
+                      </>
+                    )}
                   </span>
                 </div>
                 {tool.entry?.type === "helical" && mil?.feed_ipm != null && mil?.rpm != null && (() => {

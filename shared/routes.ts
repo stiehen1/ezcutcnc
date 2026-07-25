@@ -129,6 +129,10 @@ export const mentorSchemas = {
     // Shop-measured absolute minimum stickout for this tool (SKU upload column).
     // 0 = not supplied → engine falls back to the geometric floor.
     min_stickout_override: z.number().min(0).default(0),
+    // Special/scanned-print tools: stickout is ESTIMATED from parsed dimensions and has
+    // no trustworthy hard floor. The engine must not assert a minimum for these.
+    stickout_is_estimate: z.boolean().default(false),
+    stickout_estimate_base: z.number().min(0).default(0),
 
     machine_hp: z.number().min(0).default(10),
     live_tool_connection: z.string().default(""),

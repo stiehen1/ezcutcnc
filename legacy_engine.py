@@ -6734,12 +6734,31 @@ def run(payload=None):
     # can bottom on the collet before the flutes do, so the geometric floor can read
     # SHORTER than the tool physically allows — the direction that breaks tools.
     _min_so_ovr = float(data.get("min_stickout_override", 0) or 0)
-    _min_so = _min_so_ovr if _min_so_ovr > 0 else (_lbs if _lbs > 0 else (_loc_for_min + _flute_wash_for_min))
-    if _lbs > 0:
+    # Special/scanned-print tools: stickout was ESTIMATED from parsed print dimensions
+    # (taper geometry / nearest-SKU lookup) and flute_wash is itself a guess, so there is
+    # no trustworthy floor. Suppress the minimum entirely rather than quote a made-up one
+    # — an explicit shop-measured override still wins if one was supplied.
+    _so_is_est = bool(data.get("stickout_is_estimate", False))
+    if _min_so_ovr > 0:
+        _min_so = _min_so_ovr
+    elif _so_is_est:
+        _min_so = 0.0
+    else:
+        _min_so = _lbs if _lbs > 0 else (_loc_for_min + _flute_wash_for_min)
+    # Only assert the LBS floor when we actually have one. On an estimated (special/print)
+    # tool _min_so is suppressed to 0, and printing "Minimum stickout = 0.000"" would be
+    # both wrong and alarming.
+    if _lbs > 0 and _min_so > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
             "label": f'Minimum stickout = {_min_so:.3f}" (LBS — shank to neck)',
             "detail": f"Necked tool — you can bury the shank right to the neck, so stickout can't go below {_min_so:.3f}\". Suggestions below respect this limit.",
+        })
+    elif _so_is_est and _min_so <= 0:
+        _stab_suggestions.insert(0, {
+            "type": "stickout_estimate",
+            "label": "Stickout is estimated from the print",
+            "detail": "This is a special/scanned tool, so the shortest safe stickout can't be derived from catalog geometry — measure the actual tool and shorten if you have room. Suggestions below won't be floored.",
         })
 
     _doc_now = float(state.get("doc", 0) or 0)
