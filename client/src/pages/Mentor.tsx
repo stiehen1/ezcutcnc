@@ -3707,6 +3707,13 @@ export default function Mentor() {
     setToolDiaText(Number(sku.cutting_diameter_in).toFixed(4));
     setLocText(Number(sku.loc_in).toFixed(3));
     setStickoutText(defaultStickout != null ? defaultStickout.toFixed(3) : "");
+    // Carry the SKU's flute wash onto the form. The stickout FIELD above already
+    // folds it in via stickoutDefault(_fw), but the min/default hint, the blur
+    // clamp, and the engine payload all read form.flute_wash — leaving it 0 made
+    // them compute a floor that was short by the wash (e.g. 1.250" vs 1.389" on
+    // a Ø.500 LOC 1.250 wash .139 tool), which told the operator to bury flutes
+    // in the collet. Deep-pocket cards read tool.flute_wash directly and were fine.
+    setForm((p) => ({ ...p, flute_wash: _fw }));
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");

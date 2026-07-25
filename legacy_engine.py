@@ -6947,7 +6947,20 @@ def run(payload=None):
                 continue
             _seen_stickout.add(_ln)
             _at_floor = _ln >= _min_so - 1e-4 and _so * frac < _min_so - 1e-4
-            _floor_note = f" (min — LOC{'+wash' if _flute_wash_for_min > 0 else ''} clearance floor)" if _at_floor else ""
+            # Floor note states the real physical constraint, not the formula: you can
+            # only bury the tool until the collet reaches the flutes (LOC + flute wash)
+            # — or, on a necked tool, the neck. Clamping on flutes crushes the cutting
+            # edges and ruins runout, so name that limit outright.
+            if _at_floor:
+                if _lbs > 0:
+                    _floor_note = f' (min — shank to the neck, LBS {_lbs:.3f}")'
+                else:
+                    _floor_note = f' (min — no flutes in the collet: LOC {_loc_for_min:.3f}"'
+                    if _flute_wash_for_min > 0:
+                        _floor_note += f' + {_flute_wash_for_min:.3f}" flute wash'
+                    _floor_note += ")"
+            else:
+                _floor_note = ""
             _hw_suggestions.append({
                 "type": "stickout",
                 "label": f'Shorten stickout to {_ln:.2f}"',
