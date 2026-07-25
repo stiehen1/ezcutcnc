@@ -215,7 +215,8 @@ type SkuRecord = {
   oal_in?: number;
   corner_condition?: string | number;  // "square" | "ball" | 0.030 (CR in inches)
   flute_wash?: number;
-  default_stickout_in?: number;
+  default_stickout_in?: number;   // Preferred stickout (per-tool override, from upload)
+  min_stickout_in?: number;       // Absolute minimum (per-tool override, from upload)
   coating?: string;
   // Flute character
   geometry?: "standard" | "chipbreaker" | "truncated_rougher";
@@ -603,6 +604,20 @@ function stickoutFloor(dia: number, loc: number, fluteWash: number, lbs: number)
 function stickoutDefault(dia: number, loc: number, fluteWash: number, lbs: number): number {
   const floor = stickoutFloor(dia, loc, fluteWash, lbs);
   return floor > 0 ? floor + 0.20 * dia : 0;
+}
+// Per-tool overrides from the SKU upload ("Minimum Stickout" / "Preferred Stickout")
+// beat the geometric rule when present. Shop-measured beats computed: on a stepped-shank
+// tool the shank shoulder can bottom on the collet before the flutes do, so the geometric
+// floor can be SHORTER than the tool physically allows — the dangerous direction.
+// override <= 0 (blank cell) → fall through to the formula.
+function resolveStickoutFloor(dia: number, loc: number, fluteWash: number, lbs: number, override?: number): number {
+  return (override ?? 0) > 0 ? (override as number) : stickoutFloor(dia, loc, fluteWash, lbs);
+}
+function resolveStickoutDefault(dia: number, loc: number, fluteWash: number, lbs: number, minOverride?: number, prefOverride?: number): number {
+  if ((prefOverride ?? 0) > 0) return prefOverride as number;
+  // Minimum supplied but no preferred: keep Scott's rule — preferred = minimum + 0.20×D.
+  if ((minOverride ?? 0) > 0) return (minOverride as number) + 0.20 * dia;
+  return stickoutDefault(dia, loc, fluteWash, lbs);
 }
 
 // Known competitor cutting-tool brands for the ROI comparison dropdown. Users pick
@@ -2528,6 +2543,12 @@ export default function Mentor() {
     // Flute wash (unused clearance length after LOC before the neck/shank) — feeds the
     // default-stickout estimate (LOC + flute_wash + 0.33×D). Populated from SKU/print.
     flute_wash: 0,
+    // Absolute-minimum stickout for THIS tool, from the SKU upload's "Minimum Stickout"
+    // column. 0 = not supplied → fall back to the geometric floor (stickoutFloor).
+    // Shop-measured values win over the formula: on stepped-shank tools (QTR3 — small
+    // cutter on a bigger shank) the shoulder can bottom on the collet before the flutes
+    // do, so the geometric floor can read shorter than the tool can physically go.
+    min_stickout_override: 0,
     corner_condition: "square" as "square" | "corner_radius" | "ball",
     corner_radius: 0,
     geometry: "standard" as "standard" | "chipbreaker" | "truncated_rougher",
@@ -3668,6 +3689,8 @@ export default function Mentor() {
     const _isQtr3 = ["QTR3", "QTR3-RN"].includes((sku.series ?? "").toUpperCase());
     const _dbStickout = sku.default_stickout_in != null ? Number(sku.default_stickout_in) : null;
     const _hasDbStickout = _dbStickout != null;
+    // Per-tool absolute minimum from the upload's "Minimum Stickout" column (0 = blank).
+    const _minOvr = Number(sku.min_stickout_in ?? 0) || 0;
     // LBS (necked) tools: stickout = LBS + 0.5×D (matches engine _min_so floor — grip
     // the shank just behind the neck). QTR3: always use DB value, never formula.
     // Other series: DB value if present, else the app-wide default = floor + 0.20×D.
@@ -3713,7 +3736,7 @@ export default function Mentor() {
     // them compute a floor that was short by the wash (e.g. 1.250" vs 1.389" on
     // a Ø.500 LOC 1.250 wash .139 tool), which told the operator to bury flutes
     // in the collet. Deep-pocket cards read tool.flute_wash directly and were fine.
-    setForm((p) => ({ ...p, flute_wash: _fw }));
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr }));
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
@@ -4316,7 +4339,7 @@ export default function Mentor() {
       const _fw  = form.flute_wash || 0;
       const _lbs = form.lbs || 0;
       // App-wide default = floor + 0.20×D (floor = LBS, or LOC+flute_wash).
-      const _def = _dia > 0 ? stickoutDefault(_dia, _loc, _fw, _lbs) : 0;
+      const _def = _dia > 0 ? resolveStickoutDefault(_dia, _loc, _fw, _lbs, form.min_stickout_override || 0) : 0;
       if (_def > 0) return Math.ceil(_def * 200) / 200;
       return form.loc > 0 ? form.loc * 1.25 : 2.0;                                         // last resort
     };
@@ -11971,11 +11994,14 @@ ${stabSection}
                 if (Number.isFinite(val) && val > 0) {
                   const _fw = (form as any).flute_wash ?? 0;
                   // Hard minimum = the bare floor (buffer removed): LBS, or LOC + flute_wash.
-                  const _minSo = form.tool_dia > 0 ? stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0) : 0;
+                  const _mo = form.min_stickout_override || 0;
+                  const _minSo = form.tool_dia > 0 ? resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo) : 0;
                   if (_minSo > 0 && val < _minSo) {
                     val = _minSo;
                     const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
-                    setStickoutViolation((form.lbs || 0) > 0
+                    setStickoutViolation(_mo > 0
+                      ? `Adjusted to minimum — ${_mo.toFixed(3)}" is the absolute minimum for this tool.`
+                      : (form.lbs || 0) > 0
                       ? `Adjusted to minimum — necked tool bottoms at LBS ${form.lbs.toFixed(3)}" (shank to the neck).`
                       : `Adjusted to minimum — LOC ${form.loc.toFixed(3)}"${_fw_part} (shank to the flutes). Can't go shorter without fouling the holder.`);
                   } else { setStickoutViolation(null); }
@@ -11986,10 +12012,11 @@ ${stabSection}
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
             {/* Default + minimum hint — mirrors the deep-pocket cards. Field defaults to
                 floor + 0.20×D; the ( ) shows the shortest this tool physically allows. */}
-            {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0) && (() => {
+            {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0) && (() => {
               const _fw = (form as any).flute_wash ?? 0;
-              const _floor = stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0);
-              const _def = stickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0);
+              const _mo = form.min_stickout_override || 0;
+              const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
               if (_floor <= 0) return null;
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
               return (
@@ -13333,10 +13360,13 @@ ${stabSection}
                     const _fw = (form as any).flute_wash ?? 0;
                     // Hard minimum = the bare floor (buffer removed): LBS (necked) or LOC + flute_wash.
                     const _isNeck = (form.lbs || 0) > 0;
-                    const _minSo = form.tool_dia > 0 ? stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0) : 0;
+                    const _mo = form.min_stickout_override || 0;
+                    const _minSo = form.tool_dia > 0 ? resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo) : 0;
                     if (_minSo > 0 && val < _minSo) {
                       val = _minSo;
-                      if (_isNeck) {
+                      if (_mo > 0) {
+                        setStickoutViolation(`Adjusted to minimum — ${_mo.toFixed(3)}" is the absolute minimum for this tool.`);
+                      } else if (_isNeck) {
                         setStickoutViolation(`Adjusted to minimum — necked tool bottoms at LBS ${form.lbs.toFixed(3)}" (bury the shank right to the neck).`);
                       } else {
                         const _fw_part = _fw > 0 ? ` + flute wash ${_fw.toFixed(3)}"` : "";
@@ -13349,10 +13379,11 @@ ${stabSection}
               />
               {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
               {/* Default + minimum hint (same as the primary stickout field). */}
-              {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0) && (() => {
+              {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0) && (() => {
                 const _fw = (form as any).flute_wash ?? 0;
-                const _floor = stickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0);
-                const _def = stickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0);
+                const _mo = form.min_stickout_override || 0;
+                const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
                 if (_floor <= 0) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
                 return (

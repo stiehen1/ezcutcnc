@@ -1498,6 +1498,17 @@ export async function registerRoutes(
       );
       const uploadId: number = uploadRes.rows[0].id;
 
+      // Blank/whitespace/non-numeric cells must land as NULL (fall back to the
+      // geometric stickout rule), NOT 0 — a 0 floor would let the tool bury to
+      // the collet face and read as "no minimum".
+      const _num = (v: any): number | null => {
+        if (v === null || v === undefined) return null;
+        const s = String(v).trim();
+        if (!s) return null;
+        const n = Number(s);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
+
       // Build valid rows first
       const validRows: any[][] = [];
       let skipped = 0;
@@ -1527,12 +1538,19 @@ export async function registerRoutes(
           r.max_woc_traditional_pct ?? null,
           r.center_cutting ?? false,
           r.max_cutting_edge_length ?? null,
+          // Per-tool stickout overrides. Blank/absent = fall back to the geometric
+          // rule (stickoutDefault/stickoutFloor = floor + 0.20xD / floor). Accepts
+          // the friendly spreadsheet headers as aliases so the sheet can read
+          // "Preferred Stickout" / "Minimum Stickout" instead of the column names.
+          _num(r.default_stickout_in ?? r.preferred_stickout_in ?? r["Preferred Stickout"]
+               ?? r.preferred_stickout ?? r.max_stickout_in),
+          _num(r.min_stickout_in ?? r["Minimum Stickout"] ?? r.minimum_stickout),
           uploadId,
         ]);
       }
 
       // Batch insert 200 rows at a time
-      const COLS = 34;
+      const COLS = 36;
       const BATCH = 200;
       for (let i = 0; i < validRows.length; i += BATCH) {
         const batch = validRows.slice(i, i + BATCH);
@@ -1551,7 +1569,8 @@ export async function registerRoutes(
             chamfer_angle, tip_diameter,
             iso_n, iso_p, iso_m, iso_k, iso_s, iso_h,
             op_hem, op_traditional, op_finishing, max_woc_traditional_pct,
-            center_cutting, max_cutting_edge_length, upload_id
+            center_cutting, max_cutting_edge_length,
+            default_stickout_in, min_stickout_in, upload_id
           ) VALUES ${valueClauses.join(",")}
           ON CONFLICT (edp) DO UPDATE SET
             series=EXCLUDED.series, description1=EXCLUDED.description1,
@@ -1571,6 +1590,8 @@ export async function registerRoutes(
             max_woc_traditional_pct=EXCLUDED.max_woc_traditional_pct,
             center_cutting=EXCLUDED.center_cutting,
             max_cutting_edge_length=EXCLUDED.max_cutting_edge_length,
+            default_stickout_in=EXCLUDED.default_stickout_in,
+            min_stickout_in=EXCLUDED.min_stickout_in,
             upload_id=EXCLUDED.upload_id`,
           params
         );
@@ -1836,7 +1857,8 @@ export async function registerRoutes(
                s.variable_pitch, s.variable_helix, s.helix,
                s.shank_dia_in, s.flute_wash, s.center_cutting,
                s.chamfer_angle, s.tip_diameter, s.max_cutting_edge_length,
-               s.default_stickout_in::float AS default_stickout_in
+               s.default_stickout_in::float AS default_stickout_in,
+               s.min_stickout_in::float AS min_stickout_in
         FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
         WHERE ${conditions.join(" AND ")}
         ORDER BY s.cutting_diameter_in, s.flutes, s.loc_in, s.edp

@@ -6729,7 +6729,12 @@ def run(payload=None):
     # floor + 0.20×D (see _default_so above).
     _loc_for_min = float(data.get("loc", 0) or 0)
     _flute_wash_for_min = float(data.get("flute_wash", 0) or 0)
-    _min_so = _lbs if _lbs > 0 else (_loc_for_min + _flute_wash_for_min)
+    # A shop-measured per-tool minimum (SKU upload "Minimum Stickout" column) OVERRIDES
+    # the geometry. Measured beats computed: on a stepped-shank tool the shank shoulder
+    # can bottom on the collet before the flutes do, so the geometric floor can read
+    # SHORTER than the tool physically allows — the direction that breaks tools.
+    _min_so_ovr = float(data.get("min_stickout_override", 0) or 0)
+    _min_so = _min_so_ovr if _min_so_ovr > 0 else (_lbs if _lbs > 0 else (_loc_for_min + _flute_wash_for_min))
     if _lbs > 0:
         _stab_suggestions.insert(0, {
             "type": "lbs",
@@ -6952,7 +6957,9 @@ def run(payload=None):
             # — or, on a necked tool, the neck. Clamping on flutes crushes the cutting
             # edges and ruins runout, so name that limit outright.
             if _at_floor:
-                if _lbs > 0:
+                if _min_so_ovr > 0:
+                    _floor_note = f' (min — {_min_so_ovr:.3f}" is this tool\'s absolute minimum)'
+                elif _lbs > 0:
                     _floor_note = f' (min — shank to the neck, LBS {_lbs:.3f}")'
                 else:
                     _floor_note = f' (min — no flutes in the collet: LOC {_loc_for_min:.3f}"'
