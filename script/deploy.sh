@@ -32,6 +32,18 @@ echo ">>> force-syncing workspace to origin/main (discarding any local/Published
 git reset --hard origin/main
 echo ">>> now at: $(git log --oneline -1)"
 
+# Install BEFORE building. The reset --hard above can bring in a package.json that
+# needs deps this workspace doesn't have yet — the build then dies with a Rollup
+# "failed to resolve import" that reads like a code error but is just a missing
+# module (happened with exceljs: dep was in package.json, absent from node_modules).
+# `npm ci` when the lockfile is in sync (exact, reproducible), else fall back to
+# `npm install` so a lock/manifest mismatch can't block the deploy.
+echo ">>> installing dependencies..."
+if ! npm ci --no-audit --no-fund; then
+  echo ">>> npm ci failed (lockfile out of sync?) — falling back to npm install"
+  npm install --no-audit --no-fund
+fi
+
 echo ">>> building..."
 npm run build
 
