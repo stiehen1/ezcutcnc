@@ -14,6 +14,8 @@ type UploadResult = {
   inserted: number;
   skipped: number;
   total: number;
+  snapshotId?: number | null;
+  snapshotError?: string | null;
 };
 
 // Normalize a header cell the same way for CSV and XLSX so both paths key rows
@@ -133,12 +135,31 @@ function coerceRow(raw: Record<string, any>): Record<string, any> {
     const s = String(v ?? "").trim().toLowerCase();
     return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x";
   };
+  // Accepts plain decimals AND fraction text. Tool dimensions get typed the way the
+  // shop says them — "2 1/2", "1-5/8", "3/4" — and Excel stores those as TEXT (the
+  // green "number stored as text" triangle). Number("2 1/2") is NaN, which silently
+  // nulled the whole cell: 12 AL3-RN tools lost a 2.500" LBS that way and were then
+  // treated as standard tools with a floor an inch short of their real reach.
   const num = (v: any) => {
     if (typeof v === "number") return Number.isFinite(v) ? v : null;   // XLSX: full precision
-    const clean = String(v ?? "").replace(/[$,\s]/g, "");
-    if (clean === "") return null;
-    const n = Number(clean);
-    return Number.isFinite(n) ? n : null;
+    const raw = String(v ?? "").replace(/["$,]/g, "").replace(/″|”/g, "").trim();
+    if (raw === "") return null;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+    // Mixed number: "2 1/2" or "1-5/8" (hyphen only when it separates whole from fraction)
+    const mixed = raw.match(/^(\d+)\s*[-\s]\s*(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) {
+      const [, w, a, b] = mixed;
+      const den = Number(b);
+      if (den > 0) return Number(w) + Number(a) / den;
+    }
+    // Bare fraction: "3/4"
+    const frac = raw.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (frac) {
+      const den = Number(frac[2]);
+      if (den > 0) return Number(frac[1]) / den;
+    }
+    return null;
   };
   const str = (v: any) => {
     const s = String(v ?? "").trim();
@@ -185,6 +206,61 @@ function coerceRow(raw: Record<string, any>): Record<string, any> {
     default_stickout_in: num(raw.preferred_stickout ?? raw.preferred_stickout_in ?? raw.default_stickout_in ?? raw.max_stickout_in ?? ""),
     min_stickout_in: num(raw.minimum_stickout ?? raw.min_stickout ?? raw.min_stickout_in ?? ""),
   };
+}
+
+// Numeric columns worth auditing — a value that LOOKS filled but doesn't parse is
+// silently stored as NULL, which reads downstream as "not supplied" rather than
+// "we couldn't read it". That's how 12 AL3-RN tools lost a 2.500" LBS (the cell held
+// the mixed fraction "2 1/2", which Excel stores as text) and were then treated as
+// standard tools with a stickout floor an inch short of their real reach.
+const AUDITED_NUM_COLS: Array<{ key: string; label: string; aliases?: string[] }> = [
+  { key: "cutting_diameter_in", label: "Cut Dia" },
+  { key: "flutes", label: "Flutes" },
+  { key: "loc_in", label: "LOC" },
+  { key: "lbs_in", label: "LBS" },
+  { key: "neck_dia_in", label: "Neck Dia" },
+  { key: "shank_dia_in", label: "Shank Dia" },
+  { key: "oal_in", label: "OAL" },
+  { key: "flute_wash", label: "Flute Wash" },
+  { key: "helix", label: "Helix" },
+  { key: "chamfer_angle", label: "Chamfer Angle" },
+  { key: "tip_diameter", label: "Tip Dia" },
+  { key: "max_cutting_edge_length", label: "Max Cutting Edge Length" },
+  { key: "preferred_stickout", label: "Preferred Stickout", aliases: ["preferred_stickout_in", "default_stickout_in", "max_stickout_in"] },
+  { key: "minimum_stickout", label: "Minimum Stickout", aliases: ["min_stickout", "min_stickout_in"] },
+];
+
+// Find cells that had SOMETHING in them but parsed to null. Returns one entry per
+// affected column with a count and a sample of the offending values, so a format
+// surprise is visible at upload time instead of months later.
+function auditUnparsedCells(rawRows: Record<string, any>[]): Array<{ label: string; count: number; samples: string[] }> {
+  const parses = (v: any): boolean => {
+    if (typeof v === "number") return Number.isFinite(v);
+    const raw = String(v ?? "").replace(/["$,]/g, "").replace(/″|”/g, "").trim();
+    if (raw === "") return true;                       // genuinely blank is fine
+    if (Number.isFinite(Number(raw))) return true;
+    if (/^(\d+)\s*[-\s]\s*(\d+)\s*\/\s*(\d+)$/.test(raw)) return true;
+    if (/^(\d+)\s*\/\s*(\d+)$/.test(raw)) return true;
+    return false;
+  };
+  const out: Array<{ label: string; count: number; samples: string[] }> = [];
+  for (const col of AUDITED_NUM_COLS) {
+    const keys = [col.key, ...(col.aliases ?? [])];
+    let count = 0;
+    const samples: string[] = [];
+    for (const r of rawRows) {
+      const k = keys.find((kk) => kk in r);
+      if (!k) continue;
+      const v = r[k];
+      if (!parses(v)) {
+        count++;
+        const s = String(v).trim();
+        if (samples.length < 3 && !samples.includes(s)) samples.push(s);
+      }
+    }
+    if (count > 0) out.push({ label: col.label, count, samples });
+  }
+  return out;
 }
 
 // ── CSV upload template ───────────────────────────────────────────────────────
@@ -301,6 +377,16 @@ export default function Catalog({ embedded = false }: { embedded?: boolean } = {
   const [uploadError, setUploadError] = useState<string | null>(null);
   // First few parsed rows, echoed so silent Excel decimal truncation is visible.
   const [parsePreview, setParsePreview] = useState<Array<Record<string, any>> | null>(null);
+  // Cells that had content but couldn't be read as numbers — surfaced so a format
+  // surprise (e.g. "2 1/2" text in LBS) is caught before it's live.
+  const [parseWarnings, setParseWarnings] = useState<Array<{ label: string; count: number; samples: string[] }> | null>(null);
+  // Snapshots — automatic before every upload, plus manual on demand. This is the only
+  // real revert path: sku_uploads reassigns rows rather than copying them, so old
+  // uploads own 0 rows and "Set Current" on one would empty the catalog.
+  const [snapshots, setSnapshots] = useState<Array<Record<string, any>> | null>(null);
+  const [snapBusy, setSnapBusy] = useState(false);
+  const [snapMsg, setSnapMsg] = useState<string | null>(null);
+  const [snapErr, setSnapErr] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -326,10 +412,98 @@ export default function Catalog({ embedded = false }: { embedded?: boolean } = {
     loadHistory();
   }
 
+  async function loadSnapshots() {
+    try {
+      const res = await fetch("/api/skus/snapshots");
+      if (res.ok) setSnapshots(await res.json());
+    } catch { /* leave prior list in place */ }
+  }
+
+  async function takeSnapshot() {
+    setSnapBusy(true); setSnapMsg(null); setSnapErr(null);
+    try {
+      const reason = prompt("Label for this snapshot (optional):") ?? "";
+      const res = await fetch("/api/skus/snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Snapshot failed");
+      setSnapMsg(`Snapshot #${data.id} taken — ${Number(data.row_count).toLocaleString()} rows saved.`);
+      loadSnapshots();
+    } catch (err: any) {
+      setSnapErr(err.message ?? "Snapshot failed");
+    } finally {
+      setSnapBusy(false);
+    }
+  }
+
+  // One-click undo of the most recent upload. Fetches the latest snapshot itself so
+  // there's nothing to look up or choose — in an emergency, picking an ID off a list
+  // is the wrong interaction. The newest snapshot IS the pre-upload state, because the
+  // upload endpoint takes one before it writes anything.
+  async function revertLastUpload() {
+    setSnapBusy(true); setSnapMsg(null); setSnapErr(null);
+    try {
+      const res = await fetch("/api/skus/snapshots");
+      if (!res.ok) throw new Error("Could not load snapshots");
+      const list: Array<Record<string, any>> = await res.json();
+      setSnapshots(list);
+      if (!list.length) throw new Error("No snapshots exist — nothing to revert to.");
+      const latest = list[0];                       // endpoint orders taken_at DESC
+      const when = new Date(latest.taken_at).toLocaleString();
+      if (!confirm(
+        `Revert to the most recent snapshot?\n\n` +
+        `#${latest.id} — ${latest.reason ?? "—"}\n` +
+        `${Number(latest.row_count).toLocaleString()} rows · taken ${when}\n\n` +
+        `This REPLACES every current SKU row with that saved state. A safety snapshot of ` +
+        `the current data is taken first, so this is itself undoable.`
+      )) { setSnapBusy(false); return; }
+      const r = await fetch(`/api/skus/snapshots/${latest.id}/restore`, { method: "POST" });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message ?? "Restore failed");
+      setSnapMsg(
+        `Reverted to snapshot #${latest.id} — ${Number(data.rowsRestored).toLocaleString()} rows restored. ` +
+        `Pre-revert state saved as #${data.safetySnapshotId}.`
+      );
+      loadSnapshots();
+      loadHistory();
+    } catch (err: any) {
+      setSnapErr(err.message ?? "Revert failed");
+    } finally {
+      setSnapBusy(false);
+    }
+  }
+
+  async function restoreSnapshot(id: number, rowCount: number) {
+    if (!confirm(
+      `Restore snapshot #${id}?\n\nThis REPLACES all current SKU rows with the ${rowCount.toLocaleString()} rows ` +
+      `saved in that snapshot. A safety snapshot of the current state is taken first, so this is undoable.`
+    )) return;
+    setSnapBusy(true); setSnapMsg(null); setSnapErr(null);
+    try {
+      const res = await fetch(`/api/skus/snapshots/${id}/restore`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Restore failed");
+      setSnapMsg(
+        `Restored ${Number(data.rowsRestored).toLocaleString()} rows from snapshot #${id}. ` +
+        `Pre-restore state saved as snapshot #${data.safetySnapshotId}.`
+      );
+      loadSnapshots();
+      loadHistory();
+    } catch (err: any) {
+      setSnapErr(err.message ?? "Restore failed");
+    } finally {
+      setSnapBusy(false);
+    }
+  }
+
   async function handleFile(file: File) {
     setUploadError(null);
     setUploadResult(null);
     setParsePreview(null);
+    setParseWarnings(null);
     const lower = file.name.toLowerCase();
     const isXlsx = lower.endsWith(".xlsx") || lower.endsWith(".xlsm");
     const isCsv = lower.endsWith(".csv");
@@ -354,6 +528,7 @@ export default function Catalog({ embedded = false }: { embedded?: boolean } = {
       return;
     }
     const rows = rawRows.map(coerceRow);
+    setParseWarnings(auditUnparsedCells(rawRows));
     // Echo back what was actually parsed for the first couple of rows. Excel-to-CSV
     // silently writes the *displayed* value (a column formatted to 2 decimals turns
     // 0.1094 into 0.11), so a truncated diameter/stickout is a plausible wrong number
@@ -486,12 +661,46 @@ export default function Catalog({ embedded = false }: { embedded?: boolean } = {
               Upload complete — <strong>{uploadResult.inserted}</strong> rows inserted
               {uploadResult.skipped > 0 && `, ${uploadResult.skipped} skipped (no EDP)`}.
               This upload is now set as <strong>Current</strong>.
+              {/* Confirm the pre-upload snapshot so the revert path is known-good, and
+                  shout if it failed — the upload still went through either way. */}
+              {uploadResult.snapshotId != null && (
+                <span className="block text-xs text-green-400/80 mt-1">
+                  Pre-upload snapshot #{uploadResult.snapshotId} saved — restore it below if this upload looks wrong.
+                </span>
+              )}
+              {uploadResult.snapshotError && (
+                <span className="block text-xs text-amber-300 mt-1">
+                  ⚠ Pre-upload snapshot FAILED ({uploadResult.snapshotError}) — there is no automatic revert point for this upload.
+                </span>
+              )}
             </div>
           )}
 
           {uploadError && (
             <div className="bg-red-900/30 border border-red-700 rounded px-4 py-3 text-sm text-red-300">
               {uploadError}
+            </div>
+          )}
+
+          {/* Unreadable-cell warning — a filled cell that parses to NULL reads downstream
+              as "not supplied", which is how a 2.500" LBS silently became a standard tool. */}
+          {parseWarnings && parseWarnings.length > 0 && (
+            <div className="bg-amber-900/30 border border-amber-700 rounded px-4 py-3 text-sm text-amber-200">
+              <p className="font-medium mb-1">
+                Some cells had values that couldn't be read as numbers — they were stored as blank:
+              </p>
+              <ul className="text-xs space-y-0.5 mt-2">
+                {parseWarnings.map((w) => (
+                  <li key={w.label}>
+                    <strong>{w.label}</strong> — {w.count} row{w.count === 1 ? "" : "s"}
+                    <span className="text-amber-300/70"> (e.g. {w.samples.map((s) => `"${s}"`).join(", ")})</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-amber-300/70 mt-2">
+                Fractions like <code>2 1/2</code> and <code>3/4</code> are accepted. Text such as
+                {" "}<code>N/A</code> or a note is not — clear those cells or enter a number.
+              </p>
             </div>
           )}
 
@@ -524,6 +733,87 @@ export default function Catalog({ embedded = false }: { embedded?: boolean } = {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Snapshots / emergency revert ──────────────────────────────────────
+            The ONLY working revert path. Upload History is not one: the upsert
+            reassigns each EDP's row to the newest upload instead of copying it, so
+            every older upload owns 0 rows and activating one would empty the
+            catalog. Snapshots store the full row set as JSONB. ── */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Snapshots &amp; Revert</h2>
+            <div className="flex items-center gap-2">
+              {/* Primary emergency action — no ID to look up, no list to scan. */}
+              <button
+                type="button"
+                onClick={revertLastUpload}
+                disabled={snapBusy}
+                className="text-xs px-3 py-1.5 rounded border border-amber-600 bg-amber-600/20 text-amber-200 hover:bg-amber-600/30 disabled:opacity-50 transition-colors font-medium"
+                title="Undo the most recent upload — restores the snapshot taken just before it"
+              >
+                {snapBusy ? "Working…" : "⟲ Revert last upload"}
+              </button>
+              <button
+                type="button"
+                onClick={takeSnapshot}
+                disabled={snapBusy}
+                className="text-xs px-3 py-1.5 rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600 disabled:opacity-50 transition-colors"
+                title="Save the current SKU table so it can be restored later"
+              >
+                ↧ Take snapshot
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            A snapshot is taken <strong>automatically before every upload</strong>, so
+            {" "}<strong className="text-amber-500/90">Revert last upload</strong> undoes a bad upload in one click.
+            Reverting is itself undoable — the current state is snapshotted first.
+          </p>
+
+          {snapMsg && (
+            <div className="bg-green-900/30 border border-green-700 rounded px-4 py-2 text-xs text-green-300">{snapMsg}</div>
+          )}
+          {snapErr && (
+            <div className="bg-red-900/30 border border-red-700 rounded px-4 py-2 text-xs text-red-300">{snapErr}</div>
+          )}
+
+          {snapshots === null ? (
+            <button
+              type="button"
+              onClick={loadSnapshots}
+              className="text-xs text-indigo-400 hover:text-indigo-300 underline"
+            >
+              Show snapshots
+            </button>
+          ) : snapshots.length === 0 ? (
+            <p className="text-xs text-gray-500">No snapshots yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {snapshots.map((sn) => (
+                <div key={sn.id} className="flex items-center justify-between gap-3 rounded border border-gray-800 bg-gray-900 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-300 truncate">
+                      <span className="font-mono text-gray-500">#{sn.id}</span>{" "}
+                      {sn.reason ?? "—"}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {Number(sn.row_count).toLocaleString()} rows · {new Date(sn.taken_at).toLocaleString()}
+                      {sn.upload_filename ? ` · ${sn.upload_filename}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => restoreSnapshot(sn.id, Number(sn.row_count))}
+                    disabled={snapBusy}
+                    className="shrink-0 text-xs px-2.5 py-1 rounded border border-amber-700 text-amber-300 hover:bg-amber-900/30 disabled:opacity-50 transition-colors"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

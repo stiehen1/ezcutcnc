@@ -1382,6 +1382,22 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // ── Unground reduced-neck blanks ────────────────────────────────────────────
+  // Reduced-neck (-RN) tools are ~90% finished; the NECK IS GROUND AT TIME OF ORDER,
+  // so until it exists there is no LBS/reach. Without LBS the app would treat them as
+  // standard tools and compute a stickout floor of LOC + flute_wash — e.g. 207830-BLK
+  // (Ø.750, LOC 1.125, wash .759) floors at 1.884" when the real reach is 3.000" — a
+  // full inch shorter than the tool physically allows, in the dangerous direction.
+  // They also can't satisfy reach filters, so they'd be offered for jobs they can't do.
+  //
+  // Gate on the DATA condition, not the "-BLK" suffix: the moment a neck is ground and
+  // LBS is populated, the tool becomes available with no code change. Rows stay in the
+  // DB (they're real, orderable products) — they're just excluded from recommendations,
+  // search results, and physics. A direct EDP lookup still finds them so the UI can
+  // explain WHY rather than say "not found".
+  const UNGROUND_RN = `AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)`;
+  const UNGROUND_RN_S2 = `AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)`;
+
   // ── SKU / EDP# catalog search (searches current upload only) ────────────────
   app.get("/api/skus", async (req, res) => {
     try {
@@ -1488,6 +1504,33 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Expected a non-empty rows array" });
       }
       const { pool } = await import("./db");
+
+      // ── Snapshot BEFORE touching anything ────────────────────────────────────
+      // sku_uploads is NOT a revert path: the upsert below sets upload_id=EXCLUDED
+      // on every existing EDP, so rows are REASSIGNED to the new upload rather than
+      // copied. One row per EDP, always owned by the newest upload — every prior
+      // upload owns 0 rows, so "Set Current" on an old one would empty the catalog.
+      // This stores the full pre-upload state as JSONB (~4 MB at 3.9k rows) so a bad
+      // upload can actually be undone. Non-fatal: a snapshot failure must not block
+      // the upload, but it IS reported back so it can't fail silently.
+      let snapshotId: number | null = null;
+      let snapshotError: string | null = null;
+      try {
+        const snap = await pool.query(
+          `INSERT INTO sku_snapshots (upload_id, row_count, reason, rows)
+           SELECT (SELECT id FROM sku_uploads WHERE is_current = TRUE),
+                  (SELECT COUNT(*) FROM skus),
+                  $1,
+                  COALESCE(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
+           FROM skus s
+           RETURNING id`,
+          [`auto — before upload of ${filename}`]
+        );
+        snapshotId = snap.rows[0]?.id ?? null;
+      } catch (e: any) {
+        snapshotError = e?.message ?? "snapshot failed";
+        console.error("[sku upload] pre-upload snapshot FAILED:", snapshotError);
+      }
 
       // Create upload record and immediately mark as current
       await pool.query(`UPDATE sku_uploads SET is_current = FALSE`);
@@ -1598,9 +1641,95 @@ export async function registerRoutes(
       }
 
       const inserted = validRows.length;
-      return res.json({ uploadId, inserted, skipped, total: rows.length });
+      return res.json({ uploadId, inserted, skipped, total: rows.length, snapshotId, snapshotError });
     } catch (err: any) {
       return res.status(500).json({ message: err.message ?? "Upload failed" });
+    }
+  });
+
+  // Manual snapshot — same payload the upload takes automatically, on demand (e.g.
+  // before hand-editing rows in SQL, or just to mark a known-good state).
+  app.post("/api/skus/snapshots", async (req, res) => {
+    try {
+      const { pool } = await import("./db");
+      const note = String((req.body?.reason ?? "")).trim();
+      const r = await pool.query(
+        `INSERT INTO sku_snapshots (upload_id, row_count, reason, rows)
+         SELECT (SELECT id FROM sku_uploads WHERE is_current = TRUE),
+                (SELECT COUNT(*) FROM skus), $1,
+                COALESCE(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
+         FROM skus s
+         RETURNING id, row_count, taken_at`,
+        [note ? `manual — ${note}` : "manual — taken from admin"]
+      );
+      return res.json(r.rows[0]);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Snapshot failed" });
+    }
+  });
+
+  // ── SKU snapshots — emergency revert for a bad upload ───────────────────────
+  // Metadata only (never ships the multi-MB `rows` payload to the browser).
+  app.get("/api/skus/snapshots", async (_req, res) => {
+    try {
+      const { pool } = await import("./db");
+      const r = await pool.query(
+        `SELECT sn.id, sn.upload_id, sn.taken_at, sn.row_count, sn.reason,
+                u.filename AS upload_filename
+           FROM sku_snapshots sn
+           LEFT JOIN sku_uploads u ON sn.upload_id = u.id
+          ORDER BY sn.taken_at DESC
+          LIMIT 50`
+      );
+      return res.json(r.rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Failed to list snapshots" });
+    }
+  });
+
+  // Restore a snapshot: wipes `skus` and rebuilds it from the stored JSONB, in ONE
+  // transaction so a failure mid-restore can't leave a half-empty catalog. Takes a
+  // safety snapshot of the current state first, so a mistaken restore is also undoable.
+  app.post("/api/skus/snapshots/:id/restore", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid snapshot id" });
+    const { pool } = await import("./db");
+    const client = await pool.connect();
+    try {
+      const snap = await client.query(`SELECT id, upload_id, row_count FROM sku_snapshots WHERE id = $1`, [id]);
+      if (!snap.rows.length) return res.status(404).json({ message: "Snapshot not found" });
+
+      await client.query("BEGIN");
+      // Safety net: snapshot what we're about to destroy.
+      const safety = await client.query(
+        `INSERT INTO sku_snapshots (upload_id, row_count, reason, rows)
+         SELECT (SELECT id FROM sku_uploads WHERE is_current = TRUE),
+                (SELECT COUNT(*) FROM skus), $1,
+                COALESCE(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
+         FROM skus s RETURNING id`,
+        [`auto — before restoring snapshot ${id}`]
+      );
+      await client.query(`DELETE FROM skus`);
+      const restored = await client.query(
+        `INSERT INTO skus SELECT * FROM jsonb_populate_recordset(NULL::skus, (SELECT rows FROM sku_snapshots WHERE id = $1))`,
+        [id]
+      );
+      // Reactivate the upload the snapshot belonged to so is_current matches the data.
+      if (snap.rows[0].upload_id != null) {
+        await client.query(`UPDATE sku_uploads SET is_current = FALSE`);
+        await client.query(`UPDATE sku_uploads SET is_current = TRUE WHERE id = $1`, [snap.rows[0].upload_id]);
+      }
+      await client.query("COMMIT");
+      return res.json({
+        restoredFrom: id,
+        rowsRestored: restored.rowCount,
+        safetySnapshotId: safety.rows[0]?.id ?? null,
+      });
+    } catch (err: any) {
+      try { await client.query("ROLLBACK"); } catch { /* ignore */ }
+      return res.status(500).json({ message: err.message ?? "Restore failed" });
+    } finally {
+      client.release();
     }
   });
 
@@ -1678,7 +1807,7 @@ export async function registerRoutes(
         : "";
       const LBS_EXCLUDE_FILTER = (req.query.lbs_exclude === "true") ? ` AND (s.lbs_in IS NULL OR s.lbs_in = 0)` : "";
 
-      const BASE = `FROM skus s JOIN sku_uploads u ON s.upload_id = u.id WHERE u.is_current = TRUE`;
+      const BASE = `FROM skus s JOIN sku_uploads u ON s.upload_id = u.id WHERE u.is_current = TRUE ${UNGROUND_RN}`;
 
       // Every active filter goes into COMMON. Each dropdown query then strips
       // only its own column's filter so its current selection doesn't hide
@@ -1736,7 +1865,8 @@ export async function registerRoutes(
       const { pool } = await import("./db");
       const { tool_type, material, flutes, diameter, dia_min, dia_max, min_loc, loc, lbs_exclude, corner, coating, center_cutting, geometry, required_chamfer_length, chamfer_lengths, chamfer_angle, tip_diameter, axial_depth, part_corner_radius, max_floor_radius, max_flutes, min_flutes, series, flute5_max_loc } = req.query;
 
-      const conditions: string[] = ["u.is_current = TRUE"];
+      // Unground -RN blanks are excluded from search results (no LBS = no reach).
+      const conditions: string[] = ["u.is_current = TRUE", UNGROUND_RN.replace(/^AND /, "")];
       const params: any[] = [];
       let p = 1;
 
@@ -2069,6 +2199,7 @@ export async function registerRoutes(
                   `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
+                     AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                    ${cbClause}
                    ${noBLK}
                    ${crFilterS}
@@ -2104,6 +2235,7 @@ export async function registerRoutes(
                   `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.oal_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
+                     AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                      AND s.flutes = $1
                      AND ABS(s.cutting_diameter_in - $2) < 0.001
                      AND LOWER(s.corner_condition) = LOWER($3)
@@ -2162,6 +2294,7 @@ export async function registerRoutes(
                   `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
+                     AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                      AND s.flutes = $1
                      AND ABS(s.cutting_diameter_in - $2) < 0.001
                      AND LOWER(s.corner_condition) = LOWER($3)
@@ -2169,6 +2302,7 @@ export async function registerRoutes(
                        SELECT MIN(COALESCE(s2.loc_in, 0))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                        WHERE u2.is_current = TRUE
+                         AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)
                          AND s2.flutes = $1
                          AND ABS(s2.cutting_diameter_in - $2) < 0.001
                          AND LOWER(s2.corner_condition) = LOWER($3)
@@ -2191,12 +2325,14 @@ export async function registerRoutes(
                     `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
+                       AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                        AND s.flutes = $1
                        AND ABS(s.cutting_diameter_in - $2) < 0.001
                        AND COALESCE(s.loc_in, 0) = (
                          SELECT MIN(COALESCE(s2.loc_in, 0))
                          FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                          WHERE u2.is_current = TRUE
+                           AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)
                            AND s2.flutes = $1
                            AND ABS(s2.cutting_diameter_in - $2) < 0.001
                            AND COALESCE(s2.loc_in, 0) >= $3
@@ -2222,6 +2358,7 @@ export async function registerRoutes(
                       `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
                        JOIN sku_uploads u ON s.upload_id = u.id
                        WHERE u.is_current = TRUE
+                         AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                          AND s.flutes = $1
                          AND ABS(s.cutting_diameter_in - $2) < 0.001
                          AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2233,6 +2370,7 @@ export async function registerRoutes(
                            SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                            FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                            WHERE u2.is_current = TRUE
+                             AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)
                              AND s2.flutes = $1
                              AND ABS(s2.cutting_diameter_in - $2) < 0.001
                              AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2262,6 +2400,7 @@ export async function registerRoutes(
                       `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
                        JOIN sku_uploads u ON s.upload_id = u.id
                        WHERE u.is_current = TRUE
+                         AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                          AND LOWER(COALESCE(s.geometry, '')) = 'chipbreaker'
                          AND s.flutes = ANY($1::int[])
                          AND ABS(s.cutting_diameter_in - $2) < 0.001
@@ -2293,6 +2432,7 @@ export async function registerRoutes(
                 `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                  JOIN sku_uploads u ON s.upload_id = u.id
                  WHERE u.is_current = TRUE
+                   AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                    AND s.flutes = $1
                    AND ABS(s.cutting_diameter_in - $2) < 0.001
                    AND LOWER(s.corner_condition) = LOWER($3)
@@ -2303,6 +2443,7 @@ export async function registerRoutes(
                      SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $4))
                      FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                      WHERE u2.is_current = TRUE
+                       AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)
                        AND s2.flutes = $1
                        AND ABS(s2.cutting_diameter_in - $2) < 0.001
                        AND LOWER(s2.corner_condition) = LOWER($3)
@@ -2322,6 +2463,7 @@ export async function registerRoutes(
                   `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
+                     AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                      AND s.flutes = $1
                      AND ABS(s.cutting_diameter_in - $2) < 0.001
                      AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2333,6 +2475,7 @@ export async function registerRoutes(
                        SELECT MIN(ABS(COALESCE(s2.loc_in, 0) - $3))
                        FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                        WHERE u2.is_current = TRUE
+                         AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)
                          AND s2.flutes = $1
                          AND ABS(s2.cutting_diameter_in - $2) < 0.001
                          AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2353,6 +2496,7 @@ export async function registerRoutes(
                     `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
+                       AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                        AND s.flutes = $1
                        AND ABS(s.cutting_diameter_in - $2) < 0.001
                        AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2363,6 +2507,7 @@ export async function registerRoutes(
                          SELECT MAX(COALESCE(s2.lbs_in, 0))
                          FROM skus s2 JOIN sku_uploads u2 ON s2.upload_id = u2.id
                          WHERE u2.is_current = TRUE
+                           AND NOT (UPPER(COALESCE(s2.series,'')) LIKE '%-RN' AND COALESCE(s2.lbs_in, 0) = 0)
                            AND s2.flutes = $1
                            AND ABS(s2.cutting_diameter_in - $2) < 0.001
                            AND s2.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2434,6 +2579,7 @@ export async function registerRoutes(
                FROM skus s
                JOIN sku_uploads u ON s.upload_id = u.id
                WHERE u.is_current = TRUE
+                 AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                  AND LOWER(COALESCE(s.geometry, '')) = 'chipbreaker'
                  AND ABS(s.cutting_diameter_in - $1) < 0.001
                  AND s.flutes >= $2
@@ -2586,6 +2732,7 @@ export async function registerRoutes(
                   AS score
            FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
            WHERE u.is_current = TRUE
+             AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
              AND ABS(s.cutting_diameter_in - ${dia}) < 0.001
              AND s.edp NOT ILIKE '%-BLK'
              AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
@@ -2745,6 +2892,7 @@ export async function registerRoutes(
         `SELECT s.* FROM skus s
          JOIN sku_uploads u ON s.upload_id = u.id
          WHERE u.is_current = TRUE
+           AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
            AND ABS(s.cutting_diameter_in - $1) < 0.001
            AND LOWER(s.edp) != LOWER($2)
            AND s.edp NOT ILIKE '%-BLK'
@@ -2890,6 +3038,7 @@ export async function registerRoutes(
           const nextDiaRows = await pool.query(
             `SELECT s.* FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
              WHERE u.is_current = TRUE
+               AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
                AND ABS(s.cutting_diameter_in - $1) < 0.005
                AND LOWER(s.tool_series) = LOWER($2)
                AND s.flutes = $3
