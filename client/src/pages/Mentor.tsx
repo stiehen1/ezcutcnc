@@ -2648,6 +2648,12 @@ export default function Mentor() {
     // discrepancy is visible. Per-session; never saved against the EDP, because a stale
     // cut-off length would silently overstate grip on a future run of a full-length tool.
     cutoff_oal_in: 0,
+    // True only when the operator says the shank is pushed all the way to the bottom of the
+    // bore. Entering a bore DEPTH says what the holder can swallow — it does NOT say the tool
+    // is seated against the stop; shrink tools get set short of the bottom all the time. So
+    // this is explicit rather than inferred, and defaults OFF: when false, stickout is whatever
+    // they set and grip is OAL − stickout (less than the bore depth).
+    tool_seated_to_stop: false,
     // Holder bore depth — shrink/press-fit holders bore ~1.5-2.0" and have a positive back
     // stop, so grip is capped here regardless of shank length, and a bottomed tool CANNOT be
     // pushed in further. 0 = no stop (collet-style). Per-session; never persisted per EDP,
@@ -3557,7 +3563,7 @@ export default function Mentor() {
 
   const [tmNeckText, setTmNeckText] = React.useState("");
   const [stickoutText, setStickoutText] = React.useState("");
-  // Actual OAL + holder bore depth (Rigidity Setup). OAL pre-fills from the catalog but is
+  // Actual OAL + holder bore depth (Tool Setup in Holder). OAL pre-fills from the catalog but is
   // editable because shops cut shanks back to fit shrink holders; bore depth is blank unless
   // the holder has a positive back stop. Both per-session — never saved against the EDP.
   const [oalText, setOalText] = React.useState("");
@@ -3859,7 +3865,8 @@ export default function Mentor() {
     const _skuOal = Number(sku.oal_in ?? 0) || 0;
     // cutoff_oal_in resets to 0: it describes ONE physical tool that was shortened, so carrying
     // it onto a different EDP would overstate that tool's grip and understate its deflection.
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, cutoff_oal_in: 0, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    // tool_seated_to_stop resets: it describes how ONE tool sat in the holder.
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, cutoff_oal_in: 0, tool_seated_to_stop: false, stickout_is_estimate: false, stickout_estimate_base: 0 }));
     setOalText(_skuOal > 0 ? (metric ? (_skuOal * 25.4).toFixed(2) : _skuOal.toFixed(3)) : "");
     setCutoffOalText("");
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
@@ -4187,8 +4194,9 @@ export default function Mentor() {
       oal_in: tool.oal_in || 0,
       pref_stickout_override: tool.default_stickout_in || 0,
       min_stickout_override: tool.min_stickout_in || 0,
-      // Bore depth belongs to the holder, so it's the same for every tool in the kit.
-      holder_bore_depth_in: form.holder_bore_depth_in || 0,
+      // Bore depth belongs to the holder, so it's the same for every tool in the kit — but it
+      // only caps grip when the tool is seated against the stop.
+      holder_bore_depth_in: form.tool_seated_to_stop ? (form.holder_bore_depth_in || 0) : 0,
       helix_angle: tool.helix || 0,
       variable_pitch: tool.variable_pitch,
       variable_helix: tool.variable_helix,
@@ -4505,6 +4513,9 @@ export default function Mentor() {
         // else the catalog OAL. The engine reads a single oal_in, so resolve it here rather
         // than teaching the engine about both.
         oal_in: effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0),
+        // Bore caps grip only when the tool is actually seated against the stop — a bore depth
+        // alone says what the holder CAN hold, not where the tool sits.
+        holder_bore_depth_in: form.tool_seated_to_stop ? (form.holder_bore_depth_in || 0) : 0,
         machine_id: activeMachineId ?? undefined,
         // center_cutting is null when SKU hasn't specified it — drop the key so Zod's default(true) applies
         center_cutting: (form as any).center_cutting ?? undefined,
@@ -11083,7 +11094,7 @@ ${stabSection}
                   />
                 </div>
                 <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
-                  <FieldLabel hint="Overall length as manufactured, tip to end of shank. Auto-fills from the catalog. Feeds the shank-grip check (grip = OAL − stickout). If THIS tool has had its shank cut back to fit a shrink holder, leave this at the catalog length and enter the shortened length in Cut-off OAL under Rigidity Setup.">{UL("OAL", "OAL")}</FieldLabel>
+                  <FieldLabel hint="Overall length as manufactured, tip to end of shank. Auto-fills from the catalog. Feeds the shank-grip check (grip = OAL − stickout). If THIS tool has had its shank cut back to fit a shrink holder, leave this at the catalog length and enter the shortened length in Cut-off OAL under Tool Setup in Holder.">{UL("OAL", "OAL")}</FieldLabel>
                   <Input
                     type="text"
                     inputMode="decimal"
@@ -12137,7 +12148,7 @@ ${stabSection}
           </div>
           </>)}
 
-          {/* ── Rigidity Setup — stickout lives here (tool setup), not in Cut Engagement ──
+          {/* ── Tool Setup in Holder — stickout lives here, not in Tool Cut Engagement ──
              Hidden for deep_pocket: that mode picks a multi-tool KIT, and each tool has
              its own reach/stickout (set on its sequence card). One global stickout can't
              be right for the kit, so we don't show it here. ── */}
@@ -12145,7 +12156,7 @@ ${stabSection}
           {form.mode !== "deep_pocket" && (<>
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-sky-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Rigidity Setup</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Tool Setup in Holder</div>
             <div className="flex-1 border-t-2 border-sky-500" />
           </div>
           <div className="max-w-sm space-y-2">
@@ -12214,22 +12225,49 @@ ${stabSection}
                 </p>
               )
             )}
-            {/* Bottomed on the stop → stickout is DETERMINED (OAL − bore depth), not chosen.
-                Offer to set it rather than silently overwriting what they typed. */}
-            {effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && form.holder_bore_depth_in > 0 && (() => {
+            {/* A bore DEPTH says what the holder can swallow; it does NOT say the tool is
+                pushed to the bottom. Shrink tools get set short of the stop routinely, so ask
+                instead of assuming — when this is off, stickout stays whatever they set and
+                grip is OAL − stickout (less than the full bore depth). */}
+            {form.holder_bore_depth_in > 0 && effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && (() => {
+              const _eo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0);
+              const _bottomedSo = _eo - form.holder_bore_depth_in;
+              if (!(_bottomedSo > 0)) return null;
+              return (
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-sky-500"
+                    checked={form.tool_seated_to_stop}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      if (on) {
+                        // Seated → stickout is determined, and that's a computed value rather
+                        // than an assumption, so it counts as confirmed.
+                        setForm((p) => ({ ...p, tool_seated_to_stop: true, stickout: _bottomedSo }));
+                        setStickoutText(metric ? (_bottomedSo * 25.4).toFixed(1) : _bottomedSo.toFixed(3));
+                        setStickoutViolation(null);
+                      } else {
+                        setForm((p) => ({ ...p, tool_seated_to_stop: false }));
+                      }
+                    }}
+                  />
+                  <span className="text-[10px] text-zinc-400 leading-snug">
+                    Tool seated to bottom of bore — sets stickout to{" "}
+                    {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`} (OAL − bore depth)
+                  </span>
+                </label>
+              );
+            })()}
+            {/* Not seated: the bottomed value is still worth naming, as a reference. */}
+            {form.holder_bore_depth_in > 0 && !form.tool_seated_to_stop && effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && (() => {
               const _bottomedSo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) - form.holder_bore_depth_in;
               if (!(_bottomedSo > 0)) return null;
-              if (Math.abs((form.stickout || 0) - _bottomedSo) <= 0.0005) {
-                return (
-                  <p className="text-[10px] text-zinc-400">
-                    Bottomed on the holder stop — stickout is set by OAL − bore depth.
-                  </p>
-                );
-              }
+              if (Math.abs((form.stickout || 0) - _bottomedSo) <= 0.0005) return null;
               return (
-                <p className="text-[10px] text-zinc-400">
-                  Bottomed on the stop gives {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`} stickout
-                  <span className="text-zinc-500"> | </span>
+                <p className="text-[10px] text-zinc-500">
+                  Fully seated would give {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`}
+                  <span className="text-zinc-600"> | </span>
                   <button
                     type="button"
                     onClick={() => {
@@ -12312,20 +12350,46 @@ ${stabSection}
               }}
             />
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-            {/* Status line for the Actual field. Preferred/Minimum are already shown above
-                as reference, so this only reports the DELTA — how far past preferred the
-                operator has gone — plus a click to snap back. Silent when sitting at the
-                preferred value: nothing to report. */}
+            {/* Status line for the Actual field. Preferred/Minimum are shown above as
+                reference, so this only reports the DELTA plus a click to snap back.
+                Three states, and the distinction matters:
+                  BOTTOMED  — stickout is DETERMINED by OAL − bore depth. Never offer
+                              "Use preferred": with a positive stop that value is
+                              physically unreachable without cutting more off the shank,
+                              so telling them to type it would be incoherent.
+                  ASSUMED   — still the pre-filled preferred value. Say so, and offer a
+                              one-click Confirm. Preferred is what we WANT them to run,
+                              not evidence of what's in the holder — and grip/deflection
+                              are only as good as that number.
+                  MEASURED  — they typed or confirmed it; just report the delta. */}
             {form.tool_dia > 0 && (() => {
               const _fw = (form as any).flute_wash ?? 0;
               const _mo = form.min_stickout_override || 0;
               const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
                 || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
               if (!(_def > 0)) return null;
-              const _delta = (form.stickout || 0) - _def;
-              if (Math.abs(_delta) <= 0.0005) return null;              // at preferred → silent
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
-              const _out = _delta > 0;                                   // pulled OUT past preferred
+              // Seated is what the operator TOLD us, not something inferred from the stickout
+              // happening to equal OAL − bore.
+              const _isBottomed = form.tool_seated_to_stop && form.holder_bore_depth_in > 0;
+              const _delta = (form.stickout || 0) - _def;
+
+              // BOTTOMED: report the delta as a shank-length fact, not a settable choice.
+              if (_isBottomed) {
+                if (Math.abs(_delta) <= 0.0005) return null;
+                return (
+                  <p className="text-[10px] mt-1 text-zinc-400">
+                    {cv(Math.abs(_delta))} {_delta > 0 ? "longer" : "shorter"} than preferred — set by the
+                    holder stop.{_delta > 0 ? ` Cut ${cv(_delta)} more off the shank to reach preferred.` : ""}
+                  </p>
+                );
+              }
+
+              // At preferred → silent. The field is labeled "Actual Stickout", which already
+              // asks the operator for the real number; a per-run "are you sure" nag would add
+              // a click that changes no value and no output.
+              if (Math.abs(_delta) <= 0.0005) return null;
+              const _out = _delta > 0;
               const _restore = () => {
                 setForm((p) => ({ ...p, stickout: _def }));
                 setStickoutText(metric ? (_def * 25.4).toFixed(1) : _def.toFixed(3));
@@ -12353,9 +12417,12 @@ ${stabSection}
                 1.2× shank Ø. Ratio is vs SHANK Ø (the holder clamps the shank), not
                 cutting Ø, which would read ~27× on a QTR3 and never flag. ── */}
             {(() => {
+              // Bore only caps grip when the tool is SEATED against the stop. Set short of the
+              // bottom, the engaged length is OAL − stickout and the bore is irrelevant.
               const _g = shankGrip(effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0),
                                    form.stickout || 0, form.shank_dia || 0,
-                                   form.pref_stickout_override || 0, form.holder_bore_depth_in || 0);
+                                   form.pref_stickout_override || 0,
+                                   form.tool_seated_to_stop ? (form.holder_bore_depth_in || 0) : 0);
               if (!_g) return null;                     // no OAL / shank Ø → make no claim
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
               const _red  = _g.severity === "red";
@@ -12386,7 +12453,7 @@ ${stabSection}
           </>)}
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 border-t-2 border-orange-500" />
-            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">{form.mode === "deep_pocket" ? "Pocketing Workflow" : "Cut Engagement"}</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-orange-500">{form.mode === "deep_pocket" ? "Pocketing Workflow" : "Tool Cut Engagement"}</div>
             <div className="flex-1 border-t-2 border-orange-500" />
           </div>
           </>)}
@@ -13265,7 +13332,7 @@ ${stabSection}
               {/* Special tool mode — DOC / WOC inputs — identical UX to standard engagement section */}
               {dpSpecialTool && pdfExtracted && (
                 <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-3 space-y-3">
-                  <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Cut Engagement for Special Tool</p>
+                  <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Tool Cut Engagement for Special Tool</p>
                   {(() => {
                     const spMode = form.dp_cutting_style === "hem" ? "hem" : "traditional";
                     // Must compute presets with spMode directly — form.mode is "deep_pocket" so
@@ -13694,11 +13761,11 @@ ${stabSection}
             </div>
           )}
 
-          {/* Rigidity Setup — chamfer_mill (mirrors the endmill section above the Cut Engagement banner for consistency). */}
+          {/* Tool Setup in Holder — chamfer_mill (mirrors the endmill section above the Tool Cut Engagement banner for consistency). */}
           {operation === "milling" && form.tool_type === "chamfer_mill" && (<>
             <div className="flex items-center gap-3 my-7">
               <div className="flex-1 border-t-2 border-sky-500" />
-              <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Rigidity Setup</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-sky-500">Tool Setup in Holder</div>
               <div className="flex-1 border-t-2 border-sky-500" />
             </div>
             <div className="max-w-sm space-y-2">
@@ -13795,7 +13862,8 @@ ${stabSection}
               {(() => {
                 const _g = shankGrip(effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0),
                                      form.stickout || 0, form.shank_dia || 0,
-                                     form.pref_stickout_override || 0, form.holder_bore_depth_in || 0);
+                                     form.pref_stickout_override || 0,
+                                     form.tool_seated_to_stop ? (form.holder_bore_depth_in || 0) : 0);
                 if (!_g) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
                 const _red = _g.severity === "red";
@@ -14311,9 +14379,10 @@ ${stabSection}
                       needs its own grip check — a kit can easily have one tool pulled out
                       too far while the rest are fine. */}
                   {(() => {
-                    // Bore depth is a property of the HOLDER, so it applies to every tool in the kit.
+                    // Bore depth is a property of the HOLDER, so it applies to every tool in the
+                    // kit — but only caps grip when the tool is actually seated to the stop.
                     const _g = shankGrip(tool.oal_in ?? 0, soActive, tool.shank_dia ?? tool.shank_dia_in ?? 0,
-                                         soDefault, form.holder_bore_depth_in || 0);
+                                         soDefault, form.tool_seated_to_stop ? (form.holder_bore_depth_in || 0) : 0);
                     if (!_g) return null;
                     const _red = _g.severity === "red";
                     const _warn = _g.severity === "warn";

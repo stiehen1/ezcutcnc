@@ -48,6 +48,9 @@ export const mentorSchemas = {
     // Present for schema completeness (the client posts the whole form). The engine reads
     // oal_in only — the client resolves cut-off vs catalog before sending.
     cutoff_oal_in: z.number().min(0).default(0),
+    // Likewise: the client zeroes holder_bore_depth_in unless this is true, so the engine
+    // never has to reason about whether the bore is actually engaged.
+    tool_seated_to_stop: z.boolean().default(false),
     tool_series: z.string().default(""),
     edp: z.string().default(""),
     helix_angle: z.number().min(0).max(90).default(0),
