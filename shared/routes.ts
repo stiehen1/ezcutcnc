@@ -45,6 +45,9 @@ export const mentorSchemas = {
     // — and a bottomed tool can't be pushed in further to shorten stickout. 0 = no stop
     // (collet-style), which leaves grip limited only by OAL - stickout.
     holder_bore_depth_in: z.number().min(0).default(0),
+    // Present for schema completeness (the client posts the whole form). The engine reads
+    // oal_in only — the client resolves cut-off vs catalog before sending.
+    cutoff_oal_in: z.number().min(0).default(0),
     tool_series: z.string().default(""),
     edp: z.string().default(""),
     helix_angle: z.number().min(0).max(90).default(0),

@@ -635,6 +635,12 @@ type GripState = { grip: number; gripX: number; severity: "" | "warn" | "red"; b
 // having pulled the tool OUT past preferred — so it's suppressed at/inside preferred.
 // RED (below the 1.2× minimum) is never suppressed, and no catalog tool is red at its
 // preferred value anyway (verified across all 3,597 rows carrying the data).
+// Which OAL governs the grip check: the cut-off length if the shank was shortened, else the
+// catalog OAL. Single helper so the readouts and the engine payload can't disagree.
+function effectiveOal(oalIn: number, cutoffOalIn: number): number {
+  return (cutoffOalIn ?? 0) > 0 ? cutoffOalIn : (oalIn ?? 0);
+}
+
 // boreDepth: holder bore depth with a positive back stop (0 = none). Caps grip regardless
 // of shank length — a shrink holder that bores 1.75" grips 1.75" even on a 4" shank, and a
 // bottomed tool can't be pushed in further to shorten stickout.
@@ -2467,8 +2473,10 @@ export default function Mentor() {
       // both read form.oal_in. Specials always have an OAL on the print, so this is the
       // path that makes the grip check work for them.
       if (_oal > 0) {
-        setForm(p => ({ ...p, oal_in: _oal }));
-        setOalText(metric ? (_oal * 25.4).toFixed(1) : _oal.toFixed(3));
+        // New tool from a print → clear any cut-off length left over from the prior tool.
+        setForm(p => ({ ...p, oal_in: _oal, cutoff_oal_in: 0 }));
+        setOalText(metric ? (_oal * 25.4).toFixed(2) : _oal.toFixed(3));
+        setCutoffOalText("");
       }
       // Auto-save to Toolbox special tools if user is logged in and CC# was extracted
       if (e.tool_number) {
@@ -2635,6 +2643,11 @@ export default function Mentor() {
     // readout: grip = oal_in - stickout, i.e. how much shank is left in the holder.
     // 0 = unknown → grip check suppressed rather than guessed.
     oal_in: 0,
+    // THIS tool's length after the customer cut the shank end back to fit a shrink holder.
+    // 0 = not cut, use oal_in. Kept separate from oal_in so the catalog spec survives and the
+    // discrepancy is visible. Per-session; never saved against the EDP, because a stale
+    // cut-off length would silently overstate grip on a future run of a full-length tool.
+    cutoff_oal_in: 0,
     // Holder bore depth — shrink/press-fit holders bore ~1.5-2.0" and have a positive back
     // stop, so grip is capped here regardless of shank length, and a bottomed tool CANNOT be
     // pushed in further. 0 = no stop (collet-style). Per-session; never persisted per EDP,
@@ -3548,6 +3561,7 @@ export default function Mentor() {
   // editable because shops cut shanks back to fit shrink holders; bore depth is blank unless
   // the holder has a positive back stop. Both per-session — never saved against the EDP.
   const [oalText, setOalText] = React.useState("");
+  const [cutoffOalText, setCutoffOalText] = React.useState("");
   const [boreDepthText, setBoreDepthText] = React.useState("");
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
@@ -3843,9 +3857,11 @@ export default function Mentor() {
     // Catalog SKU → real geometry, so clear any "estimated from print" flag left by a
     // prior special/PDF tool.
     const _skuOal = Number(sku.oal_in ?? 0) || 0;
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, stickout_is_estimate: false, stickout_estimate_base: 0 }));
-    // Catalog OAL seeds the editable field; the operator overrides it if the shank was cut back.
-    setOalText(_skuOal > 0 ? (metric ? (_skuOal * 25.4).toFixed(1) : _skuOal.toFixed(3)) : "");
+    // cutoff_oal_in resets to 0: it describes ONE physical tool that was shortened, so carrying
+    // it onto a different EDP would overstate that tool's grip and understate its deflection.
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, cutoff_oal_in: 0, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    setOalText(_skuOal > 0 ? (metric ? (_skuOal * 25.4).toFixed(2) : _skuOal.toFixed(3)) : "");
+    setCutoffOalText("");
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
@@ -4485,6 +4501,10 @@ export default function Mentor() {
         // NOT loc×1.25 — guards against a stale form.stickout (SKU-apply state race)
         // sending a too-long reach that inflates deflection. LBS/necked: lbs + 0.5×D.
         stickout: stickoutForPayload(),
+        // Send the OAL that GOVERNS grip: the cut-off length when the shank was shortened,
+        // else the catalog OAL. The engine reads a single oal_in, so resolve it here rather
+        // than teaching the engine about both.
+        oal_in: effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0),
         machine_id: activeMachineId ?? undefined,
         // center_cutting is null when SKU hasn't specified it — drop the key so Zod's default(true) applies
         center_cutting: (form as any).center_cutting ?? undefined,
@@ -11062,6 +11082,32 @@ ${stabSection}
                     }}
                   />
                 </div>
+                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
+                  <FieldLabel hint="Overall length as manufactured, tip to end of shank. Auto-fills from the catalog. Feeds the shank-grip check (grip = OAL − stickout). If THIS tool has had its shank cut back to fit a shrink holder, leave this at the catalog length and enter the shortened length in Cut-off OAL under Rigidity Setup.">{UL("OAL", "OAL")}</FieldLabel>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    className="no-spinners"
+                    value={oalText}
+                    onChange={(e) => setOalText(e.target.value)}
+                    onFocus={() => {
+                      if (form.oal_in) setOalText(metric ? (form.oal_in * 25.4).toFixed(2) : form.oal_in.toFixed(3));
+                    }}
+                    onBlur={() => {
+                      const n = parseDim(oalText);
+                      if (Number.isFinite(n) && n > 0) {
+                        const stored = metric ? n / 25.4 : n;
+                        setForm((p) => ({ ...p, oal_in: stored }));
+                        setOalText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                      } else if (!oalText.trim() || oalText.trim() === "0") {
+                        setForm((p) => ({ ...p, oal_in: 0 }));
+                        setOalText("");
+                      } else {
+                        setOalText(form.oal_in ? (metric ? (form.oal_in * 25.4).toFixed(2) : form.oal_in.toFixed(3)) : "");
+                      }
+                    }}
+                  />
+                </div>
                 {showLbs && <div className="space-y-2" style={{ flex: 1 }}>
                   <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>LBS</FieldLabel>
                   <Input
@@ -12103,30 +12149,30 @@ ${stabSection}
             <div className="flex-1 border-t-2 border-sky-500" />
           </div>
           <div className="max-w-sm space-y-2">
-            {/* Actual OAL + holder bore depth. Both exist because the physical tool in the
-                holder often isn't the catalog tool: customers cut the shank END back to fit a
-                shrink holder, and shrink/press-fit holders bore only ~1.5-2.0" behind a
-                POSITIVE STOP. Catalog OAL on a cut-back tool overstates grip, which
-                UNDERstates deflection — the dangerous direction. Per-session only. */}
+            {/* Two OAL numbers, deliberately: Tool Geometry holds the CATALOG OAL (the tool as
+                manufactured), and "Cut-off OAL" here holds THIS physical tool's length after the
+                customer shortened the shank end to fit a shrink holder. Keeping both preserves
+                the catalog spec and makes the discrepancy visible instead of overwriting it.
+                Bore depth sits here too — it's a property of the HOLDER, not the tool. */}
             {form.tool_dia > 0 && (
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <FieldLabel hint="Overall length of the ACTUAL tool in the holder. Defaults to the catalog OAL, but shops routinely cut the shank end back so a tool fits a shrink holder — enter the real length or the shank-grip check will read high.">{UL("Actual OAL (in)", "Actual OAL (mm)")}</FieldLabel>
+                  <FieldLabel hint="Only if this tool has been CUT OFF — shops shorten the shank end so a tool fits a shrink holder. Leave blank when the tool is at its catalog length; the grip check then uses the OAL from Tool Geometry. When filled, this overrides it: a catalog OAL on a cut-back tool overstates how much shank is in the holder, which makes the engine understate deflection.">{UL("Cut-off OAL (in)", "Cut-off OAL (mm)")}</FieldLabel>
                   <Input
                     type="text" inputMode="decimal"
                     className="no-spinners h-8 text-xs"
-                    placeholder="e.g. 3.000"
-                    value={oalText}
-                    onChange={(e) => setOalText(e.target.value)}
+                    placeholder="blank = full length"
+                    value={cutoffOalText}
+                    onChange={(e) => setCutoffOalText(e.target.value)}
                     onBlur={() => {
-                      const n = parseDim(oalText);
+                      const n = parseDim(cutoffOalText);
                       const val = metric ? n / 25.4 : n;
                       if (Number.isFinite(val) && val > 0) {
-                        setForm((p) => ({ ...p, oal_in: val }));
-                        setOalText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                        setForm((p) => ({ ...p, cutoff_oal_in: val }));
+                        setCutoffOalText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
                       } else {
-                        setForm((p) => ({ ...p, oal_in: 0 }));
-                        setOalText("");
+                        setForm((p) => ({ ...p, cutoff_oal_in: 0 }));
+                        setCutoffOalText("");
                       }
                     }}
                   />
@@ -12154,10 +12200,24 @@ ${stabSection}
                 </div>
               </div>
             )}
+            {/* Make the discrepancy explicit — a cut-off length shorter than the catalog spec is
+                the whole point, but one LONGER than the catalog OAL is a typo, not a cut. */}
+            {form.cutoff_oal_in > 0 && form.oal_in > 0 && (
+              form.cutoff_oal_in < form.oal_in ? (
+                <p className="text-[10px] text-zinc-400">
+                  Cut back {metric ? `${((form.oal_in - form.cutoff_oal_in) * 25.4).toFixed(1)}mm` : `${(form.oal_in - form.cutoff_oal_in).toFixed(3)}"`} from
+                  the catalog {metric ? `${(form.oal_in * 25.4).toFixed(1)}mm` : `${form.oal_in.toFixed(3)}"`} — grip is figured on the cut-off length.
+                </p>
+              ) : (
+                <p className="text-[10px] text-amber-400">
+                  Cut-off OAL is longer than the catalog {metric ? `${(form.oal_in * 25.4).toFixed(1)}mm` : `${form.oal_in.toFixed(3)}"`} — check the entry.
+                </p>
+              )
+            )}
             {/* Bottomed on the stop → stickout is DETERMINED (OAL − bore depth), not chosen.
                 Offer to set it rather than silently overwriting what they typed. */}
-            {form.oal_in > 0 && form.holder_bore_depth_in > 0 && (() => {
-              const _bottomedSo = form.oal_in - form.holder_bore_depth_in;
+            {effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && form.holder_bore_depth_in > 0 && (() => {
+              const _bottomedSo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) - form.holder_bore_depth_in;
               if (!(_bottomedSo > 0)) return null;
               if (Math.abs((form.stickout || 0) - _bottomedSo) <= 0.0005) {
                 return (
@@ -12293,7 +12353,8 @@ ${stabSection}
                 1.2× shank Ø. Ratio is vs SHANK Ø (the holder clamps the shank), not
                 cutting Ø, which would read ~27× on a QTR3 and never flag. ── */}
             {(() => {
-              const _g = shankGrip(form.oal_in || 0, form.stickout || 0, form.shank_dia || 0,
+              const _g = shankGrip(effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0),
+                                   form.stickout || 0, form.shank_dia || 0,
                                    form.pref_stickout_override || 0, form.holder_bore_depth_in || 0);
               if (!_g) return null;                     // no OAL / shank Ø → make no claim
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
@@ -13732,7 +13793,8 @@ ${stabSection}
               })()}
               {/* Shank grip — same check as the primary field. */}
               {(() => {
-                const _g = shankGrip(form.oal_in || 0, form.stickout || 0, form.shank_dia || 0,
+                const _g = shankGrip(effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0),
+                                     form.stickout || 0, form.shank_dia || 0,
                                      form.pref_stickout_override || 0, form.holder_bore_depth_in || 0);
                 if (!_g) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
