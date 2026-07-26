@@ -1394,17 +1394,31 @@ def grip_state(data):
     "" (fine) | "warn" (approaching minimum) | "red" (below minimum grip).
     A missing OAL/shank Ø yields (None, None, 1.0, "") — unknown must not invent
     either a penalty or a clean bill of health.
+
+    Two real-world wrinkles are handled here:
+      * oal_in may be the CUT-BACK length, not the catalog length. Customers shorten
+        the shank end to fit a shrink holder; the catalog OAL would then overstate grip,
+        which UNDERstates deflection — the dangerous direction. The client sends the
+        actual OAL, so this function just trusts oal_in.
+      * holder_bore_depth_in caps grip regardless of how much shank exists. Shrink and
+        press-fit holders bore only ~1.5-2.0" and have a positive back stop, so a tool
+        bottomed on that stop is gripped over the bore depth and no further.
     """
     try:
         oal      = float(data.get("oal_in", 0) or 0)
         stickout = float(data.get("stickout", 0) or 0)
         shank_d  = float(data.get("shank_dia", 0) or 0)
+        bore_d   = float(data.get("holder_bore_depth_in", 0) or 0)
     except (TypeError, ValueError):
         return (None, None, 1.0, "")
     if oal <= 0 or stickout <= 0 or shank_d <= 0:
         return (None, None, 1.0, "")
 
     grip = oal - stickout
+    # Positive back stop: the bore can only swallow so much shank. Whatever sticks out
+    # behind the stop is not gripped, so cap the engaged length at the bore depth.
+    if bore_d > 0:
+        grip = min(grip, bore_d)
     if grip <= 0:
         # Stickout exceeds the whole tool — nothing is being held. Physically absurd,
         # so clamp to the floor rather than returning a negative ratio.
@@ -1425,7 +1439,11 @@ def grip_state(data):
         pref_so = float(data.get("pref_stickout_override", 0) or 0)
     except (TypeError, ValueError):
         pref_so = 0.0
-    if pref_so > 0 and stickout <= pref_so + 5e-4 and grip_x >= GRIP_MIN_X_SHANK - 1e-9:
+    # Skipped when the BORE is the limiter: that's a holder constraint, not over-extension,
+    # so being at the preferred stickout says nothing about whether the grip is adequate.
+    _bore_limited = bore_d > 0 and (oal - stickout) >= bore_d - 1e-4
+    if (not _bore_limited and pref_so > 0 and stickout <= pref_so + 5e-4
+            and grip_x >= GRIP_MIN_X_SHANK - 1e-9):
         return (grip, grip_x, 1.0, "")
 
     # Epsilon so a grip that lands exactly ON the minimum reads as at-limit (warn), not
@@ -7115,12 +7133,44 @@ def run(payload=None):
             and (_grip_sev == "red" or (_grip_sev == "warn" and not _at_or_inside_pref))):
         _oal_now = float(data.get("oal_in", 0) or 0)
         _shank_now = float(data.get("shank_dia", 0) or 0)
-        # Stickout that restores full grip credit (GRIP_FULL × shank Ø left in the holder),
-        # but never shorter than the tool's own minimum — can't bury flutes in the collet.
-        _so_for_full = _oal_now - GRIP_FULL_X_SHANK * _shank_now
-        _so_target   = max(_so_for_full, _min_so)
-        _push_in     = _so - _so_target
-        if _push_in > 0.005:
+        _bore_now  = float(data.get("holder_bore_depth_in", 0) or 0)
+        # Bottomed on a positive back stop? Then grip is capped by BORE DEPTH, not by how
+        # much shank exists, and pushing the tool in further is physically impossible — the
+        # stop is already holding it. "Grip more shank" would be bad advice, so the fix
+        # becomes: cut the shank back (moves the tool deeper past the stop, shortening
+        # stickout) or move to a holder with a deeper bore.
+        _bottomed = _bore_now > 0 and (_oal_now - _so) >= _bore_now - 1e-4
+        if _bottomed:
+            _need_grip  = GRIP_MIN_X_SHANK * _shank_now
+            _cut_needed = _so - (_oal_now - _bore_now)   # how much shorter the OAL must be
+            _hw_suggestions.append({
+                "type": "shank_grip",
+                "label": (
+                    f'Holder bore is limiting grip to {_grip_in:.3f}" ({_grip_x:.1f}× shank Ø)'
+                ),
+                "detail": (
+                    f'The tool is bottomed on the holder\'s back stop at {_bore_now:.3f}" bore'
+                    f" depth, so pushing it in further isn't possible — the stop is already"
+                    f" holding it."
+                    f'{" That grip is below the " + format(GRIP_MIN_X_SHANK, ".1f") + "× shank Ø minimum, so feed and DOC are pulled back." if _grip_sev == "red" else ""}'
+                    f" To fix it, either cut the shank end back"
+                    f'{f" ~{_cut_needed:.3f}\"" if _cut_needed > 0.005 else ""}'
+                    f" so the tool sits deeper past the stop and projects less, or use a holder"
+                    f' with a deeper bore (needs ≥ {_need_grip:.3f}" to make the {GRIP_MIN_X_SHANK:.1f}×'
+                    f" minimum)."
+                ),
+                "gain_pct": 0,
+                "grip_in": round(_grip_in, 4),
+                "grip_x_shank": round(_grip_x, 2),
+                "bore_limited": True,
+            })
+        else:
+          # Stickout that restores full grip credit (GRIP_FULL × shank Ø left in the holder),
+          # but never shorter than the tool's own minimum — can't bury flutes in the collet.
+          _so_for_full = _oal_now - GRIP_FULL_X_SHANK * _shank_now
+          _so_target   = max(_so_for_full, _min_so)
+          _push_in     = _so - _so_target
+          if _push_in > 0.005:
             # Rigidity regained = new grip multiplier / current one. Deflection is inversely
             # proportional to the multiplier, and the shorter cantilever helps on top of it.
             _mult_after = grip_state({**data, "stickout": _so_target})[2]
@@ -7152,6 +7202,7 @@ def run(payload=None):
                     "grip_x_shank": round(_grip_x, 2),
                     "preview": _preview(stickout_ovr=_so_target),
                 })
+
 
     # The depth the user actually intends to cut — the RAW DOC input, not the physics-clamped
     # _doc_now. Used to size shorter-LOC and reduced-neck flute lengths (both must reach the

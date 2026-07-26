@@ -628,38 +628,47 @@ function resolveStickoutDefault(dia: number, loc: number, fluteWash: number, lbs
 // about a setup the engine didn't derate (or worse, stay silent about one it did).
 const GRIP_FULL_X_SHANK = 2.00;   // at/above: holder is as stiff as it gets
 const GRIP_MIN_X_SHANK  = 1.20;   // below: setup is wrong, not just soft
-type GripState = { grip: number; gripX: number; severity: "" | "warn" | "red" } | null;
+type GripState = { grip: number; gripX: number; severity: "" | "warn" | "red"; boreLimited: boolean } | null;
 // prefStickout (optional): the tool's PREFERRED stickout. 54 catalog tools sit at only
 // 1.30–1.60× shank grip at their own preferred stickout, so warning there would flag the
 // setup we ourselves recommend. The amber "approaching minimum" is about the operator
 // having pulled the tool OUT past preferred — so it's suppressed at/inside preferred.
 // RED (below the 1.2× minimum) is never suppressed, and no catalog tool is red at its
 // preferred value anyway (verified across all 3,597 rows carrying the data).
-function shankGrip(oal: number, stickout: number, shankDia: number, prefStickout?: number): GripState {
+// boreDepth: holder bore depth with a positive back stop (0 = none). Caps grip regardless
+// of shank length — a shrink holder that bores 1.75" grips 1.75" even on a 4" shank, and a
+// bottomed tool can't be pushed in further to shorten stickout.
+function shankGrip(oal: number, stickout: number, shankDia: number, prefStickout?: number,
+                   boreDepth?: number): GripState {
   if (!(oal > 0) || !(stickout > 0) || !(shankDia > 0)) return null;   // unknown → no claim
-  const grip = oal - stickout;
-  if (grip <= 0) return { grip, gripX: 0, severity: "red" };
+  const bore = boreDepth ?? 0;
+  const rawGrip = oal - stickout;
+  const grip = bore > 0 ? Math.min(rawGrip, bore) : rawGrip;
+  const boreLimited = bore > 0 && rawGrip >= bore - 1e-4;
+  if (grip <= 0) return { grip, gripX: 0, severity: "red", boreLimited };
   const gripX = grip / shankDia;
-  if (gripX >= GRIP_FULL_X_SHANK) return { grip, gripX, severity: "" };
+  if (gripX >= GRIP_FULL_X_SHANK) return { grip, gripX, severity: "", boreLimited };
   const pref = prefStickout ?? 0;
   // At/inside the tool's preferred stickout → full credit, no warning. Mirrors the engine:
-  // the preferred value IS the baseline, so the flag measures over-extension only.
-  if (pref > 0 && stickout <= pref + 0.0005 && gripX >= GRIP_MIN_X_SHANK - 1e-9) {
-    return { grip, gripX, severity: "" };
+  // the preferred value IS the baseline, so the flag measures over-extension only. Skipped
+  // when the bore is the limiter: that's a holder constraint, not over-extension, so the
+  // preferred stickout says nothing about whether the grip is adequate.
+  if (!boreLimited && pref > 0 && stickout <= pref + 0.0005 && gripX >= GRIP_MIN_X_SHANK - 1e-9) {
+    return { grip, gripX, severity: "", boreLimited };
   }
   // Epsilon: a grip landing exactly ON the minimum is at-limit (warn), not below it.
   if (gripX >= GRIP_MIN_X_SHANK - 1e-9) {
     // Band top = lower of the 2× ceiling and this tool's grip at preferred, so the warn
     // threshold tracks the same anchor the engine's derate uses.
     let topX = GRIP_FULL_X_SHANK;
-    if (pref > 0) {
+    if (!boreLimited && pref > 0) {
       const prefGripX = (oal - pref) / shankDia;
       if (prefGripX > GRIP_MIN_X_SHANK && prefGripX < topX) topX = prefGripX;
     }
     const half = GRIP_MIN_X_SHANK + (topX - GRIP_MIN_X_SHANK) * 0.5;
-    return { grip, gripX, severity: gripX < half ? "warn" : "" };
+    return { grip, gripX, severity: gripX < half ? "warn" : "", boreLimited };
   }
-  return { grip, gripX, severity: "red" };
+  return { grip, gripX, severity: "red", boreLimited };
 }
 
 // Known competitor cutting-tool brands for the ROI comparison dropdown. Users pick
@@ -2457,7 +2466,10 @@ export default function Mentor() {
       // Carry OAL onto the form too: the shank-grip readout and the engine's grip derate
       // both read form.oal_in. Specials always have an OAL on the print, so this is the
       // path that makes the grip check work for them.
-      if (_oal > 0) setForm(p => ({ ...p, oal_in: _oal }));
+      if (_oal > 0) {
+        setForm(p => ({ ...p, oal_in: _oal }));
+        setOalText(metric ? (_oal * 25.4).toFixed(1) : _oal.toFixed(3));
+      }
       // Auto-save to Toolbox special tools if user is logged in and CC# was extracted
       if (e.tool_number) {
         const _saveEmail = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
@@ -2623,6 +2635,11 @@ export default function Mentor() {
     // readout: grip = oal_in - stickout, i.e. how much shank is left in the holder.
     // 0 = unknown → grip check suppressed rather than guessed.
     oal_in: 0,
+    // Holder bore depth — shrink/press-fit holders bore ~1.5-2.0" and have a positive back
+    // stop, so grip is capped here regardless of shank length, and a bottomed tool CANNOT be
+    // pushed in further. 0 = no stop (collet-style). Per-session; never persisted per EDP,
+    // because a stale saved value would silently distort grip on a future run.
+    holder_bore_depth_in: 0,
     // True when stickout came from parsing a special/uploaded PRINT rather than catalog
     // geometry. Specials give an ESTIMATED preferred value and no trustworthy minimum,
     // so the UI must not assert a hard floor for them.
@@ -3527,6 +3544,11 @@ export default function Mentor() {
 
   const [tmNeckText, setTmNeckText] = React.useState("");
   const [stickoutText, setStickoutText] = React.useState("");
+  // Actual OAL + holder bore depth (Rigidity Setup). OAL pre-fills from the catalog but is
+  // editable because shops cut shanks back to fit shrink holders; bore depth is blank unless
+  // the holder has a positive back stop. Both per-session — never saved against the EDP.
+  const [oalText, setOalText] = React.useState("");
+  const [boreDepthText, setBoreDepthText] = React.useState("");
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
   const [feedmillDocText, setFeedmillDocText] = React.useState("");
@@ -3820,7 +3842,10 @@ export default function Mentor() {
     // in the collet. Deep-pocket cards read tool.flute_wash directly and were fine.
     // Catalog SKU → real geometry, so clear any "estimated from print" flag left by a
     // prior special/PDF tool.
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: Number(sku.oal_in ?? 0) || 0, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    const _skuOal = Number(sku.oal_in ?? 0) || 0;
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    // Catalog OAL seeds the editable field; the operator overrides it if the shank was cut back.
+    setOalText(_skuOal > 0 ? (metric ? (_skuOal * 25.4).toFixed(1) : _skuOal.toFixed(3)) : "");
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
@@ -4146,6 +4171,8 @@ export default function Mentor() {
       oal_in: tool.oal_in || 0,
       pref_stickout_override: tool.default_stickout_in || 0,
       min_stickout_override: tool.min_stickout_in || 0,
+      // Bore depth belongs to the holder, so it's the same for every tool in the kit.
+      holder_bore_depth_in: form.holder_bore_depth_in || 0,
       helix_angle: tool.helix || 0,
       variable_pitch: tool.variable_pitch,
       variable_helix: tool.variable_helix,
@@ -12076,6 +12103,87 @@ ${stabSection}
             <div className="flex-1 border-t-2 border-sky-500" />
           </div>
           <div className="max-w-sm space-y-2">
+            {/* Actual OAL + holder bore depth. Both exist because the physical tool in the
+                holder often isn't the catalog tool: customers cut the shank END back to fit a
+                shrink holder, and shrink/press-fit holders bore only ~1.5-2.0" behind a
+                POSITIVE STOP. Catalog OAL on a cut-back tool overstates grip, which
+                UNDERstates deflection — the dangerous direction. Per-session only. */}
+            {form.tool_dia > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <FieldLabel hint="Overall length of the ACTUAL tool in the holder. Defaults to the catalog OAL, but shops routinely cut the shank end back so a tool fits a shrink holder — enter the real length or the shank-grip check will read high.">{UL("Actual OAL (in)", "Actual OAL (mm)")}</FieldLabel>
+                  <Input
+                    type="text" inputMode="decimal"
+                    className="no-spinners h-8 text-xs"
+                    placeholder="e.g. 3.000"
+                    value={oalText}
+                    onChange={(e) => setOalText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(oalText);
+                      const val = metric ? n / 25.4 : n;
+                      if (Number.isFinite(val) && val > 0) {
+                        setForm((p) => ({ ...p, oal_in: val }));
+                        setOalText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                      } else {
+                        setForm((p) => ({ ...p, oal_in: 0 }));
+                        setOalText("");
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <FieldLabel hint="Depth of the holder's bore, when it has a positive back stop (shrink fit, press fit — typically 1.5-2.0&quot;). Grip is capped at this depth no matter how long the shank is, and a tool bottomed on the stop can't be pushed in further to shorten stickout. Leave blank for collet-style holders with no stop.">{UL("Holder bore depth (in)", "Holder bore depth (mm)")}</FieldLabel>
+                  <Input
+                    type="text" inputMode="decimal"
+                    className="no-spinners h-8 text-xs"
+                    placeholder="blank = no stop"
+                    value={boreDepthText}
+                    onChange={(e) => setBoreDepthText(e.target.value)}
+                    onBlur={() => {
+                      const n = parseDim(boreDepthText);
+                      const val = metric ? n / 25.4 : n;
+                      if (Number.isFinite(val) && val > 0) {
+                        setForm((p) => ({ ...p, holder_bore_depth_in: val }));
+                        setBoreDepthText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                      } else {
+                        setForm((p) => ({ ...p, holder_bore_depth_in: 0 }));
+                        setBoreDepthText("");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {/* Bottomed on the stop → stickout is DETERMINED (OAL − bore depth), not chosen.
+                Offer to set it rather than silently overwriting what they typed. */}
+            {form.oal_in > 0 && form.holder_bore_depth_in > 0 && (() => {
+              const _bottomedSo = form.oal_in - form.holder_bore_depth_in;
+              if (!(_bottomedSo > 0)) return null;
+              if (Math.abs((form.stickout || 0) - _bottomedSo) <= 0.0005) {
+                return (
+                  <p className="text-[10px] text-zinc-400">
+                    Bottomed on the holder stop — stickout is set by OAL − bore depth.
+                  </p>
+                );
+              }
+              return (
+                <p className="text-[10px] text-zinc-400">
+                  Bottomed on the stop gives {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`} stickout
+                  <span className="text-zinc-500"> | </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm((p) => ({ ...p, stickout: _bottomedSo }));
+                      setStickoutText(metric ? (_bottomedSo * 25.4).toFixed(1) : _bottomedSo.toFixed(3));
+                      setStickoutViolation(null);
+                    }}
+                    className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-sky-400 transition-colors"
+                  >
+                    Use it
+                  </button>
+                </p>
+              );
+            })()}
             {/* Preferred / Minimum are REFERENCE values for this tool — read-only, straight
                 from the SKU upload (or the geometric rule when the tool has no override).
                 They used to share the input, which meant the box labeled "Preferred" held
@@ -12186,7 +12294,7 @@ ${stabSection}
                 cutting Ø, which would read ~27× on a QTR3 and never flag. ── */}
             {(() => {
               const _g = shankGrip(form.oal_in || 0, form.stickout || 0, form.shank_dia || 0,
-                                   form.pref_stickout_override || 0);
+                                   form.pref_stickout_override || 0, form.holder_bore_depth_in || 0);
               if (!_g) return null;                     // no OAL / shank Ø → make no claim
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
               const _red  = _g.severity === "red";
@@ -12197,10 +12305,12 @@ ${stabSection}
                   <span className="font-medium">Shank in holder {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
                   <span className={_red ? "text-red-400/60" : _warn ? "text-amber-400/50" : "text-zinc-500"}> | </span>
                   <span>{_g.gripX.toFixed(1)}× shank Ø</span>
+                  {_g.boreLimited && <span className="text-zinc-500"> (capped by holder bore)</span>}
                   {_red && (
                     <p className="mt-0.5 font-semibold leading-snug">
                       ⚠ Using less than recommended shank grip area — cutting parameters
                       pulled back for tool/holder cantilever.
+                      {_g.boreLimited && " The tool is bottomed on the holder stop, so it can't be pushed in further — cut the shank back or use a deeper-bore holder."}
                     </p>
                   )}
                   {_warn && (
@@ -13623,7 +13733,7 @@ ${stabSection}
               {/* Shank grip — same check as the primary field. */}
               {(() => {
                 const _g = shankGrip(form.oal_in || 0, form.stickout || 0, form.shank_dia || 0,
-                                     form.pref_stickout_override || 0);
+                                     form.pref_stickout_override || 0, form.holder_bore_depth_in || 0);
                 if (!_g) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
                 const _red = _g.severity === "red";
@@ -13634,10 +13744,12 @@ ${stabSection}
                     <span className="font-medium">Shank in holder {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
                     <span className={_red ? "text-red-400/60" : _warn ? "text-amber-400/50" : "text-zinc-500"}> | </span>
                     <span>{_g.gripX.toFixed(1)}× shank Ø</span>
+                    {_g.boreLimited && <span className="text-zinc-500"> (capped by holder bore)</span>}
                     {_red && (
                       <p className="mt-0.5 font-semibold leading-snug">
                         ⚠ Using less than recommended shank grip area — cutting parameters
                         pulled back for tool/holder cantilever.
+                        {_g.boreLimited && " Bottomed on the holder stop — cut the shank back or use a deeper-bore holder."}
                       </p>
                     )}
                   </div>
@@ -14137,21 +14249,26 @@ ${stabSection}
                       needs its own grip check — a kit can easily have one tool pulled out
                       too far while the rest are fine. */}
                   {(() => {
-                    const _g = shankGrip(tool.oal_in ?? 0, soActive, tool.shank_dia ?? tool.shank_dia_in ?? 0, soDefault);
+                    // Bore depth is a property of the HOLDER, so it applies to every tool in the kit.
+                    const _g = shankGrip(tool.oal_in ?? 0, soActive, tool.shank_dia ?? tool.shank_dia_in ?? 0,
+                                         soDefault, form.holder_bore_depth_in || 0);
                     if (!_g) return null;
                     const _red = _g.severity === "red";
                     const _warn = _g.severity === "warn";
+                    const _cap = _g.boreLimited ? " (capped by bore)" : "";
                     if (!_red && !_warn) {
                       return (
                         <span className="block text-[11px] text-zinc-600 mt-0.5">
-                          Shank in holder {_g.grip.toFixed(3)}" ({_g.gripX.toFixed(1)}× shank Ø)
+                          Shank in holder {_g.grip.toFixed(3)}" ({_g.gripX.toFixed(1)}× shank Ø){_cap}
                         </span>
                       );
                     }
                     return (
                       <span className={`block text-[11px] mt-0.5 font-medium ${_red ? "text-red-400" : "text-amber-400"}`}>
-                        {_red ? "⚠ " : ""}Shank in holder {_g.grip > 0 ? `${_g.grip.toFixed(3)}"` : "—"} ({_g.gripX.toFixed(1)}× shank Ø)
-                        {_red && " — less than recommended grip area; parameters pulled back"}
+                        {_red ? "⚠ " : ""}Shank in holder {_g.grip > 0 ? `${_g.grip.toFixed(3)}"` : "—"} ({_g.gripX.toFixed(1)}× shank Ø){_cap}
+                        {_red && (_g.boreLimited
+                          ? " — bottomed on the holder stop; cut the shank back or use a deeper-bore holder"
+                          : " — less than recommended grip area; parameters pulled back")}
                       </span>
                     );
                   })()}

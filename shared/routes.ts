@@ -40,6 +40,11 @@ export const mentorSchemas = {
     // holder's rigidity is derated when that grip falls below ~2× shank Ø. 0 = unknown,
     // which suppresses the check entirely rather than assuming a length.
     oal_in: z.number().min(0).default(0),
+    // Holder bore depth. Shrink/press-fit holders bore only ~1.5-2.0" and have a positive
+    // BACK STOP, so grip is capped at the bore depth no matter how much shank is behind it
+    // — and a bottomed tool can't be pushed in further to shorten stickout. 0 = no stop
+    // (collet-style), which leaves grip limited only by OAL - stickout.
+    holder_bore_depth_in: z.number().min(0).default(0),
     tool_series: z.string().default(""),
     edp: z.string().default(""),
     helix_angle: z.number().min(0).max(90).default(0),
