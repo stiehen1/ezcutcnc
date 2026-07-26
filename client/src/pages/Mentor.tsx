@@ -12074,17 +12074,17 @@ ${stabSection}
                 setStickoutViolation(null);
               };
               return (
-                <p className="text-[10px] text-zinc-300 mt-1">
+                <p className="text-[10px] text-amber-400 mt-1">
                   {form.stickout_is_estimate
-                    ? <span className="text-zinc-400">Preferred {cv(_def)} — estimated from print dimensions; verify against the actual tool</span>
+                    ? <span className="text-amber-400/80">Preferred {cv(_def)} — estimated from print dimensions; verify against the actual tool</span>
                     : <>Minimum stickout is {cv(_floor)}</>}
                   {_offPreferred && (
                     <>
-                      <span className="text-zinc-500"> | </span>
+                      <span className="text-amber-400/50"> | </span>
                       <button
                         type="button"
                         onClick={_restore}
-                        className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-sky-400 transition-colors"
+                        className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-amber-200 transition-colors"
                         title={`Restore the preferred stickout (${cv(_def)})`}
                       >
                         Restore default {cv(_def)}
@@ -13462,15 +13462,15 @@ ${stabSection}
                   setStickoutViolation(null);
                 };
                 return (
-                  <p className="text-[10px] text-zinc-300 mt-1">
+                  <p className="text-[10px] text-amber-400 mt-1">
                     Minimum stickout is {cv(_floor)}
                     {_offPreferred && (
                       <>
-                        <span className="text-zinc-500"> | </span>
+                        <span className="text-amber-400/50"> | </span>
                         <button
                           type="button"
                           onClick={_restore}
-                          className="underline decoration-dotted hover:text-sky-400 transition-colors"
+                          className="underline decoration-dotted hover:text-amber-200 transition-colors"
                           title={`Restore the preferred stickout (${cv(_def)})`}
                         >
                           Restore default {cv(_def)}
