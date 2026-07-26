@@ -12074,14 +12074,13 @@ ${stabSection}
                 setStickoutViolation(null);
               };
               return (
-                <p className="text-[10px] text-zinc-500 mt-1">
+                <p className="text-[10px] text-zinc-300 mt-1">
                   {form.stickout_is_estimate
-                    ? <span className="text-zinc-600">Preferred {cv(_def)} — estimated from print dimensions; verify against the actual tool</span>
+                    ? <span className="text-zinc-400">Preferred {cv(_def)} — estimated from print dimensions; verify against the actual tool</span>
                     : <>Minimum stickout is {cv(_floor)}</>}
-                  {!form.stickout_is_estimate && (form.lbs || 0) > 0 && <span className="text-zinc-600"> (reduced-neck, shank to neck)</span>}
                   {_offPreferred && (
                     <>
-                      <span className="text-zinc-600"> | </span>
+                      <span className="text-zinc-500"> | </span>
                       <button
                         type="button"
                         onClick={_restore}
@@ -13463,12 +13462,11 @@ ${stabSection}
                   setStickoutViolation(null);
                 };
                 return (
-                  <p className="text-[10px] text-zinc-500 mt-1">
+                  <p className="text-[10px] text-zinc-300 mt-1">
                     Minimum stickout is {cv(_floor)}
-                    {(form.lbs || 0) > 0 && <span className="text-zinc-600"> (reduced-neck, shank to neck)</span>}
                     {_offPreferred && (
                       <>
-                        <span className="text-zinc-600"> | </span>
+                        <span className="text-zinc-500"> | </span>
                         <button
                           type="button"
                           onClick={_restore}
