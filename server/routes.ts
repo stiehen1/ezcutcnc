@@ -6871,12 +6871,18 @@ ${catalogList}`
         helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia: number;
         entry: { type: string; helix_dia?: number; angle_deg?: number };
         is_rn: boolean;
+        // Shank-grip check on the card (grip = oal_in − stickout) + per-tool stickout
+        // overrides from the SKU upload, so each card resolves its own preferred/minimum.
+        oal_in: number; flute_wash: number;
+        default_stickout_in: number; min_stickout_in: number;
       }
 
       interface ToolRow { edp: string; description1: string; description2: string;
         cutting_diameter_in: string; flutes: number; loc_in: string; lbs_in: string;
         reach_in: string; corner_condition: string; series: string; geometry: string;
-        helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia_in: string; is_rn: boolean; }
+        helix: number; variable_pitch: boolean; variable_helix: boolean; shank_dia_in: string; is_rn: boolean;
+        oal_in: string | null; flute_wash: string | null;
+        default_stickout_in: string | null; min_stickout_in: string | null; }
 
       // Fetch best tool at a given diameter that reaches the required depth.
       //
@@ -6906,6 +6912,7 @@ ${catalogList}`
         const selectCols = `edp, description1, description2, cutting_diameter_in, flutes,
                    loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
                    corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   oal_in, flute_wash, default_stickout_in, min_stickout_in,
                    (lbs_in IS NOT NULL AND lbs_in != '0') as is_rn`;
         const orderBy = `CASE WHEN variable_pitch = true THEN 0 ELSE 1 END ASC, flutes ${fluteOrder}, COALESCE(lbs_in, loc_in) ASC`;
 
@@ -7137,6 +7144,10 @@ ${catalogList}`
             corner_condition: t.corner_condition, series: t.series ?? "", geometry: t.geometry ?? "standard",
             helix: t.helix ?? 0, variable_pitch: !!t.variable_pitch, variable_helix: !!t.variable_helix,
             shank_dia: parseFloat(t.shank_dia_in ?? "0") || 0,
+            oal_in: parseFloat(t.oal_in ?? "0") || 0,
+            flute_wash: parseFloat(t.flute_wash ?? "0") || 0,
+            default_stickout_in: parseFloat(t.default_stickout_in ?? "0") || 0,
+            min_stickout_in: parseFloat(t.min_stickout_in ?? "0") || 0,
             entry, is_rn: t.is_rn,
           } as SeqTool;
         });
@@ -7156,6 +7167,7 @@ ${catalogList}`
             SELECT edp, description1, description2, cutting_diameter_in, flutes,
                    loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
                    corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   oal_in, flute_wash, default_stickout_in, min_stickout_in,
                    (lbs_in > 0) as is_rn
             FROM skus
             WHERE tool_type = 'endmill'
@@ -7175,6 +7187,7 @@ ${catalogList}`
             SELECT edp, description1, description2, cutting_diameter_in, flutes,
                    loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
                    corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   oal_in, flute_wash, default_stickout_in, min_stickout_in,
                    (lbs_in > 0) as is_rn
             FROM skus
             WHERE tool_type = 'endmill'
@@ -7219,6 +7232,10 @@ ${catalogList}`
           corner_condition: t.corner_condition, series: t.series ?? "", geometry: t.geometry ?? "standard",
           helix: t.helix ?? 0, variable_pitch: !!t.variable_pitch, variable_helix: !!t.variable_helix,
           shank_dia: parseFloat(t.shank_dia_in ?? "0") || 0,
+          oal_in: parseFloat(t.oal_in ?? "0") || 0,
+          flute_wash: parseFloat(t.flute_wash ?? "0") || 0,
+          default_stickout_in: parseFloat(t.default_stickout_in ?? "0") || 0,
+          min_stickout_in: parseFloat(t.min_stickout_in ?? "0") || 0,
           entry: { type: "plunge_from_bulk_path" },
           is_rn: t.is_rn,
         };

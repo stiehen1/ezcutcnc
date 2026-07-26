@@ -620,6 +620,48 @@ function resolveStickoutDefault(dia: number, loc: number, fluteWash: number, lbs
   return stickoutDefault(dia, loc, fluteWash, lbs);
 }
 
+// ── Shank grip in the holder ──────────────────────────────────────────────────
+// grip = OAL − stickout: how much shank is actually left inside the holder. The ratio
+// is against SHANK Ø, not cutting Ø — the holder clamps the shank, so on a stepped tool
+// (QTR3: Ø.0625 cutter on a Ø.250 shank) cutting Ø would read 27× and never flag.
+// MIRRORS legacy_engine.grip_state() — keep the constants in sync or the UI will warn
+// about a setup the engine didn't derate (or worse, stay silent about one it did).
+const GRIP_FULL_X_SHANK = 2.00;   // at/above: holder is as stiff as it gets
+const GRIP_MIN_X_SHANK  = 1.20;   // below: setup is wrong, not just soft
+type GripState = { grip: number; gripX: number; severity: "" | "warn" | "red" } | null;
+// prefStickout (optional): the tool's PREFERRED stickout. 54 catalog tools sit at only
+// 1.30–1.60× shank grip at their own preferred stickout, so warning there would flag the
+// setup we ourselves recommend. The amber "approaching minimum" is about the operator
+// having pulled the tool OUT past preferred — so it's suppressed at/inside preferred.
+// RED (below the 1.2× minimum) is never suppressed, and no catalog tool is red at its
+// preferred value anyway (verified across all 3,597 rows carrying the data).
+function shankGrip(oal: number, stickout: number, shankDia: number, prefStickout?: number): GripState {
+  if (!(oal > 0) || !(stickout > 0) || !(shankDia > 0)) return null;   // unknown → no claim
+  const grip = oal - stickout;
+  if (grip <= 0) return { grip, gripX: 0, severity: "red" };
+  const gripX = grip / shankDia;
+  if (gripX >= GRIP_FULL_X_SHANK) return { grip, gripX, severity: "" };
+  const pref = prefStickout ?? 0;
+  // At/inside the tool's preferred stickout → full credit, no warning. Mirrors the engine:
+  // the preferred value IS the baseline, so the flag measures over-extension only.
+  if (pref > 0 && stickout <= pref + 0.0005 && gripX >= GRIP_MIN_X_SHANK - 1e-9) {
+    return { grip, gripX, severity: "" };
+  }
+  // Epsilon: a grip landing exactly ON the minimum is at-limit (warn), not below it.
+  if (gripX >= GRIP_MIN_X_SHANK - 1e-9) {
+    // Band top = lower of the 2× ceiling and this tool's grip at preferred, so the warn
+    // threshold tracks the same anchor the engine's derate uses.
+    let topX = GRIP_FULL_X_SHANK;
+    if (pref > 0) {
+      const prefGripX = (oal - pref) / shankDia;
+      if (prefGripX > GRIP_MIN_X_SHANK && prefGripX < topX) topX = prefGripX;
+    }
+    const half = GRIP_MIN_X_SHANK + (topX - GRIP_MIN_X_SHANK) * 0.5;
+    return { grip, gripX, severity: gripX < half ? "warn" : "" };
+  }
+  return { grip, gripX, severity: "red" };
+}
+
 // Known competitor cutting-tool brands for the ROI comparison dropdown. Users pick
 // one or type their own (free-add). Alphabetical; edit here to grow the list.
 const ROI_COMPETITOR_BRANDS = [
@@ -2412,6 +2454,10 @@ export default function Mentor() {
       setPdfMaterial(e.cutting_material ?? null);
       const _oal = e.oal > 0 ? e.oal : 0;
       setPdfOal(_oal);
+      // Carry OAL onto the form too: the shank-grip readout and the engine's grip derate
+      // both read form.oal_in. Specials always have an OAL on the print, so this is the
+      // path that makes the grip check work for them.
+      if (_oal > 0) setForm(p => ({ ...p, oal_in: _oal }));
       // Auto-save to Toolbox special tools if user is logged in and CC# was extracted
       if (e.tool_number) {
         const _saveEmail = localStorage.getItem("tb_email") || localStorage.getItem("er_email");
@@ -2573,6 +2619,10 @@ export default function Mentor() {
     // this they hit the minimum + 0.20×D fallback and offered a number that
     // disagreed with the field the upload had just populated.
     pref_stickout_override: 0,
+    // Overall tool length, from the catalog SKU or the print. Drives the shank-grip
+    // readout: grip = oal_in - stickout, i.e. how much shank is left in the holder.
+    // 0 = unknown → grip check suppressed rather than guessed.
+    oal_in: 0,
     // True when stickout came from parsing a special/uploaded PRINT rather than catalog
     // geometry. Specials give an ESTIMATED preferred value and no trustworthy minimum,
     // so the UI must not assert a hard floor for them.
@@ -3770,7 +3820,7 @@ export default function Mentor() {
     // in the collet. Deep-pocket cards read tool.flute_wash directly and were fine.
     // Catalog SKU → real geometry, so clear any "estimated from print" flag left by a
     // prior special/PDF tool.
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: Number(sku.oal_in ?? 0) || 0, stickout_is_estimate: false, stickout_estimate_base: 0 }));
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
@@ -4089,6 +4139,13 @@ export default function Mentor() {
       lbs: tool.lbs_in || 0,
       stickout: soEst,
       shank_dia: tool.shank_dia || 0,
+      // OAL drives the engine's shank-grip derate (grip = oal_in − stickout). Each pocket
+      // tool has its own stickout, so each gets its own grip check. The preferred value
+      // rides along so the engine can suppress the "grip more shank" step on tools that
+      // are already at their recommended stickout.
+      oal_in: tool.oal_in || 0,
+      pref_stickout_override: tool.default_stickout_in || 0,
+      min_stickout_override: tool.min_stickout_in || 0,
       helix_angle: tool.helix || 0,
       variable_pitch: tool.variable_pitch,
       variable_helix: tool.variable_helix,
@@ -11555,7 +11612,7 @@ ${stabSection}
                       onChange={e => setPdfOalText(e.target.value)}
                       onBlur={() => {
                         const n = parseDim(pdfOalText);
-                        if (Number.isFinite(n) && n > 0) { setPdfOal(n); setPdfOalText(n.toFixed(3)); }
+                        if (Number.isFinite(n) && n > 0) { setPdfOal(n); setForm(p => ({ ...p, oal_in: n })); setPdfOalText(n.toFixed(3)); }
                         else { setPdfOalText(pdfOal > 0 ? pdfOal.toFixed(3) : ""); }
                       }}
                     />
@@ -11781,7 +11838,7 @@ ${stabSection}
                 onChange={e => setPdfOalText(e.target.value)}
                 onBlur={() => {
                   const n = parseDim(pdfOalText);
-                  if (Number.isFinite(n) && n > 0) { setPdfOal(n); setPdfOalText(n.toFixed(3)); }
+                  if (Number.isFinite(n) && n > 0) { setPdfOal(n); setForm(p => ({ ...p, oal_in: n })); setPdfOalText(n.toFixed(3)); }
                   else { setPdfOalText(pdfOal > 0 ? pdfOal.toFixed(3) : ""); }
                 }}
               />
@@ -12019,7 +12076,42 @@ ${stabSection}
             <div className="flex-1 border-t-2 border-sky-500" />
           </div>
           <div className="max-w-sm space-y-2">
-            <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Preferred Tool Projection / Stickout (in)", "Preferred Tool Projection / Stickout (mm)")}</FieldLabel>
+            {/* Preferred / Minimum are REFERENCE values for this tool — read-only, straight
+                from the SKU upload (or the geometric rule when the tool has no override).
+                They used to share the input, which meant the box labeled "Preferred" held
+                whatever got typed into it. Splitting them makes the input honestly "Actual"
+                and gives the operator both targets to aim between while they type. */}
+            {(() => {
+              const _fw = (form as any).flute_wash ?? 0;
+              const _mo = form.min_stickout_override || 0;
+              const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
+                || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
+              if (!(_def > 0) && !(_floor > 0)) return null;
+              const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+              return (
+                <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1">
+                  {_def > 0 && (
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[11px] text-zinc-400">Preferred stickout</span>
+                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
+                    </div>
+                  )}
+                  {_floor > 0 && (
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[11px] text-zinc-400">Minimum stickout</span>
+                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
+                    </div>
+                  )}
+                  {form.stickout_is_estimate && (
+                    <p className="text-[10px] text-amber-400/80 leading-snug pt-0.5">
+                      Estimated from print dimensions — verify against the actual tool.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+            <FieldLabel hint="How far the tool ACTUALLY projects from the toolholder face — measure the setup, don't assume the preferred value. Longer stickout reduces rigidity two ways: deflection scales with length³, and less shank left in the holder makes the holder itself more compliant. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Actual Stickout (in)", "Actual Stickout (mm)")}</FieldLabel>
             <Input
               type="text" inputMode="decimal"
               className="no-spinners"
@@ -12052,46 +12144,71 @@ ${stabSection}
               }}
             />
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-            {/* Minimum hint. The MINIMUM is what the operator actually needs here (how
-                short can this tool go), so it always shows. The preferred value is only
-                worth naming when the field has been moved OFF it — otherwise it just
-                repeats the number already in the box. Same pattern as the pocket cards. */}
-            {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0 || form.stickout_is_estimate) && (() => {
+            {/* Status line for the Actual field. Preferred/Minimum are already shown above
+                as reference, so this only reports the DELTA — how far past preferred the
+                operator has gone — plus a click to snap back. Silent when sitting at the
+                preferred value: nothing to report. */}
+            {form.tool_dia > 0 && (() => {
               const _fw = (form as any).flute_wash ?? 0;
               const _mo = form.min_stickout_override || 0;
-              const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
-              // Specials: no floor to derive, so the PREFERRED value is whatever the print
-              // estimate put in the field. Still show it — an estimate the operator can see
-              // and correct is more useful than a blank line.
               const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
                 || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
-              if (_floor <= 0 && !(form.stickout_is_estimate && _def > 0)) return null;
+              if (!(_def > 0)) return null;
+              const _delta = (form.stickout || 0) - _def;
+              if (Math.abs(_delta) <= 0.0005) return null;              // at preferred → silent
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
-              const _offPreferred = _def > 0 && Math.abs((form.stickout || 0) - _def) > 0.0005;
+              const _out = _delta > 0;                                   // pulled OUT past preferred
               const _restore = () => {
                 setForm((p) => ({ ...p, stickout: _def }));
                 setStickoutText(metric ? (_def * 25.4).toFixed(1) : _def.toFixed(3));
                 setStickoutViolation(null);
               };
               return (
-                <p className="text-[10px] text-amber-400 mt-1">
-                  {form.stickout_is_estimate
-                    ? <span className="text-amber-400/80">Preferred {cv(_def)} — estimated from print dimensions; verify against the actual tool</span>
-                    : <>Minimum stickout is {cv(_floor)}</>}
-                  {_offPreferred && (
-                    <>
-                      <span className="text-amber-400/50"> | </span>
-                      <button
-                        type="button"
-                        onClick={_restore}
-                        className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-amber-200 transition-colors"
-                        title={`Restore the preferred stickout (${cv(_def)})`}
-                      >
-                        Restore default {cv(_def)}
-                      </button>
-                    </>
-                  )}
+                <p className={`text-[10px] mt-1 ${_out ? "text-amber-400" : "text-zinc-400"}`}>
+                  {cv(Math.abs(_delta))} {_out ? "past preferred" : "shorter than preferred"}
+                  <span className={_out ? "text-amber-400/50" : "text-zinc-500"}> | </span>
+                  <button
+                    type="button"
+                    onClick={_restore}
+                    className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-amber-200 transition-colors"
+                    title={`Set the field back to the preferred stickout (${cv(_def)})`}
+                  >
+                    Use preferred {cv(_def)}
+                  </button>
                 </p>
+              );
+            })()}
+            {/* ── Shank grip in the holder ──────────────────────────────────────────
+                Operators pull tools out further than the preferred stickout, which
+                leaves less shank in the holder — a rigidity loss ON TOP of the longer
+                cantilever. Show what's actually left to grip and flag it in red below
+                1.2× shank Ø. Ratio is vs SHANK Ø (the holder clamps the shank), not
+                cutting Ø, which would read ~27× on a QTR3 and never flag. ── */}
+            {(() => {
+              const _g = shankGrip(form.oal_in || 0, form.stickout || 0, form.shank_dia || 0,
+                                   form.pref_stickout_override || 0);
+              if (!_g) return null;                     // no OAL / shank Ø → make no claim
+              const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+              const _red  = _g.severity === "red";
+              const _warn = _g.severity === "warn";
+              const _tone = _red ? "text-red-400" : _warn ? "text-amber-400" : "text-zinc-400";
+              return (
+                <div className={`text-[10px] mt-1.5 ${_tone}`}>
+                  <span className="font-medium">Shank in holder {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
+                  <span className={_red ? "text-red-400/60" : _warn ? "text-amber-400/50" : "text-zinc-500"}> | </span>
+                  <span>{_g.gripX.toFixed(1)}× shank Ø</span>
+                  {_red && (
+                    <p className="mt-0.5 font-semibold leading-snug">
+                      ⚠ Using less than recommended shank grip area — cutting parameters
+                      pulled back for tool/holder cantilever.
+                    </p>
+                  )}
+                  {_warn && (
+                    <p className="mt-0.5 leading-snug text-amber-400/90">
+                      Approaching minimum grip ({GRIP_MIN_X_SHANK.toFixed(1)}× shank Ø).
+                    </p>
+                  )}
+                </div>
               );
             })()}
           </div>
@@ -13414,7 +13531,33 @@ ${stabSection}
               <div className="flex-1 border-t-2 border-sky-500" />
             </div>
             <div className="max-w-sm space-y-2">
-              <FieldLabel hint="Distance from the toolholder face to the tip of the tool. Longer stickout reduces rigidity — deflection scales with length³. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Preferred Tool Projection / Stickout (in)", "Preferred Tool Projection / Stickout (mm)")}</FieldLabel>
+              {/* Read-only reference pair — see the primary Rigidity Setup block for why
+                  Preferred/Minimum are split out of the editable field. */}
+              {(() => {
+                const _fw = (form as any).flute_wash ?? 0;
+                const _mo = form.min_stickout_override || 0;
+                const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0);
+                if (!(_def > 0) && !(_floor > 0)) return null;
+                const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+                return (
+                  <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1">
+                    {_def > 0 && (
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[11px] text-zinc-400">Preferred stickout</span>
+                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
+                      </div>
+                    )}
+                    {_floor > 0 && (
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[11px] text-zinc-400">Minimum stickout</span>
+                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              <FieldLabel hint="How far the tool ACTUALLY projects from the toolholder face — measure the setup, don't assume the preferred value. Longer stickout reduces rigidity two ways: deflection scales with length³, and less shank left in the holder makes the holder itself more compliant. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Actual Stickout (in)", "Actual Stickout (mm)")}</FieldLabel>
               <Input
                 type="text" inputMode="decimal"
                 className="no-spinners"
@@ -13447,37 +13590,57 @@ ${stabSection}
                 }}
               />
               {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-              {/* Minimum hint (same as the primary stickout field). */}
-              {form.tool_dia > 0 && (form.loc > 0 || (form.lbs || 0) > 0 || (form.min_stickout_override || 0) > 0) && (() => {
+              {/* Delta-from-preferred status line (same as the primary stickout field). */}
+              {form.tool_dia > 0 && (() => {
                 const _fw = (form as any).flute_wash ?? 0;
                 const _mo = form.min_stickout_override || 0;
-                const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
                 const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0);
-                if (_floor <= 0) return null;
+                if (!(_def > 0)) return null;
+                const _delta = (form.stickout || 0) - _def;
+                if (Math.abs(_delta) <= 0.0005) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
-                const _offPreferred = _def > 0 && Math.abs((form.stickout || 0) - _def) > 0.0005;
+                const _out = _delta > 0;
                 const _restore = () => {
                   setForm((p) => ({ ...p, stickout: _def }));
                   setStickoutText(metric ? (_def * 25.4).toFixed(1) : _def.toFixed(3));
                   setStickoutViolation(null);
                 };
                 return (
-                  <p className="text-[10px] text-amber-400 mt-1">
-                    Minimum stickout is {cv(_floor)}
-                    {_offPreferred && (
-                      <>
-                        <span className="text-amber-400/50"> | </span>
-                        <button
-                          type="button"
-                          onClick={_restore}
-                          className="underline decoration-dotted hover:text-amber-200 transition-colors"
-                          title={`Restore the preferred stickout (${cv(_def)})`}
-                        >
-                          Restore default {cv(_def)}
-                        </button>
-                      </>
-                    )}
+                  <p className={`text-[10px] mt-1 ${_out ? "text-amber-400" : "text-zinc-400"}`}>
+                    {cv(Math.abs(_delta))} {_out ? "past preferred" : "shorter than preferred"}
+                    <span className={_out ? "text-amber-400/50" : "text-zinc-500"}> | </span>
+                    <button
+                      type="button"
+                      onClick={_restore}
+                      className="underline decoration-dotted hover:text-amber-200 transition-colors"
+                      title={`Set the field back to the preferred stickout (${cv(_def)})`}
+                    >
+                      Use preferred {cv(_def)}
+                    </button>
                   </p>
+                );
+              })()}
+              {/* Shank grip — same check as the primary field. */}
+              {(() => {
+                const _g = shankGrip(form.oal_in || 0, form.stickout || 0, form.shank_dia || 0,
+                                     form.pref_stickout_override || 0);
+                if (!_g) return null;
+                const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+                const _red = _g.severity === "red";
+                const _warn = _g.severity === "warn";
+                const _tone = _red ? "text-red-400" : _warn ? "text-amber-400" : "text-zinc-400";
+                return (
+                  <div className={`text-[10px] mt-1.5 ${_tone}`}>
+                    <span className="font-medium">Shank in holder {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
+                    <span className={_red ? "text-red-400/60" : _warn ? "text-amber-400/50" : "text-zinc-500"}> | </span>
+                    <span>{_g.gripX.toFixed(1)}× shank Ø</span>
+                    {_red && (
+                      <p className="mt-0.5 font-semibold leading-snug">
+                        ⚠ Using less than recommended shank grip area — cutting parameters
+                        pulled back for tool/holder cantilever.
+                      </p>
+                    )}
+                  </div>
                 );
               })()}
             </div>
@@ -13970,6 +14133,28 @@ ${stabSection}
                       </>
                     )}
                   </span>
+                  {/* Per-tool shank grip. Each pocket tool has its own stickout, so each
+                      needs its own grip check — a kit can easily have one tool pulled out
+                      too far while the rest are fine. */}
+                  {(() => {
+                    const _g = shankGrip(tool.oal_in ?? 0, soActive, tool.shank_dia ?? tool.shank_dia_in ?? 0, soDefault);
+                    if (!_g) return null;
+                    const _red = _g.severity === "red";
+                    const _warn = _g.severity === "warn";
+                    if (!_red && !_warn) {
+                      return (
+                        <span className="block text-[11px] text-zinc-600 mt-0.5">
+                          Shank in holder {_g.grip.toFixed(3)}" ({_g.gripX.toFixed(1)}× shank Ø)
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className={`block text-[11px] mt-0.5 font-medium ${_red ? "text-red-400" : "text-amber-400"}`}>
+                        {_red ? "⚠ " : ""}Shank in holder {_g.grip > 0 ? `${_g.grip.toFixed(3)}"` : "—"} ({_g.gripX.toFixed(1)}× shank Ø)
+                        {_red && " — less than recommended grip area; parameters pulled back"}
+                      </span>
+                    );
+                  })()}
                 </div>
                 {tool.entry?.type === "helical" && mil?.feed_ipm != null && mil?.rpm != null && (() => {
                   // L/D-based conservatism: longer/skinnier tools need shallower ramp + slower feed

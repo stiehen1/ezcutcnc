@@ -36,6 +36,10 @@ export const mentorSchemas = {
     variable_pitch: z.boolean().default(false),
     variable_helix: z.boolean().default(false),
     shank_dia: z.number().min(0).default(0),
+    // Overall tool length. Feeds the shank-grip check: grip = oal_in - stickout, and the
+    // holder's rigidity is derated when that grip falls below ~2× shank Ø. 0 = unknown,
+    // which suppresses the check entirely rather than assuming a length.
+    oal_in: z.number().min(0).default(0),
     tool_series: z.string().default(""),
     edp: z.string().default(""),
     helix_angle: z.number().min(0).max(90).default(0),

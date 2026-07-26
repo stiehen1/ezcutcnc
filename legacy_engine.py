@@ -1361,6 +1361,102 @@ def hardness_kc_mult(hrc: float) -> float:
 # ================================
 # RIGIDITY
 # ================================
+# Shank grip left in the holder, as a multiple of SHANK diameter (not cutting dia —
+# the holder clamps the shank, so on a stepped-shank tool the cutter Ø is irrelevant).
+#   grip = OAL - stickout
+# FULL: at/above this the holder is developing all the stiffness it's going to; pushing
+#       a shank deeper into an ER collet past ~2×D adds essentially nothing.
+# MIN:  shop minimum acceptable grip. Below this the setup is wrong, not merely soft.
+GRIP_FULL_X_SHANK = 2.00
+GRIP_MIN_X_SHANK  = 1.20
+# Rigidity retained at exactly GRIP_MIN (linear from FULL down to MIN), and the floor
+# the penalty can't fall past no matter how little shank is left. Operators do pull
+# tools out further than they should; the model has to degrade rather than pretend.
+#
+# Below GRIP_MIN the falloff is deliberately STEEP (quadratic, not linear): holding a
+# shank on 0.5×D is not merely "a bit soft", it is a fundamentally different setup —
+# the collet starts allowing the shank to tip, so deflection grows much faster than the
+# lost contact length suggests. It stays permitted (shops do it, and blocking it would
+# make the app wrong about reality) but the cutting parameters come back hard.
+#   Ø.500 shank, OAL 3.000 — grip mult by stickout:
+#     2.000" → 1.000× grip = 2.00×D → 1.00  (no penalty; cantilever only)
+#     2.400" → 0.600" grip = 1.20×D → 0.80  (at minimum)
+#     2.500" → 0.500" grip = 1.00×D → 0.63
+#     2.650" → 0.350" grip = 0.70×D → 0.42
+#     2.750" → 0.250" grip = 0.50×D → 0.31  (pulled back "big time")
+GRIP_RIGIDITY_AT_MIN = 0.80
+GRIP_RIGIDITY_FLOOR  = 0.22
+
+def grip_state(data):
+    """Shank grip left in the holder and the rigidity multiplier it earns.
+
+    Returns (grip_in, grip_x_shank, rigidity_mult, severity) where severity is
+    "" (fine) | "warn" (approaching minimum) | "red" (below minimum grip).
+    A missing OAL/shank Ø yields (None, None, 1.0, "") — unknown must not invent
+    either a penalty or a clean bill of health.
+    """
+    try:
+        oal      = float(data.get("oal_in", 0) or 0)
+        stickout = float(data.get("stickout", 0) or 0)
+        shank_d  = float(data.get("shank_dia", 0) or 0)
+    except (TypeError, ValueError):
+        return (None, None, 1.0, "")
+    if oal <= 0 or stickout <= 0 or shank_d <= 0:
+        return (None, None, 1.0, "")
+
+    grip = oal - stickout
+    if grip <= 0:
+        # Stickout exceeds the whole tool — nothing is being held. Physically absurd,
+        # so clamp to the floor rather than returning a negative ratio.
+        return (grip, 0.0, GRIP_RIGIDITY_FLOOR, "red")
+
+    grip_x = grip / shank_d
+    if grip_x >= GRIP_FULL_X_SHANK:
+        return (grip, grip_x, 1.0, "")
+
+    # The tool's PREFERRED stickout is the calibration baseline: 54 catalog tools have only
+    # 1.30-1.60× shank grip at the stickout we ourselves recommend, and derating those would
+    # silently make shop-validated feeds/DOC 12-17% more conservative than the numbers Scott
+    # runs today. So grip at/inside preferred earns full credit, and the penalty measures
+    # purely how far the operator has pulled the tool out PAST preferred. Below the hard
+    # 1.2× minimum the penalty always applies — that regime is unsafe regardless of preferred.
+    pref_so = 0.0
+    try:
+        pref_so = float(data.get("pref_stickout_override", 0) or 0)
+    except (TypeError, ValueError):
+        pref_so = 0.0
+    if pref_so > 0 and stickout <= pref_so + 5e-4 and grip_x >= GRIP_MIN_X_SHANK - 1e-9:
+        return (grip, grip_x, 1.0, "")
+
+    # Epsilon so a grip that lands exactly ON the minimum reads as at-limit (warn), not
+    # below it (red) — 0.300/0.250 is 1.2× in decimal but not always in binary.
+    if grip_x >= GRIP_MIN_X_SHANK - 1e-9:
+        # Top of the taper = the lower of the fixed 2× ceiling and THIS tool's grip at its
+        # preferred stickout. Without that, a tool whose preferred grip is 1.30× would jump
+        # from mult 1.00 (at preferred) straight to ~0.83 one thou past it — a cliff. Anchoring
+        # on preferred makes the penalty ramp smoothly from the moment they pull out.
+        top_x = GRIP_FULL_X_SHANK
+        if pref_so > 0 and shank_d > 0:
+            pref_grip_x = (oal - pref_so) / shank_d
+            if GRIP_MIN_X_SHANK < pref_grip_x < top_x:
+                top_x = pref_grip_x
+        # Linear taper 1.00 → GRIP_RIGIDITY_AT_MIN across [MIN, top_x).
+        span = top_x - GRIP_MIN_X_SHANK
+        frac = (grip_x - GRIP_MIN_X_SHANK) / span if span > 0 else 1.0
+        frac = max(0.0, min(1.0, frac))
+        mult = GRIP_RIGIDITY_AT_MIN + frac * (1.0 - GRIP_RIGIDITY_AT_MIN)
+        # "warn" only in the lower half of the band — the top of it is unremarkable.
+        sev = "warn" if grip_x < (GRIP_MIN_X_SHANK + span * 0.5) else ""
+        return (grip, grip_x, mult, sev)
+
+    # Below minimum grip: fall from GRIP_RIGIDITY_AT_MIN toward the floor, reaching it
+    # at zero grip. SQUARED so the drop accelerates as grip vanishes — a shank held on
+    # 0.5×D is not "slightly worse" than one held on 1.0×D, it is a different setup.
+    # Permitted, but the parameters come back hard.
+    frac = grip_x / GRIP_MIN_X_SHANK
+    mult = GRIP_RIGIDITY_FLOOR + (frac ** 2) * (GRIP_RIGIDITY_AT_MIN - GRIP_RIGIDITY_FLOOR)
+    return (grip, grip_x, mult, "red")
+
 def rigidity_factor(data):
     r = TOOLHOLDER_RIGIDITY.get(data.get("toolholder", "er_collet"), 1.0)
     if data.get("dual_contact", False):
@@ -1372,6 +1468,10 @@ def rigidity_factor(data):
     # Horizontal boring mills: massive castings, box ways, gear drive — extreme rigidity
     if str(data.get("machine_type", "")).lower() == "hbm":
         r *= 1.15
+    # Short shank grip makes the HOLDER itself more compliant, on top of the longer
+    # cantilever the stickout already buys. Without this the engine models a tool pulled
+    # out to 2.5" as if the collet were still gripping it like a full insertion.
+    r *= grip_state(data)[2]
     return r
 
 def hem_target_woc_pct(data, material_group, flutes):
@@ -3335,6 +3435,7 @@ def run_keyseat(payload: dict) -> dict:
     rigidity = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
     if payload.get("dual_contact", False):
         rigidity *= 1.08
+    rigidity *= grip_state(payload)[2]      # short shank grip → softer holder
     deflection = tool_deflection(
         radial_force, stickout, D, flutes, loc, lbs, arbor_dia if arbor_dia > 0 else None,
         payload.get("holder_gage_length"), payload.get("holder_nose_dia"),
@@ -3606,6 +3707,7 @@ def run_dovetail(payload: dict) -> dict:
     rigidity = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
     if payload.get("dual_contact", False):
         rigidity *= 1.08
+    rigidity *= grip_state(payload)[2]      # short shank grip → softer holder
     deflection = tool_deflection(
         radial_force, stickout, D, flutes, loc, lbs, None,
         payload.get("holder_gage_length"), payload.get("holder_nose_dia"),
@@ -4026,6 +4128,7 @@ def run_feedmill(payload: dict) -> dict:
     rigidity     = TOOLHOLDER_RIGIDITY.get(toolholder, 1.0)
     if payload.get("dual_contact", False):
         rigidity *= 1.08
+    rigidity *= grip_state(payload)[2]      # short shank grip → softer holder
     deflection = tool_deflection(
         radial_force, stickout, D, flutes, loc, 0.0, None,
         payload.get("holder_gage_length"), payload.get("holder_nose_dia"),
@@ -6996,6 +7099,60 @@ def run(payload=None):
                 "preview": _preview(stickout_ovr=_ln),
             })
 
+    # 1b) Short shank grip — the tool is pulled out so far that the HOLDER itself has gone
+    # soft, on top of the longer cantilever. This is its own step because the fix is free
+    # (push the tool in) and it names the two numbers the operator needs: how much more
+    # shank to grip, and what rigidity that buys back. Only offered when pushing the tool
+    # in is actually possible — it must still clear the flutes/neck (_min_so).
+    _grip_in, _grip_x, _grip_mult, _grip_sev = grip_state(data)
+    # Don't offer this step when the operator is at/inside the tool's PREFERRED stickout —
+    # 54 catalog tools have only 1.30-1.60× shank grip at their own preferred value, and
+    # telling someone to push in past the stickout we recommended is incoherent. A "red"
+    # (below 1.2× minimum) still speaks up; no catalog tool is red at preferred.
+    _pref_so_ovr = float(data.get("pref_stickout_override", 0) or 0)
+    _at_or_inside_pref = _pref_so_ovr > 0 and _so <= _pref_so_ovr + 0.0005
+    if (_grip_in is not None and _grip_mult < 0.999
+            and (_grip_sev == "red" or (_grip_sev == "warn" and not _at_or_inside_pref))):
+        _oal_now = float(data.get("oal_in", 0) or 0)
+        _shank_now = float(data.get("shank_dia", 0) or 0)
+        # Stickout that restores full grip credit (GRIP_FULL × shank Ø left in the holder),
+        # but never shorter than the tool's own minimum — can't bury flutes in the collet.
+        _so_for_full = _oal_now - GRIP_FULL_X_SHANK * _shank_now
+        _so_target   = max(_so_for_full, _min_so)
+        _push_in     = _so - _so_target
+        if _push_in > 0.005:
+            # Rigidity regained = new grip multiplier / current one. Deflection is inversely
+            # proportional to the multiplier, and the shorter cantilever helps on top of it.
+            _mult_after = grip_state({**data, "stickout": _so_target})[2]
+            _grip_gain  = round((_mult_after / max(_grip_mult, 1e-6) - 1.0) * 100.0)
+            _grip_after = (_oal_now - _so_target) / _shank_now if _shank_now > 0 else 0.0
+            if _grip_gain >= 3:
+                _at_min_note = ""
+                if _so_target <= _min_so + 1e-4 and _so_for_full < _min_so:
+                    # Can't reach full grip without burying the flutes — say so rather than
+                    # implying the problem goes away entirely.
+                    _at_min_note = (
+                        f' This tool can only go to {_min_so:.3f}" before the collet reaches'
+                        f" the flutes/neck, so it can't fully recover — a shorter-LOC or"
+                        f" reduced-neck tool is the real fix."
+                    )
+                _hw_suggestions.append({
+                    "type": "shank_grip",
+                    "label": f'Grip {_push_in:.2f}" more shank — {_grip_gain}% more rigidity',
+                    "detail": (
+                        f'Only {_grip_in:.3f}" of shank is in the holder ({_grip_x:.1f}× shank Ø)'
+                        f'{" — below the " + format(GRIP_MIN_X_SHANK, ".1f") + "× minimum" if _grip_sev == "red" else ""}.'
+                        f' Push the tool in to {_so_target:.3f}" stickout for {_grip_after:.1f}× shank Ø'
+                        f" of grip. Costs nothing — the holder is doing less work, so feed and"
+                        f" DOC come back with it.{_at_min_note}"
+                    ),
+                    "stickout_in": round(_so_target, 4),
+                    "gain_pct": _grip_gain,
+                    "grip_in": round(_grip_in, 4),
+                    "grip_x_shank": round(_grip_x, 2),
+                    "preview": _preview(stickout_ovr=_so_target),
+                })
+
     # The depth the user actually intends to cut — the RAW DOC input, not the physics-clamped
     # _doc_now. Used to size shorter-LOC and reduced-neck flute lengths (both must reach the
     # real depth, regardless of any internal DOC clamp). Falls back to _doc_now if unset.
@@ -7565,7 +7722,11 @@ def run(payload=None):
     # Info/FYI notes (type="info") always appended after the cap — not counted.
     # LBS note (_stab_suggestions) always prepended — not counted toward cap.
     _MAX_SUGGESTIONS = 6
-    _PRIORITY_TYPES = ["feed", "doc", "woc", "stickout", "holder", "tool"]
+    # shank_grip sits ahead of stickout: pushing the tool further INTO the holder is free
+    # and costs no reach, whereas "shorten stickout" may not be available if the part needs
+    # the depth. A type missing from BOTH lists is silently dropped, so anything appended to
+    # _imm_/_hw_suggestions must be registered here.
+    _PRIORITY_TYPES = ["feed", "doc", "woc", "shank_grip", "stickout", "holder", "tool"]
     _FILLER_TYPES   = ["shorter_loc", "diameter"]
 
     _all_actionable = _imm_suggestions + _hw_suggestions
