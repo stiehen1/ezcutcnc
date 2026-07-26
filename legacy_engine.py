@@ -7051,7 +7051,16 @@ def run(payload=None):
     # Skip for QTR3/QTR3-RN: stickout is fixed by the hardcoded DB value (1/4" shank forces a set geometry)
     _fixed_stickout_series = {"QTR3", "QTR3-RN"}
     _tool_series_upper = str(data.get("tool_series", "") or "").upper()
-    _stickout_is_fixed = _tool_series_upper in _fixed_stickout_series
+    # A tool bottomed on a holder's positive back stop also has a FIXED stickout: the stop is
+    # already holding it, so it cannot be pushed in further. "Shorten stickout to 2.42" on a
+    # tool seated at 2.700" asks for something physically impossible — the only route to a
+    # shorter projection is cutting the shank end back. Suppress the step and let the
+    # shank_grip / cut-the-shank advice carry it instead.
+    _bore_depth_in = float(data.get("holder_bore_depth_in", 0) or 0)
+    _oal_for_stop  = float(data.get("oal_in", 0) or 0)
+    _seated_on_stop = (_bore_depth_in > 0 and _oal_for_stop > 0
+                       and (_oal_for_stop - _so) >= _bore_depth_in - 1e-4)
+    _stickout_is_fixed = (_tool_series_upper in _fixed_stickout_series) or _seated_on_stop
     _seen_stickout = set()
     # Necked tool is "at the floor" once stickout is within ~0.3×D of the LBS minimum
     # (_min_so = LBS). A small tolerance band so "reduce stickout" doesn't fire on tools
@@ -7115,6 +7124,43 @@ def run(payload=None):
                 "stickout_in": _ln,
                 "gain_pct": _gain,
                 "preview": _preview(stickout_ovr=_ln),
+            })
+
+    # 1a) Seated on a positive stop and flex is over limit: "shorten stickout" was suppressed
+    # above because the tool can't be pushed in. The equivalent real fix is to CUT THE SHANK
+    # END BACK — the tool then sits deeper past the stop and projects less. This is a distinct
+    # case from short grip (1b): here the grip may be perfectly adequate (a 2.000" bore on a
+    # Ø.750 shank is 2.7×) while the projection is still too long for the cut.
+    if _seated_on_stop and _defl > _dlim and not _at_lbs_floor:
+        # Stickout that would bring flex to the limit: deflection ~ L³, so scale by the cube
+        # root of the ratio. Never shorter than the tool's own minimum.
+        if _dlim > 0 and _defl > 0:
+            _cut_target = max(_min_so, _so * (_dlim / _defl) ** (1.0 / 3.0))
+        else:
+            _cut_target = _min_so
+        _cut_amount = _so - _cut_target
+        if _cut_amount > 0.010:
+            _cut_gain = round(((_so / _cut_target) ** 3 - 1.0) * 100.0) if _cut_target > 0 else 0
+            _at_floor_note = ""
+            if _cut_target <= _min_so + 1e-4:
+                _at_floor_note = (
+                    f' That is this tool\'s absolute minimum ({_min_so:.3f}"), so it won\'t fully'
+                    f" solve the flex on its own — stack it with a lower DOC or a stiffer holder."
+                )
+            _hw_suggestions.append({
+                "type": "stickout",
+                "label": f'Cut {_cut_amount:.2f}" off the shank end — {_cut_gain}% stiffer',
+                "detail": (
+                    f'The tool is bottomed on the holder stop at {_bore_depth_in:.3f}" bore depth,'
+                    f' so it can\'t be pushed in to shorten the {_so:.3f}" projection. Cutting the'
+                    f' shank end back lets it sit deeper past the stop: a {_cut_target:.3f}"'
+                    f" projection is {_cut_gain}% stiffer (deflection scales with length³)."
+                    f"{_at_floor_note}"
+                ),
+                "stickout_in": round(_cut_target, 4),
+                "gain_pct": _cut_gain,
+                "requires_shank_cut": True,
+                "preview": _preview(stickout_ovr=_cut_target),
             })
 
     # 1b) Short shank grip — the tool is pulled out so far that the HOLDER itself has gone
