@@ -2371,7 +2371,10 @@ export default function Mentor() {
         // so there is no trustworthy hard floor to quote. Flag it — the hint line shows
         // "estimated from print" instead of asserting a measured minimum, and the min
         // clamp stays off so the operator isn't blocked by a guessed number.
-        setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst, stickout_is_estimate: true, stickout_estimate_base: _defaultSo }));
+        // Clear both per-tool stickout overrides: they belong to whatever catalog SKU was
+        // selected before this print, and carrying them onto a special would quote another
+        // tool's measured numbers as this one's.
+        setForm(p => ({ ...p, stickout: _defaultSo, flute_wash: _fwEst, min_stickout_override: 0, pref_stickout_override: 0, stickout_is_estimate: true, stickout_estimate_base: _defaultSo }));
         setStickoutText(_defaultSo.toFixed(3));
       }
       // Auto-apply optimal (med) WOC/DOC presets based on new tool dims + cutting style.
@@ -2563,6 +2566,13 @@ export default function Mentor() {
     // cutter on a bigger shank) the shoulder can bottom on the collet before the flutes
     // do, so the geometric floor can read shorter than the tool can physically go.
     min_stickout_override: 0,
+    // Per-tool PREFERRED stickout from the SKU upload's "Preferred Stickout" column.
+    // 0 = not supplied → fall back to the geometric rule. Must be carried on the form
+    // (not just used to seed the field) because the min/default hint and its
+    // "Restore default" link recompute the preferred value on every render: without
+    // this they hit the minimum + 0.20×D fallback and offered a number that
+    // disagreed with the field the upload had just populated.
+    pref_stickout_override: 0,
     // True when stickout came from parsing a special/uploaded PRINT rather than catalog
     // geometry. Specials give an ESTIMATED preferred value and no trustworthy minimum,
     // so the UI must not assert a hard floor for them.
@@ -3760,7 +3770,7 @@ export default function Mentor() {
     // in the collet. Deep-pocket cards read tool.flute_wash directly and were fine.
     // Catalog SKU → real geometry, so clear any "estimated from print" flag left by a
     // prior special/PDF tool.
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, stickout_is_estimate: false, stickout_estimate_base: 0 }));
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
     setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
@@ -4366,8 +4376,9 @@ export default function Mentor() {
       const _loc = form.loc || 0;
       const _fw  = form.flute_wash || 0;
       const _lbs = form.lbs || 0;
-      // App-wide default = floor + 0.20×D (floor = LBS, or LOC+flute_wash).
-      const _def = _dia > 0 ? resolveStickoutDefault(_dia, _loc, _fw, _lbs, form.min_stickout_override || 0) : 0;
+      // Per-tool uploaded preferred wins; else app-wide default = floor + 0.20×D
+      // (floor = LBS, or LOC+flute_wash).
+      const _def = _dia > 0 ? resolveStickoutDefault(_dia, _loc, _fw, _lbs, form.min_stickout_override || 0, form.pref_stickout_override || 0) : 0;
       if (_def > 0) return Math.ceil(_def * 200) / 200;
       return form.loc > 0 ? form.loc * 1.25 : 2.0;                                         // last resort
     };
@@ -12052,7 +12063,7 @@ ${stabSection}
               // Specials: no floor to derive, so the PREFERRED value is whatever the print
               // estimate put in the field. Still show it — an estimate the operator can see
               // and correct is more useful than a blank line.
-              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo)
+              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
                 || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
               if (_floor <= 0 && !(form.stickout_is_estimate && _def > 0)) return null;
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
@@ -13442,7 +13453,7 @@ ${stabSection}
                 const _fw = (form as any).flute_wash ?? 0;
                 const _mo = form.min_stickout_override || 0;
                 const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
-                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0);
                 if (_floor <= 0) return null;
                 const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
                 const _offPreferred = _def > 0 && Math.abs((form.stickout || 0) - _def) > 0.0005;
