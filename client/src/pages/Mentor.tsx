@@ -12380,7 +12380,7 @@ ${stabSection}
                 return (
                   <p className="text-[10px] mt-1 text-zinc-400">
                     {cv(Math.abs(_delta))} {_delta > 0 ? "longer" : "shorter"} than preferred — set by the
-                    holder stop.{_delta > 0 ? ` Cut ${cv(_delta)} more off the shank to reach preferred.` : ""}
+                    holder stop, not adjustable on this setup.
                   </p>
                 );
               }
@@ -12438,7 +12438,7 @@ ${stabSection}
                     <p className="mt-0.5 font-semibold leading-snug">
                       ⚠ Using less than recommended shank grip area — cutting parameters
                       pulled back for tool/holder cantilever.
-                      {_g.boreLimited && " The tool is bottomed on the holder stop, so it can't be pushed in further — cut the shank back or use a deeper-bore holder."}
+                      {_g.boreLimited && " The tool is bottomed on the holder stop, so it can't be pushed in further — a deeper-bore holder is the fix."}
                     </p>
                   )}
                   {_warn && (
@@ -13879,7 +13879,7 @@ ${stabSection}
                       <p className="mt-0.5 font-semibold leading-snug">
                         ⚠ Using less than recommended shank grip area — cutting parameters
                         pulled back for tool/holder cantilever.
-                        {_g.boreLimited && " Bottomed on the holder stop — cut the shank back or use a deeper-bore holder."}
+                        {_g.boreLimited && " Bottomed on the holder stop — a deeper-bore holder is the fix."}
                       </p>
                     )}
                   </div>
@@ -14398,7 +14398,7 @@ ${stabSection}
                       <span className={`block text-[11px] mt-0.5 font-medium ${_red ? "text-red-400" : "text-amber-400"}`}>
                         {_red ? "⚠ " : ""}Shank in holder {_g.grip > 0 ? `${_g.grip.toFixed(3)}"` : "—"} ({_g.gripX.toFixed(1)}× shank Ø){_cap}
                         {_red && (_g.boreLimited
-                          ? " — bottomed on the holder stop; cut the shank back or use a deeper-bore holder"
+                          ? " — bottomed on the holder stop; needs a deeper-bore holder"
                           : " — less than recommended grip area; parameters pulled back")}
                       </span>
                     );

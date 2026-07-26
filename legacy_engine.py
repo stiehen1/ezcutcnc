@@ -7126,42 +7126,12 @@ def run(payload=None):
                 "preview": _preview(stickout_ovr=_ln),
             })
 
-    # 1a) Seated on a positive stop and flex is over limit: "shorten stickout" was suppressed
-    # above because the tool can't be pushed in. The equivalent real fix is to CUT THE SHANK
-    # END BACK — the tool then sits deeper past the stop and projects less. This is a distinct
-    # case from short grip (1b): here the grip may be perfectly adequate (a 2.000" bore on a
-    # Ø.750 shank is 2.7×) while the projection is still too long for the cut.
-    if _seated_on_stop and _defl > _dlim and not _at_lbs_floor:
-        # Stickout that would bring flex to the limit: deflection ~ L³, so scale by the cube
-        # root of the ratio. Never shorter than the tool's own minimum.
-        if _dlim > 0 and _defl > 0:
-            _cut_target = max(_min_so, _so * (_dlim / _defl) ** (1.0 / 3.0))
-        else:
-            _cut_target = _min_so
-        _cut_amount = _so - _cut_target
-        if _cut_amount > 0.010:
-            _cut_gain = round(((_so / _cut_target) ** 3 - 1.0) * 100.0) if _cut_target > 0 else 0
-            _at_floor_note = ""
-            if _cut_target <= _min_so + 1e-4:
-                _at_floor_note = (
-                    f' That is this tool\'s absolute minimum ({_min_so:.3f}"), so it won\'t fully'
-                    f" solve the flex on its own — stack it with a lower DOC or a stiffer holder."
-                )
-            _hw_suggestions.append({
-                "type": "stickout",
-                "label": f'Cut {_cut_amount:.2f}" off the shank end — {_cut_gain}% stiffer',
-                "detail": (
-                    f'The tool is bottomed on the holder stop at {_bore_depth_in:.3f}" bore depth,'
-                    f' so it can\'t be pushed in to shorten the {_so:.3f}" projection. Cutting the'
-                    f' shank end back lets it sit deeper past the stop: a {_cut_target:.3f}"'
-                    f" projection is {_cut_gain}% stiffer (deflection scales with length³)."
-                    f"{_at_floor_note}"
-                ),
-                "stickout_in": round(_cut_target, 4),
-                "gain_pct": _cut_gain,
-                "requires_shank_cut": True,
-                "preview": _preview(stickout_ovr=_cut_target),
-            })
+    # NOTE: when the tool is bottomed on a positive stop, the "shorten stickout" step is
+    # suppressed (see _stickout_is_fixed above) and nothing replaces it. Cutting the shank end
+    # back WOULD shorten the projection, but that's destructive and irreversible on a carbide
+    # tool — not something the app should recommend. The reversible levers (DOC, holder, tool
+    # choice) carry the flex fix instead. Accommodating a cut the shop already made is what
+    # the Cut-off OAL field is for; advising one is a different thing.
 
     # 1b) Short shank grip — the tool is pulled out so far that the HOLDER itself has gone
     # soft, on top of the longer cantilever. This is its own step because the fix is free
@@ -7182,13 +7152,13 @@ def run(payload=None):
         _bore_now  = float(data.get("holder_bore_depth_in", 0) or 0)
         # Bottomed on a positive back stop? Then grip is capped by BORE DEPTH, not by how
         # much shank exists, and pushing the tool in further is physically impossible — the
-        # stop is already holding it. "Grip more shank" would be bad advice, so the fix
-        # becomes: cut the shank back (moves the tool deeper past the stop, shortening
-        # stickout) or move to a holder with a deeper bore.
+        # stop is already holding it. State the constraint and point at a deeper-bore holder.
+        # Deliberately NOT suggesting a shank cut-off: it's destructive and irreversible on a
+        # carbide tool. Cut-off is something we ACCOMMODATE when a shop has already done it for
+        # shrink-fit clearance (that's the Cut-off OAL field), never something we encourage.
         _bottomed = _bore_now > 0 and (_oal_now - _so) >= _bore_now - 1e-4
         if _bottomed:
-            _need_grip  = GRIP_MIN_X_SHANK * _shank_now
-            _cut_needed = _so - (_oal_now - _bore_now)   # how much shorter the OAL must be
+            _need_grip = GRIP_MIN_X_SHANK * _shank_now
             _hw_suggestions.append({
                 "type": "shank_grip",
                 "label": (
@@ -7199,11 +7169,9 @@ def run(payload=None):
                     f" depth, so pushing it in further isn't possible — the stop is already"
                     f" holding it."
                     f'{" That grip is below the " + format(GRIP_MIN_X_SHANK, ".1f") + "× shank Ø minimum, so feed and DOC are pulled back." if _grip_sev == "red" else ""}'
-                    f" To fix it, either cut the shank end back"
-                    f'{f" ~{_cut_needed:.3f}\"" if _cut_needed > 0.005 else ""}'
-                    f" so the tool sits deeper past the stop and projects less, or use a holder"
-                    f' with a deeper bore (needs ≥ {_need_grip:.3f}" to make the {GRIP_MIN_X_SHANK:.1f}×'
-                    f" minimum)."
+                    f' A holder with a deeper bore (≥ {_need_grip:.3f}" to make the'
+                    f" {GRIP_MIN_X_SHANK:.1f}× minimum) is the fix here; otherwise lean on DOC"
+                    f" and WOC to bring the flex down."
                 ),
                 "gain_pct": 0,
                 "grip_in": round(_grip_in, 4),
