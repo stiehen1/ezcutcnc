@@ -8,6 +8,15 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### STEP file catalog converted to inch units
+All **3,595** downloadable tool models are now inch-unit STEP files, replacing the millimeter exports that had been live since April. Opening one in CAD no longer lands a 0.500" endmill as a 0.500 mm one.
+
+The files are Cloudflare R2 objects served from `cdn.ezcutcnc.app`, not database rows — `ToolFinder` builds the URL from the EDP at request time (`Core_Cutter_<EDP> v1.step`), so identical filenames meant the swap needed no schema, code, or deploy change. R2 sends no `Cache-Control` on these objects and the edge reports `cf-cache-status: DYNAMIC`, so the overwrite went live immediately without a cache purge.
+
+New `scripts/r2-step-upload.mjs` does the bulk replace — the R2 dashboard caps uploads at 100 files, so 3,595 needs the S3 API. Dependency-free Node with hand-rolled SigV4; credentials come from `$env:R2_ACCOUNT` / `R2_KEY` / `R2_SECRET` and are never written to disk. It issues only `ListObjectsV2` and `PutObject` — there is deliberately **no delete path**, because the same bucket holds ~750 MB of `.dwg`/`.dxf` companions that a mirroring `sync` would silently erase. Run `plan` before `upload`: it diffs local against live and names any live key your export doesn't cover, which would otherwise sit in the old units indefinitely. `verify` then re-reads a sample through the public CDN.
+
+One verification note worth recording: an inch STEP file still contains an `SI_UNIT(.MILLI.,.METRE.)` entity, because inch is defined as a *conversion* from the SI base unit. The presence of `CONVERSION_BASED_UNIT('INCH',...)` is the signal — absence of `MILLI` is not. That entity also sits at a byte offset that varies per file, so a unit check has to read the whole file; a first-pass verifier that scanned only the leading 20 KB reported 15 correctly-converted files as metric.
+
 ### Tool Setup in Holder — reordered around the field people actually fill
 The section opened with Cut-off OAL and Holder bore depth, which are the exception: most tools run at catalog length in a collet with no stop. Reordered top to bottom:
 - **Actual Stickout leads**, with the available-shank line directly beneath it — the number that drives deflection is now the first thing in the section instead of the fourth.
