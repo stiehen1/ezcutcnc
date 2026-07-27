@@ -8,6 +8,14 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Tool Setup in Holder — reordered around the field people actually fill
+The section opened with Cut-off OAL and Holder bore depth, which are the exception: most tools run at catalog length in a collet with no stop. Reordered top to bottom:
+- **Actual Stickout leads**, with the available-shank line directly beneath it — the number that drives deflection is now the first thing in the section instead of the fourth.
+- **Preferred / Minimum** follows as read-only reference for aiming that value.
+- **Cut-off OAL + holder bore depth move last**, folded behind a collapsed *"Are you cutting off the OAL of your tool?"* toggle. It auto-opens whenever either value is already set, so a loaded setup never hides numbers that are in play. The seated-to-stop checkbox stays with bore depth (it means nothing without it) and still writes the stickout field above — a positive stop *determines* stickout rather than suggesting it.
+- **"Shank in holder" → "Available shank length"** across the endmill, chamfer, and deep-pocket tool-card blocks. In a plain ER collet with no stop, only part of that length is actually clamped; the old wording claimed all of it was gripped.
+- Actual Stickout now says **"Showing the preferred stickout — change it if your setup measures different"**, shown only while the field is still sitting on the pre-filled value. Nothing on screen previously disclosed that the number was a recommendation rather than a measurement.
+
 ### Fix — uploaded Preferred Stickout ignored by "Restore default" and the engine payload
 Per-EDP stickout overrides are now authoritative everywhere. With the full catalog re-uploaded (3,597 of 3,931 rows carrying both columns; the 334 blanks are exactly the `-BLK` unground blanks), the *field* showed the uploaded preferred but three other consumers still recomputed it from the formula:
 - **"Restore default" offered a number that disagreed with the field.** `resolveStickoutDefault()` takes the uploaded preferred as its 6th argument, but both main-form hint call sites passed only 5. With `prefOverride` undefined the early return was skipped and it fell through to the `minimum + 0.20×D` branch — so a Ø.375 tool with an uploaded preferred of **1.169"** offered to "restore" **1.120"** (1.045 + 0.075). The field was right because it reads `default_stickout_in` directly at SKU-select; the hint recomputes on every render, so the two numbers came from different sources. The uploaded preferred is now carried on the form as `pref_stickout_override` and passed at both sites.
