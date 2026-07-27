@@ -30,11 +30,13 @@ import sys
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 
-from OCP.STEPControl import STEPControl_Reader, STEPControl_Writer, STEPControl_AsIs
+from OCP.STEPControl import STEPControl_Reader, STEPControl_AsIs
+from OCP.STEPCAFControl import STEPCAFControl_Reader, STEPCAFControl_Writer
+from OCP.TDocStd import TDocStd_Document
+from OCP.TCollection import TCollection_ExtendedString
+from OCP.XCAFApp import XCAFApp_Application
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.Interface import Interface_Static
-from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
-from OCP.gp import gp_Trsf
 from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
 
@@ -88,6 +90,28 @@ def raw_max_coord(text: str) -> float:
     return biggest
 
 
+def count_colours(text: str) -> int:
+    """Number of distinct COLOUR_RGB values declared in a STEP file.
+
+    These tools are two-tone (grey shank, cyan flute length); losing them makes
+    the model import as flat grey. Counted distinctly rather than by occurrence
+    because the writer may legitimately renumber or share entities.
+    """
+    found = set()
+    start = 0
+    while (i := text.find("COLOUR_RGB(", start)) != -1:
+        j = text.find(")", i)
+        if j == -1:
+            break
+        vals = text[i + 11 : j].split(",")[-3:]
+        try:
+            found.add(tuple(round(float(v), 6) for v in vals))
+        except ValueError:
+            pass
+        start = j
+    return len(found)
+
+
 def bbox_max(shape) -> float:
     box = Bnd_Box()
     BRepBndLib.Add_s(shape, box)
@@ -99,23 +123,50 @@ def convert_one(name: str):
     """Scale one file mm -> inch. Returns (name, ok, detail)."""
     try:
         src = SRC / name
-        shape = read_shape(src)
 
-        # Do NOT pre-scale the geometry. OCCT holds shapes in millimetres
-        # internally and `write.step.unit` makes the writer convert on output,
+        # Use the CAF (attribute) reader/writer, not STEPControl_Writer. The
+        # plain writer transfers geometry ONLY and silently drops STYLED_ITEM /
+        # PRESENTATION_STYLE_ASSIGNMENT / COLOUR_RGB, which is what gives these
+        # tools their two-tone shank-vs-LOC colouring in CAD.
+        app = XCAFApp_Application.GetApplication_s()
+        doc = TDocStd_Document(TCollection_ExtendedString("MDTV-XCAF"))
+        app.NewDocument(TCollection_ExtendedString("MDTV-XCAF"), doc)
+
+        reader = STEPCAFControl_Reader()
+        reader.SetColorMode(True)
+        reader.SetNameMode(True)
+        reader.SetLayerMode(True)
+        if reader.ReadFile(str(src)) != IFSelect_RetDone:
+            raise RuntimeError("read failed")
+        if not reader.Transfer(doc):
+            raise RuntimeError("CAF transfer failed")
+
+        out = DST / name
+        writer = STEPCAFControl_Writer()
+        writer.SetColorMode(True)
+        writer.SetNameMode(True)
+        writer.SetLayerMode(True)
+
+        # Order matters. The `write.step.*` statics are not registered until a
+        # STEP writer has been constructed -- SetCVal_s returns False and does
+        # nothing if called first, leaving the default MM and silently emitting
+        # a millimetre file. Construct, THEN set the unit, THEN transfer.
+        #
+        # Do NOT pre-scale the geometry to compensate. OCCT holds shapes in mm
+        # internally and this setting makes the writer convert on output,
         # emitting inch coordinates AND the 25.4 conversion factor together.
-        # Scaling by 1/25.4 first double-converts: the first attempt did that
-        # and produced 38.1-magnitude coords under an INCH header -- the exact
-        # FreeCAD defect this script exists to fix. The roundtrip check below
-        # is what caught it.
-        Interface_Static.SetCVal_s("write.step.unit", "INCH")
+        # Scaling by 1/25.4 as well double-converts, reproducing the exact
+        # FreeCAD defect this script exists to fix.
+        if not Interface_Static.SetCVal_s("write.step.unit", "INCH"):
+            raise RuntimeError("could not set write.step.unit")
         Interface_Static.SetIVal_s("write.step.schema", 214)
 
-        writer = STEPControl_Writer()
-        writer.Transfer(shape, STEPControl_AsIs)
-        out = DST / name
+        if not writer.Transfer(doc, STEPControl_AsIs):
+            raise RuntimeError("CAF write-transfer failed")
         if writer.Write(str(out)) != IFSelect_RetDone:
             raise RuntimeError("write failed")
+
+        shape = read_shape(src)  # for the dimension checks below
 
         want = bbox_max(shape)  # source size, in mm
 
@@ -142,7 +193,16 @@ def convert_one(name: str):
         if expect > 0 and abs(raw - expect) / expect > 0.01:
             raise RuntimeError(f"coord {raw:.4f}in != expected {expect:.4f}in")
 
-        return (name, True, f"{expect:.3f}in")
+        # Check 3 -- presentation. The first pass used STEPControl_Writer and
+        # silently dropped every COLOUR_RGB, so the tools imported plain grey
+        # and only turned up when the file was opened in Fusion. Assert the
+        # colours survived, and that we did not lose any.
+        src_colours = count_colours(src.read_text(errors="ignore"))
+        out_colours = count_colours(text)
+        if out_colours < src_colours:
+            raise RuntimeError(f"lost colour: {src_colours} -> {out_colours}")
+
+        return (name, True, f"{expect:.3f}in {out_colours}col")
     except Exception as e:  # noqa: BLE001 - report, never abort the batch
         return (name, False, str(e)[:120])
 
