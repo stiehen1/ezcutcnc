@@ -12372,15 +12372,26 @@ ${stabSection}
               const _hasVals = form.cutoff_oal_in > 0 || form.holder_bore_depth_in > 0;
               const _open = cutoffOpen || _hasVals;   // never hide values that are in play
               return (
-                <div className="pt-1">
+                <div className="pt-1.5">
+                  {/* Question and hint stack, they don't sit side by side — together they
+                      overflow the max-w-sm column and wrap into a ragged two-line row that
+                      collides with the divider below. */}
                   <button
                     type="button"
                     onClick={() => setCutoffOpen(!_open)}
-                    className="flex w-full items-center gap-1.5 text-left text-[11px] font-medium text-zinc-400 hover:text-sky-400 transition-colors"
+                    className="group flex w-full items-start gap-1.5 text-left transition-colors"
                   >
-                    <span className="text-[9px] text-zinc-500">{_open ? "▾" : "▸"}</span>
-                    Are you cutting off the OAL of your tool?
-                    {!_open && <span className="font-normal text-zinc-600">— or using a holder with a stop</span>}
+                    <span className="text-[9px] leading-4 text-amber-400/70 group-hover:text-amber-300">{_open ? "▾" : "▸"}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-medium leading-4 text-amber-400 group-hover:text-amber-300">
+                        Are you having to cut the shank length of tool to fit in holder?
+                      </span>
+                      {!_open && (
+                        <span className="block text-[10px] leading-tight text-zinc-600">
+                          Or using a holder with a positive stop
+                        </span>
+                      )}
+                    </span>
                   </button>
                   {_open && (
                     <div className="mt-2 space-y-2 border-l border-zinc-700/60 pl-3">
