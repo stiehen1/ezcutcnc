@@ -28,8 +28,14 @@ const HOST = `${ACCOUNT_ID}.r2.cloudflarestorage.com`;
 const REGION = "auto";
 const SERVICE = "s3";
 const CONTENT_TYPE = "application/octet-stream"; // matches existing objects
+// Do NOT point this at "- IN": that FreeCAD export is a header-only relabel.
+// It declares CONVERSION_BASED_UNIT('INCH') while leaving coordinates in
+// millimetres, so every CAD package scales the model 25.4x (a 1/2" tool
+// measures 12.70"). "- INCH_TRUE" is generated from the mm masters by
+// scripts/step_mm_to_inch.py, which converts through the OpenCASCADE kernel
+// and asserts inch magnitudes on every file it writes.
 const SRC_DIR =
-  "C:/Users/scott/OneDrive/Desktop/STEP-Normalized_Master/STEP_Normalized Files (Z axis) - IN";
+  "C:/Users/scott/OneDrive/Desktop/STEP-Normalized_Master/STEP_Normalized Files (Z axis) - INCH_TRUE";
 const CONCURRENCY = 24;
 
 const KEY = process.env.R2_KEY;
@@ -213,7 +219,26 @@ async function plan() {
 
 async function upload() {
   const local = await localFiles();
-  console.log(`Uploading ${local.length} inch .step objects to r2://${BUCKET}/ ...`);
+
+  // Pre-flight every file BEFORE writing anything. A mislabelled catalogue
+  // once went live because units were only checked after the upload; refusing
+  // to start is cheaper than a second 3,595-object restore.
+  process.stdout.write(`Checking units on ${local.length} files ... `);
+  const rejects = [];
+  for (const name of local) {
+    const c = classify(await readFile(join(SRC_DIR, name), "utf8"));
+    if (!c.ok) rejects.push([name, c.note]);
+  }
+  if (rejects.length) {
+    console.log(`\n\nABORTED -- ${rejects.length} file(s) have bad units:`);
+    rejects.slice(0, 15).forEach(([n, m]) => console.log(`  x ${n}: ${m}`));
+    console.log("\nNothing was uploaded. R2 is unchanged.");
+    process.exitCode = 1;
+    return;
+  }
+  console.log("all clean");
+
+  console.log(`Uploading ${local.length} .step objects to r2://${BUCKET}/ ...`);
 
   let done = 0,
     failed = [];
@@ -252,7 +277,52 @@ async function upload() {
   }
 }
 
-/** Read live objects back through the public CDN and confirm INCH is declared. */
+/**
+ * Largest absolute coordinate in the model, in whatever unit the file declares.
+ * This is the only honest unit test: a solid carbide endmill is at most ~8"
+ * / ~200 mm long, so the magnitude alone says which unit the NUMBERS are in --
+ * regardless of what the header claims they are.
+ */
+function maxAbsCoord(body) {
+  let max = 0;
+  for (const m of body.matchAll(/CARTESIAN_POINT\('',\(([^)]*)\)\)/g)) {
+    const parts = m[1].split(",");
+    // 3-tuples only. A 2-tuple is a pcurve point in a surface's PARAMETER
+    // space -- first value an angle in radians, second a length parameter.
+    // Those are not model coordinates and a unit conversion correctly leaves
+    // them alone, so counting them flags good inch files as still-metric.
+    if (parts.length !== 3) continue;
+    for (const part of parts) {
+      const v = Math.abs(parseFloat(part));
+      if (Number.isFinite(v) && v > max) max = v;
+    }
+  }
+  return max;
+}
+
+/**
+ * Classify a STEP body by comparing its DECLARED unit against the MAGNITUDE of
+ * its geometry. Checking the header alone is what let a 25.4x-oversized catalog
+ * ship: the "- IN" export relabelled the unit without scaling the coordinates,
+ * so every INCH-header grep passed while every tool measured 25.4x too big.
+ */
+function classify(body) {
+  const declaresInch = /CONVERSION_BASED_UNIT\('INCH'/.test(body);
+  const max = maxAbsCoord(body);
+  // Endmill envelope: <= ~8 in, <= ~205 mm. A file whose numbers exceed the
+  // inch envelope is carrying mm coordinates no matter what it declares.
+  const numbersLookInch = max > 0 && max <= 12;
+  if (!declaresInch) return { ok: true, unit: "mm", max, note: "mm (declared, consistent)" };
+  if (numbersLookInch) return { ok: true, unit: "inch", max, note: "inch (declared, consistent)" };
+  return {
+    ok: false,
+    unit: "BROKEN",
+    max,
+    note: `declares INCH but max coord ${max.toFixed(2)} is a mm magnitude -> renders ${(25.4).toFixed(0)}x oversize`,
+  };
+}
+
+/** Read live objects back through the CDN and check units against geometry. */
 async function verify(sampleSize = 40) {
   const local = await localFiles();
   const step = Math.max(1, Math.floor(local.length / sampleSize));
@@ -260,6 +330,7 @@ async function verify(sampleSize = 40) {
 
   let inch = 0,
     mm = 0,
+    broken = 0,
     bad = 0;
   for (const name of sample) {
     const url = `https://cdn.ezcutcnc.app/${encodeURIComponent(name)}`;
@@ -270,20 +341,28 @@ async function verify(sampleSize = 40) {
         bad++;
         continue;
       }
-      // Scan the WHOLE body: the INCH entity sits at a byte offset that varies
-      // per file, so truncating the read reports big inch files as metric.
-      const body = await res.text();
-      if (/CONVERSION_BASED_UNIT\('INCH'/.test(body)) inch++;
-      else {
-        mm++;
-        console.log(`  ! still metric: ${name}  (${body.length} bytes)`);
-      }
+      // Scan the WHOLE body: the unit entity sits at a byte offset that varies
+      // per file, so truncating the read misreads big files.
+      const c = classify(await res.text());
+      if (!c.ok) {
+        broken++;
+        console.log(`  x ${name}: ${c.note}`);
+      } else if (c.unit === "inch") inch++;
+      else mm++;
     } catch (e) {
       bad++;
       console.log(`  ? ${name} -> ${e.message}`);
     }
   }
-  console.log(`\nsampled ${sample.length}:  INCH ${inch} | metric ${mm} | unreadable ${bad}`);
+  console.log(
+    `\nsampled ${sample.length}:  inch ${inch} | mm ${mm} | BROKEN ${broken} | unreadable ${bad}`,
+  );
+  if (broken) {
+    console.log(
+      "\nBROKEN = header says INCH, coordinates are mm. Renders 25.4x oversize.",
+    );
+    process.exitCode = 1;
+  }
 }
 
 // ---------------------------------------------------------------- main
