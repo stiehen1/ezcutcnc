@@ -3569,6 +3569,10 @@ export default function Mentor() {
   const [oalText, setOalText] = React.useState("");
   const [cutoffOalText, setCutoffOalText] = React.useState("");
   const [boreDepthText, setBoreDepthText] = React.useState("");
+  // Cut-off OAL / bore depth are the exception, not the rule — most tools run at catalog
+  // length in a collet with no stop. Collapsed by default so Actual Stickout leads the
+  // section; auto-opens below whenever either value is actually set.
+  const [cutoffOpen, setCutoffOpen] = React.useState(false);
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
   const [feedmillDocText, setFeedmillDocText] = React.useState("");
@@ -12160,163 +12164,17 @@ ${stabSection}
             <div className="flex-1 border-t-2 border-sky-500" />
           </div>
           <div className="max-w-sm space-y-2">
-            {/* Two OAL numbers, deliberately: Tool Geometry holds the CATALOG OAL (the tool as
-                manufactured), and "Cut-off OAL" here holds THIS physical tool's length after the
-                customer shortened the shank end to fit a shrink holder. Keeping both preserves
-                the catalog spec and makes the discrepancy visible instead of overwriting it.
-                Bore depth sits here too — it's a property of the HOLDER, not the tool. */}
-            {form.tool_dia > 0 && (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <FieldLabel hint="Only if this tool has been CUT OFF — shops shorten the shank end so a tool fits a shrink holder. Leave blank when the tool is at its catalog length; the grip check then uses the OAL from Tool Geometry. When filled, this overrides it: a catalog OAL on a cut-back tool overstates how much shank is in the holder, which makes the engine understate deflection.">{UL("Cut-off OAL (in)", "Cut-off OAL (mm)")}</FieldLabel>
-                  <Input
-                    type="text" inputMode="decimal"
-                    className="no-spinners h-8 text-xs"
-                    placeholder="blank = full length"
-                    value={cutoffOalText}
-                    onChange={(e) => setCutoffOalText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseDim(cutoffOalText);
-                      const val = metric ? n / 25.4 : n;
-                      if (Number.isFinite(val) && val > 0) {
-                        setForm((p) => ({ ...p, cutoff_oal_in: val }));
-                        setCutoffOalText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
-                      } else {
-                        setForm((p) => ({ ...p, cutoff_oal_in: 0 }));
-                        setCutoffOalText("");
-                      }
-                    }}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <FieldLabel hint="Depth of the holder's bore, when it has a positive back stop (shrink fit, press fit — typically 1.5-2.0&quot;). Grip is capped at this depth no matter how long the shank is, and a tool bottomed on the stop can't be pushed in further to shorten stickout. Leave blank for collet-style holders with no stop.">{UL("Holder bore depth (in)", "Holder bore depth (mm)")}</FieldLabel>
-                  <Input
-                    type="text" inputMode="decimal"
-                    className="no-spinners h-8 text-xs"
-                    placeholder="blank = no stop"
-                    value={boreDepthText}
-                    onChange={(e) => setBoreDepthText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseDim(boreDepthText);
-                      const val = metric ? n / 25.4 : n;
-                      if (Number.isFinite(val) && val > 0) {
-                        setForm((p) => ({ ...p, holder_bore_depth_in: val }));
-                        setBoreDepthText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
-                      } else {
-                        setForm((p) => ({ ...p, holder_bore_depth_in: 0 }));
-                        setBoreDepthText("");
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            {/* Make the discrepancy explicit — a cut-off length shorter than the catalog spec is
-                the whole point, but one LONGER than the catalog OAL is a typo, not a cut. */}
-            {form.cutoff_oal_in > 0 && form.oal_in > 0 && (
-              form.cutoff_oal_in < form.oal_in ? (
-                <p className="text-[10px] text-zinc-400">
-                  Cut back {metric ? `${((form.oal_in - form.cutoff_oal_in) * 25.4).toFixed(1)}mm` : `${(form.oal_in - form.cutoff_oal_in).toFixed(3)}"`} from
-                  the catalog {metric ? `${(form.oal_in * 25.4).toFixed(1)}mm` : `${form.oal_in.toFixed(3)}"`} — grip is figured on the cut-off length.
-                </p>
-              ) : (
-                <p className="text-[10px] text-amber-400">
-                  Cut-off OAL is longer than the catalog {metric ? `${(form.oal_in * 25.4).toFixed(1)}mm` : `${form.oal_in.toFixed(3)}"`} — check the entry.
-                </p>
-              )
-            )}
-            {/* A bore DEPTH says what the holder can swallow; it does NOT say the tool is
-                pushed to the bottom. Shrink tools get set short of the stop routinely, so ask
-                instead of assuming — when this is off, stickout stays whatever they set and
-                grip is OAL − stickout (less than the full bore depth). */}
-            {form.holder_bore_depth_in > 0 && effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && (() => {
-              const _eo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0);
-              const _bottomedSo = _eo - form.holder_bore_depth_in;
-              if (!(_bottomedSo > 0)) return null;
-              return (
-                <label className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-sky-500"
-                    checked={form.tool_seated_to_stop}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      if (on) {
-                        // Seated → stickout is determined, and that's a computed value rather
-                        // than an assumption, so it counts as confirmed.
-                        setForm((p) => ({ ...p, tool_seated_to_stop: true, stickout: _bottomedSo }));
-                        setStickoutText(metric ? (_bottomedSo * 25.4).toFixed(1) : _bottomedSo.toFixed(3));
-                        setStickoutViolation(null);
-                      } else {
-                        setForm((p) => ({ ...p, tool_seated_to_stop: false }));
-                      }
-                    }}
-                  />
-                  <span className="text-[10px] text-zinc-400 leading-snug">
-                    Tool seated to bottom of bore — sets stickout to{" "}
-                    {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`} (OAL − bore depth)
-                  </span>
-                </label>
-              );
-            })()}
-            {/* Not seated: the bottomed value is still worth naming, as a reference. */}
-            {form.holder_bore_depth_in > 0 && !form.tool_seated_to_stop && effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && (() => {
-              const _bottomedSo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) - form.holder_bore_depth_in;
-              if (!(_bottomedSo > 0)) return null;
-              if (Math.abs((form.stickout || 0) - _bottomedSo) <= 0.0005) return null;
-              return (
-                <p className="text-[10px] text-zinc-500">
-                  Fully seated would give {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`}
-                  <span className="text-zinc-600"> | </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForm((p) => ({ ...p, stickout: _bottomedSo }));
-                      setStickoutText(metric ? (_bottomedSo * 25.4).toFixed(1) : _bottomedSo.toFixed(3));
-                      setStickoutViolation(null);
-                    }}
-                    className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-sky-400 transition-colors"
-                  >
-                    Use it
-                  </button>
-                </p>
-              );
-            })()}
-            {/* Preferred / Minimum are REFERENCE values for this tool — read-only, straight
-                from the SKU upload (or the geometric rule when the tool has no override).
-                They used to share the input, which meant the box labeled "Preferred" held
-                whatever got typed into it. Splitting them makes the input honestly "Actual"
-                and gives the operator both targets to aim between while they type. */}
-            {(() => {
-              const _fw = (form as any).flute_wash ?? 0;
-              const _mo = form.min_stickout_override || 0;
-              const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
-              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
-                || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
-              if (!(_def > 0) && !(_floor > 0)) return null;
-              const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
-              return (
-                <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1">
-                  {_def > 0 && (
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[11px] text-zinc-400">Preferred stickout</span>
-                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
-                    </div>
-                  )}
-                  {_floor > 0 && (
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[11px] text-zinc-400">Minimum stickout</span>
-                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
-                    </div>
-                  )}
-                  {form.stickout_is_estimate && (
-                    <p className="text-[10px] text-amber-400/80 leading-snug pt-0.5">
-                      Estimated from print dimensions — verify against the actual tool.
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
+            {/* Order is deliberate, and it is NOT data-flow order:
+                  1. Actual Stickout  — the one field every setup fills, and the one that
+                                        drives deflection. It leads.
+                  2. Preferred / Min  — read-only reference for aiming that number.
+                  3. Cut-off OAL / bore depth — collapsed. Most tools run at catalog length
+                                        in a no-stop collet, so these are the exception.
+                Cut-off OAL and bore depth DO feed the available-shank number shown under
+                the stickout field; putting them last means that line reads on catalog-OAL
+                assumptions until they're opened and corrected. That's the same assumption
+                the form already defaults to, and it keeps the grip number next to the field
+                that most affects it. */}
             <FieldLabel hint="How far the tool ACTUALLY projects from the toolholder face — measure the setup, don't assume the preferred value. Longer stickout reduces rigidity two ways: deflection scales with length³, and less shank left in the holder makes the holder itself more compliant. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Actual Stickout (in)", "Actual Stickout (mm)")}</FieldLabel>
             <Input
               type="text" inputMode="decimal"
@@ -12350,7 +12208,24 @@ ${stabSection}
               }}
             />
             {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
-            {/* Status line for the Actual field. Preferred/Minimum are shown above as
+            {/* The field pre-fills with Preferred, and nothing on screen used to say so —
+                an operator could read the number as something we measured. Only say it while
+                the field is still SITTING on preferred; once they move it, the delta line
+                below takes over and this would be false. */}
+            {form.tool_dia > 0 && !form.tool_seated_to_stop && (() => {
+              const _fw = (form as any).flute_wash ?? 0;
+              const _mo = form.min_stickout_override || 0;
+              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
+                || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
+              if (!(_def > 0)) return null;
+              if (Math.abs((form.stickout || 0) - _def) > 0.0005) return null;
+              return (
+                <p className="text-[10px] mt-1 text-zinc-500">
+                  Showing the preferred stickout — change it if your setup measures different.
+                </p>
+              );
+            })()}
+            {/* Status line for the Actual field. Preferred/Minimum are shown below as
                 reference, so this only reports the DELTA plus a click to snap back.
                 Three states, and the distinction matters:
                   BOTTOMED  — stickout is DETERMINED by OAL − bore depth. Never offer
@@ -12410,12 +12285,13 @@ ${stabSection}
                 </p>
               );
             })()}
-            {/* ── Shank grip in the holder ──────────────────────────────────────────
-                Operators pull tools out further than the preferred stickout, which
-                leaves less shank in the holder — a rigidity loss ON TOP of the longer
-                cantilever. Show what's actually left to grip and flag it in red below
-                1.2× shank Ø. Ratio is vs SHANK Ø (the holder clamps the shank), not
-                cutting Ø, which would read ~27× on a QTR3 and never flag. ── */}
+            {/* ── Available shank length ────────────────────────────────────────────
+                OAL − stickout: the shank left behind the holder face. Called "available"
+                rather than "in holder" on purpose — in a plain ER collet with no stop,
+                only part of that length is actually clamped, so claiming it's all gripped
+                would overstate the setup. Flagged red below 1.2× shank Ø. Ratio is vs
+                SHANK Ø (the holder clamps the shank), not cutting Ø, which would read
+                ~27× on a QTR3 and never flag. ── */}
             {(() => {
               // Bore only caps grip when the tool is SEATED against the stop. Set short of the
               // bottom, the engaged length is OAL − stickout and the bore is irrelevant.
@@ -12430,7 +12306,7 @@ ${stabSection}
               const _tone = _red ? "text-red-400" : _warn ? "text-amber-400" : "text-zinc-400";
               return (
                 <div className={`text-[10px] mt-1.5 ${_tone}`}>
-                  <span className="font-medium">Shank in holder {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
+                  <span className="font-medium">Available shank length {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
                   <span className={_red ? "text-red-400/60" : _warn ? "text-amber-400/50" : "text-zinc-500"}> | </span>
                   <span>{_g.gripX.toFixed(1)}× shank Ø</span>
                   {_g.boreLimited && <span className="text-zinc-500"> (capped by holder bore)</span>}
@@ -12445,6 +12321,187 @@ ${stabSection}
                     <p className="mt-0.5 leading-snug text-amber-400/90">
                       Approaching minimum grip ({GRIP_MIN_X_SHANK.toFixed(1)}× shank Ø).
                     </p>
+                  )}
+                </div>
+              );
+            })()}
+            {/* Preferred / Minimum are REFERENCE values for this tool — read-only, straight
+                from the SKU upload (or the geometric rule when the tool has no override).
+                They used to share the input, which meant the box labeled "Preferred" held
+                whatever got typed into it. Splitting them makes the input honestly "Actual"
+                and gives the operator both targets to aim between while they type. */}
+            {(() => {
+              const _fw = (form as any).flute_wash ?? 0;
+              const _mo = form.min_stickout_override || 0;
+              const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+              const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0)
+                || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
+              if (!(_def > 0) && !(_floor > 0)) return null;
+              const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+              return (
+                <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1 mt-2">
+                  {_def > 0 && (
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[11px] text-zinc-400">Preferred stickout</span>
+                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
+                    </div>
+                  )}
+                  {_floor > 0 && (
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[11px] text-zinc-400">Minimum stickout</span>
+                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
+                    </div>
+                  )}
+                  {form.stickout_is_estimate && (
+                    <p className="text-[10px] text-amber-400/80 leading-snug pt-0.5">
+                      Estimated from print dimensions — verify against the actual tool.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+            {/* ── Cut-off OAL / holder bore depth — the exception, so it's folded away ──
+                Two OAL numbers, deliberately: Tool Geometry holds the CATALOG OAL (the tool
+                as manufactured), and "Cut-off OAL" here holds THIS physical tool's length
+                after the customer shortened the shank end to fit a shrink holder. Keeping
+                both preserves the catalog spec and makes the discrepancy visible instead of
+                overwriting it. Bore depth sits here too — it's a property of the HOLDER, not
+                the tool. Most setups are neither, so the whole group is collapsed until
+                asked for — or until one of the values is already set. ── */}
+            {form.tool_dia > 0 && (() => {
+              const _hasVals = form.cutoff_oal_in > 0 || form.holder_bore_depth_in > 0;
+              const _open = cutoffOpen || _hasVals;   // never hide values that are in play
+              return (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setCutoffOpen(!_open)}
+                    className="flex w-full items-center gap-1.5 text-left text-[11px] font-medium text-zinc-400 hover:text-sky-400 transition-colors"
+                  >
+                    <span className="text-[9px] text-zinc-500">{_open ? "▾" : "▸"}</span>
+                    Are you cutting off the OAL of your tool?
+                    {!_open && <span className="font-normal text-zinc-600">— or using a holder with a stop</span>}
+                  </button>
+                  {_open && (
+                    <div className="mt-2 space-y-2 border-l border-zinc-700/60 pl-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <FieldLabel hint="Only if this tool has been CUT OFF — shops shorten the shank end so a tool fits a shrink holder. Leave blank when the tool is at its catalog length; the grip check then uses the OAL from Tool Geometry. When filled, this overrides it: a catalog OAL on a cut-back tool overstates how much shank is in the holder, which makes the engine understate deflection.">{UL("Cut-off OAL (in)", "Cut-off OAL (mm)")}</FieldLabel>
+                          <Input
+                            type="text" inputMode="decimal"
+                            className="no-spinners h-8 text-xs"
+                            placeholder="blank = full length"
+                            value={cutoffOalText}
+                            onChange={(e) => setCutoffOalText(e.target.value)}
+                            onBlur={() => {
+                              const n = parseDim(cutoffOalText);
+                              const val = metric ? n / 25.4 : n;
+                              if (Number.isFinite(val) && val > 0) {
+                                setForm((p) => ({ ...p, cutoff_oal_in: val }));
+                                setCutoffOalText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                              } else {
+                                setForm((p) => ({ ...p, cutoff_oal_in: 0 }));
+                                setCutoffOalText("");
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <FieldLabel hint="Depth of the holder's bore, when it has a positive back stop (shrink fit, press fit — typically 1.5-2.0&quot;). Grip is capped at this depth no matter how long the shank is, and a tool bottomed on the stop can't be pushed in further to shorten stickout. Leave blank for collet-style holders with no stop.">{UL("Holder bore depth (in)", "Holder bore depth (mm)")}</FieldLabel>
+                          <Input
+                            type="text" inputMode="decimal"
+                            className="no-spinners h-8 text-xs"
+                            placeholder="blank = no stop"
+                            value={boreDepthText}
+                            onChange={(e) => setBoreDepthText(e.target.value)}
+                            onBlur={() => {
+                              const n = parseDim(boreDepthText);
+                              const val = metric ? n / 25.4 : n;
+                              if (Number.isFinite(val) && val > 0) {
+                                setForm((p) => ({ ...p, holder_bore_depth_in: val }));
+                                setBoreDepthText(metric ? (val * 25.4).toFixed(1) : val.toFixed(3));
+                              } else {
+                                setForm((p) => ({ ...p, holder_bore_depth_in: 0 }));
+                                setBoreDepthText("");
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {/* Make the discrepancy explicit — a cut-off length shorter than the catalog spec is
+                          the whole point, but one LONGER than the catalog OAL is a typo, not a cut. */}
+                      {form.cutoff_oal_in > 0 && form.oal_in > 0 && (
+                        form.cutoff_oal_in < form.oal_in ? (
+                          <p className="text-[10px] text-zinc-400">
+                            Cut back {metric ? `${((form.oal_in - form.cutoff_oal_in) * 25.4).toFixed(1)}mm` : `${(form.oal_in - form.cutoff_oal_in).toFixed(3)}"`} from
+                            the catalog {metric ? `${(form.oal_in * 25.4).toFixed(1)}mm` : `${form.oal_in.toFixed(3)}"`} — grip is figured on the cut-off length.
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-amber-400">
+                            Cut-off OAL is longer than the catalog {metric ? `${(form.oal_in * 25.4).toFixed(1)}mm` : `${form.oal_in.toFixed(3)}"`} — check the entry.
+                          </p>
+                        )
+                      )}
+                      {/* A bore DEPTH says what the holder can swallow; it does NOT say the tool is
+                          pushed to the bottom. Shrink tools get set short of the stop routinely, so ask
+                          instead of assuming — when this is off, stickout stays whatever they set and
+                          grip is OAL − stickout (less than the full bore depth). Checking it writes the
+                          stickout field ABOVE: this control reaches upward by design, because a positive
+                          stop DETERMINES stickout rather than suggesting it. */}
+                      {form.holder_bore_depth_in > 0 && effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && (() => {
+                        const _eo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0);
+                        const _bottomedSo = _eo - form.holder_bore_depth_in;
+                        if (!(_bottomedSo > 0)) return null;
+                        return (
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 accent-sky-500"
+                              checked={form.tool_seated_to_stop}
+                              onChange={(e) => {
+                                const on = e.target.checked;
+                                if (on) {
+                                  // Seated → stickout is determined, and that's a computed value rather
+                                  // than an assumption, so it counts as confirmed.
+                                  setForm((p) => ({ ...p, tool_seated_to_stop: true, stickout: _bottomedSo }));
+                                  setStickoutText(metric ? (_bottomedSo * 25.4).toFixed(1) : _bottomedSo.toFixed(3));
+                                  setStickoutViolation(null);
+                                } else {
+                                  setForm((p) => ({ ...p, tool_seated_to_stop: false }));
+                                }
+                              }}
+                            />
+                            <span className="text-[10px] text-zinc-400 leading-snug">
+                              Tool seated to bottom of bore — sets stickout above to{" "}
+                              {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`} (OAL − bore depth)
+                            </span>
+                          </label>
+                        );
+                      })()}
+                      {/* Not seated: the bottomed value is still worth naming, as a reference. */}
+                      {form.holder_bore_depth_in > 0 && !form.tool_seated_to_stop && effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) > 0 && (() => {
+                        const _bottomedSo = effectiveOal(form.oal_in || 0, form.cutoff_oal_in || 0) - form.holder_bore_depth_in;
+                        if (!(_bottomedSo > 0)) return null;
+                        if (Math.abs((form.stickout || 0) - _bottomedSo) <= 0.0005) return null;
+                        return (
+                          <p className="text-[10px] text-zinc-500">
+                            Fully seated would give {metric ? `${(_bottomedSo * 25.4).toFixed(1)}mm` : `${_bottomedSo.toFixed(3)}"`}
+                            <span className="text-zinc-600"> | </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => ({ ...p, stickout: _bottomedSo }));
+                                setStickoutText(metric ? (_bottomedSo * 25.4).toFixed(1) : _bottomedSo.toFixed(3));
+                                setStickoutViolation(null);
+                              }}
+                              className="inline p-0 m-0 align-baseline bg-transparent border-0 text-[10px] leading-[inherit] font-[inherit] underline decoration-dotted hover:text-sky-400 transition-colors"
+                            >
+                              Use it
+                            </button>
+                          </p>
+                        );
+                      })()}
+                    </div>
                   )}
                 </div>
               );
@@ -13769,32 +13826,8 @@ ${stabSection}
               <div className="flex-1 border-t-2 border-sky-500" />
             </div>
             <div className="max-w-sm space-y-2">
-              {/* Read-only reference pair — see the primary Rigidity Setup block for why
-                  Preferred/Minimum are split out of the editable field. */}
-              {(() => {
-                const _fw = (form as any).flute_wash ?? 0;
-                const _mo = form.min_stickout_override || 0;
-                const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
-                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0);
-                if (!(_def > 0) && !(_floor > 0)) return null;
-                const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
-                return (
-                  <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1">
-                    {_def > 0 && (
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-[11px] text-zinc-400">Preferred stickout</span>
-                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
-                      </div>
-                    )}
-                    {_floor > 0 && (
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-[11px] text-zinc-400">Minimum stickout</span>
-                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* Same order as the endmill block: the editable Actual field leads, the
+                  read-only Preferred/Minimum reference pair follows it. */}
               <FieldLabel hint="How far the tool ACTUALLY projects from the toolholder face — measure the setup, don't assume the preferred value. Longer stickout reduces rigidity two ways: deflection scales with length³, and less shank left in the holder makes the holder itself more compliant. The Stability Advisor's #1 fix when chatter or deflection is flagged.">{UL("Actual Stickout (in)", "Actual Stickout (mm)")}</FieldLabel>
               <Input
                 type="text" inputMode="decimal"
@@ -13828,6 +13861,20 @@ ${stabSection}
                 }}
               />
               {stickoutViolation && <p className="text-[10px] text-amber-400 mt-1">{stickoutViolation}</p>}
+              {/* Pre-fill disclosure — same rule as the primary field: only while the value
+                  is still sitting on preferred. */}
+              {form.tool_dia > 0 && (() => {
+                const _fw = (form as any).flute_wash ?? 0;
+                const _mo = form.min_stickout_override || 0;
+                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0);
+                if (!(_def > 0)) return null;
+                if (Math.abs((form.stickout || 0) - _def) > 0.0005) return null;
+                return (
+                  <p className="text-[10px] mt-1 text-zinc-500">
+                    Showing the preferred stickout — change it if your setup measures different.
+                  </p>
+                );
+              })()}
               {/* Delta-from-preferred status line (same as the primary stickout field). */}
               {form.tool_dia > 0 && (() => {
                 const _fw = (form as any).flute_wash ?? 0;
@@ -13871,7 +13918,7 @@ ${stabSection}
                 const _tone = _red ? "text-red-400" : _warn ? "text-amber-400" : "text-zinc-400";
                 return (
                   <div className={`text-[10px] mt-1.5 ${_tone}`}>
-                    <span className="font-medium">Shank in holder {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
+                    <span className="font-medium">Available shank length {_g.grip > 0 ? cv(_g.grip) : "—"}</span>
                     <span className={_red ? "text-red-400/60" : _warn ? "text-amber-400/50" : "text-zinc-500"}> | </span>
                     <span>{_g.gripX.toFixed(1)}× shank Ø</span>
                     {_g.boreLimited && <span className="text-zinc-500"> (capped by holder bore)</span>}
@@ -13881,6 +13928,32 @@ ${stabSection}
                         pulled back for tool/holder cantilever.
                         {_g.boreLimited && " Bottomed on the holder stop — a deeper-bore holder is the fix."}
                       </p>
+                    )}
+                  </div>
+                );
+              })()}
+              {/* Read-only reference pair — see the primary block for why Preferred/Minimum
+                  are split out of the editable field. Sits below Actual, same as there. */}
+              {(() => {
+                const _fw = (form as any).flute_wash ?? 0;
+                const _mo = form.min_stickout_override || 0;
+                const _floor = resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo);
+                const _def = resolveStickoutDefault(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo, form.pref_stickout_override || 0);
+                if (!(_def > 0) && !(_floor > 0)) return null;
+                const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+                return (
+                  <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1 mt-2">
+                    {_def > 0 && (
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[11px] text-zinc-400">Preferred stickout</span>
+                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
+                      </div>
+                    )}
+                    {_floor > 0 && (
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[11px] text-zinc-400">Minimum stickout</span>
+                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
+                      </div>
                     )}
                   </div>
                 );
@@ -14390,13 +14463,13 @@ ${stabSection}
                     if (!_red && !_warn) {
                       return (
                         <span className="block text-[11px] text-zinc-600 mt-0.5">
-                          Shank in holder {_g.grip.toFixed(3)}" ({_g.gripX.toFixed(1)}× shank Ø){_cap}
+                          Available shank length {_g.grip.toFixed(3)}" ({_g.gripX.toFixed(1)}× shank Ø){_cap}
                         </span>
                       );
                     }
                     return (
                       <span className={`block text-[11px] mt-0.5 font-medium ${_red ? "text-red-400" : "text-amber-400"}`}>
-                        {_red ? "⚠ " : ""}Shank in holder {_g.grip > 0 ? `${_g.grip.toFixed(3)}"` : "—"} ({_g.gripX.toFixed(1)}× shank Ø){_cap}
+                        {_red ? "⚠ " : ""}Available shank length {_g.grip > 0 ? `${_g.grip.toFixed(3)}"` : "—"} ({_g.gripX.toFixed(1)}× shank Ø){_cap}
                         {_red && (_g.boreLimited
                           ? " — bottomed on the holder stop; needs a deeper-bore holder"
                           : " — less than recommended grip area; parameters pulled back")}
