@@ -12220,7 +12220,7 @@ ${stabSection}
               if (!(_def > 0)) return null;
               if (Math.abs((form.stickout || 0) - _def) > 0.0005) return null;
               return (
-                <p className="text-[10px] mt-1 text-zinc-500">
+                <p className="text-[10px] mt-1 text-zinc-400">
                   Showing the preferred stickout — change it if your setup measures different.
                 </p>
               );
@@ -12384,11 +12384,11 @@ ${stabSection}
                     <span className="text-[9px] leading-4 text-amber-400/70 group-hover:text-amber-300">{_open ? "▾" : "▸"}</span>
                     <span className="min-w-0">
                       <span className="block text-[11px] font-medium leading-4 text-amber-400 group-hover:text-amber-300">
-                        Are you having to cut the shank length of tool to fit in holder?
+                        Has this tool's shank been cut back to shorten stickout?
                       </span>
                       {!_open && (
-                        <span className="block text-[10px] leading-tight text-zinc-600">
-                          Or using a holder with a positive stop
+                        <span className="block text-[10px] leading-tight text-zinc-400">
+                          Common on shrink fit — also set the bore depth for any holder with a positive stop
                         </span>
                       )}
                     </span>
@@ -12397,7 +12397,7 @@ ${stabSection}
                     <div className="mt-2 space-y-2 border-l border-zinc-700/60 pl-3">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <FieldLabel hint="Only if this tool has been CUT OFF — shops shorten the shank end so a tool fits a shrink holder. Leave blank when the tool is at its catalog length; the grip check then uses the OAL from Tool Geometry. When filled, this overrides it: a catalog OAL on a cut-back tool overstates how much shank is in the holder, which makes the engine understate deflection.">{UL("Cut-off OAL (in)", "Cut-off OAL (mm)")}</FieldLabel>
+                          <FieldLabel hint="Only if this tool has been CUT OFF — most often a shrink fit, where the tool bottoms on the stop and the only way to shorten stickout is to take length off the shank end. Leave blank when the tool is at its catalog length; the grip check then uses the OAL from Tool Geometry. When filled, this overrides it: a catalog OAL on a cut-back tool overstates how much shank is in the holder, which makes the engine understate deflection.">{UL("Cut-off OAL (in)", "Cut-off OAL (mm)")}</FieldLabel>
                           <Input
                             type="text" inputMode="decimal"
                             className="no-spinners h-8 text-xs"
@@ -13881,7 +13881,7 @@ ${stabSection}
                 if (!(_def > 0)) return null;
                 if (Math.abs((form.stickout || 0) - _def) > 0.0005) return null;
                 return (
-                  <p className="text-[10px] mt-1 text-zinc-500">
+                  <p className="text-[10px] mt-1 text-zinc-400">
                     Showing the preferred stickout — change it if your setup measures different.
                   </p>
                 );
