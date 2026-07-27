@@ -91,6 +91,11 @@ export const mentorSchemas = {
     holder_gage_length: z.number().min(0).default(0),
     holder_nose_dia: z.number().min(0).default(0),
     runout_in: z.number().min(0).max(0.01).default(0),  // measured TIR at tool tip in spindle
+    // Weldon only: who ground the flat. A factory flat is on-axis, on-depth and burr-free;
+    // a hand-ground one often isn't, so the set screw bites a point instead of the full flat
+    // and the tool can cock in the bore or creep out under load. Drives a warning, NOT a
+    // derate — the honest number is a measured TIR, which runout_in already carries.
+    weldon_flat_ground: z.enum(["unknown", "factory", "user"]).default("unknown"),
     dual_contact: z.boolean().default(false),
     speeder_enabled: z.boolean().default(false),
     speeder_ratio: z.number().min(1).max(20).default(4),

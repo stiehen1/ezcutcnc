@@ -2732,6 +2732,8 @@ export default function Mentor() {
     holder_gage_length: 0,
     holder_nose_dia: 0,
     runout_in: 0,  // measured TIR at tool tip in spindle (0 = not measured)
+    // Weldon only — who ground the flat. Warning-only; see shared/routes.ts.
+    weldon_flat_ground: "unknown" as "unknown" | "factory" | "user",
     extension_holder: false,
     workholding: "vise" as "rigid_fixture" | "dovetail" | "vise" | "soft_jaws" | "tombstone" | "toe_clamps" | "5th_axis_vise" | "3_jaw_chuck" | "4_jaw_chuck" | "6_jaw_chuck" | "collet_chuck" | "between_centers" | "face_plate" | "trunnion_4th" | "3_jaw_on_rotary" | "expanding_mandrel" | "sub_spindle" | "tailstock_supported" | "ijaw" | "autochuck" | "zero_point" | "pyramid" | "gang_tooling" | "guide_bushing" | "hydraulic_chuck" | "power_chuck" | "step_jaws" | "form_jaws" | "pie_jaws" | "steady_rest" | "modular_quickchange" | "secondary_op_vise",
     coolant: "flood" as "dry" | "mist" | "flood" | "tsc_low" | "tsc_high",
@@ -6057,6 +6059,15 @@ ${stabSection}
     if (form.tailstock) lines.push(L("Tailstock", "In use — simply-supported (3.5× rigidity boost applied)"));
     const thLabels = TOOLHOLDER_LABELS;
     if (form.toolholder) lines.push(L("Toolholder",   thLabels[form.toolholder] ?? form.toolholder.replace(/_/g, " ")));
+    // Weldon flat provenance goes on the sheet on purpose. It changes no parameter, but if
+    // this job is ever reviewed after a failure, "shop-ground flat, TIR not measured" is the
+    // line that explains a tool that walked out of the holder.
+    if (form.toolholder === "weldon" && form.weldon_flat_ground !== "unknown") {
+      const _wf = form.weldon_flat_ground === "factory"
+        ? "Factory ground"
+        : `Shop / hand ground  ⚠ verify TIR and seating${form.runout_in > 0 ? "" : " — TIR NOT MEASURED"}`;
+      lines.push(L("Weldon Flat", _wf));
+    }
     if (form.stickout > 0) lines.push(L("Tool Stickout", `${form.stickout.toFixed(3)}"`));
     if (form.coolant)   lines.push(L("Coolant",       form.coolant.replace(/_/g, " ")));
     lines.push("");
@@ -9825,6 +9836,62 @@ ${stabSection}
 
               {/* Yes/No question rows */}
               <div className="pt-2 border-t border-border/50 space-y-0">
+                {/* ── Weldon flat provenance — only when Weldon is the selected holder ──
+                    Factory/Shop rather than No/Yes: a Weldon tool HAS a flat, so the
+                    question is who cut it, not whether it exists.
+
+                    Deliberately warning-only — no multiplier is applied. There's no
+                    calibrated number for "ground by hand", and inventing one would move
+                    every cutting parameter on a guess. The honest input is a measured TIR,
+                    which runout_in already feeds into the physics and which overrides the
+                    Weldon default outright — so the warning points at that field instead.
+
+                    It also prints on the export: it changes no parameter, but on a failure
+                    review "shop-ground flat, TIR not measured" is the line that explains a
+                    tool that walked out of the holder. ── */}
+                {form.toolholder === "weldon" && (
+                  <div>
+                    <div className="flex items-center gap-3 py-2 border-b border-border/30">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-xs font-medium text-zinc-300 cursor-default flex-1">Is the Weldon flat factory or shop ground? <span className="text-muted-foreground/60 text-[10px]">ⓘ</span></span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-64 text-xs">
+                          A factory flat is ground on-axis, to the correct depth, and burr-free, so the set screw bears evenly across it. A shop-ground flat is often slightly off-parallel to the shank axis, cut too shallow or too deep, or left with a raised edge burr — the screw then contacts a single point, which cocks the tool in the bore and lets it creep out under heavy radial load. This changes no cutting parameter; it tells you whether to verify the setup with an indicator, and it prints on the export for failure reviews.
+                        </TooltipContent>
+                      </Tooltip>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Selected = solid amber fill on dark text. Unselected = dim grey
+                            outline, NOT an amber outline: an amber-outlined button here is
+                            indistinguishable from the SELECTED amber "Yes" on the rows below,
+                            so nothing reads as chosen. */}
+                        {([{ val: "factory", label: "Factory" }, { val: "user", label: "Shop" }] as const).map(({ val, label }) => {
+                          const _sel = form.weldon_flat_ground === val;
+                          return (
+                            <button key={val} type="button"
+                              onClick={() => setForm(p => ({ ...p, weldon_flat_ground: p.weldon_flat_ground === val ? "unknown" : val }))}
+                              className="rounded px-3 py-1 text-xs font-semibold border transition-all w-16"
+                              style={{
+                                backgroundColor: _sel ? "#f59e0b" : "transparent",
+                                borderColor: _sel ? "#f59e0b" : "#52525b",
+                                color: _sel ? "#111" : "#71717a",
+                              }}
+                            >{label}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {form.weldon_flat_ground === "user" && (
+                      <div className="text-[11px] text-amber-400 py-1.5 border-b border-border/30 leading-relaxed">
+                        ⚠ Check TIR before running — a hand-ground flat that's off-axis, off-depth, or
+                        burred lets the screw bite a point instead of the whole flat, so the tool cocks
+                        and can creep out under load. Indicate the tip and enter the reading above; a
+                        measured TIR overrides the assumed Weldon default. Stone any burr and re-check
+                        seating after the first few cuts.
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Extension Holder */}
                 <div className="flex items-center gap-3 py-2 border-b border-border/30">
                   <Tooltip>
@@ -9841,9 +9908,11 @@ ${stabSection}
                         onClick={() => setForm(p => ({ ...p, extension_holder: val }))}
                         className="rounded px-3 py-1 text-xs font-semibold border transition-all w-12"
                         style={{
+                          // Only the SELECTED button carries colour. An unselected "Yes" used to
+                          // keep a bright amber border, which reads the same as a selected one.
                           backgroundColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                          borderColor: val ? "#f59e0b" : "#52525b",
-                          color: form.extension_holder === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                          borderColor: form.extension_holder === val ? (val ? "#f59e0b" : "#52525b") : "#3f3f46",
+                          color: form.extension_holder === val ? (val ? "#111" : "#fff") : "#71717a",
                         }}
                       >{label}</button>
                     ))}
@@ -9872,8 +9941,8 @@ ${stabSection}
                             className="rounded px-3 py-1 text-xs font-semibold border transition-all w-12"
                             style={{
                               backgroundColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                              borderColor: val ? "#f59e0b" : "#52525b",
-                              color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                              borderColor: form.speeder_enabled === val ? (val ? "#f59e0b" : "#52525b") : "#3f3f46",
+                              color: form.speeder_enabled === val ? (val ? "#111" : "#fff") : "#71717a",
                             }}
                           >{label}</button>
                         ))}
@@ -9901,8 +9970,8 @@ ${stabSection}
                           className="rounded px-3 py-1 text-xs font-semibold border transition-all w-12"
                           style={{
                             backgroundColor: (form.toolholder === "right_angle_head") === val ? (val ? "#f59e0b" : "#52525b") : "transparent",
-                            borderColor: val ? "#f59e0b" : "#52525b",
-                            color: (form.toolholder === "right_angle_head") === val ? (val ? "#111" : "#fff") : (val ? "#f59e0b" : "#71717a"),
+                            borderColor: (form.toolholder === "right_angle_head") === val ? (val ? "#f59e0b" : "#52525b") : "#3f3f46",
+                            color: (form.toolholder === "right_angle_head") === val ? (val ? "#111" : "#fff") : "#71717a",
                           }}
                         >{label}</button>
                       ))}
