@@ -2149,13 +2149,34 @@ def run_chamfer_mill(payload: dict) -> dict:
         base_sfm *= hardness_sfm_mult(_hrc)
     sfm_target = base_sfm
 
-    # D_eff at the outer edge of the chamfer
+    # D_eff at the outer edge of the chamfer.
+    #
+    # On a chamfer mill the diameter varies continuously along the cutting edge, so WHERE the
+    # cut sits on that edge sets the effective cutting diameter — and therefore RPM.
+    #   "tip"    — cut pulled down to the tip (no tool hanging below the chamfer). D_eff is
+    #              measured straight up from the tip flat: the smallest diameter for a given
+    #              chamfer, so it needs the HIGHEST RPM to hold SFM.
+    #   "saddle" — cut centered on the cutting edge (default; best life/finish). The contact
+    #              band sits higher up the taper, so the mean cutting diameter is larger by
+    #              the radial rise to the middle of the engaged span.
     half_angle_rad = math.radians(chamfer_angle / 2.0)
-    if chamfer_depth > 0:
-        d_eff = tip_dia + 2.0 * chamfer_depth * math.tan(half_angle_rad)
+    edge_position = str(payload.get("chamfer_edge_position", "saddle") or "saddle").lower()
+    _depth_for_deff = chamfer_depth if chamfer_depth > 0 else 0.010
+    # Axial rise from the tip to the MIDDLE of the engaged span.
+    if edge_position == "tip":
+        _axial_to_mid = _depth_for_deff / 2.0
     else:
-        # No depth — show RPM at a nominal 0.010" depth so the field isn't useless
-        d_eff = tip_dia + 2.0 * 0.010 * math.tan(half_angle_rad)
+        # Saddling centers the span on the edge: full axial reach of the edge is
+        # (body_dia - tip_dia)/2 / tan(half), and the span midpoint is at its center.
+        _edge_axial = ((body_dia - tip_dia) / 2.0) / math.tan(half_angle_rad) if math.tan(half_angle_rad) > 0 else 0.0
+        _axial_to_mid = _edge_axial / 2.0
+    # RPM is set by the LARGEST diameter in the cut (that is where surface speed peaks and
+    # where the tool wears), so drive it from the top of the engaged span.
+    if edge_position == "tip":
+        d_eff = tip_dia + 2.0 * _depth_for_deff * math.tan(half_angle_rad)
+    else:
+        _span_top_axial = _axial_to_mid + _depth_for_deff / 2.0
+        d_eff = tip_dia + 2.0 * _span_top_axial * math.tan(half_angle_rad)
     d_eff = max(0.005, min(d_eff, body_dia))
 
     # RPM — cap at max_rpm × rpm_util (same logic as milling path)
@@ -2338,15 +2359,26 @@ def run_chamfer_mill(payload: dict) -> dict:
     if flutes <= 2:
         tips.append("More flutes (4–6) improve finish quality on chamfer mills — light chip load per tooth reduces edge burnishing.")
     tips.append("Keep chip load per tooth consistent — verify actual SFM at D_eff matches target before adjusting feed.")
-    # Saddling tip — always shown: position chamfer in middle of cutting edge, not at extremes
+    # Saddling guidance — only when the user is actually saddling. If they deliberately chose to
+    # cut at the tip (no clearance below the chamfer), telling them to shift Z up is wrong.
     _saddle_pct  = 80 if is_cmh else 60
     _saddle_excl = (100 - _saddle_pct) // 2
-    tips.append(
-        f"Saddle the tool: position your chamfer so it engages the middle {_saddle_pct}% of the cutting edge length (L2), "
-        f"staying clear of the bottom {_saddle_excl}% near the tip and the top {_saddle_excl}% near the shoulder. "
-        f"{'CMH tip flat is robust enough for 10% exclusion at each end.' if is_cmh else 'CMS point tip is fragile — keep a 20% exclusion zone at the tip to avoid chipping.'} "
-        f"If your chamfer is shallow relative to L2, shift Z up so contact lands in that center band."
-    )
+    if edge_position == "tip":
+        tips.append(
+            f"Cutting at the tip (no tool below the chamfer): D_eff is {d_eff:.4f}\" — the smallest "
+            f"diameter for this chamfer, so RPM runs higher than saddling to hold {sfm_target:.0f} SFM. "
+            f"Expect shorter tool life: the tip is the weakest, slowest-cutting part of the edge and "
+            f"takes all the wear. {'The CMH tip flat helps, but it still rubs more than the flank.' if is_cmh else 'The CMS point tip is fragile here — go light and watch for chipping.'} "
+            f"If clearance ever allows it, saddle instead."
+        )
+    else:
+        tips.append(
+            f"Saddle the tool: position your chamfer so it engages the middle {_saddle_pct}% of the cutting edge length (L2), "
+            f"staying clear of the bottom {_saddle_excl}% near the tip and the top {_saddle_excl}% near the shoulder. "
+            f"{'CMH tip flat is robust enough for 10% exclusion at each end.' if is_cmh else 'CMS point tip is fragile — keep a 20% exclusion zone at the tip to avoid chipping.'} "
+            f"Saddling also raises D_eff to {d_eff:.4f}\", so RPM is lower than cutting at the tip. "
+            f"Needs clearance for the tip to hang below the chamfer — if there is none, switch to Cut at tip."
+        )
     # Z-oscillation tip — always shown: up-down motion distributes wear, prevents notching
     tips.append(
         "Z-oscillate to distribute wear: program a slow Z-shift (up and down within the available flank length) "

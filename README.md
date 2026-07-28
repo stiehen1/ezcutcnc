@@ -8,6 +8,17 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Chamfer geometry card — vertical true-angle diagram + tip-clearance question
+The chamfer card's geometry diagram was drawn on its side, with the tool horizontal and the part represented by a bare line. It's now a vertical section: tool plunging down, cutting a chamfer on the top corner of a hatched part block, laid out with the drawing on the left and a colour-coded dimension list on the right (each swatch matches the element it labels). The part's chamfer face is built from the same endpoints as the engaged span of the cutting edge, so its width tracks the Chamfer Length input instead of being fixed.
+
+**The drawn included angle was wrong at 120°.** The drawing is isotropic, so the angle only renders true if the axial run is `radial_reach / tan(half_angle)` with neither axis independently clamped — and the axial run *was* clamped to a pixel range. At 120° the floor bit and drew 118.1°; with a tip flat it drew **102.7°**, off by 17°. Inverted the construction: fix the axial budget, then solve for the OD half-width. Verified exact across 60/82/90/100/120° × three tip-flat fractions. The included angle is now called out on the drawing, with both flanks extended to their virtual apex on the centerline (below the tip flat on CMH) and an arc swept between them — a real measurement, not decoration.
+
+Two geometry corrections fell out of the rebuild: a CMS point runs axially **longer** than a CMH that stops at a tip flat (both were drawn at one length), and an `H`-prefixed EDP is a CMH tool by definition, so the tip flat now draws from the EDP even when `tip_diameter` is missing from the record.
+
+**Tip clearance now drives D_eff, and therefore RPM.** Saddling — centering the cut on the edge for tool life and finish — assumes the tip can hang below the finished chamfer. On a shallow boss, a chamfer sitting on a floor, or with an obstruction underneath, it can't. A new `chamfer_edge_position` field (`saddle` | `tip`) asks about the *part* ("Is there room for the tool to hang below the chamfer?", explicit Yes/No — a bare checkbox left it ambiguous which way meant which) rather than asking the user to pick a machining strategy.
+
+This is not cosmetic. A chamfer mill's diameter varies continuously along the cutting edge, so where the cut sits sets the effective cutting diameter. `run_chamfer_mill` previously measured `d_eff` straight up from the tip in all cases — correct only for the no-clearance case. On 17-4 PH, Ø0.500", 90°, 0.150" chamfer: **2346 RPM saddled vs 2717 RPM at the tip**, same 270 SFM. The engine's "saddle the tool / shift Z up" tip is now conditional, since telling someone to shift Z up right after they've said there's no room for it is wrong advice.
+
 ### Catalog screenshot capture — 300 DPI print exports (admin only)
 An internal tool for pulling app screenshots into the printed catalog. Toggle it from the **Capture** tab on the right edge (or `Ctrl+Shift+S`), then either click sections or drag a region. Output is a bordered PNG at a genuine 300 DPI — 3pt `#f36f21` on black, matching the catalog page — named `corecut-<date>_<HHMMSS>.png` so same-day exports don't collide.
 

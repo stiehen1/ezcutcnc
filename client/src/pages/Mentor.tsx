@@ -2713,6 +2713,7 @@ export default function Mentor() {
     chamfer_angle: 90,
     chamfer_tip_dia: 0,
     chamfer_depth: 0,
+    chamfer_edge_position: "saddle" as "saddle" | "tip",
 
     // Tool capability from SKU
     center_cutting: null as boolean | null,
@@ -11325,90 +11326,266 @@ ${stabSection}
                   const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                   const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
                   const maxDepth = halfRad > 0 ? radialReach / Math.tan(halfRad) : 0;
-                  const isCms = !(form.chamfer_tip_dia > 0);
+                  /* CMH tools have a flat tip; CMS come to a point. Tip dia is the primary tell, but
+                     an "H"-prefixed EDP is a CMH tool by definition — honour that even if the tip dia
+                     didn't come through on the record, so the flat still draws. */
+                  const isHseriesEdp = /^h/i.test(edpText.trim());
+                  const isCms = !(form.chamfer_tip_dia > 0) && !isHseriesEdp;
                   const tipX = isCms ? 138 : 128;
                   return (
-                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2 space-y-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-orange-400">Cutting Edge Length</span>
-                        <span className="font-mono font-semibold text-orange-400">{edgeLength.toFixed(4)}"</span>
-                        <span className="text-zinc-600">|</span>
-                        <span className="text-blue-400">Max Chamfer Depth</span>
-                        <span className="font-mono font-semibold text-blue-400">{maxDepth.toFixed(4)}"</span>
-                      </div>
+                    <div className="col-span-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2.5 text-xs">
+                      {/* Two columns: geometry drawing on the LEFT, colour-coded dimensions RIGHT.
+                          Each swatch colour matches the element it labels in the drawing. */}
+                      <div className="flex gap-3 items-start">
+                      <div className="flex-1 min-w-0">
                       {(() => {
-                        const topY = 12, clY = 74;
-                        const bodyX1 = 22, chamferX = 58;
-                        const tipX = isCms ? 230 : 205;
-                        const tipHalfPx = (!isCms && form.tool_dia > 0)
-                          ? Math.max(5, (form.chamfer_tip_dia / form.tool_dia) * (clY - topY))
+                        /* SINGLE-SIDE CHAMFERING on an OUTSIDE CORNER. Vertical orientation:
+                           X = radial, Y = axial. The tool breaks the top-left corner of a block —
+                           no channel/floor needed, which frees up room to draw everything larger. */
+                        const clX = 104;                    // tool centerline
+                        const shankTopY = 4;
+                        /* TRUE-ANGLE construction. The drawing is isotropic (same px per inch on both
+                           axes), so the included angle renders correctly ONLY if the axial run is
+                           radial_reach / tan(half-angle) with no independent clamping of either.
+                           So: pick the axial run to fit the frame, then SOLVE for the OD half-width.
+                           Clamping axial alone (as before) silently drew 120° as ~118°, or ~103° once
+                           a tip flat was involved. */
+                        const halfRadDraw = (form.chamfer_angle / 2) * (Math.PI / 180);
+                        const tanHalf = Math.max(0.05, Math.tan(halfRadDraw));
+                        const AXIAL_PX = 52;                 // axial run of the taper (fixed budget)
+                        // Tip flat as a fraction of the body radius (0 for a CMS point).
+                        const tipFrac = (!isCms && form.tool_dia > 0)
+                          ? Math.min(0.55, Math.max(0.12, (form.chamfer_tip_dia / form.tool_dia)))
                           : 0;
-                        const tipY = clY - tipHalfPx;
-                        const lMidX = (chamferX + tipX) / 2;
-                        const lMidY = (topY + tipY) / 2;
-                        const lAngle = Math.round(Math.atan2(tipY - topY, tipX - chamferX) * 180 / Math.PI);
-                        const dArrowY = clY + 13;
+                        /* radialReach = AXIAL_PX * tanHalf, and radialReach = odHalf - tipHalf
+                           with tipHalf = tipFrac * odHalf  =>  odHalf = reach / (1 - tipFrac). */
+                        const reachPx = AXIAL_PX * tanHalf;
+                        const odHalf = Math.min(46, reachPx / (1 - tipFrac));
+                        const tipHalfPx = odHalf * tipFrac;
+                        // Recover the exact axial run for the (possibly capped) odHalf — keeps angle true.
+                        const axialPx = (odHalf - tipHalfPx) / tanHalf;
+                        const odX = clX + odHalf;            // tool OD (right — the cutting side)
+                        const odLeftX = clX - odHalf;        // tool OD (left)
+                        const tipX = clX + tipHalfPx;
+                        const tipLeftX = clX - tipHalfPx;
+                        /* Pin the TIP at a fixed height so a long taper grows upward, not off-frame. */
+                        const tipY = 118;                    // tool tip plane (fixed)
+                        const shoulderY = tipY - axialPx;    // OD meets the chamfer edge
+                        /* Engaged span of the cutting edge = entered chamfer length. Position depends
+                           on chamfer_edge_position: "saddle" centers it on the edge (best life/finish,
+                           but the tip hangs below the chamfer and needs clearance); "tip" pulls the cut
+                           down to the tip for shallow features with no room for tip overhang.
+                           The part's chamfer uses the SAME endpoints, so its width tracks the input. */
+                        const engFrac = (form.chamfer_depth > 0 && edgeLength > 0)
+                          ? Math.min(1, form.chamfer_depth / edgeLength)
+                          : 1;
+                        const atTip = form.chamfer_edge_position === "tip";
+                        const fStart = atTip ? 1 - engFrac : 0.5 - engFrac / 2;
+                        const fEnd = atTip ? 1 : 0.5 + engFrac / 2;
+                        const chTopX = odX + (tipX - odX) * fStart;   // chamfer meets top face
+                        const chTopY = shoulderY + (tipY - shoulderY) * fStart;
+                        const chBotX = odX + (tipX - odX) * fEnd;     // chamfer meets the side wall
+                        const chBotY = shoulderY + (tipY - shoulderY) * fEnd;
+                        /* Part = a simple block; the tool breaks its top-LEFT outside corner. The
+                           chamfer runs from the top face down to the left side wall. */
+                        const partOuterX = 262;              // right edge of the block (runs off frame)
+                        const partTopY = chTopY;             // top face of the part
+                        const partBotY = 156;                // bottom of the block
                         return (
-                          <svg viewBox="0 0 265 98" width="100%" height="88" className="block mt-1">
-                            <defs>
-                              <clipPath id="cc-hatch2">
-                                <rect x={bodyX1} y={topY} width="9" height={clY - topY}/>
-                              </clipPath>
-                            </defs>
-                            {/* Cross-hatch on left end face */}
-                            <g clipPath="url(#cc-hatch2)">
-                              {[0,7,14,21,28,35,42,49,56,63,70].map((d,i) =>
-                                <line key={i} x1={bodyX1+d-(clY-topY)} y1={clY} x2={bodyX1+d} y2={topY} stroke="#666" strokeWidth="0.75"/>
-                              )}
-                            </g>
-                            {/* Tool body top wall */}
-                            <line x1={bodyX1} y1={topY} x2={chamferX} y2={topY} stroke="#888" strokeWidth="1.5"/>
-                            {/* Left end cap */}
-                            <line x1={bodyX1} y1={topY} x2={bodyX1} y2={clY} stroke="#888" strokeWidth="1.5"/>
-                            {/* "Tool" label rotated inside body */}
-                            <text x={(bodyX1+chamferX)/2} y={(topY+clY)/2} fontSize="11" fill="#f97316" fontWeight="bold" textAnchor="middle" dominantBaseline="middle" transform={`rotate(-90,${(bodyX1+chamferX)/2},${(topY+clY)/2})`} opacity="0.85">Tool</text>
-                            {/* Shoulder line where body meets chamfer */}
-                            <line x1={chamferX} y1={topY} x2={chamferX} y2={clY} stroke="#555" strokeWidth="1" strokeDasharray="3,2"/>
-                            {/* Centerline — proper long-short-long drafting linetype */}
-                            <line x1={bodyX1-6} y1={clY} x2={tipX+12} y2={clY} stroke="#4a4a5a" strokeWidth="1" strokeDasharray="12,3,3,3"/>
-                            {/* Chamfer cutting edge (orange) */}
-                            <line x1={chamferX} y1={topY} x2={tipX} y2={tipY} stroke="#f97316" strokeWidth="2.5"/>
-                            {/* Saddling zone — white overlay centered on cutting edge */}
-                            {form.chamfer_depth > 0 && (() => {
-                              const saddleFrac = Math.min(1, form.chamfer_depth / edgeLength);
-                              const half = saddleFrac / 2;
-                              const f1 = 0.5 - half; // start fraction along edge
-                              const f2 = 0.5 + half; // end fraction along edge
-                              const sx1 = chamferX + (tipX - chamferX) * f1;
-                              const sy1 = topY + (tipY - topY) * f1;
-                              const sx2 = chamferX + (tipX - chamferX) * f2;
-                              const sy2 = topY + (tipY - topY) * f2;
-                              const isOver = form.chamfer_depth > edgeLength;
+                          <>
+                          <svg viewBox="0 0 265 162" width="100%" className="block h-auto w-full">
+                            {(() => {
+                              /* Simple block with its top-LEFT outside corner broken by the tool.
+                                 The chamfer face runs from the top face down to the left side wall;
+                                 its width tracks the Chamfer Length input via chTop/chBot. */
+                              const profile = [
+                                `${chBotX},${partBotY}`,                     // bottom of the left side wall
+                                `${chBotX},${chBotY}`,                       // up the left side wall
+                                `${chTopX},${partTopY}`,                     // THE CHAMFER being cut
+                                `${partOuterX},${partTopY}`,                 // top face out to the right
+                                `${partOuterX},${partBotY}`,                 // down the right edge
+                              ].join(" ");
                               return (
-                                <line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
-                                  stroke={isOver ? "#ef4444" : "rgba(255,255,255,0.80)"}
-                                  strokeWidth="5" strokeLinecap="round"/>
+                                <>
+                                  <defs>
+                                    <clipPath id="cc-partclip">
+                                      <polygon points={profile}/>
+                                    </clipPath>
+                                  </defs>
+                                  {/* ---- PART: solid fill + hatching (the workpiece) ---- */}
+                                  <g clipPath="url(#cc-partclip)">
+                                    <rect x="0" y={partTopY} width="265" height={partBotY - partTopY} fill="#7c5c2e" opacity="0.28"/>
+                                    {Array.from({ length: 46 }, (_, i) => i * 10 - 160).map((d, i) =>
+                                      <line key={i} x1={d} y1={partBotY} x2={d + (partBotY - partTopY)} y2={partTopY} stroke="#d19a4a" strokeWidth="0.7" opacity="0.5"/>
+                                    )}
+                                  </g>
+                                  <polygon points={profile} fill="none" stroke="#e8b168" strokeWidth="1.5" strokeLinejoin="round"/>
+                                  <text x={partOuterX - 14} y={partBotY - 10} fontSize="11" fill="#e8b168" fontWeight="bold" textAnchor="end" opacity="0.95">PART</text>
+                                </>
                               );
                             })()}
-                            {/* CMS: point on CL */}
-                            {isCms && <polygon points={`${tipX},${clY} ${tipX-9},${clY-7} ${tipX-9},${clY}`} fill="#f97316" opacity="0.85"/>}
-                            {/* CMH: gray flat face from tipY down to CL */}
-                            {!isCms && <line x1={tipX} y1={tipY} x2={tipX} y2={clY} stroke="#52525b" strokeWidth="2.5"/>}
-                            {/* Depth ref ticks */}
-                            <line x1={chamferX} y1={clY} x2={chamferX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
-                            <line x1={tipX} y1={clY} x2={tipX} y2={dArrowY+2} stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2"/>
-                            {/* Depth arrow */}
-                            <line x1={chamferX} y1={dArrowY} x2={tipX} y2={dArrowY} stroke="#3b82f6" strokeWidth="1.5"/>
-                            <polygon points={`${chamferX},${dArrowY} ${chamferX+7},${dArrowY-3} ${chamferX+7},${dArrowY+3}`} fill="#3b82f6"/>
-                            <polygon points={`${tipX},${dArrowY} ${tipX-7},${dArrowY-3} ${tipX-7},${dArrowY+3}`} fill="#3b82f6"/>
-                            <text x={(chamferX+tipX)/2} y={dArrowY+9} fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle" data-capture-value>d={maxDepth.toFixed(3)}"</text>
-                            {/* L label along cutting edge */}
-                            <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`} data-capture-value>L={edgeLength.toFixed(3)}"</text>
-                            {/* Series label */}
-                            <text x={tipX - 10} y={topY - 1} fontSize="8" fill="#6b7280" textAnchor="end">{isCms ? "CMS — Center Cutting" : "CMH — Non-Center (flat tip)"}</text>
+                            {/* ---- TOOL: full symmetric cutter, outer shape only ---- */}
+                            {(() => {
+                              /* Shank runs OFF the top of the frame (no top cap, no break symbol) —
+                                 an open-ended shank reads as "continues" on its own, so the drawn
+                                 length never implies the tool's actual OAL. */
+                              const nose = [
+                                `${odLeftX},${-2}`,                             // shank exits the top edge
+                                `${odX},${-2}`,
+                                `${odX},${shoulderY}`,                          // down the right OD
+                                ...(isCms
+                                  ? [`${clX},${tipY}`]                          // CMS point
+                                  : [`${tipX},${tipY}`, `${tipLeftX},${tipY}`]  // CMH flat tip
+                                ),
+                                `${odLeftX},${shoulderY}`,                      // back up the left flank
+                              ].join(" ");
+                              return (
+                                <>
+                                  <polygon points={nose} fill="#0d1117" stroke="#7dd3fc" strokeWidth="1.6" strokeLinejoin="round"/>
+                                  {/* RIGHT flank — the cutting side, bright orange */}
+                                  <line x1={odX} y1={shoulderY} x2={isCms ? clX : tipX} y2={tipY} stroke="#f97316" strokeWidth="2.2"/>
+                                  {/* LEFT flank — not engaged on a single-side chamfer, so keep it quiet */}
+                                  <line x1={odLeftX} y1={shoulderY} x2={isCms ? clX : tipLeftX} y2={tipY} stroke="#7dd3fc" strokeWidth="1.6" opacity="0.75"/>
+                                  {/* CMH flat tip (non-cutting face) */}
+                                  {!isCms && <line x1={tipLeftX} y1={tipY} x2={tipX} y2={tipY} stroke="#71717a" strokeWidth="2.2"/>}
+                                  {/* Engaged span — the part of the RIGHT edge actually in the cut */}
+                                  {form.chamfer_depth > 0 && (
+                                    <line x1={chTopX} y1={chTopY} x2={chBotX} y2={chBotY}
+                                      stroke={form.chamfer_depth > edgeLength ? "#ef4444" : "#ffffff"}
+                                      strokeWidth="3.4" strokeLinecap="round" opacity="0.9"/>
+                                  )}
+                                  {/* ---- Z DEPTH dimension — axial drop from the part's top face down
+                                       to the bottom of the chamfer. This is the number to program. ---- */}
+                                  {form.chamfer_depth > 0 && form.chamfer_depth <= edgeLength && (() => {
+                                    const zx = chBotX + 40;   // reference line, further right into the part
+                                    return (
+                                      <g>
+                                        {/* Only the BOTTOM extension leg — run it out past the dimension
+                                            line; the top end is already defined by the part's top face. */}
+                                        <line x1={chBotX} y1={chBotY} x2={zx + 16} y2={chBotY} stroke="#38bdf8" strokeWidth="0.6" strokeDasharray="2,2" opacity="0.8"/>
+                                        {/* Plain reference line — no arrowheads */}
+                                        <line x1={zx} y1={chTopY} x2={zx} y2={chBotY} stroke="#38bdf8" strokeWidth="1.1"/>
+                                        <text x={zx + 5} y={(chTopY + chBotY) / 2} fontSize="9" fill="#7dd3fc" fontFamily="monospace"
+                                          fontWeight="bold" dominantBaseline="middle" data-capture-value>
+                                          Z {(form.chamfer_depth * Math.cos(halfRadDraw)).toFixed(4)}"
+                                        </text>
+                                      </g>
+                                    );
+                                  })()}
+                                  {/* Centerline */}
+                                  <line x1={clX} y1={shankTopY - 5} x2={clX} y2={tipY + 12} stroke="#52525b" strokeWidth="0.9" strokeDasharray="10,3,3,3"/>
+                                  <text x={odLeftX - 8} y={shoulderY - 16} fontSize="11" fill="#7dd3fc" fontWeight="bold" textAnchor="end" opacity="0.95">TOOL</text>
+                                  {/* ---- INCLUDED ANGLE callout ----
+                                       Both flanks are extended to their virtual apex on the centerline
+                                       (for CMH that apex is BELOW the tip flat), then an arc is swept
+                                       between them. Because the construction is true-angle, this arc
+                                       measures the real included angle. */}
+                                  {(() => {
+                                    // Virtual apex: where the flanks would meet on the CL.
+                                    const apexY = tipY + (isCms ? 0 : tipHalfPx / tanHalf);
+                                    const half = halfRadDraw;
+                                    const R = Math.min(30, Math.max(15, (apexY - shoulderY) * 0.52));
+                                    // Arc endpoints measured off the CL (straight up) by ±half.
+                                    const ax1 = clX - R * Math.sin(half), ay1 = apexY - R * Math.cos(half);
+                                    const ax2 = clX + R * Math.sin(half), ay2 = apexY - R * Math.cos(half);
+                                    const big = form.chamfer_angle > 180 ? 1 : 0;
+                                    return (
+                                      <g opacity="0.95">
+                                        {/* Extension lines to the apex (dashed) — only needed for CMH */}
+                                        {!isCms && (
+                                          <>
+                                            <line x1={tipX} y1={tipY} x2={clX} y2={apexY} stroke="#a78bfa" strokeWidth="0.7" strokeDasharray="3,2" opacity="0.7"/>
+                                            <line x1={tipLeftX} y1={tipY} x2={clX} y2={apexY} stroke="#a78bfa" strokeWidth="0.7" strokeDasharray="3,2" opacity="0.7"/>
+                                          </>
+                                        )}
+                                        {/* The angle arc */}
+                                        <path d={`M ${ax1},${ay1} A ${R},${R} 0 ${big} 1 ${ax2},${ay2}`}
+                                          fill="none" stroke="#a78bfa" strokeWidth="1.2"/>
+                                        {/* Label, just under the arc */}
+                                        <text x={clX} y={apexY - R - 4} fontSize="10" fill="#c4b5fd" fontFamily="monospace"
+                                          fontWeight="bold" textAnchor="middle" data-capture-value>{form.chamfer_angle}°</text>
+                                      </g>
+                                    );
+                                  })()}
+                                </>
+                              );
+                            })()}
                           </svg>
+                          {/* Caption in HTML (not SVG) so it wraps instead of overrunning. */}
+                          <div className="mt-1 text-[10px] text-zinc-500 leading-snug">
+                            {isCms ? "CMS — Center Cutting" : "CMH — Non-Center (flat tip)"}
+                            <span className="text-zinc-600"> · shank truncated, not actual OAL</span>
+                          </div>
+                          </>
                         );
                       })()}
+                      </div>
+                      {/* ---- RIGHT: colour-coded dimension list ---- */}
+                      <div className="w-[46%] shrink-0 space-y-1.5">
+                        {(() => {
+                          const zDepth = form.chamfer_depth > 0 ? form.chamfer_depth * Math.cos(halfRad) : 0;
+                          const over = form.chamfer_depth > edgeLength;
+                          const atTip = form.chamfer_edge_position === "tip";
+                          const rows: Array<{ sw: string; label: string; val: string; cls: string; hint?: string }> = [
+                            { sw: "#f97316", label: "Cutting Edge Length", val: `${edgeLength.toFixed(4)}"`, cls: "text-orange-400",
+                              hint: "full usable edge" },
+                            { sw: "#60a5fa", label: "Max Chamfer Depth", val: `${maxDepth.toFixed(4)}"`, cls: "text-blue-400",
+                              hint: "axial limit of this tool" },
+                          ];
+                          if (form.chamfer_depth > 0) {
+                            rows.push({
+                              sw: over ? "#ef4444" : "#ffffff",
+                              label: "Chamfer Length (cut)",
+                              val: `${form.chamfer_depth.toFixed(4)}"`,
+                              cls: over ? "text-red-400" : "text-zinc-100",
+                              hint: over ? "exceeds edge — larger tool" : "engaged span on the edge",
+                            });
+                            if (!over) {
+                              rows.push({ sw: "#38bdf8", label: "Z Depth to Program", val: `${zDepth.toFixed(4)}"`, cls: "text-sky-400",
+                                hint: "axial depth in CAM" });
+                            }
+                          }
+                          rows.push({ sw: "#a78bfa", label: "Included Angle", val: `${form.chamfer_angle}°`, cls: "text-violet-300",
+                            hint: "drawn to true angle" });
+                          rows.push({
+                            sw: atTip ? "#fbbf24" : "#a1a1aa",
+                            label: "Edge Contact",
+                            val: atTip ? "At tip" : "Saddled",
+                            cls: atTip ? "text-amber-400" : "text-zinc-300",
+                            hint: atTip ? "no clearance below" : "centered on edge",
+                          });
+                          if (form.chamfer_tip_dia > 0) {
+                            rows.push({ sw: "#71717a", label: "Tip Flat Dia", val: `${form.chamfer_tip_dia.toFixed(4)}"`, cls: "text-zinc-300" });
+                          }
+                          return (
+                            <>
+                              {rows.map((r, i) => (
+                                <div key={i} className="flex items-start gap-1.5">
+                                  <span className="mt-[5px] h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: r.sw }}/>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-baseline justify-between gap-1.5">
+                                      <span className="text-[10.5px] text-zinc-400 truncate">{r.label}</span>
+                                      <span className={`font-mono text-[11px] font-semibold shrink-0 ${r.cls}`} data-capture-value>{r.val}</span>
+                                    </div>
+                                    {r.hint && <div className="text-[9px] text-zinc-600 leading-tight">{r.hint}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                              {(edpText.trim() || skuDescription) && (
+                                <div className="pt-1.5 mt-0.5 border-t border-zinc-700/70 space-y-0.5">
+                                  {edpText.trim() && (
+                                    <div className="font-mono text-[10.5px] font-semibold text-zinc-300">EDP {edpText.trim()}</div>
+                                  )}
+                                  {skuDescription && (
+                                    <div className="text-[9.5px] text-zinc-500 leading-snug break-words">{skuDescription}</div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                      </div>
                     </div>
                   );
                 })()}
@@ -11499,17 +11676,21 @@ ${stabSection}
                     const radialReach = (form.tool_dia - (form.chamfer_tip_dia ?? 0)) / 2;
                     const edgeLength = halfRad > 0 ? radialReach / Math.sin(halfRad) : 0;
                     if (!(edgeLength > 0)) return null;
+                    const atTip = form.chamfer_edge_position === "tip";
                     const skip = form.chamfer_series === "CMS" ? 0.20 : 0.10;
                     const lo = edgeLength * skip;
                     const hi = edgeLength * (1 - skip);
                     if (!(form.chamfer_depth > 0)) {
-                      return (
+                      return atTip ? (
+                        <p className="mt-1 text-xs text-zinc-500 leading-snug">
+                          No clearance below the chamfer — cut sits at the tip, usable up to <span className="text-zinc-400 font-mono">{edgeLength.toFixed(3)}"</span> with nothing hanging below.
+                        </p>
+                      ) : (
                         <p className="mt-1 text-xs text-zinc-500 leading-snug">
                           Preferred saddle zone: <span className="text-zinc-400 font-mono">{lo.toFixed(3)}"–{hi.toFixed(3)}"</span> — keeps the cut centered on the edge, away from the tip and shoulder for best tool life and finish.
                         </p>
                       );
                     }
-                    const zDepth = form.chamfer_depth * Math.cos(halfRad);
                     if (form.chamfer_depth > edgeLength) {
                       return (
                         <p className="mt-1 text-xs text-red-400">
@@ -11517,16 +11698,58 @@ ${stabSection}
                         </p>
                       );
                     }
+                    /* Z depth is shown in the dimension panel above — no need to repeat it here.
+                       Only the saddle-zone warning is left, and only when actually saddling. */
+                    if (atTip || (form.chamfer_depth >= lo && form.chamfer_depth <= hi)) return null;
                     return (
-                      <p className="mt-1 text-xs text-zinc-400">
-                        Z depth to program in CAM: <span className="text-blue-400 font-mono font-semibold">{zDepth.toFixed(4)}"</span>
-                        {(form.chamfer_depth < lo || form.chamfer_depth > hi) && (
-                          <span className="ml-2 text-amber-400">⚠ outside preferred saddle zone ({lo.toFixed(3)}"–{hi.toFixed(3)}")</span>
-                        )}
+                      <p className="mt-1 text-xs text-amber-400">
+                        ⚠ outside preferred saddle zone ({lo.toFixed(3)}"–{hi.toFixed(3)}")
                       </p>
                     );
                   })()}
                 </div>
+                {/* Ask about the PART, not the strategy: saddling requires room for the tool to hang
+                    below the finished chamfer. Spans BOTH grid columns — nested in the narrow left
+                    column it wrapped badly and left column 2 empty. Explicit Yes/No, since a bare
+                    checkbox left it ambiguous whether "checked" meant "I have room" or "I don't". */}
+                {form.tool_dia > 0 && form.chamfer_angle > 0 && (
+                  <div className="col-span-2 rounded-lg bg-zinc-800/40 border border-zinc-700/70 px-3 py-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex gap-1.5 shrink-0">
+                        {([
+                          { key: "saddle", label: "Yes — room below" },
+                          { key: "tip", label: "No — no clearance" },
+                        ] as const).map(({ key, label }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setForm((p) => ({ ...p, chamfer_edge_position: key }))}
+                            className="rounded px-3 py-1.5 text-[11px] font-semibold border transition-all whitespace-nowrap"
+                            style={{
+                              backgroundColor: form.chamfer_edge_position === key ? "#6366f1" : "transparent",
+                              borderColor: "#6366f1",
+                              color: form.chamfer_edge_position === key ? "#fff" : "#6366f1",
+                            }}
+                          >{label}</button>
+                        ))}
+                      </div>
+                      <div className="flex-1 min-w-[180px]">
+                        <div className="text-[11px] font-medium text-zinc-200 leading-snug">
+                          Is there room for the tool to hang below the chamfer?
+                        </div>
+                        {form.chamfer_edge_position === "tip" ? (
+                          <div className="text-[10px] text-amber-400/90 leading-snug">
+                            Cutting at the tip — smaller D_eff, so RPM runs higher and tool life is shorter (the tip takes the wear).
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-zinc-500 leading-snug">
+                            Saddling — cut centered on the edge for best tool life and finish. Answer No for a shallow boss, a chamfer on a floor, or an obstruction underneath.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Col 2: suggest a larger tool when depth exceeds max */}
                 {chamferUpgradeSuggestion && (
                   <div className="flex items-start">

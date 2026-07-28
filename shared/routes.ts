@@ -83,6 +83,11 @@ export const mentorSchemas = {
     chamfer_angle: z.number().min(0).max(180).default(90),
     chamfer_tip_dia: z.number().min(0).default(0),
     chamfer_depth: z.number().min(0).default(0),
+    /* Where along the cutting edge the cut sits. "saddle" centers it on the edge (best
+       tool life / finish) but hangs the tip below the chamfer, which needs clearance.
+       "tip" pulls the cut down to the tip for shallow bosses / shoulders with a floor
+       right below the edge, where there is no room for tip overhang. */
+    chamfer_edge_position: z.enum(["saddle", "tip"]).default("saddle"),
 
     spindle_taper: z.enum(["CAT30", "CAT40", "CAT50", "BT30", "BT40", "BT50", "HSK32", "HSK50", "HSK63", "HSK80", "HSK100", "HSK125", "VDI30", "VDI40", "VDI50", "BMT45", "BMT55", "BMT65", "CAPTO C6", "CAPTO C8", "KM80"]).default("CAT40"),
     spindle_drive: z.enum(["direct", "belt", "gear"]).default("belt"),
