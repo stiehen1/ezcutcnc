@@ -8,6 +8,22 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Chamfer feed — tip-starvation derate for a point cutting in material
+Chip load on a chamfer mill is scaled to **body** diameter, because that's where manufacturers rate it, and `D_eff` deliberately drives only RPM. But that full body-scaled chip is then applied at *every* point along the engaged edge — including points whose local diameter, and therefore local surface speed, is near zero. A CMS point cut at the tip has the bottom of its cut at Ø0.000": it can't cut at 0 SFM, it plows, and handing it a full chip load is how the point snaps off.
+
+The trigger is **not** saddle-vs-tip and **not** CMS-vs-CMH — it's how small the smallest cutting diameter in the cut actually is. If it falls below `TIP_STARVE_FLOOR_FRAC` (15%) of body diameter, feed is derated toward `TIP_STARVE_MIN_MULT` (0.35) on a softened sqrt ramp. On 17-4 PH:
+
+| Case | RPM | Feed | Derate |
+|---|---|---|---|
+| CMS Ø0.375 at tip | 3709 | 10.96 IPM | **×0.35** |
+| CMS Ø0.375 saddled | 2910 | 24.57 IPM | full |
+| CMH Ø0.500 saddled | 2346 | 40.64 IPM | full |
+| CMH Ø0.500 at tip | 2717 | 47.06 IPM | full |
+
+That last row is why the diameter framing matters rather than a series rule: a CMH cutting on its tip *flat* has real diameter to cut with (Ø0.080 = 16% of body), so it needs no special-casing and keeps full feed. Saddled cases — the ones that genuinely need good feed — are untouched. Only a true point in the dead zone is penalised, and it says so in the notes rather than derating silently. Swept 108 geometry combinations to confirm no case trips both this and the existing `CMH_MIN_CHIP_FRAC` "too light, tip flat will rub" warning, which would be contradictory advice.
+
+**Both constants are UNCALIBRATED** — reasoned from SFM-at-radius, not bench-validated, and labelled as such in the source.
+
 ### Chamfer geometry card — vertical true-angle diagram + tip-clearance question
 The chamfer card's geometry diagram was drawn on its side, with the tool horizontal and the part represented by a bare line. It's now a vertical section: tool plunging down, cutting a chamfer on the top corner of a hatched part block, laid out with the drawing on the left and a colour-coded dimension list on the right (each swatch matches the element it labels). The part's chamfer face is built from the same endpoints as the engaged span of the cutting edge, so its width tracks the Chamfer Length input instead of being fixed.
 

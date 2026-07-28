@@ -678,6 +678,15 @@ CMH_SFM_MULT         = 1.15   # +15% SFM vs CMS/baseline at 30° shear
 CMH_FORCE_FACTOR     = round(1.0 - (CMH_SHEAR_ANGLE_DEG / 45.0) * 0.10, 4)  # ~0.933
 # Minimum chip fraction: below this × base_ipt, CMH tip flat rubs instead of cutting.
 CMH_MIN_CHIP_FRAC    = 0.30   # 30% of base ipt_frac × body_dia
+# Tip-starvation feed derate. Chip load is scaled to BODY diameter, but that full chip is
+# applied along the whole engaged edge — including points whose local diameter (and so local
+# SFM) approaches zero. A CMS point cut at the tip plows there instead of cutting, and a full
+# body-scaled chip is how the point snaps off. If the SMALLEST cutting diameter in the cut
+# falls below TIP_STARVE_FLOOR_FRAC × body_dia, feed is derated toward TIP_STARVE_MIN_MULT.
+# Deliberately does NOT trigger on a saddled CMH or a CMH cutting on its tip flat — both have
+# real diameter to cut with. UNCALIBRATED: reasoned from SFM-at-radius, not bench-validated.
+TIP_STARVE_FLOOR_FRAC = 0.15   # "healthy" min cutting dia as a fraction of body dia
+TIP_STARVE_MIN_MULT   = 0.35   # hardest derate applied at a true zero-diameter point
 # Chamfer chip-load multiplier over endmill IPT_FRAC. Chip-evac/deflection headroom
 # governs for soft materials (1.75×); edge strength governs for HRSA/hardened (1.1–1.4×).
 # Shop-calibrated anchor: 17-4 PH 1/2" CMH ~0.0036 fpt, CMS ~0.0024 fpt @ 250–275 SFM
@@ -2214,6 +2223,37 @@ def run_chamfer_mill(payload: dict) -> dict:
     chamfer_mult = CHAMFER_IPT_MULT.get(_mat_key, CHAMFER_IPT_MULT.get(mat_group, 1.35))
     ipt = ipt_frac * body_dia * lead_ctf * series_mult * chamfer_mult
 
+    # ---- Tip-starvation feed derate -------------------------------------------------
+    # Chip load is scaled to BODY diameter (manufacturers rate it there), but that full
+    # chip is then applied at EVERY point along the engaged edge — including points whose
+    # local diameter, and therefore local surface speed, is near zero. On a CMS point cut
+    # at the tip the bottom of the cut sits at dia 0.000": it cannot cut at 0 SFM, it plows,
+    # and a full body-scaled chip is exactly how the point gets broken off.
+    #
+    # This is NOT a saddle-vs-tip rule and NOT a CMS-vs-CMH rule. What matters is how small
+    # the smallest cutting diameter in the cut actually is:
+    #   CMS point at tip  -> bottom of cut =  0% of body  -> dead zone, derate
+    #   CMS saddled       -> bottom of cut = 18% of body  -> healthy, no derate
+    #   CMH saddled       -> bottom of cut = 28% of body  -> healthy, no derate
+    #   CMH at tip        -> bottom of cut = 16% of body  -> the tip FLAT gives it real
+    #                        diameter to cut with, so it keeps full feed
+    # Only a true point running into the dead zone is penalised, so the saddled-CMH case
+    # that genuinely needs good feed is left untouched.
+    _dead_zone_floor = TIP_STARVE_FLOOR_FRAC * body_dia
+    if edge_position == "tip":
+        _cut_bottom_axial = 0.0
+    else:
+        _cut_bottom_axial = max(0.0, _axial_to_mid - _depth_for_deff / 2.0)
+    _d_cut_bottom = tip_dia + 2.0 * _cut_bottom_axial * math.tan(half_angle_rad)
+    if _dead_zone_floor > 0 and _d_cut_bottom < _dead_zone_floor:
+        # sqrt softens the ramp; never derate past TIP_STARVE_MIN_MULT.
+        tip_starve_mult = max(TIP_STARVE_MIN_MULT,
+                              math.sqrt(_d_cut_bottom / _dead_zone_floor))
+    else:
+        tip_starve_mult = 1.0
+    ipt *= tip_starve_mult
+    # ---------------------------------------------------------------------------------
+
     # CMH minimum chip load — tip flat rubs below this threshold
     cmh_min_ipt = ipt_frac * body_dia * CMH_MIN_CHIP_FRAC * lead_ctf * chamfer_mult if is_cmh else 0.0
 
@@ -2328,6 +2368,18 @@ def run_chamfer_mill(payload: dict) -> dict:
         notes.append(
             f"⚠ Chip load ({ipt:.5f}\") is below CMH minimum ({cmh_min_ipt:.5f}\"). "
             f"The tip flat will rub rather than cut — increase feed or chamfer depth."
+        )
+    if tip_starve_mult < 1.0:
+        notes.append(
+            f"⚠ Feed derated to {tip_starve_mult * 100:.0f}% — the bottom of this cut sits at "
+            f"Ø{_d_cut_bottom:.4f}\", under the Ø{_dead_zone_floor:.4f}\" healthy minimum "
+            f"({TIP_STARVE_FLOOR_FRAC * 100:.0f}% of Ø{body_dia:.4f}\" body). Surface speed there is "
+            f"{(rpm * math.pi * _d_cut_bottom / 12.0):.0f} SFM, so that part of the edge plows instead "
+            f"of cutting; a full body-scaled chip load is how a point gets broken off. "
+            + ("Saddle the tool if you can get clearance below the chamfer — that moves the cut off the "
+               "point entirely and restores full feed."
+               if edge_position == "tip"
+               else "Increase chamfer depth or step to a tool with a tip flat.")
         )
     if notes_feed_capped:
         notes.append(
