@@ -8,6 +8,7 @@ import Catalog from "@/pages/Catalog";
 import Toolbox from "@/pages/Toolbox";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
+import CaptureMode from "@/components/CaptureMode";
 import React from "react";
 
 function AddToHomeScreenBanner() {
@@ -805,6 +806,38 @@ function FeedbackButton() {
     reader.readAsDataURL(file);
   };
 
+  // Grab a region of the app directly, so reporting a visual bug doesn't require
+  // leaving the page for a separate screenshot tool. The panel closes during the
+  // drag (it would otherwise cover the thing being reported) and reopens after.
+  const grabFromScreen = async () => {
+    setSizeError("");
+    closeTab();
+    // Let the panel finish closing before the picker overlay goes up.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    let dataUrl: string | null = null;
+    try {
+      const { pickScreenRegion } = await import("@/lib/capture");
+      dataUrl = await pickScreenRegion();
+    } catch {
+      dataUrl = null;
+    }
+    openTab();
+    if (!dataUrl) return;                       // cancelled or too small
+    // Same 3 MB ceiling the file path enforces; base64 is ~4/3 of the bytes.
+    if (dataUrl.length * 0.75 > 3 * 1024 * 1024) {
+      setSizeError("That area is too large — try selecting a smaller region.");
+      return;
+    }
+    setScreenshot(dataUrl);
+    // Timestamped so two captures in one report are distinguishable in the email.
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, "0");
+    setScreenshotName(
+      `screen-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+      `_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.png`,
+    );
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
@@ -912,13 +945,22 @@ function FeedbackButton() {
                 </div>
                 <div>
                   <label className="text-[11px] text-zinc-400 mb-1 block">Screenshot <span className="text-zinc-600">(optional)</span></label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="bg-zinc-800 border border-zinc-700 hover:border-zinc-500 rounded px-2 py-1.5 text-xs text-zinc-300 whitespace-nowrap">
-                      {screenshotName ? "Change image" : "Attach image"}
-                    </span>
-                    {screenshotName && <span className="text-[10px] text-zinc-400 truncate">{screenshotName}</span>}
-                    <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={grabFromScreen}
+                      className="bg-zinc-800 border border-zinc-700 hover:border-orange-500 rounded px-2 py-1.5 text-xs text-zinc-300 whitespace-nowrap"
+                    >
+                      Grab from screen
+                    </button>
+                    <label className="cursor-pointer">
+                      <span className="bg-zinc-800 border border-zinc-700 hover:border-zinc-500 rounded px-2 py-1.5 text-xs text-zinc-300 whitespace-nowrap">
+                        {screenshotName ? "Change image" : "Attach image"}
+                      </span>
+                      <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
+                    </label>
+                  </div>
+                  {screenshotName && <p className="text-[10px] text-zinc-400 truncate mt-1">{screenshotName}</p>}
                   {sizeError && <p className="text-[10px] text-red-400 mt-1">{sizeError}</p>}
                   {screenshot && (
                     <div className="mt-1.5 relative">
@@ -1494,6 +1536,7 @@ function App() {
         <BrevoNudge />
         <WhatsNewModal />
         <AddToHomeScreenBanner />
+        <CaptureMode />
       </TooltipProvider>
     </QueryClientProvider>
   );

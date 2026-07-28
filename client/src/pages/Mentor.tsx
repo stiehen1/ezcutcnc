@@ -11401,9 +11401,9 @@ ${stabSection}
                             <line x1={chamferX} y1={dArrowY} x2={tipX} y2={dArrowY} stroke="#3b82f6" strokeWidth="1.5"/>
                             <polygon points={`${chamferX},${dArrowY} ${chamferX+7},${dArrowY-3} ${chamferX+7},${dArrowY+3}`} fill="#3b82f6"/>
                             <polygon points={`${tipX},${dArrowY} ${tipX-7},${dArrowY-3} ${tipX-7},${dArrowY+3}`} fill="#3b82f6"/>
-                            <text x={(chamferX+tipX)/2} y={dArrowY+9} fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle">d={maxDepth.toFixed(3)}"</text>
+                            <text x={(chamferX+tipX)/2} y={dArrowY+9} fontSize="8" fill="#60a5fa" fontFamily="monospace" textAnchor="middle" data-capture-value>d={maxDepth.toFixed(3)}"</text>
                             {/* L label along cutting edge */}
-                            <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`}>L={edgeLength.toFixed(3)}"</text>
+                            <text x={lMidX} y={lMidY-4} fontSize="8.5" fill="#fb923c" fontFamily="monospace" textAnchor="middle" transform={`rotate(${lAngle},${lMidX},${lMidY-4})`} data-capture-value>L={edgeLength.toFixed(3)}"</text>
                             {/* Series label */}
                             <text x={tipX - 10} y={topY - 1} fontSize="8" fill="#6b7280" textAnchor="end">{isCms ? "CMS — Center Cutting" : "CMH — Non-Center (flat tip)"}</text>
                           </svg>

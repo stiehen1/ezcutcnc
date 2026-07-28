@@ -8,6 +8,26 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Catalog screenshot capture — 300 DPI print exports (admin only)
+An internal tool for pulling app screenshots into the printed catalog. Toggle it from the **Capture** tab on the right edge (or `Ctrl+Shift+S`), then either click sections or drag a region. Output is a bordered PNG at a genuine 300 DPI — 3pt `#f36f21` on black, matching the catalog page — named `corecut-<date>_<HHMMSS>.png` so same-day exports don't collide.
+
+Two selection modes, because catalog figures rarely line up with one element. **Sections** resolves the card under the cursor by visual boundedness (a border or non-transparent background at a usable size) rather than a class allowlist — this app has no single card-container convention, and the chamfer geometry card in particular is inline JSX with no component boundary to hang a button on. Shift-click accumulates, and the export spans the union of everything selected, so a geometry card + its input + the note below it come out as one continuous image. **Rectangle** captures exactly the dragged region, for figures that don't follow element edges. `Hide values` blanks computed numbers for a blank-form figure.
+
+Gated on the same `sessionStorage.admin_token` the Admin page uses, across all three entry points — the tab, the keyboard shortcut, and a force-disarm if the token disappears mid-session. This is UI gating, not a security boundary: the tool only reads already-rendered DOM and writes a local PNG, so there's no privileged data behind it.
+
+Users get a separate, much smaller path: a **Grab from screen** button in the feedback panel, next to the existing *Attach image*. The feedback form already accepted base64 screenshots with a 3 MB cap, so this only had to fill the same state — it drags a region, renders at screen scale (not 300 DPI; print scale would be ~17× larger for no benefit in an email), and reopens the panel with the shot attached.
+
+Implementation notes, all of which produced silently wrong output first:
+- **Browsers write no physical-size metadata**, so a 4.17×-scaled PNG lands in InDesign as 72 DPI at 4.17× the intended size. `setPngDpi` injects a `pHYs` chunk after IHDR declaring 11811 px/m. The insert offset must be read from IHDR's declared length — a hardcoded guess produced a byte-length-plausible but corrupt file that passed an eyeball check and failed on placement.
+- **Capture renders the VIEWPORT, not a containing ancestor.** Rendering an ancestor and cropping the region out of it is the obvious approach and it does not work here: the mentor's form container is ~3300px tall, which at 4.17× is a ~14000px canvas, and the crop consistently landed in the wrong place — content shifted sideways, edge text sliced mid-glyph. Rendering `document.body` clipped to the viewport (with a `translate` cancelling the scroll offset) keeps the canvas ~viewport-sized and makes the mapping trivial, since the selection is already in viewport coordinates. Trade-off: a selection can't extend past the visible window, which the drag UI already prevents.
+- **`width`/`height` are not a windowing mechanism.** `applyStyle` sets them on the clone's own style, so they *resize and reflow* the element rather than cropping it — they only work as a canvas size when the element already matches that box.
+- **`html-to-image` renders via an SVG `foreignObject`, which preserves CSS positioning.** An offscreen staging frame at `position:fixed; left:-10000px` draws its content outside the viewBox, yielding a correctly-sized rectangle of pure background.
+- **The library copies *computed* styles onto its clone**, so no stylesheet rule can hide a value — the inlined style always wins. `Hide values` forces `fill`/`color` inline on the live nodes and restores them in a `finally`. SVG dimension callouts need a `data-capture-value` tag to be found; the chamfer card's `d=` and `L=` labels are tagged, and other SVG callouts will need the same one-attribute addition.
+- **`skipFonts: true`** — the Google Fonts stylesheet is cross-origin, so reading its `cssRules` throws a `SecurityError` mid-render. Fonts render correctly from computed styles anyway.
+- **Timestamps are local, not `toISOString()`.** The UTC form mislabeled any capture after ~7pm ET with the next day's date.
+
+Verification is browser-driven (`playwright`, devDependency) and differential: each export is compared against a Playwright screenshot of the same region, with `sharp` asserting dimensions, non-blank content, and `density=300`. That comparison is what finally located the crop bug — several plausible diagnoses (canvas size cap, border overlap, stale bundle) were each disproved by measurement rather than inspection, and a synthetic test page without stylesheets produces empty renders that look like a library failure but aren't.
+
 ### STEP file catalog converted to inch units
 All **3,595** downloadable tool models are now inch-unit STEP files, replacing the millimeter exports that had been live since April. Opening one in CAD no longer lands a 0.500" endmill as a 0.500 mm one.
 
