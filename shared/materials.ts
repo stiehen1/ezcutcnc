@@ -16,7 +16,7 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "tool_steel_a2":       "Air-hardening tool steel — tougher than D2 and more forgiving on cutting edges. Machines consistently at working hardness; AlTiN coating preferred.",
   "tool_steel_h13":      "Hot-work die steel (44–48 HRC typical). Work-hardens at the cut if the tool rubs — keep feed up and never let the tool dwell. AlTiN or AlCrN coating required.",
   "tool_steel_s7":       "Shock-resistant and tough, but less abrasive than D2 — more forgiving on cutting edges. Good for punches and dies where impact resistance matters.",
-  "tool_steel_d2":       "The most abrasive common tool steel. High chromium carbide content eats edges fast — conservative SFM, reduced chip load, and expect shorter tool life.",
+  "tool_steel_d2":       "The most abrasive common tool steel. High chromium carbide content eats edges fast — conservative SFM, reduced chip load, and expect shorter tool life. Mill D2 in the ANNEALED state (~20–25 HRC) whenever possible, leaving a small finishing allowance, then heat treat to 58–62 HRC. Set the hardness below to your actual condition — speeds derate automatically.",
   "cpm_10v":             "PM high-vanadium wear steel (A11). Vanadium carbides are harder than carbide binders — treat this as an abrasion problem, not a heat problem. Lower SFM than D2, moderate chip load (don't baby it — rubbing on vanadium carbides accelerates edge breakdown faster than correct chip load). HEM with 5–15% WOC is the preferred strategy; AlTiN or AlCrN coating required.",
   // M — Stainless Steel
   "stainless_fm":        "303 and 416 are the sulfur-added free-machining grades — the easiest stainless to cut by a wide margin. Fast, clean chips; runs significantly faster than 304.",
@@ -95,7 +95,7 @@ export const ISO_SUBCATEGORIES = [
   { iso: "P" as IsoCategory, key: "tool_steel_a2",         label: "A2 Tool Steel",                             hardness: { value: 36, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_h13",        label: "H13 Tool Steel",                            hardness: { value: 44, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "tool_steel_s7",         label: "S7 Tool Steel",                             hardness: { value: 38, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "tool_steel_d2",         label: "D2 Tool Steel",                             hardness: { value: 58, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_d2",         label: "D2 Tool Steel",                             hardness: { value: 22, scale: "hrc" as const } },
   { iso: "P" as IsoCategory, key: "cpm_10v",               label: "CPM 10V / A11 (PM Tool Steel)",               hardness: { value: 60, scale: "hrc" as const } },
   // M — Stainless Steel
   { iso: "M" as IsoCategory, key: "stainless_304",         label: "304 / 304L / 321 Stainless",                  hardness: { value: 85, scale: "hrb" as const } },
@@ -159,7 +159,7 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "tool_steel_a2":   { min: 54, max: 62,  scale: "hrc", note: "A2 in working condition is hardened 54–62 HRC. Annealed (~92 HRB) is pre-heat treat stock." },
   "tool_steel_h13":  { min: 44, max: 54,  scale: "hrc", note: "H13 die steel typical working range is 44–54 HRC. Below 44 is annealed or under-tempered." },
   "tool_steel_s7":   { min: 54, max: 60,  scale: "hrc", note: "S7 shock-resistant tool steel is hardened 54–60 HRC in service." },
-  "tool_steel_d2":   { min: 58, max: 64,  scale: "hrc", note: "D2 tool steel hardened range is 58–64 HRC. It's rarely machined at lower hardness." },
+  "tool_steel_d2":   { min: 18, max: 64,  scale: "hrc", note: "D2 spans annealed ~20–25 HRC (how it's normally milled) up to 58–62 HRC hardened. Mill it annealed and leave a finishing allowance for heat treat whenever you can — cutting data is derated automatically for the hardness you enter." },
   "cpm_10v":         { min: 58, max: 64,  scale: "hrc", note: "CPM 10V / A11 is typically used at 58–64 HRC. Below 55 HRC is annealed stock — machinability improves substantially but is still worse than D2 due to vanadium carbide abrasion." },
   // M — Stainless
   "stainless_fm":        { min: 65, max: 95,  scale: "hrb", note: "303/416 free-machining stainless ranges 65–95 HRB — sulfur additives prevent heat-treat hardening." },
@@ -243,6 +243,15 @@ export const PH_CONDITION_HARDNESS: Record<string, { condition: string; label: s
     { condition: "H1000", label: "H1000 — 1000°F", hrc: 41 },
     { condition: "H1025", label: "H1025 — 1025°F", hrc: 39 },
     { condition: "H1050", label: "H1050 — 1050°F", hrc: 38 },
+  ],
+  // D2 tool steel — not a PH grade, but the same "pick the heat-treat state and we
+  // fill the typical hardness" UI applies. D2 is normally MILLED ANNEALED with a
+  // finishing allowance left, then hardened to 58-62 HRC, so Annealed is the default.
+  "tool_steel_d2": [
+    { condition: "Annealed", label: "Annealed (as-supplied)", hrc: 22, note: "How D2 should be milled whenever possible (~20–25 HRC). Leave a small finishing allowance, then heat treat to 58–62 HRC." },
+    { condition: "Hardened 58", label: "Hardened — 58 HRC", hrc: 58, note: "Low end of the hardened service band. Carbide only, light radial engagement, expect short tool life." },
+    { condition: "Hardened 60", label: "Hardened — 60 HRC", hrc: 60, note: "Typical hardened D2. Hard-milling practice: rigid setup, 6+ flutes, minimal stickout." },
+    { condition: "Hardened 62", label: "Hardened — 62 HRC", hrc: 62, note: "Top of spec. Carbide is marginal here — consider CBN or grinding for finish work." },
   ],
 };
 

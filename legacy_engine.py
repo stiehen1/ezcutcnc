@@ -1205,6 +1205,11 @@ def apply_sfm_hardness(base_sfm: float, hrc: float, mat: str, mat_group: str) ->
     """base_sfm × hardness_sfm_mult(hrc), but SKIP the mult for materials whose
     baseline already bakes in hardness (see _NO_HRC_PENALTY). Prevents the
     double-derate bug (e.g. 13-8 PH @43HRC would otherwise run 218→140 SFM)."""
+    # D2 is the one _NO_HRC_PENALTY member whose tables are calibrated ANNEALED
+    # rather than as-hardened, so it needs its own curve instead of a flat pass
+    # through — otherwise hardened D2 gets annealed speeds on every operation.
+    if mat == "tool_steel_d2" or mat_group == "tool_steel_d2":
+        return apply_d2_hardness(base_sfm, hrc, mat, mat_group)
     if mat in _NO_HRC_PENALTY or mat_group in _NO_HRC_PENALTY:
         return base_sfm
     return base_sfm * hardness_sfm_mult(hrc)
@@ -1235,6 +1240,55 @@ def hardened_sfm_absolute(hrc: float) -> float:
         return 100.0 - (100.0 - 90.0) * (hrc - 55) / 5.0    # 100 → 90
     # ≥60 HRC: keep derating toward CBN territory, floor at 60 SFM
     return max(60.0, 90.0 - 4.0 * (hrc - 60))
+
+
+# D2 is the same story as the generic hardened keys but on its own curve: the
+# BASE_SFM 180 (140–220 band) is an ANNEALED number, and D2 is normally milled
+# annealed (~20–25 HRC) with a finish allowance left for heat treat to 58–62 HRC.
+# A flat 180 therefore reads correct at the default but is dangerously fast for
+# the minority who really are cutting hardened D2 — 60 HRC D2 is a ~100 SFM job.
+# D2 sits BELOW plain hardened steel of equal HRC across the whole range because
+# the limit is chromium-carbide abrasion, not just matrix hardness.
+def d2_sfm_absolute(hrc: float) -> float:
+    """Absolute carbide SFM in D2 as a function of HRC. Used in place of the flat
+    BASE_SFM for tool_steel_d2 so the speed tracks the actual condition."""
+    hrc = float(hrc or 0)
+    if hrc <= 0:
+        return 180.0          # unspecified → annealed reference (the default state)
+    if hrc <= 30:
+        return 180.0          # annealed / spheroidized 20–30 HRC: full 180 SFM
+    if hrc <= 45:
+        # 180 @ 30 → 135 @ 45 (partially hardened / under-tempered)
+        return 180.0 - (180.0 - 135.0) * (hrc - 30) / 15.0
+    if hrc <= 55:
+        return 135.0 - (135.0 - 105.0) * (hrc - 45) / 10.0   # 135 → 105
+    if hrc <= 62:
+        # 105 @ 55 → 85 @ 62: the normal hardened service band (58–62 HRC)
+        return 105.0 - (105.0 - 85.0) * (hrc - 55) / 7.0
+    # >62 HRC: past the usual D2 spec; keep derating toward CBN/grinding territory
+    return max(60.0, 85.0 - 4.0 * (hrc - 62))
+
+
+def d2_hardness_sfm_mult(hrc: float) -> float:
+    """D2 SFM multiplier relative to the ANNEALED baseline (= d2_sfm_absolute/180).
+
+    The per-operation SFM tables (DRILL_SFM, KEYSEAT_SFM, DOVETAIL_SFM,
+    FEEDMILL_SFM, REAM_SFM) each carry their own D2 number calibrated for the
+    annealed state. Rather than hand-authoring a separate curve per operation,
+    scale the table value by the same ratio the milling curve uses, so every
+    operation tracks hardness consistently off its own anchor.
+    Returns 1.0 for annealed/unspecified — the default path is unchanged.
+    """
+    return d2_sfm_absolute(hrc) / 180.0
+
+
+def apply_d2_hardness(base_sfm: float, hrc: float, mat: str, mat_group: str) -> float:
+    """Scale a per-op D2 base SFM by the hardness curve; pass through otherwise.
+    tool_steel_d2 is in _NO_HRC_PENALTY (its tables are annealed-calibrated, so the
+    generic hardness_sfm_mult must NOT apply); this is the D2-specific replacement."""
+    if mat == "tool_steel_d2" or mat_group == "tool_steel_d2":
+        return base_sfm * d2_hardness_sfm_mult(hrc)
+    return base_sfm
 
 
 def hardness_life_mult(hrc: float) -> float:
@@ -2148,6 +2202,9 @@ def run_chamfer_mill(payload: dict) -> dict:
     # Generic hardened steel: HRC-driven absolute SFM (matches the endmill path)
     if _mat_key in ("hardened_lt55", "hardened_gt55") or mat_group in ("hardened_lt55", "hardened_gt55"):
         base_sfm = hardened_sfm_absolute(_hrc)
+    # D2: HRC-driven curve (annealed default) — matches the endmill path
+    if _mat_key == "tool_steel_d2" or mat_group == "tool_steel_d2":
+        base_sfm = d2_sfm_absolute(_hrc)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
                        "stainless_15_5", "stainless_ph", "stainless_13_8",
@@ -2582,6 +2639,10 @@ def run_drilling(payload: dict) -> dict:
     _drill_no_hrc_penalty = _NO_HRC_PENALTY | {"copper_beryllium", "manganese_steel"}
     if mat_group not in _drill_no_hrc_penalty and mat not in _drill_no_hrc_penalty:
         base_sfm *= hardness_sfm_mult(hrc)
+    else:
+        # D2's DRILL_SFM (110) is an annealed number — scale it by the D2 curve so
+        # a hardened-D2 hole isn't drilled at annealed speed. No-op when annealed.
+        base_sfm = apply_d2_hardness(base_sfm, hrc, mat, mat_group)
     base_sfm *= cool_factor * geo_factor  # PA factor applies to IPR only, not SFM
     # Micro-drill SFM bonus — base table calibrated for ~1/4" drills; micro-drills run hotter SFM.
     # Bonus scales with sfm_dia (the operating dia that drives RPM/heat) — not feed_dia.
@@ -4927,11 +4988,20 @@ def run(payload=None):
         or material_group in ("hardened_lt55", "hardened_gt55")
     if _is_generic_hardened:
         base_sfm = hardened_sfm_absolute(float(data.get("hardness_hrc", 0) or 0))
+    # D2: HRC-driven absolute SFM on its own (abrasion-offset) curve. Default is
+    # the annealed state, so most jobs land on the same 180 as before.
+    _is_d2 = _mat_key == "tool_steel_d2" or material_group == "tool_steel_d2"
+    _d2_hrc = float(data.get("hardness_hrc", 0) or 0) if _is_d2 else 0.0
+    if _is_d2:
+        base_sfm = d2_sfm_absolute(_d2_hrc)
     if data["mode"] in ("hem", "trochoidal"):
         # Hardened steel is abrasion/thermal-limited, NOT chip-evacuation-limited,
         # so the blanket HEM 2× doesn't physically apply — the light radial arc
         # buys a modest bump only. Everything else keeps the 2× rule.
-        base_sfm *= 1.3 if _is_generic_hardened else 2.0  # HEM = 2× conventional (most materials)
+        # Hardened D2 (>45 HRC) joins that exception; annealed D2 is genuinely
+        # chip-limited and keeps the normal boost (tamed by HEM_IPT_MULT 1.4).
+        _hem_tamed = _is_generic_hardened or (_is_d2 and _d2_hrc > 45)
+        base_sfm *= 1.3 if _hem_tamed else 2.0  # HEM = 2× conventional (most materials)
         # Per-material HEM SFM overrides (shop-validated; prorated from 718 baseline of 216)
         _hem_sfm_override = {
             "inconel_718": 216,
@@ -6557,6 +6627,11 @@ def run(payload=None):
 
     # SFM ratio: compare against the un-boosted base (conventional) SFM so HEM isn't penalised
     _base_sfm_conv = BASE_SFM.get(_mat_key, BASE_SFM.get(material_group, 300))
+    # Materials on an HRC-driven curve must compare against the curve, not the flat
+    # table value — else hardened D2 (100 actual vs 180 table) reads as "running
+    # slow" and reports LONGER life, when the hardness derate is the whole point.
+    if _mat_key == "tool_steel_d2" or material_group == "tool_steel_d2":
+        _base_sfm_conv = d2_sfm_absolute(float(data.get("hardness_hrc", 0) or 0))
     sfm_target_val = float(_base_sfm_conv or sfm_actual or 1.0)
     sfm_ratio = (sfm_actual / sfm_target_val) if sfm_actual > 0 else 1.0
     # Clamp: running below target SFM doesn't give unrealistic life gains

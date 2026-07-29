@@ -8,6 +8,25 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### D2 tool steel — defaults to ANNEALED, with an HRC-driven SFM curve
+D2 defaulted to **58 HRC**, but most shops mill D2 in the **annealed** state (~20–25 HRC), leave a finishing allowance, and heat treat to 58–62 HRC afterward. The default is now **22 HRC** and the plausible range widened from 58–64 to **18–64 HRC**.
+
+The bigger fix is underneath: `tool_steel_d2` sits in `_NO_HRC_PENALTY`, so its flat `BASE_SFM` of 180 was served **regardless of the hardness entered** — and 180 SFM is an *annealed* number (the 140–220 band). Anyone actually hard-milling D2 was handed roughly 2× the correct speed. New `d2_sfm_absolute(hrc)` curve, mirroring `hardened_sfm_absolute`:
+
+| HRC | SFM | Note |
+|---|---|---|
+| ≤30 (annealed) | 180 | unchanged from before — the default path |
+| 45 | 135 | partially hardened / under-tempered |
+| 55 | 105 | |
+| 58–62 (hardened) | 96 → 85 | normal hardened service band |
+| >62 | → 60 floor | past spec; CBN/grinding territory |
+
+D2 sits **below** plain hardened steel of equal HRC across the range because the limiter is chromium-carbide abrasion, not just matrix hardness. Wired into all six SFM surfaces — milling, chamfer, drilling, keyseat, dovetail, feedmill — largely via one branch inside `apply_sfm_hardness` (`apply_d2_hardness` scales each per-op table off its own annealed anchor, so no per-op curves to maintain). Two related corrections:
+- **HEM boost** now tames to 1.3× only above 45 HRC; annealed D2 is genuinely chip-limited and keeps the full 2×.
+- **Tool-life SFM ratio** compares against the curve, not the flat table — otherwise hardened D2 (96 actual vs 180 table) read as "running slow" and reported *longer* life.
+
+UI: D2 joins the `PH_CONDITION_HARDNESS` condition-chip row (Annealed / Hardened 58 / 60 / 62) — one tap fills the HRC and the active state is always visible, so the label can't contradict the field. Annealed output is byte-identical to before (180 SFM / 1375 RPM / 17.7 IPM @ Ø0.5" 4fl). **The 45–62 HRC anchors are estimates** in the same spirit as the existing hardened curves, not bench-validated.
+
 ### Chamfer feed — tip-starvation derate for a point cutting in material
 Chip load on a chamfer mill is scaled to **body** diameter, because that's where manufacturers rate it, and `D_eff` deliberately drives only RPM. But that full body-scaled chip is then applied at *every* point along the engaged edge — including points whose local diameter, and therefore local surface speed, is near zero. A CMS point cut at the tip has the bottom of its cut at Ø0.000": it can't cut at 0 SFM, it plows, and handing it a full chip load is how the point snaps off.
 
@@ -788,7 +807,7 @@ Defined in `shared/materials.ts` (UI) and `legacy_engine.py` (physics constants)
 | `tool_steel_a2` | A2 | 240 | 0.0044 |
 | `tool_steel_h13` | H13 | 220 | 0.0040 |
 | `tool_steel_s7` | S7 | 240 | 0.0044 |
-| `tool_steel_d2` | D2 | 180 | 0.0032 |
+| `tool_steel_d2` | D2 (annealed ~20–25 HRC default; HRC-driven curve) | 180 | 0.0032 |
 
 ### M — Stainless Steel
 
