@@ -8,6 +8,34 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Pocketing sequencer — sharp-floor pockets crashed the lookup
+The Progressive Reach Sequence card returned **"Sequence lookup failed"** on every pocket run with **Floor Radius blank or 0** — the common case, and precisely the sharp-floor path the square-finisher work below was written to enable.
+
+Splitting the corner-coverage query into square-end and filleted branches left the square-end branch with **no `$1`/`$2` placeholders**, while the `pool.query()` call underneath still bound two values (`corner_radius`, `floor_radius`). Postgres rejects a bind supplying more parameters than the statement declares:
+
+```
+bind message supplies 2 parameters, but prepared statement "" requires 0
+```
+
+The throw hit the endpoint's catch-all, which returns a generic error string — so the real cause never reached the UI. The square-end branch now references both parameters in an always-true guard, keeping the placeholder count matched in either branch. Filleted-floor pockets were never affected.
+
+### Traditional slotting — QTR3 buried by the flute sort, not filtered out
+QTR3 chips appeared for full-width ferrous slotting at 0.21875", 0.15625", 0.109", 0.0937", 0.078" and 0.0625" but **never** at 0.250", 0.1875" or 0.125". The flute filter wasn't the cause — traditional ferrous is `flutes <= 4`, which a 3-flute passes. The **ordering** was:
+
+`ORDER BY ... ABS(s.flutes - 4) ASC, score DESC ... LIMIT 12`
+
+Distance-from-4 puts every 4-flute at rank 0 and QTR3 at rank 1. The catalog stocks **18 four-flute tools at 0.125", 21 at 0.1875" and 59 at 0.250"** (ISO P), so `LIMIT 12` was consumed entirely by 4-flutes and no QTR3 row was ever fetched. The odd sizes worked only because **zero** 4-flute tools exist there, leaving QTR3 as the sole candidate.
+
+Three changes: QTR3 ≤0.250" now **ties with the 4-flutes at rank 0** (rather than being exempted from the ordering, so score and reach still choose which QTR3 EDP wins); the fetch limit went **12 → 40**; and the 2-per-Ø signature dedupe — which filled both slots with 4fl CB + 4fl standard — now **reserves QTR3 an extra chip** instead of replacing either, so the 4-flute pair is still shown alongside it. Verified against the live catalog on a 0.375" ISO P slot:
+
+| Ø | chips |
+|---|---|
+| 0.250" | 401021C 4fl CB · 401611 4fl std · **Q2502R QTR3 3fl** |
+| 0.1875" | 400111C 4fl CB · 400911 4fl std · **Q1872R QTR3 3fl** |
+| 0.125" | 410211C 4fl CB · 410811 4fl std · **Q1253R QTR3 3fl** |
+
+Nothing above 1/4" changes, and the aluminum (`flutes IN (2,3)`) and HEM paths are untouched.
+
 ### Pocketing — square finishers for square corners, and the QTR3 line unlocked
 Two independent tool-selection bugs in the pocketing sequencer.
 
@@ -18,7 +46,7 @@ Two independent tool-selection bugs in the pocketing sequencer.
 Variable pitch **and** variable helix is now a ranking preference in both finisher branches — the irregular tooth spacing disrupts regenerative chatter, which is the real limiter on a finish wall pass at reach. A sharp-floor 0.125" pocket in steel now picks **Q1252S** (QTR3-0125-2XD-SQ); with a 0.015" floor radius it picks **Q1252R**.
 
 ### QTR3 available for slotting in every material
-QTR3 is built for all materials — all 102 QTR3 / QTR3-RN SKUs are flagged for every ISO category (N/P/M/K/S/H) in the catalog — but the **HEM ferrous/titanium** slot filter required 5+ flutes, so the 3-flute series was excluded. Traditional slotting was already fine (its filters are upper bounds: `<= 4` / `<= 5` / `IN (2,3)`, all of which a 3-flute passes), as was HEM aluminum.
+QTR3 is built for all materials — all 102 QTR3 / QTR3-RN SKUs are flagged for every ISO category (N/P/M/K/S/H) in the catalog — but the **HEM ferrous/titanium** slot filter required 5+ flutes, so the 3-flute series was excluded. HEM aluminum was already fine. Traditional slotting *passed* QTR3 through its filters (upper bounds: `<= 4` / `<= 5` / `IN (2,3)`) but still didn't surface it at the three diameters where 4-flute tools exist — see the flute-sort fix above, which was a separate bug in the ordering rather than the filter.
 
 QTR3 under 0.250" is now exempt from the HEM ferrous/Ti flute floor in **both** slotting paths — the diameter chips the user taps and the optimal-tool scorer that ranks them, so the two agree. This mattered most where the catalog has no alternative: at **0.0625", 0.078", 0.0937", 0.109", 0.15625" and 0.21875" there is no 5+ flute tool stocked at all**, so HEM ferrous slotting returned an empty list at those sizes. Diameters that already had 5-flute options keep them and simply gain QTR3 alongside (0.250": 156 + 11, 0.1875": 56 + 14, 0.125": 29 + 11) — nothing was displaced.
 

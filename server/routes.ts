@@ -2715,8 +2715,17 @@ export async function registerRoutes(
       // workhorse — surface it ahead of a 3-flute so each Ø shows 4fl CB then 4fl std,
       // not a mix of flute counts. (HEM and non-ferrous already filter their own flute
       // band, so this orderer is a no-op there.) Lower distance-from-4 sorts first.
+      // QTR3 (3fl var pitch + var helix, ≤0.250") slots really well in full-width
+      // ferrous, so it must not be buried by the distance-from-4 sort. At 0.250",
+      // 0.1875" and 0.125" the catalog stocks 18–59 four-flute tools, so every 3fl
+      // row sorted below the LIMIT and QTR3 never reached the picks loop. At the odd
+      // sizes (0.21875", 0.15625", 0.109", 0.0937", 0.078", 0.0625") there is no 4fl
+      // tool at all, which is why it appeared there and nowhere else.
+      // Tie it with the 4-flutes (rank 0) instead of exempting it from the ordering,
+      // so score/reach still decide which QTR3 EDP wins.
+      const qtr3TradSlot = `(UPPER(COALESCE(s.series,'')) LIKE 'QTR3%' AND s.cutting_diameter_in <= ${QTR3_SLOT_MAX_DIA})`;
       const fluteRank = (!isHem && !isN)
-        ? `ABS(s.flutes - 4) ASC,`
+        ? `(CASE WHEN ${qtr3TradSlot} THEN 0 ELSE ABS(s.flutes - 4) END) ASC,`
         : "";
       const chips: any[] = [];
       for (const dia of candidates) {
@@ -2748,7 +2757,7 @@ export async function registerRoutes(
              AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
              ${fluteClause} ${matClause}
            ORDER BY ${reachRank} ${fluteRank} score DESC, s.loc_in ASC NULLS LAST
-           LIMIT 12`
+           LIMIT 40`
         );
         // Z-steps to clear the slot are cut by the FLUTES, so the axial bite = LOC
         // (LBS = the non-fluted necked body below the flutes; it's clearance so the
@@ -2794,6 +2803,17 @@ export async function registerRoutes(
           seenSig.add(g);
           picks.push(r);
           if (picks.length >= maxPerDia) break;
+        }
+        // Traditional ferrous: guarantee QTR3 a slot at ≤0.250". The 2-per-Ø signature
+        // dedupe above fills both slots with 4fl CB + 4fl std at diameters where those
+        // exist, which would drop QTR3 right back out even though it now sorts level
+        // with them. Append the best QTR3 as an EXTRA chip (not a replacement) so the
+        // customer still sees the 4-flute pair alongside it.
+        const isQtr3Row = (r: any) =>
+          String(r.series ?? "").toUpperCase().startsWith("QTR3") && dia <= QTR3_SLOT_MAX_DIA;
+        if (!isHem && !isN && !picks.some(isQtr3Row)) {
+          const bestQtr3 = rows.find(isQtr3Row);
+          if (bestQtr3) picks.push(bestQtr3);
         }
         // HEM display order: chipbreaker first (tougher-material choice up front), then
         // standard; within each geometry, fewer flutes first — i.e. 5fl CB, 6fl CB,
@@ -6816,7 +6836,13 @@ ${catalogList}`
                  AND (corner_condition::numeric <= $1::numeric)
                  AND ($2::numeric = 0 OR corner_condition::numeric <= $2::numeric))
            )`
-        : `AND corner_condition = 'square'`;
+        // Square-end branch needs no radius params, but pool.query below always binds
+        // two ($1 corner_radius, $2 floor_radius) — and Postgres rejects a bind that
+        // supplies more parameters than the statement declares ("bind message supplies
+        // 2 parameters, but prepared statement requires 0"). Reference both in a
+        // always-true guard so the placeholder count matches in either branch.
+        : `AND corner_condition = 'square'
+           AND $1::numeric >= 0 AND $2::numeric >= 0`;
       const cornerCoverageRows = await pool.query(`
         SELECT cutting_diameter_in, MAX(COALESCE(lbs_in, loc_in)) AS max_reach
         FROM skus
