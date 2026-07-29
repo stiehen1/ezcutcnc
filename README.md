@@ -8,6 +8,22 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Pocketing — square finishers for square corners, and the QTR3 line unlocked
+Two independent tool-selection bugs in the pocketing sequencer.
+
+**The corner finisher could never be a square end mill.** The end condition was chosen by diameter (`dia < 0.250` → ball) and the fallback branch banned `square` outright, so a pocket with a **sharp floor-to-wall corner** was handed a ball nose — which leaves a radius you then have to clean out. The end condition now follows the part geometry: **Floor Radius blank or 0 → sharp floor → square end**; Floor Radius set → corner-radius tool closest to that value, ball only as a fallback when no CR is stocked at that diameter.
+
+**The entire QTR3 line was invisible to ferrous pocketing.** The roughing filter was a flat `flutes >= 4`, and QTR3 is 3-flute — so every QTR3 was excluded at every diameter. Being P-Max, it was also blocked by the aluminum D-Max/A-Max coating filter on ISO N. QTR3 is now exempt from **both** filters below 0.250" on any material. This mattered more than it sounds: at 0.0625", 0.078", 0.0937", 0.109", 0.15625" and 0.21875" **QTR3 is the only ferrous end mill stocked** — those diameters previously returned nothing at all, so the sequencer had no small-tool option whatsoever. Below 1/4" you can't fit 4+ flutes with usable chip gullets; the 3-flute variable pitch/helix design is the answer there, not a compromise.
+
+Variable pitch **and** variable helix is now a ranking preference in both finisher branches — the irregular tooth spacing disrupts regenerative chatter, which is the real limiter on a finish wall pass at reach. A sharp-floor 0.125" pocket in steel now picks **Q1252S** (QTR3-0125-2XD-SQ); with a 0.015" floor radius it picks **Q1252R**.
+
+### QTR3 available for slotting in every material
+QTR3 is built for all materials — all 102 QTR3 / QTR3-RN SKUs are flagged for every ISO category (N/P/M/K/S/H) in the catalog — but the **HEM ferrous/titanium** slot filter required 5+ flutes, so the 3-flute series was excluded. Traditional slotting was already fine (its filters are upper bounds: `<= 4` / `<= 5` / `IN (2,3)`, all of which a 3-flute passes), as was HEM aluminum.
+
+QTR3 under 0.250" is now exempt from the HEM ferrous/Ti flute floor in **both** slotting paths — the diameter chips the user taps and the optimal-tool scorer that ranks them, so the two agree. This mattered most where the catalog has no alternative: at **0.0625", 0.078", 0.0937", 0.109", 0.15625" and 0.21875" there is no 5+ flute tool stocked at all**, so HEM ferrous slotting returned an empty list at those sizes. Diameters that already had 5-flute options keep them and simply gain QTR3 alongside (0.250": 156 + 11, 0.1875": 56 + 14, 0.125": 29 + 11) — nothing was displaced.
+
+Unchanged: the 5+ flute rule for HEM ferrous/Ti generally, 3-flute for HEM aluminum, and the engine's `slot_doc_ceiling` limit of 0.5×D for a 5-flute in a full slot (0.4×D titanium).
+
 ### D2 tool steel — defaults to ANNEALED, with an HRC-driven SFM curve
 D2 defaulted to **58 HRC**, but most shops mill D2 in the **annealed** state (~20–25 HRC), leave a finishing allowance, and heat treat to 58–62 HRC afterward. The default is now **22 HRC** and the plausible range widened from 58–64 to **18–64 HRC**.
 

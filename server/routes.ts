@@ -2680,8 +2680,18 @@ export async function registerRoutes(
       // slot runs deeper than ½×D per pass, and a 5-flute tool is chip-clearance-capped
       // to 0.5×D in a full slot (see slot_doc_ceiling), so it would force extra Z-levels.
       // Surface 4fl (and below) only — the deep-slot guidance text says "go 4-flute."
+      // (5-fl is admitted by the engine only to 0.5×D in a full slot — slot_doc_ceiling.)
+      //
+      // QTR3 exemption (HEM ferrous/Ti only): the ≥5fl floor is right for HEM, but
+      // QTR3/QTR3-RN is the sub-1/4" all-material series — flagged for every ISO
+      // category (N/P/M/K/S/H) in the catalog — and at 0.0625"–0.109", 0.15625" and
+      // 0.21875" there is NO ≥5fl tool stocked at all, so the list came back empty.
+      // Exempt the series under 0.250" so it's available for slotting in every
+      // material. The other branches already admit 3fl, so this is the only gate.
+      const QTR3_SLOT_MAX_DIA = 0.250;
+      const qtr3SlotExempt = `(UPPER(COALESCE(s.series,'')) LIKE 'QTR3%' AND s.cutting_diameter_in <= ${QTR3_SLOT_MAX_DIA})`;
       const fluteClause = isHem
-        ? (isN ? `AND s.flutes >= 3` : `AND s.flutes >= 5`)
+        ? (isN ? `AND s.flutes >= 3` : `AND (s.flutes >= 5 OR ${qtr3SlotExempt})`)
         : isN
           ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`
           : `AND s.flutes <= 4`;
@@ -2880,10 +2890,15 @@ export async function registerRoutes(
       //   HEM non-ferrous: ≥3 flute (no upper cap)
       //   trad N (aluminum): 2–3 flute, no VRX (gullet-limited, soft chips)
       //   trad ferrous:      ≤5 flute
+      //   QTR3 under 0.250" is exempt from the HEM ferrous/Ti ≥5fl floor — the
+      //     sub-1/4" all-material series (flagged N/P/M/K/S/H), and at several small
+      //     diameters no ≥5fl tool is stocked at all. Mirrors the slot-chip endpoint
+      //     so the chips the user taps and the scorer that ranks them agree.
       const isNslot = isoCategory === "N";
+      const qtr3SlotPeerExempt = `(UPPER(COALESCE(s.series,'')) LIKE 'QTR3%' AND s.cutting_diameter_in <= 0.250)`;
       let slotFluteClause = "";
       if (mode === "slot") {
-        if (isHemSlot)                slotFluteClause = isNslot ? ` AND s.flutes >= 3` : ` AND s.flutes >= 5`;
+        if (isHemSlot)                slotFluteClause = isNslot ? ` AND s.flutes >= 3` : ` AND (s.flutes >= 5 OR ${qtr3SlotPeerExempt})`;
         else if (isNslot)             slotFluteClause = ` AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`;
         else                          slotFluteClause = ` AND s.flutes <= 5`;
       }
@@ -6737,9 +6752,20 @@ ${catalogList}`
       // ISO P/M/K/S/H (steel/stainless/titanium/superalloy/hardened): P-Max or T-Max, 4+ flutes
       const isoUpper = (iso_category ?? "").toUpperCase();
       const isAluminum = isoUpper === "N";
+      // ── QTR3 small-diameter exemption ──────────────────────────────────────
+      // QTR3 / QTR3-RN is the dedicated sub-1/4" series: 3-flute variable pitch +
+      // variable helix, P-Max. Below 0.250" you physically can't fit 4+ flutes with
+      // usable chip gullets, so the normal ferrous "flutes >= 4" rule excluded the
+      // ENTIRE line from pocketing — at exactly the diameters where nothing else is
+      // stocked. It's also P-Max, so the aluminum D-Max/A-Max coating filter shut it
+      // out on ISO N too. Exempt the series from BOTH filters under 0.250" on any
+      // material; above that the standard flute/coating rules stand (a 4-5 fl tool
+      // genuinely is the better pick once the gullets fit).
+      const QTR3_MAX_DIA = 0.250;
+      const qtr3Exempt = `(series ILIKE 'QTR3%' AND cutting_diameter_in <= ${QTR3_MAX_DIA})`;
       const coatingFilter = isAluminum
-        ? `AND (coating ILIKE 'D-Max%' OR coating ILIKE 'A-Max%' OR coating IS NULL OR coating = '')`
-        : `AND (coating ILIKE 'P-Max%' OR coating ILIKE 'T-Max%')`;
+        ? `AND ((coating ILIKE 'D-Max%' OR coating ILIKE 'A-Max%' OR coating IS NULL OR coating = '') OR ${qtr3Exempt})`
+        : `AND ((coating ILIKE 'P-Max%' OR coating ILIKE 'T-Max%') OR ${qtr3Exempt})`;
       // Flute count rules for pocketing roughing:
       //   Aluminum (ISO N): 2–3 flutes for chip clearance.
       //   Ferrous: 4+ flutes. Traditional prefers 5-fl (better chip clearance at
@@ -6748,7 +6774,7 @@ ${catalogList}`
       //     only wins when nothing smaller fits the dia/reach combo.
       const fluteFilter = isAluminum
         ? `AND flutes <= 3`
-        : `AND flutes >= 4`;
+        : `AND (flutes >= 4 OR ${qtr3Exempt})`;
 
       // ── 2. Catalog lookup — available diameters with depth coverage ─────────
       // Key rule: for RN tools, lbs_in IS the reach; for standard tools, loc_in is the reach
@@ -6774,24 +6800,29 @@ ${catalogList}`
         max_reach: string; rn_count: string; ball_count: string;
       }> = coverageRows.rows;
 
-      // ── 2b. Corner-specific coverage — only ball/CR tools that reach depth ──
-      // Filter for tools whose corner radius is suitable for the floor radius requirement:
-      //   - If floor_radius is set: tool CR must be ≤ floor_radius (smaller is fine, larger
-      //     would leave an oversized floor radius — wrong geometry).
-      //   - If floor_radius is NOT set: any CR ≤ wall corner_radius qualifies.
-      // Ball nose tools satisfy any floor radius via axial engagement so they pass through.
+      // ── 2b. Corner-specific coverage — candidate finisher diameters ─────────
+      // MUST agree with buildCornerTool's end-condition choice below, or this picks a
+      // diameter that the tool query then can't satisfy → null finisher.
+      //   - floor_radius unset/0 → SHARP floor → square-end tools only.
+      //   - floor_radius set     → filleted floor → CR ≤ floor_radius (smaller is fine;
+      //     larger would cut an oversized floor radius — wrong geometry), or ball,
+      //     which satisfies any floor radius via axial engagement.
+      const wantsFloorRadiusCov = (floor_radius ?? 0) > 0;
+      const cornerEndCondFilter = wantsFloorRadiusCov
+        ? `AND corner_condition != 'square'
+           AND (
+             corner_condition = 'ball'
+             OR (corner_condition ~ '^[0-9.]+$'
+                 AND (corner_condition::numeric <= $1::numeric)
+                 AND ($2::numeric = 0 OR corner_condition::numeric <= $2::numeric))
+           )`
+        : `AND corner_condition = 'square'`;
       const cornerCoverageRows = await pool.query(`
         SELECT cutting_diameter_in, MAX(COALESCE(lbs_in, loc_in)) AS max_reach
         FROM skus
         WHERE tool_type = 'endmill'
           AND cutting_diameter_in > 0
-          AND corner_condition != 'square'
-          AND (
-            corner_condition = 'ball'
-            OR (corner_condition ~ '^[0-9.]+$'
-                AND (corner_condition::numeric <= $1::numeric)
-                AND ($2::numeric = 0 OR corner_condition::numeric <= $2::numeric))
-          )
+          ${cornerEndCondFilter}
           ${coatingFilter}
         GROUP BY cutting_diameter_in
         ORDER BY cutting_diameter_in DESC
@@ -7156,13 +7187,42 @@ ${catalogList}`
       // ── 5. Corner finish tool (single tool) ────────────────────────────────
       const buildCornerTool = async (row: { cutting_diameter_in: string; max_reach: string; [k: string]: any }): Promise<SeqTool | null> => {
         const dia = parseFloat(row.cutting_diameter_in);
-        const useBallNose = dia < 0.250;
 
-        // Ball nose: corner dia < 0.250" — matches corner radius exactly via axial engagement
-        // Corner radius (bull nose): corner dia >= 0.250" — CR tool whose radius <= pocket corner radius
-        // Never use square corner for a corner finishing tool
+        // ── Floor geometry drives the end condition, NOT the diameter ──────────
+        // This used to be `useBallNose = dia < 0.250`, which forced a ball on every
+        // small corner tool regardless of the part — and the CR branch below banned
+        // 'square' outright, so NO path could ever return a square-end tool. A sharp
+        // floor-to-wall corner got a ball that left a radius you'd have to clean out.
+        //
+        // Correct mapping:
+        //   floor_radius unset/0 → SHARP floor → square end (the only tool that
+        //                          produces a sharp floor-to-wall intersection)
+        //   floor_radius > 0     → filleted floor → CR tool closest to that radius,
+        //                          ball as fallback if no CR is stocked at this dia
+        const wantsFloorRadius = (floor_radius ?? 0) > 0;
         let toolRows;
-        if (useBallNose) {
+        if (!wantsFloorRadius) {
+          // Sharp floor. Square end, preferring variable pitch/helix — the irregular
+          // tooth spacing disrupts regenerative chatter, which is the real limiter on
+          // a finish wall pass at reach (QTR3 is built for exactly this).
+          toolRows = await pool.query(`
+            SELECT edp, description1, description2, cutting_diameter_in, flutes,
+                   loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
+                   corner_condition, series, geometry, helix, variable_pitch, variable_helix, shank_dia_in,
+                   oal_in, flute_wash, default_stickout_in, min_stickout_in,
+                   (lbs_in > 0) as is_rn
+            FROM skus
+            WHERE tool_type = 'endmill'
+              AND cutting_diameter_in = $1
+              AND corner_condition = 'square'
+              AND COALESCE(lbs_in, loc_in) >= $2
+              ${coatingFilter}
+            ORDER BY
+              (COALESCE(variable_pitch, false) AND COALESCE(variable_helix, false)) DESC,
+              COALESCE(lbs_in, loc_in) ASC
+            LIMIT 1
+          `, [dia, target_depth]);
+        } else if (dia < 0.250) {
           toolRows = await pool.query(`
             SELECT edp, description1, description2, cutting_diameter_in, flutes,
                    loc_in, lbs_in, COALESCE(lbs_in, loc_in) as reach_in,
@@ -7203,6 +7263,8 @@ ${catalogList}`
             ORDER BY
               -- Prefer CR over ball
               CASE WHEN corner_condition = 'ball' THEN 1 ELSE 0 END ASC,
+              -- Then variable pitch + helix: chatter-resistant, the better finisher
+              (COALESCE(variable_pitch, false) AND COALESCE(variable_helix, false)) DESC,
               -- When floor_radius set: pick CR closest to target (abs distance ASC).
               -- When not set: prefer largest CR (legacy behavior — DESC).
               CASE
@@ -7264,7 +7326,11 @@ ${catalogList}`
             corner_tool = fallbackTool;
             corner_oversize = true;
             const stockLeft = (fallbackTool.dia / 2 - corner_radius).toFixed(4);
-            corner_oversize_note = `No standard ball/CR tool reaches ${target_depth}" at ≤${maxCornerDia.toFixed(4)}" dia. Using Ø${fallbackTool.dia.toFixed(4)}" as closest available — leaves ~${stockLeft}" stock at corners. Contact Core Cutter for a deep-reach reduced-neck CR tool to finish corners to print.`;
+            // Wording follows the floor geometry — a sharp-floor job isn't waiting on
+            // a CR tool, it needs a deep-reach square.
+            const endCondLabel = (floor_radius ?? 0) > 0 ? "ball/CR" : "square-end";
+            const specialLabel = (floor_radius ?? 0) > 0 ? "reduced-neck CR" : "reduced-neck square-end";
+            corner_oversize_note = `No standard ${endCondLabel} tool reaches ${target_depth}" at ≤${maxCornerDia.toFixed(4)}" dia. Using Ø${fallbackTool.dia.toFixed(4)}" as closest available — leaves ~${stockLeft}" stock at corners. Contact Core Cutter for a deep-reach ${specialLabel} tool to finish corners to print.`;
           }
         }
       }
