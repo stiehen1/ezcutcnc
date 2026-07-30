@@ -2659,18 +2659,31 @@ export async function registerRoutes(
 
       const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
       // Traditional full-width slotting wants the LARGEST tool that fits the slot —
-      // fewest side passes, most rigid. Laddering all the way down to tiny tools just
-      // surfaces many-side-pass / many-Z-step suggestions nobody wants, so cap to the
-      // largest 3 diameters ≤ width (e.g. 3/4, 5/8, 1/2 for a 3/4" slot — gives the
-      // user a couple of step-down options without flooding with tiny tools). HEM
-      // uses a 0.40–0.80× window (tool < slot): the 0.80× ceiling matches the 10%
-      // per-wall clearance floor (leaves >=10% of slot width per side to loop) and
-      // the engine's 0.85× sizing target, so a stiffer near-slot-width tool is
-      // offered — e.g. a 0.350" slot now admits 0.250" as well as 0.1875" (was 0.70×
-      // -> 0.1875" only, which surfaced NO chip when no small HEM tool was stocked).
+      // fewest side passes, most rigid. There is really only ONE right diameter (the
+      // biggest that fits); the choice that matters is the VARIANT at that diameter
+      // (standard / chipbreaker / reduced-neck), which the per-Ø picks loop surfaces.
+      // Capped to the largest 2 diameters ≤ width (was 3): with 2-4 variants per Ø,
+      // three diameters produced 7+ cards and read as a dump, not a recommendation —
+      // in a 0.438" slot you plow with the 3/8" and never touch the 5/16" or 1/4".
+      // The 2nd diameter stays as a fallback for when the big tool can't reach depth.
+      // HEM uses a 0.40-0.85x window (tool < slot). The 0.85x ceiling is the SAME
+      // target the engine's Picker A sizes to; it was 0.80x (the 10%-per-wall comfort
+      // floor), which made panel and engine disagree — the engine would size a 0.375"
+      // tool for a 0.438" slot while the panel refused to offer one, leaving the user
+      // on 5/16" wondering where the 3/8" went. The 10% floor is NOT removed: it still
+      // fires as the tight-wall warning on the chip, so the near-slot-width tool is
+      // offered WITH its trade-off stated rather than silently withheld.
+      // HEM snap-up (mirrors slotDiaChips() on the client — keep the two in step): if the
+      // next standard size above the 0.85x target is within 5%, admit it. 0.85x of a
+      // 0.438" slot is 0.3723", which would exclude a 3/8" tool by 0.7% and leave 5/16"
+      // as the top pick when 3/8" is the obvious choice. Bounded so it crosses at most
+      // one size gap, and only a small one.
+      const HEM_SNAP_TOL = 0.05;
+      const hemHi = width * 0.85;
+      const hemSnap = STD_DIAS.find(d => d > hemHi + 1e-6 && d <= hemHi * (1 + HEM_SNAP_TOL));
       const candidates = isHem
-        ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && d <= width * 0.80 + 1e-6)
-        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-3);
+        ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && (d <= hemHi + 1e-6 || d === hemSnap))
+        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-2);
       if (!candidates.length) return res.json({ chips: [] });
 
       // Strategy-aware flute filter (mirrors optimal-tool scorer).
@@ -2682,27 +2695,76 @@ export async function registerRoutes(
       // Surface 4fl (and below) only — the deep-slot guidance text says "go 4-flute."
       // (5-fl is admitted by the engine only to 0.5×D in a full slot — slot_doc_ceiling.)
       //
-      // QTR3 exemption (HEM ferrous/Ti only): the ≥5fl floor is right for HEM, but
-      // QTR3/QTR3-RN is the sub-1/4" all-material series — flagged for every ISO
-      // category (N/P/M/K/S/H) in the catalog — and at 0.0625"–0.109", 0.15625" and
-      // 0.21875" there is NO ≥5fl tool stocked at all, so the list came back empty.
-      // Exempt the series under 0.250" so it's available for slotting in every
-      // material. The other branches already admit 3fl, so this is the only gate.
+      // QTR3 exemption: QTR3/QTR3-RN is the sub-1/4" all-material series — flagged for
+      // every ISO category (N/P/M/K/S/H) — 3fl variable pitch AND variable helix, on a
+      // full 0.250" shank at every diameter down to 0.0625". That shank is the reason it
+      // belongs here: at 0.125" a QTR3 is running a 1/4" shank where a VST5 has a 0.125"
+      // shank, so it's dramatically stiffer in the same slot.
+      //
+      // The HEM rule is NOT a diameter threshold. In HEM the light radial bite rewards
+      // teeth, so a 5-flute wins wherever one is stocked, and the QTR3 is there purely to
+      // FILL THE GAPS where no 5-flute is made at all.
+      //
+      // Those gaps are not "small diameters" — they're the ODD sizes. Stocked 5+ flute
+      // ISO-M counts: 0.0625"/0.0781"/0.0938"/0.1094" none, 0.125" TWENTY-NINE,
+      // 0.15625" none, 0.1875" fifty-six, 0.21875" none, 0.250" one-hundred-fifty-six.
+      // So a "<=0.125" exemption was wrong in both directions: it injected a 3-flute at
+      // 0.125" where 29 five-flutes exist, and left 0.15625"/0.21875" with no HEM pick.
+      // Instead: probe for a 5-flute at THIS diameter (qtr3HemNeeded, set per-Ø below) and
+      // admit the QTR3 only when there is none. Self-correcting as the catalog changes.
       const QTR3_SLOT_MAX_DIA = 0.250;
-      const qtr3SlotExempt = `(UPPER(COALESCE(s.series,'')) LIKE 'QTR3%' AND s.cutting_diameter_in <= ${QTR3_SLOT_MAX_DIA})`;
-      const fluteClause = isHem
-        ? (isN ? `AND s.flutes >= 3` : `AND (s.flutes >= 5 OR ${qtr3SlotExempt})`)
-        : isN
-          ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`
-          : `AND s.flutes <= 4`;
+      // Per-diameter because the HEM branch needs to know whether a 5-flute exists AT THIS Ø.
+      // The gap test is a correlated NOT EXISTS against the same current upload, so it costs
+      // no extra round trip and stays true to whatever is actually stocked.
+      const fluteClauseFor = (dia: number) => {
+        if (!isHem) {
+          return isN
+            ? `AND COALESCE(s.geometry,'standard') != 'truncated_rougher' AND s.flutes IN (2,3)`
+            : `AND s.flutes <= 4`;
+        }
+        if (isN) return `AND s.flutes >= 3`;
+        const noFiveFluteHere = `NOT EXISTS (
+          SELECT 1 FROM skus s5 JOIN sku_uploads u5 ON s5.upload_id = u5.id
+          WHERE u5.is_current = TRUE
+            AND ABS(s5.cutting_diameter_in - ${dia}) < 0.001
+            AND s5.flutes >= 5
+            AND s5.edp NOT ILIKE '%-BLK'
+            AND s5.tool_type IS DISTINCT FROM 'chamfer_mill'
+            AND NOT (UPPER(COALESCE(s5.series,'')) LIKE '%-RN' AND COALESCE(s5.lbs_in,0) = 0)
+            ${isoCol ? `AND s5.${isoCol} = TRUE` : ""}
+        )`;
+        return `AND (s.flutes >= 5 OR (UPPER(COALESCE(s.series,'')) LIKE 'QTR3%' AND ${noFiveFluteHere}))`;
+      };
       const matClause = isoCol ? `AND (s.${isoCol} = TRUE OR UPPER(s.series) IN ('QTR3','QTR3-RN'))` : "";
       // Reach is RANKED, not filtered: a tool that reaches the full slot depth in one
       // pass sorts ahead of a shorter one, but short-LOC tools still appear — the user
       // may run a longer-reach tool they have on hand and let the stability advisor pull
       // back feeds/DOC for the extra overhang. (LBS reach counts as reaching, too.)
+      // LOC and LBS are both ground to +0.060"/-0.000", so the NOMINAL length is the
+      // guaranteed MINIMUM — actual lengths run 0.000-0.060" LONGER, never shorter. A tool
+      // nominally AT the slot depth therefore always clears it, and one up to 0.060" short
+      // of nominal still has the length in hand. Without this, a 1.25" LOC was treated as
+      // unable to clear a 1.26" slot and demoted to "needs 2 Z-steps" — sending the user
+      // to a longer, floppier tool for depth the tool already has.
+      // One-sided on purpose: never credit MORE than the tolerance guarantees.
+      const LOC_PLUS_TOL = 0.060;
+      const reachTol = (d: number) => (d - LOC_PLUS_TOL - 1e-4).toFixed(4);
       const reachRank = depth > 0
-        ? `(CASE WHEN COALESCE(s.loc_in,0) >= ${(depth - 1e-4).toFixed(4)} OR COALESCE(s.lbs_in,0) >= ${(depth - 1e-4).toFixed(4)} THEN 0 ELSE 1 END) ASC,`
+        ? `(CASE WHEN COALESCE(s.loc_in,0) >= ${reachTol(depth)} OR COALESCE(s.lbs_in,0) >= ${reachTol(depth)} THEN 0 ELSE 1 END) ASC,`
         : "";
+      // LOC tie-break, in two parts, because "longer LOC" is only better UP TO the slot
+      // depth. Flute length past the floor buys nothing and costs stickout (and thus
+      // rigidity), so:
+      //   1. tools whose LOC already clears the depth sort ahead of those that don't;
+      //   2. within the clears-it group take the SHORTEST such LOC (least overhang);
+      //      within the doesn't-clear group take the LONGEST (fewest Z-levels).
+      // In a 1.240" slot at 3/8" this picks the 1.25" LOC over the 1.50" — both are
+      // single-pass, so the 1.25" is the same cut with 0.25" less tool hanging out.
+      const locRank = depth > 0
+        ? `(CASE WHEN COALESCE(s.loc_in,0) >= ${reachTol(depth)} THEN 0 ELSE 1 END) ASC,
+           (CASE WHEN COALESCE(s.loc_in,0) >= ${reachTol(depth)}
+                 THEN COALESCE(s.loc_in,0) ELSE -COALESCE(s.loc_in,0) END) ASC,`
+        : `COALESCE(s.loc_in,0) DESC,`;
 
       // Preferred default corner radius is SERIES- and DIAMETER-dependent (what Core
       // Cutter actually offers), not a continuous ladder:
@@ -2712,20 +2774,23 @@ export async function registerRoutes(
       // Computed per row in SQL since it depends on each candidate's series.
       //
       // Flute-count preference (traditional ferrous only): the 4-flute is the slotting
-      // workhorse — surface it ahead of a 3-flute so each Ø shows 4fl CB then 4fl std,
-      // not a mix of flute counts. (HEM and non-ferrous already filter their own flute
-      // band, so this orderer is a no-op there.) Lower distance-from-4 sorts first.
-      // QTR3 (3fl var pitch + var helix, ≤0.250") slots really well in full-width
-      // ferrous, so it must not be buried by the distance-from-4 sort. At 0.250",
-      // 0.1875" and 0.125" the catalog stocks 18–59 four-flute tools, so every 3fl
-      // row sorted below the LIMIT and QTR3 never reached the picks loop. At the odd
-      // sizes (0.21875", 0.15625", 0.109", 0.0937", 0.078", 0.0625") there is no 4fl
-      // tool at all, which is why it appeared there and nowhere else.
-      // Tie it with the 4-flutes (rank 0) instead of exempting it from the ordering,
-      // so score/reach still decide which QTR3 EDP wins.
+      // workhorse at 5/16" and up — surface it ahead of a 3-flute so each Ø shows 4fl CB
+      // then 4fl std, not a mix of flute counts. (HEM and non-ferrous already filter their
+      // own flute band, so this orderer is a no-op there.)
+      //
+      // AT 1/4" AND BELOW the QTR3 OUTRANKS the 4-flutes rather than tying with them.
+      // On a small tool the shank, not the flute count, is what fails: a QTR3 carries a
+      // full 0.250" shank at every diameter down to 1/16", so against a matched-shank
+      // 0.125" VST4 its section above the flutes is (0.250/0.125)^4 = 16x stiffer. Three
+      // flutes also leave a LARGER core than four at the same cutter Ø (fewer, shallower
+      // gullets), so both terms favour the QTR3 — and it adds variable pitch AND helix,
+      // which is what keeps a slot this narrow from chattering. The 4-flute VST4 stays as
+      // #2/#3 for its chipbreaker option and extra tooth.
+      // (It previously tied at rank 0, which left the VST4s on top by score and hid the
+      // stiffer tool behind them.)
       const qtr3TradSlot = `(UPPER(COALESCE(s.series,'')) LIKE 'QTR3%' AND s.cutting_diameter_in <= ${QTR3_SLOT_MAX_DIA})`;
       const fluteRank = (!isHem && !isN)
-        ? `(CASE WHEN ${qtr3TradSlot} THEN 0 ELSE ABS(s.flutes - 4) END) ASC,`
+        ? `(CASE WHEN ${qtr3TradSlot} THEN -1 ELSE ABS(s.flutes - 4) END) ASC,`
         : "";
       const chips: any[] = [];
       for (const dia of candidates) {
@@ -2735,6 +2800,8 @@ export async function registerRoutes(
         // top two high-flute variants), not just one tool.
         const q = await pool.query(
           `SELECT s.edp, s.flutes, s.geometry, s.coating, s.corner_condition, s.loc_in, s.lbs_in, s.series,
+                  s.description1, s.shank_dia_in, s.oal_in, s.cutting_diameter_in,
+                  s.variable_pitch, s.variable_helix, s.center_cutting,
                   (CASE WHEN LOWER(COALESCE(s.geometry,'standard')) = 'chipbreaker' THEN 3
                         WHEN LOWER(COALESCE(s.geometry,'standard')) = 'truncated_rougher' THEN 2
                         ELSE 1 END)
@@ -2755,8 +2822,14 @@ export async function registerRoutes(
              AND ABS(s.cutting_diameter_in - ${dia}) < 0.001
              AND s.edp NOT ILIKE '%-BLK'
              AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
-             ${fluteClause} ${matClause}
-           ORDER BY ${reachRank} ${fluteRank} score DESC, s.loc_in ASC NULLS LAST
+             ${fluteClauseFor(dia)} ${matClause}
+           ORDER BY ${reachRank} ${fluteRank} score DESC,
+                    ${locRank}
+                    -- Among reduced-necks, take the SHORTEST neck that still reaches
+                    -- depth. Neck length past the slot floor is pure lost rigidity, so a
+                    -- 1.625" LBS beats a 3.000" LBS in a 1.240" slot. Tools with no neck
+                    -- (LBS null → 0) are unaffected by this key.
+                    COALESCE(s.lbs_in, 0) ASC
            LIMIT 40`
         );
         // Z-steps to clear the slot are cut by the FLUTES, so the axial bite = LOC
@@ -2765,6 +2838,9 @@ export async function registerRoutes(
         const zStepsFor = (r: any) => {
           const reach = Number(r.loc_in) || 0;
           if (!(depth > 0) || !(reach > 0)) return 1;
+          // Credit the +0.060"/-0.000" grind tolerance before counting levels, so a
+          // nominal 1.25" LOC is one pass in a 1.25"-1.31" slot rather than two.
+          if (reach >= depth - LOC_PLUS_TOL - 1e-4) return 1;
           return Math.ceil((depth - 1e-4) / reach);
         };
         // A HEM candidate qualifies if it can PHYSICALLY reach the full slot depth —
@@ -2776,25 +2852,57 @@ export async function registerRoutes(
         // on LOC alone, which wrongly hid necked tools that reach depth via LBS —
         // e.g. a 3/16" 5fl RN with 0.25" LOC + 1.0" LBS in a 1.0" slot.)
         const reachesDepth = (r: any) =>
-          (Number(r.loc_in) || 0) >= depth - 1e-4 || (Number(r.lbs_in) || 0) >= depth - 1e-4;
+          (Number(r.loc_in) || 0) >= depth - LOC_PLUS_TOL - 1e-4
+          || (Number(r.lbs_in) || 0) >= depth - LOC_PLUS_TOL - 1e-4;
         let rows = q.rows;
         if (isHem && depth > 0) {
           const reachable = rows.filter(reachesDepth);
           // Rank fewest Z-steps (deepest single-pass reach) first, then score. If nothing
           // reaches full depth at this Ø, suppress it (client hides empty Ø).
-          rows = reachable.sort((a, b) => zStepsFor(a) - zStepsFor(b) || Number(b.score) - Number(a.score));
+          // Final tie-break = least overhang: among tools that clear the depth in the same
+          // number of Z-levels at the same score, the SHORTER flute is the better tool
+          // (flute length past the slot floor is stickout bought for nothing). This
+          // re-sort replaces the SQL ORDER BY, so without this key a 1.50" LOC could beat
+          // an equally-capable 1.25" purely on row order.
+          const overhang = (r: any) => {
+            const loc = Number(r.loc_in) || 0;
+            return loc >= depth - LOC_PLUS_TOL - 1e-4 ? loc : Number.POSITIVE_INFINITY;
+          };
+          rows = reachable.sort((a, b) =>
+            zStepsFor(a) - zStepsFor(b)
+            || Number(b.score) - Number(a.score)
+            || overhang(a) - overhang(b)
+            || (Number(a.lbs_in) || 0) - (Number(b.lbs_in) || 0));
         }
-        // Surface the best EDP for each distinct flute+geometry signature. A 5fl
-        // chipbreaker and a 5fl standard are different tools — so are 6fl CB vs 6fl
-        // standard — so dedupe on flutes+geometry, not flutes. HEM shows up to FOUR
-        // signatures per Ø (e.g. 5fl CB / 6fl CB / 5fl std / 6fl std) so the customer
-        // sees the full choice — in tougher materials the CB geometry takes a beating,
-        // and some shops prefer to run the standard. Traditional stays at 2-per-Ø
-        // (4fl CB + 4fl std) to avoid flooding the panel with side-pass options.
-        // `rows` is already ordered best-first (reach/z-steps then score), so the first
-        // row seen for each signature is that signature's best EDP.
-        const sig = (r: any) => `${r.flutes}|${String(r.geometry ?? "standard").toLowerCase()}`;
-        const maxPerDia = isHem ? 4 : 2;
+        // Surface the best EDP per distinct VARIANT CLASS at this diameter.
+        //
+        // HEM dedupes on flutes+geometry: a 5fl CB and a 5fl standard are different
+        // tools, and so are 5fl vs 6fl, which is exactly the choice HEM users want.
+        //
+        // TRADITIONAL dedupes on geometry + necked-or-not instead. At one diameter every
+        // traditional candidate is a 4-flute, so flutes+geometry collapsed to just two
+        // classes (4|standard, 4|chipbreaker) and the reduced-neck — a genuinely
+        // different tool, and the third pick a machinist actually wants — could never
+        // appear: it shares the "4|standard" signature with the plain endmill and, having
+        // a shorter LOC, sorted ahead of it. Result was CB + RN with the plain endmill
+        // never shown at all. Splitting standard/CB/reduced-neck into three classes gives
+        // the three-pick set the panel is meant to present (e.g. at 3/8" in 13-8:
+        // 403321C chipbreaker, 403321 standard, 403621N reduced-neck).
+        // At <=1/4" the QTR3 is folded in as its OWN class: it's a 3-flute standard-geometry
+        // tool, so on geometry+necked alone it collides with the plain VST4 and — now that it
+        // outranks the 4-flutes — would evict it instead of sitting alongside. Keying the
+        // QTR3 separately keeps all three visible (QTR3 stiffest, VST4-CB, VST4 plain).
+        const sig = (r: any) => {
+          const geom = String(r.geometry ?? "standard").toLowerCase();
+          if (isHem) return `${r.flutes}|${geom}`;
+          const necked = Number(r.lbs_in) > 0 ? "rn" : "std";
+          const isQtr3 = String(r.series ?? "").toUpperCase().startsWith("QTR3");
+          if (isQtr3) return `qtr3|${necked}`;
+          return `${geom}|${necked}`;
+        };
+        // Three either way — the client renders exactly three numbered picks, so a 4th
+        // could only ever be truncated away.
+        const maxPerDia = 3;
         const seenSig = new Set<string>();
         const picks: any[] = [];
         for (const r of rows) {
@@ -2815,13 +2923,16 @@ export async function registerRoutes(
           const bestQtr3 = rows.find(isQtr3Row);
           if (bestQtr3) picks.push(bestQtr3);
         }
-        // HEM display order: chipbreaker first (tougher-material choice up front), then
-        // standard; within each geometry, fewer flutes first — i.e. 5fl CB, 6fl CB,
-        // 5fl std, 6fl std. Z-steps are equal across same-LOC tools at one Ø, so this
-        // reorder doesn't fight the cross-diameter fewest-Z-passes ranking above.
+        // HEM display order: FLUTE COUNT ASCENDING, chipbreaker first within a flute
+        // count — i.e. 5fl CB, 5fl std, 6fl std. The numbered #1/#2/#3 picks are meant
+        // to read as a progression the user can step UP: start at the lowest flute count
+        // (most gullet room, most forgiving), climb for more teeth and more feed. Sorting
+        // CB-before-standard across the whole list broke that (5fl CB, 6fl CB, 5fl std
+        // jumps 5→6→5), so flutes lead and geometry tie-breaks. Z-steps are equal across
+        // same-LOC tools at one Ø, so this doesn't fight the cross-Ø Z-pass ranking above.
         if (isHem) {
           const geomRank = (r: any) => (String(r.geometry ?? "standard").toLowerCase() === "chipbreaker" ? 0 : 1);
-          picks.sort((a, b) => geomRank(a) - geomRank(b) || Number(a.flutes) - Number(b.flutes));
+          picks.sort((a, b) => Number(a.flutes) - Number(b.flutes) || geomRank(a) - geomRank(b));
         }
         for (const r of picks) {
           chips.push({
@@ -2834,6 +2945,18 @@ export async function registerRoutes(
             loc_in: r.loc_in ?? null,
             lbs_in: r.lbs_in ?? null,
             series: r.series ?? null,
+            // Full spec line for the pick row + hover card (one-per-line layout has the
+            // horizontal room for it, and it saves cross-referencing the catalog).
+            description1: r.description1 ?? null,
+            shank_dia_in: r.shank_dia_in ?? null,
+            oal_in: r.oal_in ?? null,
+            variable_pitch: r.variable_pitch ?? null,
+            variable_helix: r.variable_helix ?? null,
+            // Center cutting decides whether the tool can plunge/ramp into the slot at all
+            // — a non-center-cutting cutter needs a pre-drilled entry or an open end.
+            // Column is fully populated (no NULLs), so FALSE genuinely means "cannot",
+            // not "unknown", and the card can state it outright.
+            center_cutting: r.center_cutting ?? null,
           });
         }
       }

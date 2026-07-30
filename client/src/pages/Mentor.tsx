@@ -696,37 +696,433 @@ const ROI_COMPETITOR_BRANDS = [
 type DiaChip = { dia: number; label: string; sub: string };
 // One stocked EDP candidate at a given slot diameter (server returns up to 2 per Ø,
 // distinct by flute count + geometry — e.g. 5fl CB vs 5fl std vs 6fl).
-type SlotDiaEdp = { edp: string; flutes: number; geometry: string; coating: string | null; loc_in: number | null; lbs_in?: number | null; series?: string | null };
+type SlotDiaEdp = {
+  edp: string; flutes: number; geometry: string; coating: string | null;
+  loc_in: number | null; lbs_in?: number | null; series?: string | null;
+  corner_condition?: string | null;
+  // Full spec line (description1 = the catalog part code, e.g. VST4-M-0375-R030-CB).
+  description1?: string | null; shank_dia_in?: number | null; oal_in?: number | null;
+  variable_pitch?: boolean | null; variable_helix?: boolean | null;
+  center_cutting?: boolean | null;
+};
+// Flute-count → core-diameter ratio (core Ø / cutter Ø). Section stiffness goes as
+// core^4, so this is what makes a 6-flute stiffer than a 4-flute at the same Ø.
+// Same map the stability-step preview uses.
+// LOC and LBS are both ground +0.060"/-0.000", so nominal length is the guaranteed
+// MINIMUM — actual lengths are 0.000-0.060" longer, never shorter. A tool nominally at
+// (or up to 0.060" under) the cut depth therefore clears it in one pass. Must match
+// LOC_PLUS_TOL in the /api/slot-dia-tools handler, or the Z-step badge shown on a pick
+// disagrees with the reach ranking the server used to choose it.
+const LOC_PLUS_TOL = 0.060;
+// Does this ground length clear `depth` in a single axial pass, tolerance included?
+const lengthClearsDepth = (len: number, depth: number) =>
+  len > 0 && depth > 0 && len >= depth - LOC_PLUS_TOL - 1e-4;
+
+// Why-pick-this-tool trade-offs for a slotting candidate.
+//
+// The hover card used to repeat the tool's specs, which the pick row already shows — so
+// hovering added nothing and couldn't answer the only question that matters when three
+// picks share a diameter and flute count: what do I gain and give up with THIS one?
+//
+// ONLY MAJOR DIFFERENCES — but "major" is RELATIVE TO THE OTHER PICKS, which is why this
+// takes a `siblings` list. A feature earns a bullet when it sets this tool apart:
+//   • Three VST4s that all have variable pitch → saying so three times is noise.
+//   • A QTR3 sitting next to VST4s → its variable pitch + helix and 1/4" shank on a 1/8"
+//     cutter are exactly what should decide the pick, so they MUST show.
+// So: geometry and reach always differ and always show; feature bullets (var pitch/helix,
+// oversized shank, corner, flute count) show only when a sibling lacks them.
+//
+// Derived from geometry + reach + material rather than looked up, so it stays correct as
+// the catalog changes. `cons` are trade-offs, not disqualifiers — every pick here is a
+// valid tool.
+type SlotTradeoff = { pros: string[]; cons: string[]; bestFor: string };
+
+// What the tool HAS, always shown — separate from the comparison bullets on purpose.
+// The ✓ bullets answer "why pick this over its siblings" and so are sibling-gated; a
+// feature every pick shares gets filtered out of those. But a customer still needs to
+// KNOW the tool is variable pitch (or var pitch + helix, or has a chipbreaker) even when
+// all three picks share it — that's product knowledge, not a tiebreaker. These chips are
+// that list: unconditional, one glance, no prose.
+// `tone`: "geo" = cutting geometry, "perf" = stability/chatter feature, "dim" = dimension,
+// "warn" = a real constraint on how the tool can be used (e.g. can't plunge).
+type SlotFeatureChip = { label: string; tone: "geo" | "perf" | "dim" | "warn"; title?: string };
+function slotFeatureChips(opts: {
+  geometry?: string | null;
+  cornerCondition?: string | null;
+  flutes: number;
+  lbsIn: number;
+  shankIn: number;
+  diaIn: number;
+  variablePitch?: boolean | null;
+  variableHelix?: boolean | null;
+  centerCutting?: boolean | null;
+  coating?: string | null;
+}): SlotFeatureChip[] {
+  const chips: SlotFeatureChip[] = [];
+  const geom = String(opts.geometry ?? "standard").toLowerCase();
+  const trim = (n: number) => n.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
+
+  // Variable pitch/helix — combine into ONE chip when both, since "variable pitch AND
+  // helix" is a distinct (and better) thing than either alone, not two separate features.
+  // FIXED pitch is spelled out rather than left blank: the variable_pitch column has no
+  // NULLs, so absence really does mean "evenly spaced flutes" and not "we don't know".
+  // Silence would read as missing data and hides a genuine difference — the whole AL2/AL3
+  // aluminum family is fixed-pitch while every VST/VMF/QTR3 is variable.
+  if (opts.variablePitch && opts.variableHelix) {
+    chips.push({
+      label: "Var pitch + helix",
+      tone: "perf",
+      title: "Flutes are unevenly spaced AND ground at differing helix angles — breaks up the regenerative harmonics that cause chatter in a full-width slot. The most chatter-resistant geometry offered.",
+    });
+  } else if (opts.variablePitch) {
+    chips.push({
+      label: "Var pitch",
+      tone: "perf",
+      title: "Flutes are unevenly spaced so each tooth enters at a different interval, disrupting the regenerative chatter a full slot invites.",
+    });
+  } else if (opts.variableHelix) {
+    chips.push({
+      label: "Var helix",
+      tone: "perf",
+      title: "Flutes are ground at differing helix angles, varying the axial engagement to damp chatter.",
+    });
+  } else {
+    chips.push({
+      label: "Fixed pitch",
+      tone: "dim",
+      title: "Evenly spaced flutes at a single helix angle. Perfectly capable — but it has no built-in harmonic disruption, so watch for chatter in a deep full-width slot and be ready to shift RPM off the resonant speed.",
+    });
+  }
+
+  // Center cutting — decides whether the tool can enter the slot at all. Spelled out in
+  // BOTH directions: "can plunge" is a genuine capability worth stating, and "cannot" is
+  // a hard constraint the user must plan an entry strategy around.
+  if (opts.centerCutting === false) {
+    chips.push({
+      label: "NOT center cutting",
+      tone: "warn",
+      title: "The end teeth do not reach the centerline, so this tool CANNOT plunge or ramp straight down. It needs a pre-drilled hole, an open slot end to enter from the side, or a helical entry wide enough to clear its dead center.",
+    });
+  } else if (opts.centerCutting === true) {
+    chips.push({
+      label: "Center cutting",
+      tone: "perf",
+      title: "End teeth cross the centerline, so the tool can plunge or ramp straight into solid material — no pre-drilled entry hole needed.",
+    });
+  }
+
+  if (geom === "chipbreaker") {
+    chips.push({
+      label: "Chipbreaker",
+      tone: "geo",
+      title: "Serrated flutes segment the chip instead of pulling one long ribbon — lowers cutting force ~17-20% and raises the deep-slot DOC ceiling. Needs >=8% WOC to engage.",
+    });
+  } else if (geom === "truncated_rougher") {
+    chips.push({
+      label: "Truncated rougher",
+      tone: "geo",
+      title: "Truncated tooth form for heavy roughing — breaks the chip and cuts force hard. Roughing only; needs >=10% WOC to engage.",
+    });
+  }
+
+  if (opts.lbsIn > 0) {
+    chips.push({
+      label: `Reduced neck ${trim(opts.lbsIn)}″`,
+      tone: "dim",
+      title: `The body below the flutes is ground undersize so the tool can descend to ${trim(opts.lbsIn)}" without the shank rubbing the slot walls. Buys reach at the cost of rigidity.`,
+    });
+  }
+
+  if (opts.shankIn > opts.diaIn + 1e-4) {
+    chips.push({
+      label: `${trim(opts.shankIn)}″ shank`,
+      tone: "perf",
+      title: `Shank is larger than the ${trim(opts.diaIn)}" cutting diameter — stiffness goes as the 4th power of diameter, so an oversized shank is markedly more rigid than a matched-shank tool this size.`,
+    });
+  }
+
+  const crRaw = String(opts.cornerCondition ?? "").trim();
+  const crNum = Number(crRaw);
+  if (Number.isFinite(crNum) && crNum > 0) {
+    chips.push({
+      label: `R${crNum.toFixed(3).replace(/^0/, "")} corner`,
+      tone: "dim",
+      title: `${crNum.toFixed(3)}" corner radius — spreads load off the sharp corner, which is where wear and chipping start. Leaves a matching fillet at the slot floor.`,
+    });
+  } else if (crRaw.toUpperCase() === "SQUARE") {
+    chips.push({ label: "Square end", tone: "dim", title: "Sharp 90° corner — no floor fillet to clean up, but the corner is the first thing to wear." });
+  } else if (crRaw.toUpperCase() === "BALL") {
+    chips.push({ label: "Ball end", tone: "dim", title: "Full radius end — for contoured floors, not a flat slot bottom." });
+  }
+
+  chips.push({ label: `${opts.flutes} flute`, tone: "dim" });
+  if (opts.coating) {
+    chips.push({ label: String(opts.coating), tone: "dim", title: "Core Cutter coating series — matched to the material group." });
+  }
+  return chips;
+}
+
+// Minimal shape needed to tell whether a feature is distinctive among the picks.
+type SlotSibling = {
+  geometry?: string | null; flutes: number; shankIn: number; diaIn: number;
+  variablePitch?: boolean | null; variableHelix?: boolean | null;
+  centerCutting?: boolean | null;
+  cornerCondition?: string | null; series?: string | null;
+};
+function slotToolTradeoffs(opts: {
+  geometry?: string | null;
+  cornerCondition?: string | null;
+  flutes: number;
+  locIn: number;
+  lbsIn: number;
+  zSteps: number;
+  slotDepthIn: number;
+  isHem: boolean;
+  isoCategory: string;
+  variablePitch?: boolean | null;
+  variableHelix?: boolean | null;
+  centerCutting?: boolean | null;
+  shankIn: number;
+  diaIn: number;
+  series?: string | null;
+  // The other picks on screen. A feature only earns a bullet if some sibling lacks it.
+  siblings?: SlotSibling[];
+}): SlotTradeoff {
+  const pros: string[] = [];
+  const cons: string[] = [];
+  const geom = String(opts.geometry ?? "standard").toLowerCase();
+  const isCb = geom === "chipbreaker";
+  const isVxr = geom === "truncated_rougher";
+  const isNecked = opts.lbsIn > 0;
+  const trim = (n: number) => n.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
+
+  // ── Geometry — the headline difference between same-Ø picks ──
+  if (isCb) {
+    pros.push("Segments the chip — a deep slot packs and breaks tools on one long ribbon");
+    pros.push("~17–20% lower cutting force: less spindle torque, less pressure on the part");
+    cons.push("Faint witness lines on the wall — finish pass if it's a finished surface");
+  } else if (isVxr) {
+    pros.push("Truncated teeth break the chip and cut roughing force hard");
+    cons.push("Roughing only — never a finish tool");
+  } else {
+    pros.push("Continuous edge — cleanest sidewall of the picks, no witness lines");
+    if (!opts.isHem) cons.push("One long chip: evacuation gets harder as the slot deepens");
+  }
+
+  // ── Reach — the other real difference: full shank vs reduced neck ──
+  if (isNecked) {
+    pros.push(`Necked body reaches ${trim(opts.lbsIn)}″ — depth a full-shank tool this length can't`);
+    if (opts.zSteps > 1) cons.push(`${trim(opts.locIn)}″ flute → ${opts.zSteps} Z-levels instead of one pass`);
+    cons.push("Thin neck is the weak point — more deflection at the same feed");
+  } else if (opts.zSteps > 1) {
+    cons.push(`Flute length needs ${opts.zSteps} Z-levels to clear the depth`);
+  } else if (opts.slotDepthIn > 0) {
+    pros.push("Clears full depth in one pass — no Z-stepping");
+  }
+
+  // ── Entry constraint — NOT sibling-gated, because it's a hard limit on how the tool can
+  //    be used rather than a nice-to-have. A non-center-cutting cutter can't plunge or ramp
+  //    into a closed slot at all; the user has to plan a pre-drilled or open-ended entry,
+  //    so it's stated even if every pick shares it. ──
+  if (opts.centerCutting === false) {
+    cons.push("Not center cutting — can't plunge or ramp in; needs a pre-drilled entry or an open slot end");
+  }
+
+  // ── Distinctive features — shown ONLY when a sibling pick lacks them, so they read as
+  //    a reason to choose this tool rather than boilerplate repeated on every card. ──
+  const sibs = opts.siblings ?? [];
+  const someSibLacks = (pred: (s: SlotSibling) => boolean) => sibs.length > 0 && sibs.some(pred);
+
+  // Variable pitch + helix: the QTR3's headline advantage next to a fixed-pitch tool.
+  // The CHIP already states the tool has it; this bullet adds the COMPARATIVE claim
+  // ("...of these picks"), which only makes sense when a sibling actually lacks it.
+  const bothVar = !!opts.variablePitch && !!opts.variableHelix;
+  if (bothVar && someSibLacks(s => !(s.variablePitch && s.variableHelix))) {
+    pros.push("Variable pitch AND helix — the most chatter-resistant of these picks in a full slot");
+  } else if (opts.variablePitch && !opts.variableHelix && someSibLacks(s => !s.variablePitch)) {
+    pros.push("Variable pitch — disrupts chatter the fixed-pitch pick can't");
+  }
+
+  // Oversized shank (QTR3 runs a 1/4" shank down to 1/16" cutters).
+  const oversized = opts.shankIn > opts.diaIn + 1e-4;
+  if (oversized && someSibLacks(s => !(s.shankIn > s.diaIn + 1e-4))) {
+    pros.push(`${trim(opts.shankIn)}″ shank on a ${trim(opts.diaIn)}″ cutter — stiffer than the matched-shank pick`);
+  }
+
+  // Flute count, when the picks actually differ on it (HEM 5 vs 6 vs 7).
+  if (someSibLacks(s => s.flutes !== opts.flutes)) {
+    const maxSib = Math.max(...sibs.map(s => s.flutes), opts.flutes);
+    const minSib = Math.min(...sibs.map(s => s.flutes), opts.flutes);
+    if (opts.flutes === maxSib && opts.isHem) {
+      pros.push(`${opts.flutes} flutes — most teeth of these picks, so the highest feed and MRR at the same chip load`);
+    } else if (opts.flutes === minSib) {
+      pros.push(`${opts.flutes} flutes — most gullet room of these picks, the most forgiving on chip evacuation`);
+    }
+  }
+
+  // Corner condition, when the picks differ (radius vs square).
+  const crRaw = String(opts.cornerCondition ?? "").trim();
+  const crNum = Number(crRaw);
+  const hasRadius = Number.isFinite(crNum) && crNum > 0;
+  const iso = String(opts.isoCategory ?? "").charAt(0);
+  const abrasive = ["M", "S", "H", "K"].includes(iso);
+  const crKey = (c?: string | null) => String(c ?? "").trim().toUpperCase();
+  // Corner: chip states WHICH corner; bullet explains why it matters HERE, and only when
+  // the picks actually differ (otherwise it's true of all three and decides nothing).
+  if (someSibLacks(s => crKey(s.cornerCondition) !== crKey(opts.cornerCondition))) {
+    if (hasRadius) {
+      pros.push(abrasive
+        ? "Radiused corner survives the abrasion this material puts on the corner"
+        : "Radiused corner spreads load off the sharp edge where chipping starts");
+    } else if (crKey(opts.cornerCondition) === "SQUARE") {
+      pros.push("Square end — sharp floor corner, no fillet to clean up");
+      if (abrasive) cons.push("Sharp corner wears first in this material — shorter life than the radiused pick");
+    }
+  }
+
+  // ── One-line "reach for this when…" ──
+  let bestFor: string;
+  if (isCb) {
+    bestFor = opts.isHem
+      ? "Deep trochoidal passes where chip evacuation and heat are the limit"
+      : "Deep slots, and any time spindle torque or part pressure is the concern";
+  } else if (isVxr) {
+    bestFor = "Heavy roughing where material removal beats finish";
+  } else if (isNecked) {
+    bestFor = "When you need the reach — otherwise a full-shank tool is stiffer";
+  } else {
+    bestFor = opts.isHem
+      ? "A straightforward, predictable trochoidal cut"
+      : "Best wall finish, and the simplest tool to run";
+  }
+
+  // Cap the card. Bullets are pushed most-decisive-first (geometry → reach → distinctive
+  // features), so truncating the tail keeps the reasons that actually drive the choice.
+  // A QTR3 next to a VST4 can otherwise generate 5 pros, which is the wall of text this
+  // card exists to replace.
+  // The not-center-cutting line is a HARD constraint (the tool physically can't enter a
+  // closed slot), so it survives the cap even if it landed past the cutoff.
+  const CANT_PLUNGE = cons.find(c => c.startsWith("Not center cutting"));
+  let cappedCons = cons.slice(0, 3);
+  if (CANT_PLUNGE && !cappedCons.includes(CANT_PLUNGE)) {
+    cappedCons = [CANT_PLUNGE, ...cappedCons.slice(0, 2)];
+  }
+  return { pros: pros.slice(0, 4), cons: cappedCons, bestFor };
+}
+
+const SLOT_CORE_RATIO: Record<number, number> = {
+  2: 0.60, 3: 0.65, 4: 0.70, 5: 0.75, 6: 0.80, 7: 0.82, 8: 0.84, 9: 0.86, 10: 0.87, 11: 0.88, 12: 0.89,
+};
+
+// Estimate Current-vs-Optimized ratios for a candidate slotting tool.
+//
+// The stability-step version of this models flute count + reach only, because those
+// steps compare tools at the SAME diameter. Slotting picks span diameters (3/8 vs
+// 5/16) and geometries (CB vs standard), and both dominate the result:
+//   • Diameter: section stiffness ∝ D⁴, so 5/16 vs 3/8 is (0.3125/0.375)⁴ ≈ 0.48 —
+//     roughly HALF the stiffness. Reporting "no change" there would be badly wrong.
+//     Force also rises with D (more chip area per tooth at the same %-of-D bite).
+//   • Chipbreaker: segments the chip, cutting force ~17–20% (see the CB note below).
+// Deliberately an ESTIMATE for direction + magnitude; the true numbers come from the
+// engine when the user loads the tool and runs it.
+const CB_FORCE_FACTOR = 0.82;
+function estSlotToolPreview(cur: {
+  dia: number; flutes: number; loc: number; stickout: number; geometry?: string | null;
+}, next: {
+  dia: number; flutes: number; loc: number; geometry?: string | null;
+}) {
+  const curFl = Number(cur.flutes) || 0;
+  const newFl = Number(next.flutes) || curFl;
+  const curD = Number(cur.dia) || 0;
+  const newD = Number(next.dia) || curD;
+  if (!curFl || !newFl || !(curD > 0) || !(newD > 0)) return null;
+
+  // Force: more teeth in the cut, and a bigger tool takes a bigger bite per tooth at
+  // the same %-of-diameter WOC. CB geometry lowers the force constant either way.
+  const isCb = (g?: string | null) => String(g ?? "").toLowerCase() === "chipbreaker";
+  const cbRatio = (isCb(next.geometry) ? CB_FORCE_FACTOR : 1) / (isCb(cur.geometry) ? CB_FORCE_FACTOR : 1);
+  const fluteForce = newFl / curFl;
+  const diaForce = newD / curD;
+  const forceRatio = fluteForce * diaForce * cbRatio;
+
+  // Stiffness: core^4 from flute count, D⁴ from diameter.
+  const crCur = SLOT_CORE_RATIO[curFl] ?? 0.70;
+  const crNew = SLOT_CORE_RATIO[newFl] ?? 0.70;
+  const stiffGain = Math.pow(crNew / crCur, 4) * Math.pow(newD / curD, 4);
+
+  // Reach: a shorter flute lets the tool sit shorter in the holder (L³ on stickout).
+  let reachFlex = 1;
+  const curSo = Number(cur.stickout) || 0;
+  const curLoc = Number(cur.loc) || 0;
+  const newLoc = Number(next.loc) || curLoc;
+  if (curSo > 0 && newLoc > 0 && curLoc > 0 && newLoc < curLoc - 0.02) {
+    const newSo = Math.max(curSo - (curLoc - newLoc), curSo * 0.5);
+    reachFlex = Math.pow(newSo / curSo, 3);
+  }
+
+  return {
+    defl_ratio: (forceRatio / stiffGain) * reachFlex,
+    force_ratio: forceRatio,
+    // Feed/MRR track tooth count (chip load per tooth held constant).
+    mrr_ratio: fluteForce,
+    feed_ratio: fluteForce,
+  };
+}
+
 function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
   if (!(slotWidth > 0)) return [];
   if (strategy === "hem") {
     // Trochoidal: tool must be smaller than the slot so the loops have room, but a
     // BIGGER tool is stiffer and clears the slot in fewer/faster loops. Accept up to
-    // ~0.85× (target, matches the engine's Picker A), hard-capped at 0.80× by the 10%
-    // per-wall clearance floor (leaves ≥10% of slot width per side to loop). Floor at
-    // 0.40× so we don't suggest a tiny tool air-cutting around huge loops.
-    // For a 0.350" slot this admits 0.1875" AND 0.250" (was 0.40–0.70× → 0.1875" only).
-    const lo = slotWidth * 0.40, hi = slotWidth * 0.80;
-    const cands = STD_DIAS.filter(d => d >= lo - 1e-6 && d <= hi + 1e-6);
+    // 0.85× — the SAME target the engine's Picker A sizes to. It was capped at 0.80×
+    // to hold ≥10% of slot width per wall, but that made panel and engine disagree:
+    // the engine sizes a 0.375" tool for a 0.438" slot while the panel refused to offer
+    // one (0.80× = 0.350"), so the user saw only 5/16" and had to reach for 3/8" by hand.
+    // The 10% per-wall floor is NOT removed — it still fires as the tight-wall warning
+    // on the chip, so a near-slot-width tool is OFFERED WITH its trade-off stated
+    // rather than hidden. (0.438" slot → 0.375" leaves 0.0315"/wall = 7.2%: tight, flagged.)
+    // Floor at 0.40× so we don't suggest a tiny tool air-cutting around huge loops.
+    // Snap-up: standard tool sizes are a coarse ladder, so a hard ratio ceiling can miss
+    // the obvious tool by a hair. 0.85× of a 0.438" slot is 0.3723" — which excludes a
+    // 3/8" endmill by 0.0027" (0.7%), leaving 5/16" as the top pick when every machinist
+    // would reach for the 3/8". So: if the next standard size up sits within
+    // HEM_SNAP_TOL of the target, admit it (the tight-wall sub-label + WOC floor warning
+    // carry the trade-off). Bounded at 5% so it only ever crosses ONE size gap when the
+    // gap is genuinely small — a 0.750" slot (0.85×=0.6375) still rejects 0.750" (+17%).
+    const HEM_SNAP_TOL = 0.05;
+    const lo = slotWidth * 0.40, hi = slotWidth * 0.85;
+    const snapTo = STD_DIAS.find(d => d > hi + 1e-6 && d <= hi * (1 + HEM_SNAP_TOL));
+    const cands = STD_DIAS.filter(d => d >= lo - 1e-6 && (d <= hi + 1e-6 || d === snapTo));
     const list = cands.length ? cands : [STD_DIAS.reduce((best, d) => Math.abs(d - slotWidth * 0.75) < Math.abs(best - slotWidth * 0.75) ? d : best, STD_DIAS[0])];
     return list.slice().reverse().map(d => ({
       dia: d,
-      label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
+      label: `${d.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")}″`,
       // ratio = slot/tool: ≥1.43 (tool ≤0.70×) roomy; 1.25–1.43 (0.70–0.80×) stiffer but
-      // tighter loops; <1.25 would be cramped (excluded by the 0.80× cap above).
-      sub: `${(slotWidth / d >= 1.43 ? "deep" : "stiffer — tighter loops")}`,
+      // tighter loops; <1.25 (above 0.80×) is a tight-wall pick — stiffest option, but
+      // under the 10%/wall comfort floor, so the chip says so instead of hiding it.
+      sub: slotWidth / d >= 1.43
+        ? "deep"
+        : slotWidth / d >= 1.25 ? "stiffer — tighter loops" : "stiffest — tight walls",
     }));
   }
-  // Traditional: all stocked dias ≤ width, ranked by fewest side passes (largest first).
+  // Traditional: the LARGEST stocked dia ≤ width, and only that one. Full-width
+  // slotting has a single right answer for diameter — the biggest tool that fits, for
+  // the fewest side passes and the most rigidity. Laddering down to 5/16" and 1/4"
+  // (each with its own CB/RN variants) produced 7 cards nobody would pick: in a 0.438"
+  // slot you plow with the 3/8" and you're done. The choice that MATTERS at that
+  // diameter is the variant — standard / chipbreaker / reduced-neck — which the
+  // per-Ø variant list below surfaces. Keep 2 dias only when the largest needs side
+  // passes anyway (no exact fit), so there's a fallback if the big tool won't reach.
   const cands = STD_DIAS.filter(d => d <= slotWidth + 1e-6);
   if (!cands.length) return [];
-  return cands.slice().reverse().slice(0, 4).map(d => {
+  const exactFit = Math.abs(cands[cands.length - 1] - slotWidth) < 0.001;
+  return cands.slice().reverse().slice(0, exactFit ? 1 : 2).map(d => {
     const exact = Math.abs(d - slotWidth) < 0.001;
     const sideStep = 0.5 * d;
     const passes = exact ? 0 : Math.max(1, Math.ceil((slotWidth - d) / Math.max(1e-6, sideStep)));
     return {
       dia: d,
-      label: `${d.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″`,
+      label: `${d.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")}″`,
       sub: exact ? "single plow" : `plow + ${passes} side pass${passes > 1 ? "es" : ""}`,
     };
   });
@@ -2904,18 +3300,42 @@ export default function Mentor() {
         });
         if (!r.ok) { setSlotDiaEdps({}); return; }
         const data = await r.json();
-        // Server now returns up to 2 EDPs per Ø (distinct flute counts). Group them
-        // into a list per diameter so the UI can show both as separate chips.
+        // Server returns up to 2-3 EDPs per Ø. Group them into a list per diameter so
+        // the UI can show each as its own numbered pick row.
+        // SPREAD the server row rather than copying named fields: this used to rebuild
+        // each chip field-by-field, which silently dropped every column added on the
+        // server (description1/shank/OAL/corner_condition/var pitch+helix) and left the
+        // spec line and hover card blank with no error anywhere. Same trap as the SKU
+        // upload's coerceRow() whitelist — don't re-introduce it.
         const map: Record<string, SlotDiaEdp[]> = {};
         for (const c of (data.chips ?? [])) {
           const key = Number(c.dia).toFixed(4);
-          (map[key] ??= []).push({ edp: c.edp, flutes: c.flutes, geometry: c.geometry, coating: c.coating, loc_in: c.loc_in ?? null, lbs_in: c.lbs_in ?? null, series: c.series ?? null });
+          (map[key] ??= []).push({
+            ...c,
+            loc_in: c.loc_in ?? null,
+            lbs_in: c.lbs_in ?? null,
+            series: c.series ?? null,
+          });
         }
         setSlotDiaEdps(map);
       } catch { /* aborted or failed — chips fall back to Ø + pass count */ }
     }, 350);
     return () => { clearTimeout(t); ctrl.abort(); };
   }, [form.mode, form.slot_width_in, form.slot_strategy, form.material, form.final_slot_depth]);
+
+  // Drop stale picks the moment the STRATEGY flips, so traditional 4-flute cards can't sit
+  // under the "HEM / trochoidal" heading during the 350ms debounce (that reads as the
+  // engine recommending a 4-flute for HEM, which it never would — ferrous HEM is >=5fl).
+  //
+  // Deliberately keyed on strategy ONLY, not on width/depth/material. Clearing inside the
+  // fetch effect meant every committed width change blanked the panel and refetched, so the
+  // three pick rows vanished and reappeared while the user was still editing the number —
+  // the row heights shifted under the cursor and the field felt like it was rejecting input.
+  // A width change swaps one set of picks for another; letting the old ones stay visible for
+  // one debounce is strictly better than a flicker to empty.
+  React.useEffect(() => {
+    setSlotDiaEdps({});
+  }, [form.slot_strategy]);
 
   // ── Chamfer upgrade suggestion — fires when face width exceeds current tool's edge length ──
   React.useEffect(() => {
@@ -3353,6 +3773,30 @@ export default function Mentor() {
   // 3 decimals on blur) so trailing zeros and a lone "." survive mid-entry.
   const [slotWidthText, setSlotWidthText] = React.useState("");
   const [slotDepthText, setSlotDepthText] = React.useState("");
+  // Commit the typed slot dimensions into the form. Shared by onBlur AND onKeyDown(Enter)
+  // so the picks + tool-choice note (both keyed off form.slot_width_in /
+  // form.final_slot_depth) update whichever way the user leaves the field — tabbing away,
+  // clicking elsewhere, or just pressing Enter and reading the panel below.
+  const commitSlotWidth = React.useCallback(() => {
+    const n = parseDim(slotWidthText);
+    if (Number.isFinite(n) && n > 0) {
+      setForm(p => ({ ...p, slot_width_in: n }));
+      setSlotWidthText(n.toFixed(3));
+    } else {
+      setForm(p => ({ ...p, slot_width_in: 0 }));
+      setSlotWidthText(form.slot_width_in > 0 ? form.slot_width_in.toFixed(3) : "");
+    }
+  }, [slotWidthText, form.slot_width_in]);
+  const commitSlotDepth = React.useCallback(() => {
+    const n = parseDim(slotDepthText);
+    if (Number.isFinite(n) && n > 0) {
+      setForm(p => ({ ...p, final_slot_depth: n }));
+      setSlotDepthText(n.toFixed(3));
+    } else {
+      setForm(p => ({ ...p, final_slot_depth: 0 }));
+      setSlotDepthText(form.final_slot_depth > 0 ? form.final_slot_depth.toFixed(3) : "");
+    }
+  }, [slotDepthText, form.final_slot_depth]);
   const [drillMultiDia, setDrillMultiDia] = React.useState(false);
   const [reamMultiDia, setReamMultiDia] = React.useState(false);
   const [stepDiaTexts, setStepDiaTexts] = React.useState<string[]>([]);
@@ -3615,6 +4059,10 @@ export default function Mentor() {
   // Populated only once a material is selected (before that, chips show Ø + pass count
   // only — the EDP can't be trusted without knowing the material). See /api/slot-dia-tools.
   const [slotDiaEdps, setSlotDiaEdps] = React.useState<Record<string, SlotDiaEdp[]>>({});
+  // Which slotting pick row is hovered (index into the ranked top-3) — drives the
+  // floating spec/preview card. Specs render immediately; the Current-vs-Optimized
+  // deltas only appear once a Run has produced a baseline to compare against.
+  const [hoveredSlotPick, setHoveredSlotPick] = React.useState<number | null>(null);
   const [pdfIncludeOptimal, setPdfIncludeOptimal] = React.useState<boolean>(() => {
     const v = localStorage.getItem("pdf_include_optimal");
     return v == null ? true : v === "1";
@@ -10455,11 +10903,12 @@ ${stabSection}
                     type="text" inputMode="decimal"
                     value={slotWidthText}
                     onChange={e => setSlotWidthText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseDim(slotWidthText);
-                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, slot_width_in: n })); setSlotWidthText(n.toFixed(3)); }
-                      else { setForm(p => ({ ...p, slot_width_in: 0 })); setSlotWidthText(form.slot_width_in > 0 ? form.slot_width_in.toFixed(3) : ""); }
-                    }}
+                    onBlur={commitSlotWidth}
+                    // Enter commits too. The value only reached form.slot_width_in on BLUR,
+                    // so typing a new width and going straight to Run left the picks and the
+                    // tool-choice note describing the OLD width — they're driven off
+                    // form.slot_width_in, not the text buffer.
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commitSlotWidth(); } }}
                     placeholder="e.g. 0.500"
                     className="no-spinners w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-400"
                   />
@@ -10470,11 +10919,8 @@ ${stabSection}
                     type="text" inputMode="decimal"
                     value={slotDepthText}
                     onChange={e => setSlotDepthText(e.target.value)}
-                    onBlur={() => {
-                      const n = parseDim(slotDepthText);
-                      if (Number.isFinite(n) && n > 0) { setForm(p => ({ ...p, final_slot_depth: n })); setSlotDepthText(n.toFixed(3)); }
-                      else { setForm(p => ({ ...p, final_slot_depth: 0 })); setSlotDepthText(form.final_slot_depth > 0 ? form.final_slot_depth.toFixed(3) : ""); }
-                    }}
+                    onBlur={commitSlotDepth}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commitSlotDepth(); } }}
                     placeholder="e.g. 0.750"
                     className="no-spinners w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-400"
                   />
@@ -10489,11 +10935,15 @@ ${stabSection}
               {form.loc > 0 && form.tool_dia > 0 && Number(form.final_slot_depth) > 0 && (() => {
                 const depthIn = Number(form.final_slot_depth);
                 const loc = form.loc;
-                if (depthIn <= loc + 1e-4) return null;   // single pass reaches — no warning
+                // LOC/LBS are ground +0.060"/-0.000", so nominal is the guaranteed minimum
+                // and a nominal 1.25" LOC genuinely cuts a 1.250" (up to 1.310") slot in one
+                // pass. Without the tolerance this warned "can't reach in one pass — load a
+                // longer tool" on exactly the tool that's correct for the job.
+                if (lengthClearsDepth(loc, depthIn)) return null;
                 const isNecked = form.lbs > 0;
                 const reach = isNecked ? form.lbs : loc;
                 const zSteps = Math.ceil(depthIn / loc);   // axial passes at LOC-sized bites
-                const reachShort = depthIn > reach + 1e-4; // even total reach can't get there
+                const reachShort = !lengthClearsDepth(reach, depthIn); // even total reach falls short
                 return (
                   <p className={`text-[11px] mt-2 ${reachShort ? "text-red-400" : "text-amber-400"}`}>
                     {reachShort
@@ -10656,15 +11106,25 @@ ${stabSection}
                     setDocText((fp.doc.low * dia).toFixed(3)); setDocPreset("low");
                   }
                 };
+                // Top 3, numbered. More than three "suggestions" stops reading as advice
+                // and starts reading as a dump the user has to filter themselves — which
+                // is exactly what a shortcut panel should spare them. The ordering above
+                // (diameter for traditional, Z-steps/flutes for HEM) has already put the
+                // best pick first, so a straight truncation keeps the right ones.
+                const ranked = items.slice(0, 3);
                 return (
                   <div className="mt-2.5">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
                       {haveMat
-                        ? (strat === "hem" ? "Suggested tools — optional shortcut (trochoidal)" : "Suggested tools — optional shortcut")
+                        ? (strat === "hem" ? "Top picks — optional shortcut (trochoidal)" : "Top picks — optional shortcut")
                         : (strat === "hem" ? "Suggested tool Ø (trochoidal)" : "Suggested tool Ø — tap to set")}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {items.map((item, idx) => {
+                    {/* One per LINE, not a wrapping chip grid: numbered picks only read as
+                        a ranking if they're stacked in order. A flex-wrap grid reflows #1/#2/#3
+                        into arbitrary rows/columns depending on width, which is what made the
+                        panel look like scattered patchwork. */}
+                    <div className="flex flex-col gap-1">
+                      {ranked.map((item, idx) => {
                         const hit = item.edp;
                         const sel = Math.abs(item.dia - curDia) < 0.001 && (!hit || edpText.trim().toLowerCase() === hit.edp.toLowerCase());
                         const geomTag = hit?.geometry === "chipbreaker" ? " CB" : hit?.geometry === "truncated_rougher" ? " VXR" : "";
@@ -10695,16 +11155,46 @@ ${stabSection}
                             : (getDynamicPresets("trochoidal", isoCategory, hit?.flutes ?? form.flutes, item.dia, locNum || form.loc, hit?.series ?? form.tool_series ?? "", hit?.geometry ?? "standard")?.woc?.med ?? 0);
                           wocBelowFloor = effWocPct > 0 && effWocPct < geoFloorPct - 1e-6;
                         }
-                        const zSteps = (locNum > 0 && slotDepthIn > locNum + 1e-4)
+                        // No Z-step badge when the flutes clear the depth within the
+                        // +0.060"/-0.000" grind tolerance — a nominal 1.25" LOC really does
+                        // cut a 1.250"-1.310" slot in one pass, so badging "2 Z-steps"
+                        // there would talk the user out of the right tool.
+                        const zSteps = (locNum > 0 && !lengthClearsDepth(locNum, slotDepthIn))
                           ? Math.ceil(slotDepthIn / locNum) : 0;
                         // Reduced-neck reach: the tool clears to full depth on its necked
                         // body (LBS ≥ depth) even though the flutes are shorter — so it's a
                         // deep-reach option, not a stubby tool. Flag it so the Z-step badge
                         // reads as intentional multi-level cutting on a necked tool.
-                        const rnReach = lbsNum >= slotDepthIn - 1e-4 && slotDepthIn > locNum + 1e-4;
+                        const rnReach = lengthClearsDepth(lbsNum, slotDepthIn)
+                          && !lengthClearsDepth(locNum, slotDepthIn);
+                        // Postgres NUMERIC arrives as a STRING — coerce every dimension.
+                        const shankNum = Number(hit?.shank_dia_in) || 0;
+                        const oalNum = Number(hit?.oal_in) || 0;
+                        // Trim trailing zeros so 0.3750 reads 0.375 and 3.0000 reads 3.
+                        // Use 5 decimals before trimming: catalog sizes like 0.28125 (9/32
+                        // LOC) and 0.09375 (3/32) are exact at 5 places, and toFixed(4) turned
+                        // them into 0.2813 / 0.0938 — a rounded number next to the tidy 0.375
+                        // and 0.25 on neighbouring cards, which reads like a data error.
+                        const fmtIn = (n: number) =>
+                          n.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
+                        // corner_condition is either a numeric radius ("0.03") or a word
+                        // ("square" / "ball") — render a radius as R.030, a word as-is.
+                        const crRaw = String(hit?.corner_condition ?? "").trim();
+                        const crNum = Number(crRaw);
+                        const crLabel = crRaw
+                          ? (Number.isFinite(crNum) && crRaw !== "" && !Number.isNaN(crNum)
+                              ? `R${crNum.toFixed(3).replace(/^0/, "")}`
+                              : crRaw.toUpperCase() === "SQUARE" ? "SQ"
+                              : crRaw.charAt(0).toUpperCase() + crRaw.slice(1))
+                          : "";
                         return (
-                          <button
+                          <div
                             key={hit ? `${item.dia}-${hit.edp}` : item.dia}
+                            className="relative"
+                            onMouseEnter={() => hit && setHoveredSlotPick(idx)}
+                            onMouseLeave={() => setHoveredSlotPick(p => (p === idx ? null : p))}
+                          >
+                          <button
                             type="button"
                             title={hit ? `Load EDP ${hit.edp} (${item.dia}", ${hit.flutes}fl)` : `Set tool diameter to ${item.dia}"`}
                             onClick={async () => {
@@ -10723,28 +11213,234 @@ ${stabSection}
                               setToolDiaText(dia.toFixed(4));
                               seedCutParams(dia, 0);
                             }}
-                            className={`rounded border px-2 py-1 text-[11px] leading-tight text-left transition-colors ${sel ? "border-indigo-400 bg-indigo-500/20 text-indigo-200" : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-indigo-400/60"}`}
+                            className={`flex w-full items-center gap-2.5 rounded border px-2.5 py-1.5 text-[11px] leading-tight text-left transition-colors ${sel ? "border-indigo-400 bg-indigo-500/20 text-indigo-200" : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-indigo-400/60"}`}
                           >
+                            {/* Rank badge — only when these are real scored EDP picks. Without a
+                                material the tiles are bare diameters in size order, not a ranking. */}
+                            {haveMat && (
+                              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${sel ? "bg-indigo-400/25 text-indigo-200" : "bg-zinc-700/70 text-zinc-400"}`}>
+                                #{idx + 1}
+                              </span>
+                            )}
+                            <span className="min-w-0 flex-1">
+                            {/* Line 1 — diameter + strategy (how many side passes this Ø costs).
+                                Kept above the spec line: it's the "what will I actually do"
+                                answer, and it's what distinguishes two picks at the same Ø. */}
                             <span className="font-semibold">{item.label}</span>
                             <span className="opacity-70"> · {item.sub}</span>
                             {hit && (
-                              <span className="block text-[10px] text-orange-400 font-medium">
-                                EDP {hit.edp} · {hit.flutes}fl{geomTag}
-                                {locNum > 0 && (
-                                  <span className="text-zinc-400"> · LOC {locNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
-                                )}
-                                {rnReach && lbsNum > 0 && (
-                                  <span className="text-sky-300/90"> · RN reaches {lbsNum.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}″</span>
-                                )}
-                                {zSteps > 1 && <span className="text-amber-300/80"> · {zSteps} Z-steps</span>}
-                                {wocBelowFloor && (
-                                  <span className="block text-rose-300/90 mt-0.5" title={`${hit.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated rougher"} prefers ≥${geoFloorPct}% WOC to engage; this material's trochoidal bite is lighter. Bump WOC to ≥${geoFloorPct}% or run the standard tool.`}>
-                                    ⚠ prefers ≥{geoFloorPct}% WOC to engage
+                              <>
+                                {/* Line 2 — full spec, so the pick can be judged (and ordered)
+                                    without cross-referencing the catalog. */}
+                                <span className="block text-[10px] text-orange-400 font-medium">
+                                  EDP {hit.edp}
+                                  {hit.description1 && <span className="text-zinc-400"> · {hit.description1}</span>}
+                                </span>
+                                {/* Abbreviated so the whole spec fits one line: Ø cut / SH shank /
+                                    LOC / OAL / R corner / flutes / coating. Full words are spelled
+                                    out in the hover card, where there's room. */}
+                                <span className="block text-[10px] text-zinc-400">
+                                  {hit.flutes}fl{geomTag}
+                                  {" · Ø"}{fmtIn(item.dia)}
+                                  {shankNum > 0 && <> · SH {fmtIn(shankNum)}</>}
+                                  {locNum > 0 && <> · LOC {fmtIn(locNum)}</>}
+                                  {oalNum > 0 && <> · OAL {fmtIn(oalNum)}</>}
+                                  {crLabel && <> · {crLabel}</>}
+                                  {hit.coating && <> · {hit.coating}</>}
+                                </span>
+                                {/* Line 3 — reach / engagement badges (only when they apply). */}
+                                {(rnReach || zSteps > 1 || wocBelowFloor) && (
+                                  <span className="block text-[10px] font-medium">
+                                    {rnReach && lbsNum > 0 && (
+                                      <span className="text-sky-300/90">RN reaches {fmtIn(lbsNum)}</span>
+                                    )}
+                                    {zSteps > 1 && (
+                                      <span className="text-amber-300/80">{rnReach && lbsNum > 0 ? " · " : ""}{zSteps} Z-steps</span>
+                                    )}
+                                    {wocBelowFloor && (
+                                      <span className="block text-rose-300/90 mt-0.5" title={`${hit.geometry === "chipbreaker" ? "Chipbreaker" : "Truncated rougher"} prefers ≥${geoFloorPct}% WOC to engage; this material's trochoidal bite is lighter. Bump WOC to ≥${geoFloorPct}% or run the standard tool.`}>
+                                        ⚠ prefers ≥{geoFloorPct}% WOC to engage
+                                      </span>
+                                    )}
                                   </span>
                                 )}
-                              </span>
+                              </>
                             )}
+                            </span>
                           </button>
+                          {/* Floating spec / preview card. Specs are known from the chip
+                              metadata, so this shows on hover immediately — no Run needed.
+                              The Current-vs-Optimized rows need a baseline (current flex/
+                              force/MRR/feed), which only exists after a Run; until then the
+                              card says so rather than rendering an empty table. */}
+                          {hit && hoveredSlotPick === idx && (() => {
+                            // Siblings = the OTHER picks on screen. Passing them lets a
+                            // feature bullet appear only when it actually distinguishes this
+                            // tool (a QTR3's var pitch+helix next to fixed-pitch VST4s), and
+                            // stay quiet when every pick shares it.
+                            const siblings = ranked
+                              .filter((o, i) => i !== idx && o.edp)
+                              .map(o => ({
+                                geometry: o.edp!.geometry,
+                                flutes: o.edp!.flutes,
+                                shankIn: Number(o.edp!.shank_dia_in) || 0,
+                                diaIn: o.dia,
+                                variablePitch: o.edp!.variable_pitch,
+                                variableHelix: o.edp!.variable_helix,
+                                centerCutting: o.edp!.center_cutting,
+                                cornerCondition: o.edp!.corner_condition,
+                                series: o.edp!.series,
+                              }));
+                            const tradeoffs = slotToolTradeoffs({
+                              geometry: hit.geometry,
+                              cornerCondition: hit.corner_condition,
+                              flutes: hit.flutes,
+                              locIn: locNum,
+                              lbsIn: lbsNum,
+                              zSteps,
+                              slotDepthIn,
+                              isHem: strat === "hem",
+                              isoCategory: isoCategory ?? "",
+                              variablePitch: hit.variable_pitch,
+                              variableHelix: hit.variable_helix,
+                              centerCutting: hit.center_cutting,
+                              shankIn: shankNum,
+                              diaIn: item.dia,
+                              series: hit.series,
+                              siblings,
+                            });
+                            // Unconditional feature list — see slotFeatureChips().
+                            const featureChips = slotFeatureChips({
+                              geometry: hit.geometry,
+                              cornerCondition: hit.corner_condition,
+                              flutes: hit.flutes,
+                              lbsIn: lbsNum,
+                              shankIn: shankNum,
+                              diaIn: item.dia,
+                              variablePitch: hit.variable_pitch,
+                              variableHelix: hit.variable_helix,
+                              centerCutting: hit.center_cutting,
+                              coating: hit.coating,
+                            });
+                            const pv = estSlotToolPreview(
+                              {
+                                dia: Number(form.tool_dia) || 0,
+                                flutes: Number(form.flutes) || 0,
+                                loc: Number(form.loc) || 0,
+                                stickout: Number(form.stickout) || 0,
+                                geometry: form.geometry,
+                              },
+                              { dia: item.dia, flutes: hit.flutes, loc: locNum, geometry: hit.geometry },
+                            );
+                            const curFlex = stability?.deflection_pct ?? null;
+                            const curForce = result?.engineering?.force_lbf ?? null;
+                            const curMrr = customer?.mrr_in3_min ?? null;
+                            const curFeed = customer?.feed_ipm ?? null;
+                            const haveBaseline = curFlex != null || curForce != null || curMrr != null || curFeed != null;
+                            const rows: { label: string; cur: string; after: string; better: boolean; worse: boolean }[] = [];
+                            if (pv && haveBaseline) {
+                              const defs: [string, number | null, number | null, (n: number) => string, boolean][] = [
+                                ["Tool flex", curFlex, pv.defl_ratio, (n) => `${Math.round(n)}%`, true],
+                                ["Force (lbf)", curForce, pv.force_ratio, (n) => Math.round(n).toString(), true],
+                                ["MRR (in³/min)", curMrr, pv.mrr_ratio, (n) => n.toFixed(3), false],
+                                ["Feed (IPM)", curFeed, pv.feed_ratio, (n) => n.toFixed(1), false],
+                              ];
+                              for (const [label, cur, ratio, fmt, lowerBetter] of defs) {
+                                if (cur == null || ratio == null) continue;
+                                const after = cur * ratio;
+                                const changed = Math.abs(ratio - 1) > 0.01;
+                                const better = changed && (lowerBetter ? after < cur : after > cur);
+                                rows.push({ label, cur: fmt(cur), after: fmt(after), better, worse: changed && !better });
+                              }
+                            }
+                            return (
+                              <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 shadow-xl shadow-black/50 pointer-events-none">
+                                <div className="text-[11px] font-semibold text-orange-400">
+                                  EDP {hit.edp}
+                                  {hit.series && <span className="font-normal text-zinc-400"> · {hit.series}</span>}
+                                </div>
+                                {hit.description1 && (
+                                  <div className="text-[10px] text-zinc-300 mt-0.5">{hit.description1}</div>
+                                )}
+                                {/* Only the dimensions that aren't already on the pick row. */}
+                                {(lbsNum > 0 || zSteps > 1) && (
+                                  <div className="text-[10px] text-zinc-500 mt-0.5">
+                                    {lbsNum > 0 && <>LBS reach {fmtIn(lbsNum)}″</>}
+                                    {lbsNum > 0 && zSteps > 1 && " · "}
+                                    {zSteps > 1 && <>{zSteps} Z-levels of ≤{fmtIn(locNum)}″ to clear {fmtIn(slotDepthIn)}″</>}
+                                  </div>
+                                )}
+                                {/* WHAT the tool has — always shown, never sibling-gated. The
+                                    ✓ bullets below only fire when a feature distinguishes this
+                                    pick, which means a feature all three share (e.g. variable
+                                    pitch across three VST4s) would otherwise never be named
+                                    anywhere. Hover a chip for what it does and why it matters. */}
+                                {featureChips.length > 0 && (
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {featureChips.map((c, i) => (
+                                      <span
+                                        key={`f${i}`}
+                                        title={c.title}
+                                        className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                                          c.tone === "warn" ? "bg-amber-500/20 text-amber-300"
+                                          : c.tone === "perf" ? "bg-sky-500/15 text-sky-300"
+                                          : c.tone === "geo" ? "bg-emerald-500/15 text-emerald-300"
+                                          : "bg-zinc-700/60 text-zinc-400"
+                                        }`}
+                                      >
+                                        {c.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* WHY this tool — advantages and trade-offs vs the other picks.
+                                    The specs are already on the row itself, so repeating them
+                                    here told the user nothing; what they need is the reason to
+                                    choose one sibling over another. */}
+                                <div className="mt-1.5 text-[10px] text-zinc-400 italic">
+                                  {tradeoffs.bestFor}
+                                </div>
+                                <div className="mt-1.5 space-y-0.5">
+                                  {tradeoffs.pros.map((p, i) => (
+                                    <div key={`p${i}`} className="flex gap-1.5 text-[10px] leading-snug">
+                                      <span className="shrink-0 text-emerald-400">✓</span>
+                                      <span className="text-zinc-300">{p}</span>
+                                    </div>
+                                  ))}
+                                  {tradeoffs.cons.map((c, i) => (
+                                    <div key={`c${i}`} className="flex gap-1.5 text-[10px] leading-snug">
+                                      <span className="shrink-0 text-amber-400">⚠</span>
+                                      <span className="text-zinc-400">{c}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {rows.length > 0 ? (
+                                  <div className="mt-2 border-t border-zinc-700/70 pt-1.5">
+                                    <div className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">
+                                      If you switch to this tool (estimate)
+                                    </div>
+                                    {rows.map(r => (
+                                      <div key={r.label} className="flex items-center justify-between text-[10px] leading-relaxed">
+                                        <span className="text-zinc-400">{r.label}</span>
+                                        <span className="tabular-nums">
+                                          <span className="text-zinc-500">{r.cur}</span>
+                                          <span className="text-zinc-600"> → </span>
+                                          <span className={r.better ? "text-emerald-400 font-semibold" : r.worse ? "text-amber-400 font-semibold" : "text-zinc-300"}>
+                                            {r.after}
+                                          </span>
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 border-t border-zinc-700/70 pt-1.5 text-[10px] text-zinc-500">
+                                    Run the calculator to see this tool's flex, force, MRR &amp; feed vs your current setup.
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                          </div>
                         );
                       })}
                     </div>
@@ -10757,34 +11453,99 @@ ${stabSection}
                 );
               })()}
 
-              {/* Flute-count explainer for slotting — explains WHY the suggested chips
-                  are the flute counts they are. Traditional (gullet-limited): ferrous
-                  4–5fl (5fl only to ½×D), non-ferrous 2–3fl. HEM (light bite rewards
-                  teeth): ferrous ≥5fl, non-ferrous ≥3fl, no upper cap. Teaching only —
-                  any tool loads from the full picker below; cut params derate via advisor. */}
+              {/* Tool choice for slotting — names the material and says WHY these picks.
+                  Traditional (gullet-limited): ferrous 4fl w/ corner radius, non-ferrous
+                  2–3fl. HEM (light bite rewards teeth): ferrous ≥5fl, non-ferrous ≥3fl.
+                  Under 1/4" the series matters more than the flute count, so the small-Ø
+                  clause names QTR3 vs VST4/VST5 explicitly. Teaching only — any tool loads
+                  from the full picker below; cut params derate via the stability advisor. */}
               {Number(form.slot_width_in) > 0 && (() => {
                 const isHemStrat = (form.slot_strategy ?? "traditional") === "hem";
                 // Aluminum/clean non-ferrous is "N1" (N2 = abrasive non-ferrous, steel-tooled → ferrous advice).
                 const isNF = isoCategory === "N1";
+                const matLabel = ISO_SUBCATEGORIES.find(s => s.key === form.material)?.label ?? null;
+                // Abrasive/work-hardening groups chew the corner first — that's what makes a
+                // corner radius (not a square end) the load-bearing part of the advice.
+                const isAbrasiveFe = ["M", "S", "H", "K"].includes(String(isoCategory ?? "").charAt(0))
+                  && !isNF;
+                // Under 1/4" the QTR3 (3fl var pitch + var helix, 1/4" shank at EVERY Ø down
+                // to 1/16") is the series answer; the flute-count rule stops being the point.
+                const smallDia = (Number(form.tool_dia) || Number(form.slot_width_in) || 0) <= 0.250 + 1e-6;
+                // What are we ACTUALLY recommending? The note used to hardcode "run a
+                // 4-flute" for all ferrous and mention the QTR3 only as a trailing footnote,
+                // so a 0.124" slot — where every pick is a 3-flute QTR3 because no 4-flute
+                // exists that small — opened with advice that contradicted its own picks.
+                // Read the rendered picks and lead with whatever they actually are.
+                // Lead with the QTR3 whenever it's the TOP pick — not only when it's the
+                // only pick. At 1/8"-1/4" the panel shows QTR3 first with a VST4 alternate,
+                // so "all picks are QTR3" was too strict and the note fell back to opening
+                // with "run a 4-flute" while a 3-flute QTR3 sat at #1 above it.
+                // Uses the largest diameter's picks, which is what the client renders.
+                const notePicks = (() => {
+                  const keys = Object.keys(slotDiaEdps).map(Number).filter(n => n > 0);
+                  if (!keys.length) return [];
+                  const biggest = Math.max(...keys);
+                  return slotDiaEdps[biggest.toFixed(4)] ?? [];
+                })();
+                const isQtr3Series = (v: SlotDiaEdp) => String(v.series ?? "").toUpperCase().startsWith("QTR3");
+                const qtr3Leads = notePicks.length > 0 && isQtr3Series(notePicks[0]);
+                const anyFourFlute = notePicks.some(v => Number(v.flutes) === 4);
                 return (
-                  <div className="mt-2.5 rounded-md border border-zinc-700 bg-zinc-800/40 px-3 py-2 text-[11px] text-zinc-300">
+                  <div className="mt-2.5 rounded-md border border-zinc-700 bg-zinc-800/40 px-3 py-2 text-[11px] leading-relaxed text-zinc-300">
                     <span className="font-semibold text-zinc-200">
-                      Flute count for {isHemStrat ? "HEM / trochoidal slotting" : "full-width slotting"}:
+                      Tool choice for {isHemStrat ? "HEM / trochoidal slotting" : "full-width slotting"}
+                      {matLabel ? ` in ${matLabel}` : ""}:
                     </span>{" "}
                     {isHemStrat ? (
                       isNF ? (
-                        <>the light radial bite clears chips easily, so go up in flute count — <span className="font-semibold">3 flutes and up</span> for aluminum/non-ferrous. More teeth = more feed at the same chip load.</>
+                        <>the light radial bite clears chips easily, so go up in flute count — <span className="font-semibold">3 flutes and up</span>. More teeth = more feed at the same chip load.</>
                       ) : (
-                        <>HEM's light engagement rewards teeth in the cut — run <span className="font-semibold">5 flutes and up</span> (7, 8, 9+ all fair game) for ferrous. No upper limit; more flutes lift feed/MRR.</>
+                        <>HEM's light engagement rewards teeth in the cut — run <span className="font-semibold">5 flutes and up</span> (6, 7, 8+ all fair game). No upper limit; more flutes lift feed and MRR.</>
                       )
                     ) : (
                       isNF ? (
                         <>aluminum &amp; clean non-ferrous want <span className="font-semibold">2–3 flutes</span> — wide, polished gullets clear the big, soft chips a full slot makes; 4+ flutes pack and re-cut.</>
+                      ) : qtr3Leads ? (
+                        // QTR3 is the top pick — lead with it. Wording adapts to whether a
+                        // 4-flute is even offered at this size: at 1/8"-1/4" it is (and is
+                        // shown as the alternate), below that it isn't.
+                        <>
+                          the <span className="font-semibold">QTR3</span> is the strongest tool this size — 3-flute <span className="font-semibold">variable pitch <em>and</em> variable helix</span> to keep a narrow slot from chattering, and it carries a full <span className="font-semibold">1/4″ shank down to 1/16″</span>. Stiffness goes as the 4th power of diameter, so against a matched-shank tool at this Ø that oversized shank is worth far more than an extra tooth.
+                          {anyFourFlute
+                            ? <> The <span className="font-semibold">4-flute VST4</span> is the alternate if you want the extra tooth or a chipbreaker.</>
+                            : <> No 4-flute is offered this small, so the QTR3 is the tool.</>}
+                        </>
                       ) : (
-                        <>ferrous slots run best on <span className="font-semibold">4–5 flutes</span> — enough teeth for a stable cut, enough gullet to evacuate. <span className="font-semibold">5-flute only to ≈½×D DOC</span> (tighter gullet packs in a deep slot); go 4-flute below that.</>
+                        <>
+                          run a <span className="font-semibold">4-flute with a corner radius</span> — four teeth give a stable cut with enough gullet to evacuate a full-width chip, and the radius
+                          {isAbrasiveFe
+                            ? " is what survives the abrasion the corner takes in this material (a sharp corner is the first thing to wear, and once it goes the wall finish and tool life go with it)"
+                            : " spreads the load off a sharp corner, where chipping starts"}.
+                        </>
                       )
                     )}
-                    {" "}A <span className="font-semibold">chipbreaker</span> raises the deep-slot ceiling either way — see below. These are starting points, not limits.
+                    {/* Chipbreaker pitch only when a chipbreaker is actually among the picks —
+                        at sub-1/8" sizes no CB is made, so recommending one sent the user
+                        looking for a tool that doesn't exist. (When the QTR3 leads, its own
+                        clause already names the VST4-CB as the alternate.) */}
+                    {!isNF && !isHemStrat && !qtr3Leads && (
+                      <>
+                        {" "}The <span className="font-semibold">chipbreaker (-CB)</span> option is a strong choice here: it breaks the long chip into segments, which lowers cutting torque and part pressure as well as easing evacuation.
+                      </>
+                    )}
+                    {/* Suppressed when the headline already led with the QTR3, otherwise the
+                        same advice appears twice in one paragraph. */}
+                    {smallDia && !qtr3Leads && (
+                      <>
+                        {" "}<span className="font-semibold">At 1/4″ and below:</span>{" "}
+                        {isHemStrat ? (
+                          <>take a <span className="font-semibold">VST5</span> down to 1/8″; below that use the <span className="font-semibold">QTR3</span> — 3-flute variable pitch <em>and</em> variable helix, and it carries a full <span className="font-semibold">1/4″ shank at every diameter</span>, so a 1/8″ QTR3 is far stiffer than a 1/8″-shank tool in the same slot.</>
+                        ) : (
+                          <>the <span className="font-semibold">QTR3</span> or a <span className="font-semibold">VST4</span> is the answer. The QTR3 is 3-flute variable pitch <em>and</em> variable helix, runs in every material, and keeps a full <span className="font-semibold">1/4″ shank down to 1/16″</span> — that shank is the strength advantage over a same-diameter tool with a matching-size shank.</>
+                        )}
+                      </>
+                    )}
+                    {" "}These are starting points, not limits.
                   </div>
                 );
               })()}
@@ -10815,6 +11576,14 @@ ${stabSection}
               {(() => {
                 const isHemStrat = (form.slot_strategy ?? "traditional") === "hem";
                 const isCb = form.geometry === "chipbreaker" || form.geometry === "truncated_rougher";
+                // Only speak once a real tool is loaded. `form.geometry` describes the
+                // LOADED tool, so with an empty EDP field it defaults to "standard" and
+                // this box invited the user to "switch to -CB" while the picks above were
+                // ALREADY chipbreakers — advice contradicting the recommendation right
+                // next to it. Before a tool is chosen the tool-choice note already makes
+                // the chipbreaker case in prose, so there's nothing to add here.
+                const haveTool = !!edpText.trim() && Number(form.tool_dia) > 0;
+                if (!haveTool) return null;
                 // A chipbreaker/VXR only engages at/above its WOC floor (CB 8%, VXR 10%);
                 // below that the segmented edge rubs. Check the WOC that will actually run
                 // (form.woc_pct — can be a stale value carried over from a prior material).
@@ -10846,13 +11615,17 @@ ${stabSection}
                         <span className="font-semibold">✓ Chipbreaker geometry selected.</span> Good call for slotting — {why}.
                       </span>
                     ) : (
+                      // The "why a chipbreaker" case is already made in prose in the tool-choice
+                      // note above, so repeating the full paragraph here was the patchwork the
+                      // panel suffered from. Reduce it to the one thing the note can't do —
+                      // the action — and let the reasoning live in one place.
                       <span className="text-sky-200/90">
-                        <span className="font-semibold">💡 Consider a chipbreaker in slotting.</span> A chipbreaker (-CB) {why}.{" "}
+                        <span className="font-semibold">💡 Want the chipbreaker?</span>{" "}
                         <button
                           type="button"
                           onClick={() => setForm(p => ({ ...p, geometry: "chipbreaker" }))}
                           className="underline decoration-dotted font-semibold hover:text-sky-100"
-                        >Use chipbreaker →</button>
+                        >Switch to -CB →</button>
                       </span>
                     )}
                   </div>
