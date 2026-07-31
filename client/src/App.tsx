@@ -128,7 +128,7 @@ const HELP_SECTIONS = [
   {
     title: "Tool Finder",
     icon: "🔍",
-    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the mentor. Each tool includes a downloadable STP file for direct use in your CAM system.",
+    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the mentor. Each tool includes a downloadable STP file — an exact replica of the tool as a solid model for direct use in your CAM system.",
   },
   {
     title: "Calculators",
@@ -138,12 +138,12 @@ const HELP_SECTIONS = [
   {
     title: "Milling & Chamfer Tips",
     icon: "⚙️",
-    body: "Speeds, feeds, and full stability analysis for standard Core Cutter end mills and chamfer mills. Enter your material, tool, machine, and cut parameters — the engine delivers RPM, feed, chip load, HP draw, and a complete stability audit including chatter risk analysis. Results can be exported as a formatted PDF report or a CAM setup sheet for notepad/CNC use — exports are open to all registered users.",
+    body: "Speeds, feeds, and full stability analysis for standard Core Cutter end mills and chamfer mills. Enter your material, tool, machine, and cut parameters — the engine delivers RPM, feed, chip load, HP draw, and a complete stability audit including chatter risk analysis. Results export three ways — a formatted PDF report, a copy-to-clipboard setup sheet for notepad/CNC use, or emailed to your inbox (with optional CC) — all open to all registered users. Every EDP also has a downloadable STP file: an exact replica of the tool as a solid model for your CAM system.",
   },
   {
     title: "Specials Tips (Dovetail, Keyseat, Thread Mill & more)",
     icon: "📐",
-    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the mentor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. PDF and CAM setup sheet exports are available here too — open to all registered users.",
+    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the mentor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. All three exports work here too — PDF report, copy-to-clipboard setup sheet, and email — open to all registered users.",
   },
   {
     title: "Toolbox",
@@ -188,7 +188,7 @@ const WALKTHROUGH_STEPS = [
       { n: "3", text: "Enter your Core Cutter EDP# — all tool geometry auto-fills" },
       { n: "4", text: "Enter your WOC, DOC, and stickout — hit Calculate for RPM, feed, chip load, HP, and a full stability analysis" },
     ],
-    note: "Results export as a PDF report or a CAM setup sheet — no email entry required.",
+    note: "Results export three ways — PDF report, copy-to-clipboard setup sheet, or emailed to your inbox. No email entry required to export.",
   },
   {
     icon: "📐",
@@ -354,7 +354,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
       { heading: "9. Cut Engagement", body: "Set your WOC, DOC, and tool stickout.\n\n• Start with the Optimal presets — hit Optimal for WOC and DOC first. WOC and DOC are not always pre-filled for you; in some cases the app seeds a default and in many cases the fields start blank, so Optimal is the right starting point every time.\n• DOC accepts three input styles — a preset button, a manually typed decimal (e.g. 0.375), or a percentage of tool diameter typed directly as XX% (e.g. 150%). The percentage form is handy for scaling depth to the cutter without doing the math yourself.\n• Stickout — the app calculates a recommended default for your tool. Use it as your starting point and adjust only if your setup requires more reach. Stickout directly affects chatter risk — keep it as short as your setup allows." },
       { heading: "10. Tool Entry", body: "Pick how the tool gets into the cut. In most cases you can select MORE THAN ONE — the checkboxes are multi-select, and every strategy you check is calculated and shown side by side so you can compare entry feeds and load before you commit in CAM.\n\n• A ★ marks the recommended entry for your current setup — Sweep / Roll-in for most open-edge and HEM work, Helical for closed pockets and chamfer mills.\n• Hover any chip for the full rules on that entry — ramp angles, entry feed percentages, and center-cutting or open-edge requirements.\n• Straight Plunge is our least preferred and is there mostly for reference — it drives the full load at first contact." },
       { heading: "11. Calculate Your Results", body: "Hit Calculate to get RPM, feed, chip load, HP draw, and a full stability audit with chatter risk analysis and ranked improvement suggestions.\n\n• !!Anytime you change an input field, you must re-run the calculator.!! Results are a snapshot of the inputs at the moment you hit Calculate — they do not update on their own. Edit anything (material, tool, WOC, DOC, stickout, machine, holder) and the numbers on screen are stale until you hit Calculate again." },
-      { heading: "Exports", body: "Export results as a formatted PDF report or a CAM setup sheet for notepad/CNC use. Exports are open to all registered users — no email entry required. STP files for the exact tool download the same way." },
+      { heading: "Exports — four ways to get your work out", body: "Three result exports plus the tool model itself. All open to all registered users — no email entry required to export.\n\n• **Copy Setup Sheet** — copies a plain-text setup sheet to your clipboard, ready to paste into a notepad, traveler, or straight into your CNC control. Best for the guy at the machine.\n• **Print / Save PDF** — a formatted report with the full recommendation and stability audit. Use your browser's print dialog to print it or save it as a PDF. Tick **Incl. Opt EDP** to keep the Optimized EDP Match block in the report, or clear it to leave that tool out (handy when the optimized tool is out of stock).\n• **Email me these results** — sends a copy to any inbox, and **+ CC someone** puts a second address on it (your lead, programmer, or customer). The email body is the same setup sheet the Copy button produces — that's why the two look alike; same content, different delivery.\n• **STP file** — an exact replica of the tool as a .stp solid model, for use in your CAM system. Download it from the Tool Info section once an EDP is entered, or from any Tool Finder result. Real geometry, so your toolpath simulation and gouge/collision checks run against the actual cutter instead of a generic stick.\n\nPDF is the one to send a customer or file with the job. Setup sheet and email are the same text for the floor. The STP goes to whoever programs it." },
     ],
   },
   feedmilling: {
@@ -493,7 +493,7 @@ const PAGE_HELP: Record<string, { title: string; sections: { heading: string; bo
       { heading: "Filters", body: "Drill-down fields allow you to select specific tool geometry — diameter, flutes, coating, corner condition and more — to filter out tools you don't need and zero in on exactly the right cutter." },
       { heading: "Part Feature Match", body: "Three powerful optional fields that match the tool directly to your part geometry — and can further restrict your filtered results:\n\n• **Final Axial Cut Depth** — ensures the LOC covers your required depth.\n• **Min. Part Radius (Wall to Wall)** — matches the corner radius to your inside wall.\n• **Max. Part Floor Radius (Floor to Wall)** — ensures the corner radius clears your floor blend.\n\nEnter your part dimensions and the finder returns only tools that fit — eliminating guesswork." },
       { heading: "Use Tool", body: "Found the right cutter? Hit Use Tool on any result to instantly transfer all tool geometry to the Milling & Chamfer Mentor — no typing required." },
-      { heading: "STP File Downloads", body: "Every EDP has a downloadable STP file for direct use in your CAM system — find the tool and grab the file in one step." },
+      { heading: "STP File Downloads", body: "Every EDP has a downloadable STP file — an exact replica of that tool as a solid model, for direct use in your CAM system. Find the tool and grab the file in one step. Because it's the real geometry, your toolpath simulation and collision checks run against the actual cutter instead of a generic stick." },
       { heading: "Not finding what you need?", body: "Use the 'Contact us' link at the bottom of the page — Core Cutter can quote a special to your print." },
     ],
   },
