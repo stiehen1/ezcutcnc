@@ -87,6 +87,51 @@ function runMentorBridge(payload: unknown): Promise<unknown> {
   });
 }
 
+// ── Spindle-taper diameter cap ───────────────────────────────────────────────
+// No 1" endmill in a 40-taper: the largest tool a spindle can hold rigidly is a
+// property of its taper. Mirrors legacy_engine.py TAPER_MAX_ENDMILL_DIA so every
+// recommender in the app agrees. Unknown taper → 40-class (0.750") conservative
+// default.
+//
+// This caps what the app RECOMMENDS, not what it will run — a user who types in a
+// bigger tool by hand still gets full physics on it.
+//
+// SCOPE: this is about the SOLID SHANK the spindle has to grip and drive, so it applies
+// to endmills (shank Ø ≈ cutting Ø). It does NOT apply to arbor-mounted / small-shank
+// cutters whose HEAD is large but whose gripped diameter is small — keyseat/slotting
+// cutters, dovetails, T-slot, woodruff. A 1" keyseat head on a 1/2" arbor is fine in a
+// 40-taper; the taper never sees the 1". If a future recommender sizes one of those,
+// gate on the SHANK/arbor Ø, not the cutting Ø.
+//
+// Module-level and shared on purpose: this table was duplicated per-endpoint, so a
+// new recommender (slot diameter chips) shipped with no cap at all and offered a
+// 1.25" tool for a 1.5" slot on a CV40. One copy, imported by every caller.
+const TAPER_MAX_ENDMILL_DIA: Record<string, number> = {
+  "CAT30": 0.500, "BT30": 0.500, "HSK32": 0.500, "HSK50": 0.500, "VDI30": 0.500,
+  "CAT40": 0.750, "BT40": 0.750, "HSK63": 0.750, "VDI40": 0.750,
+  "CAT50": 2.000, "BT50": 2.000, "HSK100": 2.000, "HSK125": 2.000, "KM80": 2.000,
+  "VDI50": 1.000, "BMT45": 0.750, "BMT55": 1.000, "BMT65": 1.250,
+  "CAPTO C6": 0.750, "CAPTO C8": 2.000,
+};
+export const TAPER_MAX_ENDMILL_DIA_DEFAULT = 0.750;
+export function taperMaxEndmillDia(taper?: string | null): number {
+  if (!taper) return TAPER_MAX_ENDMILL_DIA_DEFAULT;
+  const t = String(taper).toUpperCase().trim();
+  if (t in TAPER_MAX_ENDMILL_DIA) return TAPER_MAX_ENDMILL_DIA[t];
+  // HSK sizes not explicitly listed (e.g. HSK80): scale off the numeric size.
+  if (t.startsWith("HSK")) {
+    const digits = t.replace(/\D/g, "");
+    if (digits) {
+      const n = parseInt(digits, 10);
+      if (n <= 50) return 0.500;
+      if (n <= 63) return 0.750;
+      if (n <= 80) return 1.000;
+      return 2.000;
+    }
+  }
+  return TAPER_MAX_ENDMILL_DIA_DEFAULT;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
@@ -2627,12 +2672,17 @@ export async function registerRoutes(
   // is the common stock choice; we prefer it but accept square as fallback.
   app.post("/api/slot-dia-tools", async (req, res) => {
     try {
-      const { slot_width_in, slot_strategy, material, final_slot_depth, default_cr } = req.body ?? {};
+      const { slot_width_in, slot_strategy, material, final_slot_depth, default_cr, spindle_taper } = req.body ?? {};
       const width = Number(slot_width_in ?? 0);
       if (!(width > 0)) return res.json({ chips: [] });
       const strat = String(slot_strategy ?? "traditional").toLowerCase();
       const depth = Number(final_slot_depth ?? 0);
       const defCr = Number(default_cr ?? 0.030);
+      // Largest endmill this spindle should swing. A 1.5" slot on a CV40 is plowed
+      // with a 3/4" tool in side passes, NOT with the 1.25" that "largest that fits"
+      // would otherwise pick. Same table/rule as the pocket sequencer and the
+      // stability engine's step-up — see taperMaxEndmillDia().
+      const taperCap = taperMaxEndmillDia(spindle_taper);
       const { pool } = await import("./db");
 
       // Material → ISO column (same map used by EDP enrichment).
@@ -2678,12 +2728,57 @@ export async function registerRoutes(
       // 0.438" slot is 0.3723", which would exclude a 3/8" tool by 0.7% and leave 5/16"
       // as the top pick when 3/8" is the obvious choice. Bounded so it crosses at most
       // one size gap, and only a small one.
+      //
+      // BOTH strategies are then bounded by the spindle taper (see taperCap above):
+      // on a CV40 the ceiling is 3/4" no matter how wide the slot is. Without this a
+      // 1.5" slot asked for 1.25"/1.5" tools — which the spindle can't hold AND the
+      // catalog doesn't stock above 1.0" — so every candidate query came back empty
+      // and the panel showed NO picks at all rather than the 3/4" that is the right
+      // answer. The taper cap is applied BEFORE the "largest 2 that fit" slice for
+      // exactly that reason: slicing first throws away the holdable sizes.
       const HEM_SNAP_TOL = 0.05;
-      const hemHi = width * 0.85;
-      const hemSnap = STD_DIAS.find(d => d > hemHi + 1e-6 && d <= hemHi * (1 + HEM_SNAP_TOL));
-      const candidates = isHem
-        ? STD_DIAS.filter(d => d >= width * 0.40 - 1e-6 && (d <= hemHi + 1e-6 || d === hemSnap))
-        : STD_DIAS.filter(d => d <= width + 1e-4).slice(-2);
+      const hemHi = Math.min(width * 0.85, taperCap);
+      const hemSnap = STD_DIAS.find(d => d > hemHi + 1e-6 && d <= hemHi * (1 + HEM_SNAP_TOL) && d <= taperCap + 1e-6);
+      // HEM floor is 0.40× slot width, but on a taper-capped wide slot that floor can
+      // sit ABOVE the ceiling (1.5" slot on a CV40: floor 0.600", ceiling 0.750" — ok;
+      // a 2.5" slot would give floor 1.000" > ceiling 0.750" and yield nothing). When
+      // the taper is what's binding, drop the ratio floor and offer the two largest
+      // holdable sizes instead — a smaller tool with more loops still cuts the slot.
+      const hemLo = Math.min(width * 0.40, hemHi);
+      let candidates = isHem
+        ? STD_DIAS.filter(d => d >= hemLo - 1e-6 && (d <= hemHi + 1e-6 || d === hemSnap)).slice(-2)
+        : STD_DIAS.filter(d => d <= Math.min(width, taperCap) + 1e-4).slice(-2);
+
+      // The STD_DIAS ladder runs to 1.5" but the CATALOG currently tops out at 1.0", so
+      // on a wide slot with a big taper the top-2 slice can name sizes that simply don't
+      // exist (a 1.5" slot on a CAT50 asked for 1.25"/1.5" → both empty → NO picks at
+      // all, the same failure the taper cap fixed for 40-taper). The taper cap alone
+      // can't catch this: it's a catalog limit, not a spindle limit.
+      //
+      // So: ask the DB for the largest diameters actually stocked within the ceiling and
+      // use those instead. Self-correcting — if 1.25" tooling is ever added, it's picked
+      // up with no code change. Only runs when the ladder-derived picks are all empty,
+      // so the normal narrow-slot path costs no extra round trip.
+      const ceiling = isHem ? Math.max(hemHi, hemSnap ?? 0) : Math.min(width, taperCap);
+      const stockedCheck = await pool.query(
+        `SELECT DISTINCT s.cutting_diameter_in AS dia
+           FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
+          WHERE u.is_current = TRUE
+            AND s.cutting_diameter_in <= $1 + 1e-4
+            AND s.edp NOT ILIKE '%-BLK'
+            AND s.tool_type IS DISTINCT FROM 'chamfer_mill'
+            AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in,0) = 0)
+            ${isoCol ? `AND (s.${isoCol} = TRUE OR UPPER(s.series) IN ('QTR3','QTR3-RN'))` : ""}
+          ORDER BY 1 DESC
+          LIMIT 2`,
+        [ceiling]
+      );
+      const stockedTop = stockedCheck.rows.map((r: any) => Number(r.dia)).filter(d => d > 0);
+      const anyLadderStocked = candidates.some(c => stockedTop.some(s => Math.abs(s - c) < 0.001))
+        || candidates.some(c => c <= (stockedTop[0] ?? 0) + 1e-4);
+      if (!anyLadderStocked && stockedTop.length) {
+        candidates = stockedTop.slice().sort((a, b) => a - b);
+      }
       if (!candidates.length) return res.json({ chips: [] });
 
       // Strategy-aware flute filter (mirrors optimal-tool scorer).
@@ -3191,7 +3286,12 @@ export async function registerRoutes(
         // ── Priority 1.5: Next diameter up, same series ───────────────────────
         const curSeries = (curSku?.series ?? "").toLowerCase();
         const STD_DIAMETERS = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.5625, 0.625, 0.6875, 0.750, 0.875, 1.000, 1.25, 1.5];
-        const nextDia = STD_DIAMETERS.find(d => d > dia + 0.001) ?? null;
+        // Never step up past what the spindle can hold — no 1" tool on a CV40. Same
+        // rule the stability engine's step-up already enforced; this ladder was the
+        // duplicate that still slipped through. If the tool is already at/over the
+        // cap there is no valid step-up and nextDia goes null.
+        const stepUpCap = taperMaxEndmillDia(payload.spindle_taper as string | undefined);
+        const nextDia = STD_DIAMETERS.find(d => d > dia + 0.001 && d <= stepUpCap + 1e-6) ?? null;
         if (curSeries && nextDia) {
           const nextDiaRows = await pool.query(
             `SELECT s.* FROM skus s JOIN sku_uploads u ON s.upload_id = u.id
@@ -6850,34 +6950,9 @@ ${catalogList}`
       // The corner finisher MUST be ≤ wall-to-wall fit to produce the radius —
       // enforced in the corner picker via maxCornerDia, not here.
       // ── Spindle-taper diameter cap ─────────────────────────────────────────
-      // No 1" endmill in a 40-taper: the largest tool a spindle can hold rigidly
-      // is a property of its taper. Mirrors legacy_engine.py TAPER_MAX_ENDMILL_DIA
-      // so the sequencer and the stability engine agree. Unknown taper → 40-class
-      // (0.750") conservative default.
-      const TAPER_MAX_ENDMILL_DIA: Record<string, number> = {
-        "CAT30": 0.500, "BT30": 0.500, "HSK32": 0.500, "HSK50": 0.500, "VDI30": 0.500,
-        "CAT40": 0.750, "BT40": 0.750, "HSK63": 0.750, "VDI40": 0.750,
-        "CAT50": 2.000, "BT50": 2.000, "HSK100": 2.000, "HSK125": 2.000, "KM80": 2.000,
-        "VDI50": 1.000, "BMT45": 0.750, "BMT55": 1.000, "BMT65": 1.250,
-        "CAPTO C6": 0.750, "CAPTO C8": 2.000,
-      };
-      const taperMaxDia = (taper?: string): number => {
-        if (!taper) return 0.750;
-        const t = taper.toUpperCase().trim();
-        if (t in TAPER_MAX_ENDMILL_DIA) return TAPER_MAX_ENDMILL_DIA[t];
-        if (t.startsWith("HSK")) {
-          const digits = t.replace(/\D/g, "");
-          if (digits) {
-            const n = parseInt(digits, 10);
-            if (n <= 50) return 0.500;
-            if (n <= 63) return 0.750;
-            if (n <= 80) return 1.000;
-            return 2.000;
-          }
-        }
-        return 0.750;
-      };
-      const taperCap = taperMaxDia(spindle_taper);
+      // No 1" endmill in a 40-taper. Shared module-level helper so the sequencer,
+      // the slot diameter chips, and the stability engine all agree.
+      const taperCap = taperMaxEndmillDia(spindle_taper);
 
       // HEM keeps its 0.625" force-management cap; both styles are then bounded by
       // what the spindle taper can physically hold.

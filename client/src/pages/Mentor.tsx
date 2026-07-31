@@ -590,6 +590,39 @@ function recommendSlotStrategy(opts: {
 // optimal-tool scorer then resolves the actual stocked EDP at the chosen diameter.
 const STD_DIAS = [0.0625, 0.09375, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5];
 
+// ── Spindle-taper diameter cap ───────────────────────────────────────────────
+// Largest endmill we will RECOMMEND for a given spindle taper — no 1" tool in a
+// 40-taper. Mirrors taperMaxEndmillDia() in server/routes.ts and
+// taper_max_endmill_dia() in legacy_engine.py; keep all three in step.
+// Caps SUGGESTIONS only — a user who types in a bigger tool still gets full physics.
+// Unknown taper → 40-class (0.750") conservative default.
+// SCOPE: about the SOLID SHANK the spindle grips, so endmills only. NOT keyseat/slotting
+// cutters, dovetails, T-slot or woodruff — a 1" head on a 1/2" arbor is fine in a
+// 40-taper because the taper never sees the 1".
+const TAPER_MAX_ENDMILL_DIA: Record<string, number> = {
+  "CAT30": 0.500, "BT30": 0.500, "HSK32": 0.500, "HSK50": 0.500, "VDI30": 0.500,
+  "CAT40": 0.750, "BT40": 0.750, "HSK63": 0.750, "VDI40": 0.750,
+  "CAT50": 2.000, "BT50": 2.000, "HSK100": 2.000, "HSK125": 2.000, "KM80": 2.000,
+  "VDI50": 1.000, "BMT45": 0.750, "BMT55": 1.000, "BMT65": 1.250,
+  "CAPTO C6": 0.750, "CAPTO C8": 2.000,
+};
+function taperMaxEndmillDia(taper?: string | null): number {
+  if (!taper) return 0.750;
+  const t = String(taper).toUpperCase().trim();
+  if (t in TAPER_MAX_ENDMILL_DIA) return TAPER_MAX_ENDMILL_DIA[t];
+  if (t.startsWith("HSK")) {
+    const digits = t.replace(/\D/g, "");
+    if (digits) {
+      const n = parseInt(digits, 10);
+      if (n <= 50) return 0.500;
+      if (n <= 63) return 0.750;
+      if (n <= 80) return 1.000;
+      return 2.000;
+    }
+  }
+  return 0.750;
+}
+
 // ── Stickout geometry (app-wide, single source of truth; mirrors legacy_engine.py) ──
 // FLOOR (hard minimum): reduced-neck → LBS (shank meets neck); standard → LOC + flute_wash
 //   (shank meets flutes). The operator can't go below this — burying past it fouls the holder.
@@ -1069,8 +1102,13 @@ function estSlotToolPreview(cur: {
   };
 }
 
-function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaChip[] {
+// `taper` bounds every offered diameter to what the spindle can hold. Without it a
+// 1.5" slot offered 1.25"/1.5" chips on a CV40 — unholdable, unstocked, and the
+// server-side EDP lookup for them came back empty, so the panel showed nothing.
+// Applied BEFORE the "largest that fits" slice, or the holdable sizes get discarded.
+function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number, taper?: string | null): DiaChip[] {
   if (!(slotWidth > 0)) return [];
+  const taperCap = taperMaxEndmillDia(taper);
   if (strategy === "hem") {
     // Trochoidal: tool must be smaller than the slot so the loops have room, but a
     // BIGGER tool is stiffer and clears the slot in fewer/faster loops. Accept up to
@@ -1090,11 +1128,23 @@ function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaCh
     // carry the trade-off). Bounded at 5% so it only ever crosses ONE size gap when the
     // gap is genuinely small — a 0.750" slot (0.85×=0.6375) still rejects 0.750" (+17%).
     const HEM_SNAP_TOL = 0.05;
-    const lo = slotWidth * 0.40, hi = slotWidth * 0.85;
-    const snapTo = STD_DIAS.find(d => d > hi + 1e-6 && d <= hi * (1 + HEM_SNAP_TOL));
+    // Ceiling = min(0.85× slot, taper cap). When the taper is what's binding, the
+    // 0.40× floor can land above the ceiling on a very wide slot — clamp it so we
+    // still offer the largest holdable sizes rather than an empty list.
+    const hi = Math.min(slotWidth * 0.85, taperCap);
+    const lo = Math.min(slotWidth * 0.40, hi);
+    const snapTo = STD_DIAS.find(d => d > hi + 1e-6 && d <= hi * (1 + HEM_SNAP_TOL) && d <= taperCap + 1e-6);
     const cands = STD_DIAS.filter(d => d >= lo - 1e-6 && (d <= hi + 1e-6 || d === snapTo));
-    const list = cands.length ? cands : [STD_DIAS.reduce((best, d) => Math.abs(d - slotWidth * 0.75) < Math.abs(best - slotWidth * 0.75) ? d : best, STD_DIAS[0])];
-    return list.slice().reverse().map(d => ({
+    // Fallback (no candidate in the window) snaps to 0.75× slot but must still respect
+    // the taper — otherwise the one degenerate path re-introduces an unholdable chip.
+    const fbTarget = Math.min(slotWidth * 0.75, taperCap);
+    const fbPool = STD_DIAS.filter(d => d <= taperCap + 1e-6);
+    const list = cands.length
+      ? cands
+      : (fbPool.length ? [fbPool.reduce((best, d) => Math.abs(d - fbTarget) < Math.abs(best - fbTarget) ? d : best, fbPool[0])] : []);
+    // Two chips max, largest first — matches the server's `.slice(-2)` so the panel and
+    // the EDP lookup offer the same set (on a wide taper-capped slot that's 3/4" + 5/8").
+    return list.slice().reverse().slice(0, 2).map(d => ({
       dia: d,
       label: `${d.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")}″`,
       // ratio = slot/tool: ≥1.43 (tool ≤0.70×) roomy; 1.25–1.43 (0.70–0.80×) stiffer but
@@ -1113,7 +1163,9 @@ function slotDiaChips(strategy: "traditional" | "hem", slotWidth: number): DiaCh
   // diameter is the variant — standard / chipbreaker / reduced-neck — which the
   // per-Ø variant list below surfaces. Keep 2 dias only when the largest needs side
   // passes anyway (no exact fit), so there's a fallback if the big tool won't reach.
-  const cands = STD_DIAS.filter(d => d <= slotWidth + 1e-6);
+  // Bounded by the spindle taper as well as the slot: a 1.5" slot on a CV40 plows with
+  // a 3/4" (plus side passes), not the 1.25" that "largest that fits the slot" picks.
+  const cands = STD_DIAS.filter(d => d <= Math.min(slotWidth, taperCap) + 1e-6);
   if (!cands.length) return [];
   const exactFit = Math.abs(cands[cands.length - 1] - slotWidth) < 0.001;
   return cands.slice().reverse().slice(0, exactFit ? 1 : 2).map(d => {
@@ -3296,6 +3348,10 @@ export default function Mentor() {
             material: form.material,
             final_slot_depth: form.final_slot_depth ?? 0,
             default_cr: 0.030,
+            // Caps the offered diameters to what this spindle can hold — a 1.5" slot
+            // on a CV40 is plowed with a 3/4", not the 1.25" that "largest that fits"
+            // would pick. Must be sent or the server falls back to the 40-taper default.
+            spindle_taper: form.spindle_taper || "CAT40",
           }),
         });
         if (!r.ok) { setSlotDiaEdps({}); return; }
@@ -3321,7 +3377,11 @@ export default function Mentor() {
       } catch { /* aborted or failed — chips fall back to Ø + pass count */ }
     }, 350);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [form.mode, form.slot_width_in, form.slot_strategy, form.material, form.final_slot_depth]);
+    // spindle_taper is a REAL dependency: it caps the candidate diameters the server
+    // resolves EDPs for (3/4" max on a CV40), so switching machines must refetch or the
+    // panel keeps picks keyed to diameters slotDiaChips() no longer offers — the keys
+    // don't match, every chip looks "no stocked tool", and the list renders empty.
+  }, [form.mode, form.slot_width_in, form.slot_strategy, form.material, form.final_slot_depth, form.spindle_taper]);
 
   // Drop stale picks the moment the STRATEGY flips, so traditional 4-flute cards can't sit
   // under the "HEM / trochoidal" heading during the 350ms debounce (that reads as the
@@ -11054,7 +11114,7 @@ ${stabSection}
                 const slotW = Number(form.slot_width_in) || 0;
                 const strat = (form.slot_strategy ?? "traditional") as "traditional" | "hem";
                 const haveMat = !!form.material;
-                const diaChips = slotDiaChips(strat, slotW);
+                const diaChips = slotDiaChips(strat, slotW, form.spindle_taper);
                 // Expand each candidate diameter into render items. With a material
                 // selected, one item per stocked EDP variant (1-2 per Ø — distinct
                 // flute+geometry). Without a material, a single bare-Ø item.
@@ -11073,9 +11133,23 @@ ${stabSection}
                 // HEM tiles: list fewest axial Z-passes FIRST (a tool that clears the slot
                 // in 1-2 deep passes beats one needing 4 LOC-sized levels — that's HEM's
                 // whole point). Z-steps are cut by the flutes (LOC), so a shorter-LOC necked
-                // tool that reaches via LBS still ranks by its true pass count. Tie-break by
-                // larger diameter (stiffer). Traditional keeps its diameter-order (fewest
-                // side passes = largest tool, already ordered by slotDiaChips).
+                // tool that reaches via LBS still ranks by its true pass count.
+                //
+                // Z-step tie-break is SMALLEST diameter first, which is the opposite of the
+                // traditional panel and deliberate. Trochoidal's whole economic case is that
+                // a smaller, CHEAPER tool holds cycle time: MRR is set by the light radial
+                // WOC × a deep DOC × feed, not by tool diameter, so once two tools both clear
+                // the slot in one Z-level the smaller one does the same work for less money —
+                // and customers reach for exactly that. (It also leaves more wall clearance,
+                // so the loops stay roomy.) This used to sort `b.dia - a.dia` for stiffness,
+                // which put the priciest tool on top of every HEM list: in a 1.5" slot all
+                // six picks were single-pass, so the tie-break decided outright and the 3/4"
+                // buried the 5/8" that was the better buy.
+                // Stiffness is not abandoned — it's the LAST key, so at equal dia and equal
+                // Z-steps the beefier tool still wins, and the stability advisor derates any
+                // pick that actually flexes too much.
+                // Traditional keeps its LARGEST-first order (fewest side passes = fewest
+                // plow passes = real cycle time there), already set by slotDiaChips().
                 if (strat === "hem") {
                   const slotDepthForSort = Number(form.final_slot_depth) || 0;
                   const zStepsOf = (it: Item) => {
@@ -11083,7 +11157,10 @@ ${stabSection}
                     if (!(slotDepthForSort > 0) || !(loc > 0)) return 1;
                     return Math.ceil((slotDepthForSort - 1e-4) / loc);
                   };
-                  items.sort((a, b) => zStepsOf(a) - zStepsOf(b) || b.dia - a.dia);
+                  items.sort((a, b) =>
+                    zStepsOf(a) - zStepsOf(b)
+                    || a.dia - b.dia
+                    || Number(b.edp?.flutes ?? 0) - Number(a.edp?.flutes ?? 0));
                 }
                 const curDia = Number(form.tool_dia) || 0;
                 // Seed WOC/DOC for the active strategy at a given dia/LOC. Shared by the
@@ -11108,10 +11185,24 @@ ${stabSection}
                 };
                 // Top 3, numbered. More than three "suggestions" stops reading as advice
                 // and starts reading as a dump the user has to filter themselves — which
-                // is exactly what a shortcut panel should spare them. The ordering above
-                // (diameter for traditional, Z-steps/flutes for HEM) has already put the
-                // best pick first, so a straight truncation keeps the right ones.
-                const ranked = items.slice(0, 3);
+                // is exactly what a shortcut panel should spare them.
+                //
+                // But a straight slice(0,3) collapses to a SINGLE diameter whenever one Ø
+                // has 3+ variants — the list is diameter-ordered, so the runner-up Ø is
+                // always the first thing cut. In a 1.5" slot that meant three 3/4" cards
+                // and the 5/8" invisible, hiding the cheaper tool entirely (and flipping
+                // the sort alone would just hide the 3/4" instead).
+                // So: guarantee the second diameter a seat. Take the top 2 from the leading
+                // Ø, then the best pick from the next Ø, so the user always sees the size
+                // CHOICE (5/8" vs 3/4") alongside the variant choice. Falls back to a plain
+                // top-3 when only one diameter is on offer.
+                const rankedDias = Array.from(new Set(items.map(i => i.dia)));
+                const ranked = rankedDias.length > 1
+                  ? [
+                      ...items.filter(i => i.dia === rankedDias[0]).slice(0, 2),
+                      ...items.filter(i => i.dia === rankedDias[1]).slice(0, 1),
+                    ].slice(0, 3)
+                  : items.slice(0, 3);
                 return (
                   <div className="mt-2.5">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">

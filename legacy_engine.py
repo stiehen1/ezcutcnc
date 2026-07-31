@@ -580,12 +580,21 @@ SPINDLE_TORQUE_CAPACITY = {
     "BMT65":  550,
 }
 
-# Max endmill diameter we will RECOMMEND for a diameter step-up, keyed by spindle taper.
-# This caps only the "Increase Tool Diameter" stability suggestion — the user can still
-# manually run any tool. A CV40 (CAT40/BT40 class) machine shouldn't be told to swing a
-# 1" endmill: the torque/rigidity envelope is built around ~3/4" and under, and a bigger
+# Max endmill diameter we will RECOMMEND, keyed by spindle taper.
+# This caps SUGGESTIONS only — the user can still manually run any tool and gets full
+# physics on it. A CV40 (CAT40/BT40 class) machine shouldn't be told to swing a 1"
+# endmill: the torque/rigidity envelope is built around ~3/4" and under, and a bigger
 # tool means a much pricier cutter customers won't buy. 50-taper and big HSK carry it.
 # Any taper not listed falls back to TAPER_MAX_ENDMILL_DIA_DEFAULT.
+#
+# SCOPE — this is about the SOLID SHANK the spindle/holder has to grip and drive, so it
+# applies to endmills (shank Ø ≈ cutting Ø). It deliberately does NOT apply to
+# arbor-mounted / small-shank cutters whose HEAD is large but whose gripped diameter is
+# small: keyseat and slotting cutters, dovetails, T-slot cutters, woodruff cutters. A 1"
+# keyseat head on a 1/2" arbor is perfectly reasonable in a 40-taper — the taper never
+# sees the 1". Those tool types run through run_keyseat()/run_dovetail(), which do not
+# consult this table; don't wire it in there. If a future recommender sizes one of those
+# heads, gate the cap on the SHANK/arbor Ø, not the cutting Ø.
 TAPER_MAX_ENDMILL_DIA = {
     "CAT30": 0.500, "BT30": 0.500, "HSK32": 0.500, "HSK50": 0.500, "VDI30": 0.500,
     "CAT40": 0.750, "BT40": 0.750, "HSK63": 0.750, "VDI40": 0.750,
@@ -3917,7 +3926,12 @@ def run_dovetail(payload: dict) -> dict:
     pre_rough_endmill_dia = max(0.030, pre_rough_slot_width * 0.70)
     # Round to a sensible fractional/decimal size for shop use
     _sizes = [0.0625, 0.094, 0.125, 0.156, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.500, 0.625, 0.750]
-    pre_rough_endmill_dia = max([s for s in _sizes if s <= pre_rough_endmill_dia] or [_sizes[0]])
+    # Bound by the spindle taper too — on a 30-taper the pre-rough endmill can't be a
+    # 5/8"/3/4" even when the dovetail neck would allow it.
+    _pr_cap = taper_max_endmill_dia(payload.get("spindle_taper"))
+    pre_rough_endmill_dia = max(
+        [s for s in _sizes if s <= pre_rough_endmill_dia and s <= _pr_cap + 1e-6] or [_sizes[0]]
+    )
     pre_rough = {
         "stock_per_side_in":   round(pre_rough_stock_per_side, 4),
         "slot_width_in":       round(pre_rough_slot_width, 4),
@@ -6201,7 +6215,10 @@ def run(payload=None):
     print(f"Material: {material}")
     print(f"Tool: {diameter:.3f}\"  {flutes}-flute  {tool_type}")
     common_sizes = [0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0]
-    alt_d = next((s for s in common_sizes if s > diameter + 1e-6), None)
+    # Same spindle-taper ceiling the structured step-up suggestion uses — don't print a
+    # 1" alternative for a 40-taper machine that can't hold it.
+    _alt_cap = taper_max_endmill_dia(data.get("spindle_taper"))
+    alt_d = next((s for s in common_sizes if s > diameter + 1e-6 and s <= _alt_cap + 1e-6), None)
     if alt_d:
         stiff_gain = (alt_d / diameter) ** 4
         print(f"Diameter alt: {alt_d:.3f}\" (next common size) — ~{stiff_gain:.2f}× stiffer (D^4) if reach allows")
@@ -7614,15 +7631,26 @@ def run(payload=None):
             # Target 0.85× slot width — bias toward the stiffer (bigger) tool; the 10%
             # per-wall clearance floor below is the hard safety stop that keeps the
             # trochoidal loop from getting cramped.
-            _hem_target = _slot_width * 0.85
+            # Spindle taper caps the target BEFORE snapping. On a wide slot the 0.85×
+            # target runs past what the machine can hold — a 1.5" slot targets 1.275",
+            # which on a CV40 would snap to a 1.25" tool nobody can run (and which we
+            # don't stock above 1.0" anyway). Clamping the TARGET rather than only
+            # filtering the ladder means the snap lands on the largest holdable size
+            # (3/4" here) instead of the nearest-to-an-impossible-number.
+            _hem_taper_cap = taper_max_endmill_dia(data.get("spindle_taper"))
+            _hem_target = min(_slot_width * 0.85, _hem_taper_cap)
             # Standard catalog diameters — only recommend sizes we actually stock
             _std_dias = [0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.5, 0.625, 0.75, 1.0, 1.25, 1.5]
             # Candidates must be strictly smaller than slot width to leave room for trochoidal looping.
             # A tool that is only 1/16" smaller than the slot (e.g. 0.625" in 0.75" slot) leaves only
             # 0.0625" per wall — path geometry gets fussy and a finishing pass is always required.
             # Drop any candidate where slot clearance per wall < 10% of slot width.
-            _candidates = [s for s in _std_dias if (_slot_width - s) / _slot_width >= 0.10 - 1e-6 and s < _slot_width - 1e-6]
-            _hem_dia = min(_candidates, key=lambda s: abs(s - _hem_target)) if _candidates else _slot_width * 0.85
+            # ...and drop anything the spindle can't swing.
+            _candidates = [s for s in _std_dias
+                           if (_slot_width - s) / _slot_width >= 0.10 - 1e-6
+                           and s < _slot_width - 1e-6
+                           and s <= _hem_taper_cap + 1e-6]
+            _hem_dia = min(_candidates, key=lambda s: abs(s - _hem_target)) if _candidates else min(_slot_width * 0.85, _hem_taper_cap)
             # Wall clearance per side with chosen tool (for detail text)
             _wall_clearance = (_slot_width - _hem_dia) / 2
             _woc_min = round(_hem_dia * 0.05, 4)
