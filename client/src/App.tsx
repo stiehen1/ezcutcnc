@@ -353,7 +353,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
       { heading: "8. Enter Tool Info (Specials & Standards)", body: "Enter your Core Cutter EDP # to auto-fill all tool geometry and unlock the calculator — or use Tool Finder to browse and hit Use Tool to transfer automatically. EDP # is required to run a calculation. Once entered, a STP file download for that exact tool is also available for direct use in your CAM system. This section also accommodates special endmill prints from Core Cutter — upload your print to auto-fill dimensions and unlock the calculator for your custom tool." },
       { heading: "9. Cut Engagement", body: "Set your WOC, DOC, and tool stickout.\n\n• Start with the Optimal presets — hit Optimal for WOC and DOC first. WOC and DOC are not always pre-filled for you; in some cases the app seeds a default and in many cases the fields start blank, so Optimal is the right starting point every time.\n• DOC accepts three input styles — a preset button, a manually typed decimal (e.g. 0.375), or a percentage of tool diameter typed directly as XX% (e.g. 150%). The percentage form is handy for scaling depth to the cutter without doing the math yourself.\n• Stickout — the app calculates a recommended default for your tool. Use it as your starting point and adjust only if your setup requires more reach. Stickout directly affects chatter risk — keep it as short as your setup allows." },
       { heading: "10. Tool Entry", body: "Pick how the tool gets into the cut. In most cases you can select MORE THAN ONE — the checkboxes are multi-select, and every strategy you check is calculated and shown side by side so you can compare entry feeds and load before you commit in CAM.\n\n• A ★ marks the recommended entry for your current setup — Sweep / Roll-in for most open-edge and HEM work, Helical for closed pockets and chamfer mills.\n• Hover any chip for the full rules on that entry — ramp angles, entry feed percentages, and center-cutting or open-edge requirements.\n• Straight Plunge is our least preferred and is there mostly for reference — it drives the full load at first contact." },
-      { heading: "11. Calculate Your Results", body: "Hit Calculate to get RPM, feed, chip load, HP draw, and a full stability audit with chatter risk analysis and ranked improvement suggestions." },
+      { heading: "11. Calculate Your Results", body: "Hit Calculate to get RPM, feed, chip load, HP draw, and a full stability audit with chatter risk analysis and ranked improvement suggestions.\n\n• !!Anytime you change an input field, you must re-run the calculator.!! Results are a snapshot of the inputs at the moment you hit Calculate — they do not update on their own. Edit anything (material, tool, WOC, DOC, stickout, machine, holder) and the numbers on screen are stale until you hit Calculate again." },
       { heading: "Exports", body: "Export results as a formatted PDF report or a CAM setup sheet for notepad/CNC use. Your email is required for all exports." },
     ],
   },
@@ -587,10 +587,16 @@ function HelpButton() {
                       {s.body.includes('\n•') ? (
                         <div className="text-[11px] text-zinc-400 leading-relaxed">
                           {s.body.split('\n').map((line, i) => {
-                            const renderBold = (text: string) => {
-                              const parts = text.split(/\*\*(.+?)\*\*/g);
-                              return parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="text-white">{p}</strong> : p);
-                            };
+                            // **bold** = white emphasis (field names).
+                            // !!warning!! = bold yellow (must-do callouts).
+                            const renderBold = (text: string) =>
+                              text.split(/(\*\*.+?\*\*|!!.+?!!)/g).map((tok, j) => {
+                                if (tok.startsWith("**") && tok.endsWith("**"))
+                                  return <strong key={j} className="text-white">{tok.slice(2, -2)}</strong>;
+                                if (tok.startsWith("!!") && tok.endsWith("!!"))
+                                  return <strong key={j} className="text-yellow-400">{tok.slice(2, -2)}</strong>;
+                                return tok;
+                              });
                             return line.startsWith('•') ? (
                               <p key={i} className="pl-3">{renderBold(line)}</p>
                             ) : line.trim() ? <p key={i}>{renderBold(line)}</p> : <div key={i} className="h-1" />;
