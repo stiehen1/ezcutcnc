@@ -753,17 +753,11 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
     finally { setFavGateSaving(false); }
   }
 
-  // ── Email gate ─────────────────────────────────────────────────────────
-  const [tfGateOpen, setTfGateOpen] = React.useState(false);
-  const [tfGateStpUrl, setTfGateStpUrl] = React.useState("");
-  const [tfGateInput, setTfGateInput] = React.useState(() => localStorage.getItem("er_email") || "");
-  const [tfGateError, setTfGateError] = React.useState("");
-
+  // STP downloads are NOT email-gated (the gate was removed — exports and STP
+  // files are open to all registered users). Thin pass-through kept under the
+  // old name so call sites don't change.
   function tfRequireStp(url: string) {
-    const email = localStorage.getItem("er_email") || "";
-    if (email) { window.open(url, "_blank"); return; }
-    setTfGateStpUrl(url);
-    setTfGateOpen(true);
+    window.open(url, "_blank");
   }
 
   // ── Contact modal ───────────────────────────────────────────────────────
@@ -1865,48 +1859,6 @@ export default function ToolFinder({ onSelectTool }: { onSelectTool: (tool: SkuR
       </div>
     )}
 
-    {/* STP Email Gate Modal */}
-    {tfGateOpen && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTfGateOpen(false)}>
-        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
-          <h2 className="text-base font-semibold text-white mb-1">Enter your email to download</h2>
-          <p className="text-xs text-zinc-400 mb-4">One-time per device — auto-fills next time.</p>
-          <input
-            type="email"
-            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500"
-            placeholder="your@email.com"
-            value={tfGateInput}
-            onChange={e => { setTfGateInput(e.target.value); setTfGateError(""); }}
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const v = tfGateInput.trim();
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setTfGateError("Enter a valid email address."); return; }
-                localStorage.setItem("er_email", v.toLowerCase());
-                setTfGateOpen(false);
-                window.open(tfGateStpUrl, "_blank");
-              }
-            }}
-            autoFocus
-          />
-          {tfGateError && <p className="text-xs text-red-400 mt-1">{tfGateError}</p>}
-          <div className="flex gap-2 mt-3">
-            <button
-              className="flex-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-medium"
-              onClick={() => {
-                const v = tfGateInput.trim();
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setTfGateError("Enter a valid email address."); return; }
-                localStorage.setItem("er_email", v.toLowerCase());
-                setTfGateOpen(false);
-                window.open(tfGateStpUrl, "_blank");
-              }}
-            >
-              Download
-            </button>
-            <button className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg py-2 text-sm" onClick={() => setTfGateOpen(false)}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    )}
 
     {/* Persistent contact link — always visible */}
     <div className="px-4 py-3 text-center border-t border-zinc-800 mt-2">

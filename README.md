@@ -8,6 +8,11 @@ Each operation includes a **Pro Tips panel** (how to use the app) and a collapsi
 
 ## Recent Updates (July 2026)
 
+### Export copy corrected — and the last live email gate removed from Tool Finder
+The tips still said "your email is required for all exports," which stopped being true when exports opened to all registered users. Correcting the copy turned up a real gate still in the code:
+- **Four stale strings fixed** — the Exports tip, the Milling and Specials section blurbs, and a walkthrough step note. All now say exports are open to all registered users.
+- **Tool Finder was still email-gating STP downloads.** The Mentor's gate had been reduced to a pass-through (`requireEmail` → `runGatedAction`), but `tfRequireStp()` in Tool Finder still checked `localStorage.er_email` and popped an "Enter your email to download" modal when it was empty — so the same STP file was free in one place and gated in another. `tfRequireStp()` now opens the file directly; the modal and its four state hooks are deleted.
+
 ### Pro Tips — real calculator order, a pinned panel, and the two sections that were missing
 The Pro Tips guide is numbered 1-N as a walkthrough, but the numbers no longer matched the form they describe. Fixed, plus the panel now stays put:
 - **Steps now follow the actual fill-in order.** Set Your Machine had drifted *after* Cut Engagement; the real flow puts machine, holder, coolant and workholding first, then tool, then engagement. New order: Tool Type → Process → Material → **Set Your Machine → Tool Holder → Coolant → Workholding → Enter Tool Info → Cut Engagement → Tool Entry** → Calculate.
