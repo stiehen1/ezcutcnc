@@ -2689,7 +2689,7 @@ export default function Mentor() {
       // Map extracted fields to form — only set fields that have real values
       setForm((p) => {
         const next = { ...p };
-        if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(e.tool_dia.toFixed(3)); }
+        if (e.tool_dia > 0) { next.tool_dia = e.tool_dia; setToolDiaText(e.tool_dia.toFixed(4)); }
         if (e.flutes > 0) next.flutes = e.flutes;
         if (e.loc > 0) { next.loc = e.loc; setLocText(String(e.loc)); }
         if (e.lbs > 0) {
@@ -2721,7 +2721,7 @@ export default function Mentor() {
           setSurfTaperAngleText(String(e.taper_included_angle_deg));
           setSurfTaperLenText(e.taper_length_in.toFixed(4));
         }
-        if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(3)); next.ream_shank_dia = e.shank_dia; }
+        if (e.shank_dia > 0) { next.shank_dia = e.shank_dia; setShankDiaText(e.shank_dia.toFixed(4)); next.ream_shank_dia = e.shank_dia; }
         if (e.coating) next.coating = e.coating;
         if (e.keyseat_arbor_dia > 0) { next.keyseat_arbor_dia = e.keyseat_arbor_dia; setNeckDiaText(e.keyseat_arbor_dia.toFixed(4)); }
         if (e.dovetail_angle > 0) next.dovetail_angle = e.dovetail_angle;
@@ -3456,7 +3456,7 @@ export default function Mentor() {
         if (inputs.stickout)      setStickoutText(Number(inputs.stickout).toFixed(3));
         if (inputs.lbs)           setLbsText(Number(inputs.lbs).toFixed(3));
         if (inputs.corner_radius) setCrText(Number(inputs.corner_radius).toFixed(4));
-        if (inputs.shank_dia)     setShankDiaText(Number(inputs.shank_dia).toFixed(3));
+        if (inputs.shank_dia)     setShankDiaText(Number(inputs.shank_dia).toFixed(4));
         // Sync drilling text fields
         if (inputs.oal)              setPdfOalText(Number(inputs.oal).toFixed(3));
         if (inputs.drill_hole_depth) setDrillHoleDepthText(Number(inputs.drill_hole_depth).toFixed(3));
@@ -4381,12 +4381,18 @@ export default function Mentor() {
     // cutoff_oal_in resets to 0: it describes ONE physical tool that was shortened, so carrying
     // it onto a different EDP would overstate that tool's grip and understate its deflection.
     // tool_seated_to_stop resets: it describes how ONE tool sat in the holder.
-    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, cutoff_oal_in: 0, tool_seated_to_stop: false, stickout_is_estimate: false, stickout_estimate_base: 0 }));
+    // is_tapered resets: no standard SKU is a tapered ballnose / tapered-neck tool, so
+    // selecting a catalog EDP after a tapered print must drop the taper — otherwise a
+    // straight catalog tool keeps the print's stiffer cantilever model and under-reports
+    // deflection.
+    setForm((p) => ({ ...p, flute_wash: _fw, min_stickout_override: _minOvr, pref_stickout_override: _dbStickout ?? 0, oal_in: _skuOal, cutoff_oal_in: 0, tool_seated_to_stop: false, stickout_is_estimate: false, stickout_estimate_base: 0, is_tapered: false, taper_included_angle_deg: 0, taper_length_in: 0 }));
     setOalText(_skuOal > 0 ? (metric ? (_skuOal * 25.4).toFixed(2) : _skuOal.toFixed(3)) : "");
     setCutoffOalText("");
     setLbsText(sku.lbs_in ? Number(sku.lbs_in).toFixed(3) : "");
-    setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(3) : "");
+    setShankDiaText(sku.shank_dia_in ? Number(sku.shank_dia_in).toFixed(4) : "");
     setCrText(crIn > 0 ? crIn.toFixed(4) : "");
+    setSurfTaperAngleText("");
+    setSurfTaperLenText("");
     if (isChamfer) {
       setChamferTipDiaText(sku.tip_diameter ? Number(sku.tip_diameter).toFixed(4) : "");
       // Only clear chamfer_depth if the new tool's geometry cannot produce it.
@@ -4529,12 +4535,18 @@ export default function Mentor() {
       corner_condition: "square", corner_radius: 0, coating: "",
       variable_pitch: false, variable_helix: false,
       helix_angle: 0,
+      // Taper is print-only (no standard tapered ballnose SKUs) — clearing the print
+      // must clear it too, or is_tapered stays true with the UI block now hidden and
+      // silently keeps applying the stiffer cantilever model to a straight tool.
+      is_tapered: false, taper_included_angle_deg: 0, taper_length_in: 0,
     }));
     setToolDiaText("");
     setLocText("");
     setLbsText("");
     setShankDiaText("");
     setCrText("");
+    setSurfTaperAngleText("");
+    setSurfTaperLenText("");
   }
 
   function resetAll() {
@@ -4554,6 +4566,8 @@ export default function Mentor() {
     setToolDiaText("");
     setLocText("");
     setLbsText("");
+    setSurfTaperAngleText("");
+    setSurfTaperLenText("");
     setHolderGageText("");
     setHolderNoseDiaText("");
     setExistingHoleText("");
@@ -11942,14 +11956,25 @@ ${stabSection}
           {/* Tool geometry — single row: Flutes / Cut Dia / LOC / LBS / OAL (hidden for deep pocket — sequencer selects tools) */}
           {form.mode !== "deep_pocket" && (() => {
             const showLbs = form.tool_type !== "chamfer_mill" && (form.lbs > 0 || pdfExtracted);
-            const showOal = pdfExtracted && pdfOal > 0;
+            // The editable OAL field below is already bound to form.oal_in, which the PDF
+            // extractor fills from the print — so the old read-only pdfOal column rendered
+            // a SECOND identical "OAL 3.000" right next to it. Dropped: one OAL, editable.
+            const showOal = false;
             // Neck Dia: only for endmill-style tools (keyseat/dovetail have their own arbor field).
             // Shows when a reduced neck is present — the LOC→LBS segment of the deflection model.
             const showNeck = !["chamfer_mill", "keyseat", "dovetail"].includes(form.tool_type)
               && form.keyseat_arbor_dia > 0;
             return (
-              <div className="flex flex-wrap gap-2">
-                <div className="space-y-2" style={{ flex: "0 0 2.8rem" }}>
+              // Auto-fit grid instead of flex: every dimension column gets the SAME width and
+              // never drops below 4.75rem, which is what a 6-char value ("0.0993") plus the
+              // input's padding needs. Under flex these columns shrank to fit the row and
+              // clipped mid-number (".649" showing as "0.649" cut off, "3." for "3.250").
+              // Now the row wraps to a second line before any field truncates.
+              <div
+                className="grid gap-2"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(4.75rem, 1fr))" }}
+              >
+                <div className="space-y-2">
                   <FieldLabel hint="Number of cutting edges. More flutes = higher feed rate but less chip clearance. HEM typically uses 5–7 flutes.">Flutes</FieldLabel>
                   <Input
                     type="number"
@@ -11959,7 +11984,7 @@ ${stabSection}
                     onChange={onNum("flutes")}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
+                <div className="space-y-2">
                   <FieldLabel hint="Cutting diameter in inches. Affects SFM, deflection stiffness (D⁴), and chip thinning calculations.">{UL("Cut Dia", "Cut Dia")}</FieldLabel>
                   <Input
                     type="text"
@@ -11968,21 +11993,21 @@ ${stabSection}
                     value={toolDiaText}
                     onChange={(e) => setToolDiaText(e.target.value)}
                     onFocus={() => {
-                      if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3));
+                      if (form.tool_dia) setToolDiaText(metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(4));
                     }}
                     onBlur={() => {
                       const n = parseDim(toolDiaText);
                       if (Number.isFinite(n) && n > 0) {
                         const stored = metric ? n / 25.4 : n;
                         setForm((p) => ({ ...p, tool_dia: stored }));
-                        setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                        setToolDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(4));
                       } else {
-                        setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(3)) : "");
+                        setToolDiaText(form.tool_dia ? (metric ? (form.tool_dia * 25.4).toFixed(2) : form.tool_dia.toFixed(4)) : "");
                       }
                     }}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
+                <div className="space-y-2">
                   <FieldLabel hint="Shank diameter. When larger than cutting diameter, activates the two-segment cantilever deflection model for reduced-neck tools.">Shank Dia</FieldLabel>
                   <Input
                     type="text"
@@ -11991,24 +12016,24 @@ ${stabSection}
                     value={shankDiaText}
                     onChange={(e) => setShankDiaText(e.target.value)}
                     onFocus={() => {
-                      if (form.shank_dia) setShankDiaText(metric ? (form.shank_dia * 25.4).toFixed(2) : form.shank_dia.toFixed(3));
+                      if (form.shank_dia) setShankDiaText(metric ? (form.shank_dia * 25.4).toFixed(2) : form.shank_dia.toFixed(4));
                     }}
                     onBlur={() => {
                       const n = parseDim(shankDiaText);
                       if (Number.isFinite(n) && n > 0) {
                         const stored = metric ? n / 25.4 : n;
                         setForm((p) => ({ ...p, shank_dia: stored }));
-                        setShankDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(3));
+                        setShankDiaText(metric ? (stored * 25.4).toFixed(2) : stored.toFixed(4));
                       } else if (!shankDiaText.trim() || shankDiaText.trim() === "0") {
                         setForm((p) => ({ ...p, shank_dia: 0 }));
                         setShankDiaText("");
                       } else {
-                        setShankDiaText(form.shank_dia ? (metric ? (form.shank_dia * 25.4).toFixed(2) : form.shank_dia.toFixed(3)) : "");
+                        setShankDiaText(form.shank_dia ? (metric ? (form.shank_dia * 25.4).toFixed(2) : form.shank_dia.toFixed(4)) : "");
                       }
                     }}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
+                <div className="space-y-2">
                   <FieldLabel hint="Length of Cut — the fluted cutting length. The engine caps DOC at this value and uses it for stickout calculations.">{UL("LOC", "LOC")}</FieldLabel>
                   <Input
                     type="text"
@@ -12031,7 +12056,7 @@ ${stabSection}
                     }}
                   />
                 </div>
-                <div className="space-y-2" style={{ flex: "1 1 4rem", minWidth: 0 }}>
+                <div className="space-y-2">
                   <FieldLabel hint="Overall length as manufactured, tip to end of shank. Auto-fills from the catalog. Feeds the shank-grip check (grip = OAL − stickout). If THIS tool has had its shank cut back to fit a shrink holder, leave this at the catalog length and enter the shortened length in Cut-off OAL under Tool Setup in Holder.">{UL("OAL", "OAL")}</FieldLabel>
                   <Input
                     type="text"
@@ -12057,7 +12082,7 @@ ${stabSection}
                     }}
                   />
                 </div>
-                {showLbs && <div className="space-y-2" style={{ flex: 1 }}>
+                {showLbs && <div className="space-y-2">
                   <FieldLabel hint={'Length Below Shank — the full reach from shank base to tool tip on a necked tool. LOC is contained within LBS, not added to it.'}>LBS</FieldLabel>
                   <Input
                     type="text"
@@ -12083,7 +12108,7 @@ ${stabSection}
                     }}
                   />
                 </div>}
-                {showNeck && <div className="space-y-2" style={{ flex: 1 }}>
+                {showNeck && <div className="space-y-2">
                   <FieldLabel hint="Reduced neck diameter on a necked reach endmill — the thinner Ø between the flutes and the shank (e.g. Ø0.712 on a Ø0.750 tool). It is the weak link in the LOC→LBS span and drives the two-segment deflection model. Leave blank for a straight-body tool.">Neck Dia</FieldLabel>
                   <Input
                     type="text"
@@ -12109,7 +12134,7 @@ ${stabSection}
                     }}
                   />
                 </div>}
-                {showOal && <div className="space-y-2" style={{ flex: 1 }}>
+                {showOal && <div className="space-y-2">
                   <FieldLabel hint="Overall Length — from print. Reference only; not used in calculations.">OAL</FieldLabel>
                   <Input
                     type="text"
@@ -14468,81 +14493,86 @@ ${stabSection}
                   </div>
                 </div>
 
-                {/* Tapered ballnose / tapered-neck tool */}
-                <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/40 px-3 py-3 space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={form.is_tapered}
-                      onChange={(e) => setForm((p) => ({ ...p, is_tapered: e.target.checked }))}
-                    />
+                {/* Tapered ballnose / tapered-neck tool — CUSTOM ONLY, PRINT-DRIVEN. Core Cutter
+                    makes no standard tapered ballnose / tapered-neck SKUs, so this is never a
+                    user choice — there is no catalog tool to check this box for. The geometry
+                    comes off an uploaded tool print: the extractor sets is_tapered + included
+                    angle + tapered length together (~line 2717) and auto-selects surfacing mode.
+                    So: no checkbox, and the whole block only exists when the print said tapered.
+                    Fields stay editable to correct a misread print, but they arrive filled in. */}
+                {form.is_tapered && (
+                <div className="mt-3 rounded-lg border border-amber-700/50 bg-amber-950/10 px-3 py-3 space-y-3">
+                  <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-zinc-200">Tapered ballnose / tapered-neck tool</span>
-                  </label>
-                  {form.is_tapered && (
-                    <>
-                      <p className="text-[10px] text-zinc-400 leading-snug">
-                        Ball tip Ø = tool diameter ({form.tool_dia > 0 ? `${form.tool_dia.toFixed(4)}"` : "set tool dia"}).
-                        The conical body is modeled as a stiffer cantilever (lower deflection). Speeds/feeds are unchanged —
-                        the tip cuts the same chip.
-                      </p>
-                      <div className="flex gap-3 items-start">
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <FieldLabel hint="Taper INCLUDED angle in degrees (the full cone angle, off the tool print — e.g. 6° per side = 12° included). Base dia = tip + 2·tan(included/2)·length.">
-                            Taper Angle <span className="font-normal text-zinc-500">(° included)</span>
-                          </FieldLabel>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
-                            placeholder="e.g. 3"
-                            value={surfTaperAngleText}
-                            onChange={(e) => setSurfTaperAngleText(e.target.value)}
-                            onBlur={() => {
-                              const n = parseFloat(surfTaperAngleText);
-                              if (Number.isFinite(n) && n >= 0 && n <= 45) {
-                                setForm((p) => ({ ...p, taper_included_angle_deg: n }));
-                                setSurfTaperAngleText(n ? n.toString() : "");
-                              } else {
-                                setSurfTaperAngleText(form.taper_included_angle_deg > 0 ? form.taper_included_angle_deg.toString() : "");
-                              }
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <FieldLabel hint="Length of the tapered body from the ball tip up to where it reaches the base diameter (in). Usually the flute/tapered-neck length off the print.">
-                            Taper Length <span className="font-normal text-zinc-500">(in)</span>
-                          </FieldLabel>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
-                            placeholder="e.g. 1.0"
-                            value={surfTaperLenText}
-                            onChange={(e) => setSurfTaperLenText(e.target.value)}
-                            onBlur={() => {
-                              const n = parseFloat(surfTaperLenText);
-                              if (Number.isFinite(n) && n >= 0) {
-                                setForm((p) => ({ ...p, taper_length_in: n }));
-                                setSurfTaperLenText(n ? n.toFixed(4) : "");
-                              } else {
-                                setSurfTaperLenText(form.taper_length_in > 0 ? form.taper_length_in.toFixed(4) : "");
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                      {form.taper_included_angle_deg > 0 && form.taper_length_in > 0 && form.tool_dia > 0 && (
-                        <p className="text-[10px] text-sky-300">
-                          Derived base Ø ≈ {(form.tool_dia + 2 * Math.tan((form.taper_included_angle_deg / 2) * Math.PI / 180) * form.taper_length_in).toFixed(4)}"
-                          {" "}(tip {form.tool_dia.toFixed(4)}" → over {form.taper_length_in.toFixed(3)}")
-                        </p>
-                      )}
-                      {(!(form.taper_included_angle_deg > 0) || !(form.taper_length_in > 0)) && (
-                        <p className="text-[10px] text-amber-400">Enter taper angle and length to activate the stiffer cantilever model.</p>
-                      )}
-                    </>
+                    <span className="rounded border border-amber-500/60 text-amber-400 text-[9px] font-bold px-1 py-0.5 leading-none uppercase tracking-wide">
+                      Custom — from print
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 leading-snug">
+                    Ball tip Ø = tool diameter ({form.tool_dia > 0 ? `${form.tool_dia.toFixed(4)}"` : "set tool dia"}).
+                    The conical body is modeled as a stiffer cantilever (lower deflection). Speeds/feeds are unchanged —
+                    the tip cuts the same chip.
+                  </p>
+                  <div className="flex gap-3 items-start">
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <FieldLabel hint="Taper INCLUDED angle in degrees (the full cone angle, off the tool print — e.g. 6° per side = 12° included). Base dia = tip + 2·tan(included/2)·length.">
+                        Taper Angle <span className="font-normal text-zinc-500">(° included)</span>
+                      </FieldLabel>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
+                        placeholder="e.g. 3"
+                        value={surfTaperAngleText}
+                        onChange={(e) => setSurfTaperAngleText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(surfTaperAngleText);
+                          if (Number.isFinite(n) && n >= 0 && n <= 45) {
+                            setForm((p) => ({ ...p, taper_included_angle_deg: n }));
+                            setSurfTaperAngleText(n ? n.toString() : "");
+                          } else {
+                            setSurfTaperAngleText(form.taper_included_angle_deg > 0 ? form.taper_included_angle_deg.toString() : "");
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <FieldLabel hint="Length of the tapered body from the ball tip up to where it reaches the base diameter (in). Usually the flute/tapered-neck length off the print.">
+                        Taper Length <span className="font-normal text-zinc-500">(in)</span>
+                      </FieldLabel>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
+                        placeholder="e.g. 1.0"
+                        value={surfTaperLenText}
+                        onChange={(e) => setSurfTaperLenText(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(surfTaperLenText);
+                          if (Number.isFinite(n) && n >= 0) {
+                            setForm((p) => ({ ...p, taper_length_in: n }));
+                            setSurfTaperLenText(n ? n.toFixed(4) : "");
+                          } else {
+                            setSurfTaperLenText(form.taper_length_in > 0 ? form.taper_length_in.toFixed(4) : "");
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {form.taper_included_angle_deg > 0 && form.taper_length_in > 0 && form.tool_dia > 0 && (
+                    <p className="text-[10px] text-sky-300">
+                      Derived base Ø ≈ {(form.tool_dia + 2 * Math.tan((form.taper_included_angle_deg / 2) * Math.PI / 180) * form.taper_length_in).toFixed(4)}"
+                      {" "}(tip {form.tool_dia.toFixed(4)}" → over {form.taper_length_in.toFixed(3)}")
+                    </p>
                   )}
+                  {(!(form.taper_included_angle_deg > 0) || !(form.taper_length_in > 0)) && (
+                    <p className="text-[10px] text-amber-400">
+                      The print didn't give both taper values — fill in the angle and length from the print to
+                      activate the stiffer cantilever model.
+                    </p>
+                      )}
                 </div>
+                )}
               </div>
             );
           })()}

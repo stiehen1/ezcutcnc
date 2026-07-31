@@ -5772,9 +5772,15 @@ CRITICAL RULES — READ CAREFULLY:
 
 7. For TAPERED tools (tapered ballnose AND tapered bull-nose — 3D surfacing tools) specifically:
    - THE TELL: the cutting body is CONICAL — it flares from a SMALL diameter at the tip up to a LARGER diameter toward the shank, with straight angled profile lines (not parallel). A ball tip (full radius) makes it a TAPERED BALLNOSE; a corner radius at the tip makes it a TAPERED BULL-NOSE. Look for an angular callout on the tapered flank like "3° PER SIDE", "6° INCLUDED", "1.5° / SIDE", "TAPER 3°", or an angle dimension between the profile line and the tool centerline.
-   - tool_dia = the BALL TIP diameter (the SMALL end where the tool actually contacts the surface), NOT the larger base/shank Ø. This is the single most common mistake on tapered prints — if you extracted the big base diameter as tool_dia, you read the wrong end. On a tapered ballnose, tool_dia = 2 × tip ball radius. The tip radius is usually a "R.XXXX BALL" callout (e.g. "R.1875 BALL" → tip dia 0.375). A "Ø.XXX @ TAN." callout is the diameter where the ball blends tangent into the taper — it CONFIRMS the tip end but is NOT the ball tip dia; still use 2×R for tool_dia.
-   - taper_included_angle_deg = the FULL INCLUDED cone angle in degrees. CRITICAL — CORE CUTTER TAPERED PRINTS CALL OUT THE ANGLE PER SIDE (half angle), so you must DOUBLE almost every taper angle you read: the angle dimension sits between the tool CENTERLINE (the green dash-dot line) and ONE tapered flank. An angle measured from the centerline to one flank is ALWAYS per-side → included = 2× that value. Example on a real print: a "4.00°" dimension drawn above the centerline means 4° per side → taper_included_angle_deg = 8.0. Treat a bare angle callout on a taper (e.g. "4.00°", "3°", "TAPER 4°", "4°/SIDE", "4.00° PER SIDE") as PER-SIDE and double it. ONLY use the value as-is (do NOT double) when the print explicitly says "INCLUDED" or "INCL" next to the angle. Geometry cross-check: base_dia ≈ tip_dia + 2·tan(included/2)·taper_length should land near the shank Ø — if doubling makes the base overshoot the shank wildly, reconsider, but per-side is the default for these prints. 0 if the tool is not tapered.
-   - taper_length_in = the axial length of the TAPERED body — from the ball tip up to where the taper reaches full base diameter. On these prints it is the LONGER length dimension spanning the tapered flank (e.g. a "(1.980)" reference dim from the shank step to the tip region), NOT the LOC (which is the shorter fluted-length callout, e.g. "1.00 LOC"). If both a LOC and a longer tapered-body dimension are shown, taper_length_in = the longer one. 0 if not tapered.
+   - tool_dia = the BALL TIP diameter (the SMALL end where the tool actually contacts the surface), NOT the larger base/shank Ø. This is the single most common mistake on tapered prints — if you extracted the big base diameter as tool_dia, you read the wrong end.
+   - PREFER AN EXPLICIT TIP Ø CALLOUT OVER 2×R. If the print gives a diameter callout at the tip end — e.g. "Ø0.0993 TSC", "Ø.0993", "Ø.125 TIP" — use THAT number for tool_dia verbatim. Only fall back to tool_dia = 2 × tip ball radius when NO tip Ø is called out. Reason: on a tapered ballnose the ball is frequently TRUNCATED where it blends into the cone, so the true cutting tip Ø is SMALLER than 2×R (e.g. a print with "R.0625 BALLNOSE" AND "Ø0.0993 TSC" → tool_dia = 0.0993, NOT 0.125). Taking 2×R there overstates the tip by 26% and inflates RPM and chip load. Put the R value in corner_radius; put the tip Ø in tool_dia.
+   - NOTE on "TSC": a TSC callout PREFIXED BY A Ø SYMBOL is a DIAMETER (the tip Ø → tool_dia). A TSC callout given as a plain LENGTH with no Ø (e.g. "1.00+.06/-.00 TSC") is the reach dimension → lbs. Same three letters, different dimension — decide by the Ø symbol.
+   - The tip radius is usually a "R.XXXX BALL" / "R.XXXX BALLNOSE" callout (e.g. "R.1875 BALL"). A "Ø.XXX @ TAN." callout is the diameter where the ball blends tangent into the taper — it CONFIRMS the tip end but is NOT the ball tip dia.
+   - taper_included_angle_deg = the FULL INCLUDED cone angle in degrees. Core Cutter prints often call out the angle PER SIDE (half angle), in which case included = 2× the printed value. But NOT always — decide per-side vs already-included by WHERE THE DIMENSION IS ANCHORED, then CONFIRM WITH THE GEOMETRY CHECK BELOW (the check WINS over any assumption):
+     (a) PER-SIDE (double it): the angle sits between the tool CENTERLINE (the green dash-dot line) and ONE tapered flank — one extension line on the centerline, one on a flank. Also double when the text says "PER SIDE", "/SIDE", "PER SIDE MAX".
+     (b) ALREADY INCLUDED (use as-is): the angle is dimensioned ACROSS BOTH FLANKS — both extension/witness lines land on the two opposite tapered profile lines and the vertex sits ahead of the tip, spanning the whole cone. Also use as-is when the text says "INCLUDED" or "INCL".
+   - MANDATORY GEOMETRY CHECK — run this before you answer, and let it OVERRIDE your read of the dimension: base_dia = tip_dia + 2·tan(included/2)·taper_length. The taper body sits BELOW the shank, so base_dia MUST come out ≤ shank_dia (it normally lands at or just under it). If your candidate included angle makes base_dia EXCEED shank_dia, that angle is wrong — the printed value was already the included angle, so use it as-is (do NOT double). Worked example from a real print (CC-14877): tip Ø0.0993, "24.0°" callout, taper length .649, shank Ø0.375. Doubling → 48° gives base = 0.0993 + 2·tan(24°)·0.649 = 0.678" — nearly 2× the 0.375 shank, IMPOSSIBLE. Using 24° as included gives base = 0.0993 + 2·tan(12°)·0.649 = 0.375" — an exact match to the shank Ø. Correct answer: taper_included_angle_deg = 24.0. When the two candidates disagree, ALWAYS pick the one whose base_dia lands at/just under shank_dia. Use 0 if the tool is not tapered.
+   - taper_length_in = the axial length of the TAPERED body — from the ball tip up to where the taper reaches full base diameter. Pick the dimension that actually SPANS THE CONE: if a separate longer dimension brackets the tapered flank (e.g. a "(1.980)" reference dim from the shank step to the tip region) while a shorter "LOC" covers only part of it, use the longer one. BUT when the taper runs the full fluted length so that the cone and the flutes are the same span, taper_length_in = the LOC (e.g. CC-14877: ".649 LOC" is the whole tapered body → taper_length_in = 0.649). Do NOT invent a longer dimension that isn't on the print, and do NOT reject the LOC just because it is labeled LOC — verify with the base_dia geometry check above. 0 if not tapered.
    - Still set corner_condition normally: "ball" for a tapered ballnose, "corner_radius" (+ corner_radius R value) for a tapered bull-nose.
    - Set taper_included_angle_deg = 0 and taper_length_in = 0 for ALL non-tapered tools (straight ballnose, straight endmills, etc.). Only populate these when the conical taper + angle callout are actually present.
 
@@ -6089,8 +6095,32 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
 
       // Tapered ballnose / bull-nose: derive is_tapered from the extracted angle+length
       // (post mm-conversion) so the client can activate the stiffer cantilever model.
-      const _tapAng = typeof extracted.taper_included_angle_deg === "number" ? extracted.taper_included_angle_deg : 0;
+      let _tapAng = typeof extracted.taper_included_angle_deg === "number" ? extracted.taper_included_angle_deg : 0;
       const _tapLen = typeof extracted.taper_length_in === "number" ? extracted.taper_length_in : 0;
+
+      // PER-SIDE vs INCLUDED backstop. Core Cutter prints call the taper angle out BOTH
+      // ways — anchored centerline-to-one-flank (per-side, must double) or dimensioned
+      // across both flanks (already included, use as-is). The prompt branches on which,
+      // but that's a soft guarantee, so verify with geometry, which is exact:
+      //   base_dia = tip_dia + 2·tan(included/2)·taper_length
+      // The tapered body sits below the shank, so base_dia must be <= shank_dia. If the
+      // model doubled a print that was already included, base overshoots the shank wildly
+      // (CC-14877: 24° read as per-side → 48° → base 0.678" on a 0.375" shank). Halving
+      // recovers the true included angle. Only correct when halving is decisively better,
+      // so a legitimately-doubled per-side angle is left alone.
+      const _tipD   = typeof extracted.tool_dia === "number" ? extracted.tool_dia : 0;
+      const _shankD = typeof extracted.shank_dia === "number" ? extracted.shank_dia : 0;
+      if (_tapAng > 0 && _tapLen > 0 && _tipD > 0 && _shankD > _tipD) {
+        const baseAt = (incl: number) => _tipD + 2 * Math.tan((incl / 2) * Math.PI / 180) * _tapLen;
+        const errAs   = Math.abs(baseAt(_tapAng) - _shankD);
+        const errHalf = Math.abs(baseAt(_tapAng / 2) - _shankD);
+        // Overshoot the shank AND halving lands materially closer → the print was included.
+        if (baseAt(_tapAng) > _shankD * 1.05 && errHalf < errAs) {
+          console.log(`[extract] taper angle ${_tapAng}° would give base Ø${baseAt(_tapAng).toFixed(4)}" > shank Ø${_shankD.toFixed(4)}" — treating print value as INCLUDED, correcting to ${(_tapAng / 2).toFixed(1)}° (base Ø${baseAt(_tapAng / 2).toFixed(4)}")`);
+          _tapAng = _tapAng / 2;
+          extracted.taper_included_angle_deg = _tapAng;
+        }
+      }
       extracted.is_tapered = _tapAng > 0 && _tapLen > 0;
 
       // Uncoated + no stated material → N1 Non-Ferrous. An uncoated tool with no
