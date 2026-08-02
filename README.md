@@ -2,7 +2,31 @@
 
 A full-stack Machining Mentor for CNC shops and sales engineers. Calculates speeds, feeds, depths of cut, cutting forces, deflection, stability, and tooling recommendations across milling, drilling, reaming, feed milling, threadmilling, keyseat, and dovetail operations. Deployed at [corecutcnc.com](https://corecutcnc.com).
 
-Each operation includes a **Pro Tips panel** (how to use the app) and a collapsible **Machining Tips & Tricks accordion** (shop-floor best practices per operation type).
+Each operation includes a **How to Use panel** (step-by-step navigation for the app) and a collapsible **Machining Tips & Tricks accordion** (shop-floor best practices per operation type).
+
+---
+
+## Recent Updates (August 2026)
+
+### "Pro Tips" is now "How to Use" — and it stops going stale when you switch tabs
+The panel is a step-by-step walkthrough, not a collection of cutting wisdom, and its name was working against it. Renamed, retitled, and fixed a staleness bug that made it show the wrong page's instructions:
+- **The pinned panel no longer shows stale content.** With the panel open, switching Tool Finder → Toolbox swapped the page but left the old instructions on screen — you had to close and reopen it. Root cause was a non-reactive data source, not a stale initializer: `HelpButton` derived its content by reading `localStorage.getItem("cc_operation")` *during render*, and it mounts as a **sibling of `<Router />`**, so `setOperation` inside `Mentor` re-rendered only Mentor's subtree. Reading localStorage doesn't subscribe, so the panel never re-ran — and since it's conditionally rendered (`{open && …}`), close→reopen was the only thing that re-read it. Fixed by mirroring the existing `calc_count_updated` pattern: `Mentor` now dispatches **`cc_help_context_changed`** from the same effects that write `cc_operation` / `cc_tool_type` / `cc_mode`, and `HelpButton` holds that context in state behind a listener. The setter bails when all three values are unchanged so unrelated form edits don't re-render a pinned panel. This also fixes Endmill ↔ Chamfer Mill and surfacing / deep-pocket mode switches, which had the same bug.
+- **Tab renamed `Pro Tips` → `How to Use`**, with the vertical rail height bumped 74 → 86 to fit, plus the two walkthrough strings that pointed at "the Tips button".
+- **All 14 panel headers now read "Steps to Navigate the X Calculator"** (Endmill, Chamfer Mill, Drilling, Reaming, Thread Milling, Keyseat, 3D Surface Contouring, High-Feed Milling, Dovetail, Deep Pocket / Thin Wall, plus Tool Finder / Toolbox / Misc Calculators). The hardcoded `— Tips` suffix in the header JSX is gone.
+- **"Mentor" removed from user-facing copy** — 9 strings across the help sections, walkthrough, and Tool Finder's "← Back to Calculator" link. Internal identifiers (`Mentor.tsx`, `useMentor`, `/api/mentor`) are untouched.
+
+### Tool Finder instructions rewritten against the actual UI
+The Tool Finder guide described a page that doesn't exist. Step 1 was "Quick Search — type into the search bar, results update instantly as you type"; there is no free-text search on that page at all, and results never update live. Rewritten as 6 numbered steps matching the real controls:
+- **The two paths are now stated up front.** A "Two ways in — pick one" section: unsure what you need → **Step 1 Quick Pick** (the guided Material › Operation › Diameter › Depth of Cut wizard); already know your configuration specs → skip to **Step 2 Filters**. Quick Pick only pre-fills the filters below it, so either entry point works.
+- **Real labels throughout** — `Product Category` is required before anything else unlocks, and the Part Feature Match fields use em dashes and `(in)`: `Min. Part Radius — Wall to Wall (in)`, not `Min. Part Radius (Wall to Wall)`. `Use Tool →` lives in the `Insert into Speed & Feed` column; the STP button is `⬇ .STP` under `3D Model`.
+- **"You must press Search Tools"** is called out in yellow — results do not refresh as filters change, which the old copy implied.
+- Added the results-reading step: `Filters:` / `Part Match:` chips, the `Close Match` and `CB` / `VXR` badges, ☆ favorites, and the 200-result cap.
+
+### Material, machine, and holder steps say what actually moves the numbers
+Three operation-guide steps were thin enough to be misleading, and the fixes apply across all operations that share the copy:
+- **Step 3 Select Your Material** now documents both entry paths (search a grade then hit **Match**, or browse the ISO chips then **Grade**) and walks the rest of the section in screen order: **Stock Condition** (including the Case Hard → "This cut" sub-row), the **Powder Metal (PM / Sintered)** modifier with Density and Sinter-hardened, **Hardness** HRC/HRB, and the **Heat-treat condition** quick chips that appear only on 17-4, 15-5, 13-8 Mo, and D2. Note the control is labeled **Stock Condition**, not "Material Condition", and grade search does not filter as you type.
+- **Step 4 Set Your Machine** now says the saved machines carry their **spindle power and torque curves** — the reason to pick your real machine over a generic one. Verified against `server/routes.ts`, which pulls per-machine `base_torque_ftlb` / `peak_torque_rpm` / `curve_confidence` and runs a two-segment model (flat torque below peak RPM, HP×5252/RPM above) to produce the available-vs-required torque zone. Coverage is **744 of 834 machines**, so the copy says "the saved machines carry" rather than "all".
+- **Step 5 Tool Holder** leads with **Dual Contact** in yellow — if you run Big-Plus holders and don't hit that button, you're leaving performance on the table. Notes it sits under the spindle taper and doesn't appear for HSK/CAPTO, which are inherently dual contact.
 
 ---
 

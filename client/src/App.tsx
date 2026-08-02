@@ -128,7 +128,7 @@ const HELP_SECTIONS = [
   {
     title: "Tool Finder",
     icon: "🔍",
-    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the mentor. Each tool includes a downloadable STP file — an exact replica of the tool as a solid model for direct use in your CAM system.",
+    body: "Browse and search Core Cutter's complete standard tool catalog with a quick finder for swift results. Use this to find the right EDP number for your application before heading to the calculator. Each tool includes a downloadable STP file — an exact replica of the tool as a solid model for direct use in your CAM system.",
   },
   {
     title: "Calculators",
@@ -143,7 +143,7 @@ const HELP_SECTIONS = [
   {
     title: "Specials Tips (Dovetail, Keyseat, Thread Mill & more)",
     icon: "📐",
-    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the mentor uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. All three exports work here too — PDF report, copy-to-clipboard setup sheet, and email — open to all registered users. A .stp file can also be requested for every custom tool upload; just let us know you need it.",
+    body: "Each section is driven by Core Cutter special tool prints uploaded for your job. Your Core Cutter special print gets loaded into the correct section and the calculator uses it for calculations. For stepped tools, upload the print as usual — the engine uses the smallest and largest diameters automatically. All three exports work here too — PDF report, copy-to-clipboard setup sheet, and email — open to all registered users. A .stp file can also be requested for every custom tool upload; just let us know you need it.",
   },
   {
     title: "Toolbox",
@@ -162,7 +162,7 @@ const WALKTHROUGH_STEPS = [
     icon: "👋",
     title: "Welcome to CoreCutCNC",
     subtitle: "Physics-based speeds & feeds tailored to the exact Core Cutter tool you're running.",
-    body: "The app walks you through three paths depending on where you're starting. Use the arrows to pick the one that fits your situation — you can always revisit this guide from the Tips button.",
+    body: "The app walks you through three paths depending on where you're starting. Use the arrows to pick the one that fits your situation — you can always revisit this guide from the How to Use button.",
     cta: "Show me how →",
   },
   {
@@ -333,7 +333,7 @@ function WelcomeModal({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: (
             </button>
           )}
         </div>
-        <p className="text-[10px] text-zinc-600 text-center pb-3 -mt-2">Tap Tips anytime to review this guide.</p>
+        <p className="text-[10px] text-zinc-600 text-center pb-3 -mt-2">Tap How to Use anytime to review this guide.</p>
       </div>
     </div>
   );
@@ -341,13 +341,13 @@ function WelcomeModal({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: (
 
 const OPERATION_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
   milling: {
-    title: "Endmilling Tips",
+    title: "Steps to Navigate the Endmill Calculator",
     sections: [
       { heading: "1. Select Operation & Tool Type", body: "Under Operation / Tool / Process, pick your operation first — Milling, Drilling, Reaming, Thread Milling, Keyseat, Dovetail, or Feed Mill. Milling covers both standard catalog tools and specials; the rest are special-print only. Then under Milling — Tool Type, choose Endmill or Chamfer Mill to set the correct geometry model." },
-      { heading: "2. Select Your Process", body: "Use the Select Process dropdown to tell the engine what kind of cut you're making. This is the single biggest driver of your numbers — it sets the WOC/DOC strategy, the chip-thinning model, and which stability rules apply. Eight processes:\n\n• **Roughing — HEM** (incl. Trochoidal / Dynamic / Adaptive) — light radial, deep axial, chip-thinned feeds. Requires a true adaptive toolpath; you'll be asked to acknowledge that before exporting.\n• **Roughing — Traditional** — conventional heavier WOC, shallower DOC.\n• **Finishing** — light engagement for surface finish and final size.\n• **Facing (Planar Milling)** — flat, open surfaces; stepover-driven.\n• **Slotting** — full-width cuts; splits into traditional vs. HEM/trochoidal slotting.\n• **Circular Interpolation** — bore enlargement and orbital moves, with per-pass tool-in-bore physics.\n• **3D Surface Contouring** — ball / bull nose / torus, driven by effective diameter at the contact point.\n• **Pocketing Strategy** — multi-tool pocket sequencing, pre-drill and entry planning, plus the Thin Wall option." },
-      { heading: "3. Select Your Material", body: "Choose the ISO category and specific material you're cutting. The engine uses calibrated SFM and chip load values validated for each material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
-      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
-      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc. If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
+      { heading: "2. Select Your Process", body: "Use the Select Process dropdown to tell the engine what kind of cut you're making. This is the single biggest driver of your numbers — it sets the WOC/DOC strategy, the chip-thinning model, and which stability rules apply. Eight processes:\n\n• **Roughing — HEM** (incl. Trochoidal / Dynamic / Adaptive) — light radial, deep axial, chip-thinned feeds. !!Requires a true adaptive toolpath; you'll be asked before we can produce any cutting parameters.!!\n• **Roughing — Traditional** — conventional heavier WOC, shallower DOC.\n• **Finishing** — light engagement for surface finish and final size.\n• **Facing (Planar Milling)** — flat, open surfaces; stepover-driven.\n• **Slotting** — full-width cuts; splits into traditional vs. HEM/trochoidal slotting.\n• **Circular Interpolation** — bore enlargement and orbital moves, with per-pass tool-in-bore physics.\n• **3D Surface Contouring** — ball / bull nose / torus, driven by effective diameter at the contact point.\n• **Pocketing Strategy** — multi-tool pocket sequencing, pre-drill and entry planning, plus the Thin Wall option." },
+      { heading: "3. Select Your Material", body: "Two ways to get there — search your material in our extensive database, or find it by ISO category:\n\n• **Search by grade name** — type your grade (e.g. \"4140\", \"17-4 PH\", \"Inconel 718\") and hit **Match** or press Enter. It sets the ISO category, Grade, and a typical hardness for you. This does not search as you type — you have to press Match.\n• **Browse by ISO category** — pick a chip (N1, N2, P, M, K, S, H, O), then narrow with the **Grade** dropdown.\n\nThe engine uses calibrated SFM and chip load values validated for each material. Then work down the rest of the section — these are not optional details, they move your numbers:\n\n• **Stock Condition** — how the material arrives. Billet is the default; Hot Rolled, Forged, Sand Cast, Inv. Cast, Case Hard, Flame/Plasma Cut, Nitrided, Cold-Worked, and Weldment all carry a hard or abrasive skin, and the engine derates your first pass accordingly (Nitrided and Case Hard the hardest). Choosing Case Hard adds a **This cut** row — tell it whether you **stay in the case** or **cut to core**.\n• **Material Modifier — Powder Metal (PM / Sintered)** — tick this if you're cutting PM. Enter as-sintered **Density** if you know it (low density is porous and abrasive; high density cuts closer to wrought), and flag **Sinter-hardened** grades. !!Don't assume PM is softer or easier — sinter-hardened grades cut like prehard alloy steel.!!\n• **Hardness** — pick **HRC** or **HRB** and enter your actual value. A typical value is filled in when you choose the material, but that's a starting assumption — !!confirm your real hardness, it drives SFM, cutting force, and torque.!!\n• **Heat-treat condition** — on 17-4 PH, 15-5 PH, 13-8 Mo PH, and D2 you'll also get quick chips (Condition A, H900, H1025, Annealed, Hardened 58, etc.). Tap one to fill the typical HRC — still editable if you know your exact number.\n\nWatch for amber warnings under the hardness row — they flag a wrong scale or a value outside the normal range for that grade, and often offer a one-click switch to a better-matching material." },
+      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc.\n\n• !!If you're running Big-Plus dual contact holders, hit the red Dual Contact button — this makes a BIG difference in your running parameters.!! It sits just under the spindle taper. Dual contact adds simultaneous taper AND face contact between spindle and holder, which raises rigidity, cuts deflection and micro-vibration, and lets the engine push your numbers accordingly. If you have it and don't select it, you're leaving performance on the table. (HSK and CAPTO are inherently dual contact, so the button doesn't appear for them.)\n• If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
       { heading: "6. Coolant", body: "Review the default coolant setting and confirm it matches your actual setup. Coolant selection affects SFM and tool life recommendations — flood, mist, through-spindle, and dry all behave differently depending on material and tool coating." },
       { heading: "7. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent — vise, pallet, chuck, tombstone, etc. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
       { heading: "8. Enter Tool Info (Specials & Standards)", body: "Enter your Core Cutter EDP # to auto-fill all tool geometry and unlock the calculator — or use Tool Finder to browse and hit Use Tool to transfer automatically. EDP # is required to run a calculation. Once entered, a STP file download for that exact tool is also available for direct use in your CAM system. This section also accommodates special endmill prints from Core Cutter — upload your print to auto-fill dimensions and unlock the calculator for your custom tool." },
@@ -358,65 +358,65 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   feedmilling: {
-    title: "Chamfer Milling Tips",
+    title: "Steps to Navigate the Chamfer Mill Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose the material you're chamfering. SFM and chip load are calibrated per material for chamfer mill geometry. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Enter Tool Info (Specials & Standards)", body: "Enter your Core Cutter EDP # to auto-fill all tool geometry and unlock the calculator — or use Tool Finder to browse and hit Use Tool to transfer automatically. EDP # is required to run a calculation. Once entered, a STP file download for that exact tool is also available for direct use in your CAM system. This section also accommodates special chamfer mill prints from Core Cutter — upload your print to auto-fill dimensions and unlock the calculator for your custom tool." },
       { heading: "3. Chamfer Depth", body: "Enter your required chamfer depth — this is a required user input. The engine uses it to calculate the effective cutting diameter at depth and adjust RPM and feed accordingly. The app displays the safe chamfer saddle range for your tool so you can confirm your depth stays within the working envelope." },
       { heading: "4. Entry Type (Default: Helical)", body: "Default to helical interpolation on all chamfer mill applications — it distributes the entry load smoothly and produces the cleanest edge. Only deviate when part geometry doesn't allow it: on straight edges use a ramp-in or sweep-in arc instead. Straight plunge is our least preferred — it drives the full cutting load at entry and can leave a witness mark. Program your entry type in CAM accordingly." },
-      { heading: "5. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
-      { heading: "6. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc. If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
+      { heading: "5. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "6. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc.\n\n• !!If you're running Big-Plus dual contact holders, hit the red Dual Contact button — this makes a BIG difference in your running parameters.!! It sits just under the spindle taper. Dual contact adds simultaneous taper AND face contact between spindle and holder, which raises rigidity, cuts deflection and micro-vibration, and lets the engine push your numbers accordingly. If you have it and don't select it, you're leaving performance on the table. (HSK and CAPTO are inherently dual contact, so the button doesn't appear for them.)\n• If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
       { heading: "7. Coolant", body: "Review the default coolant setting and confirm it matches your actual setup. Coolant selection affects SFM and tool life recommendations — flood, mist, through-spindle, and dry all behave differently depending on material and tool coating." },
       { heading: "8. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent — vise, pallet, chuck, tombstone, etc. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
       { heading: "9. Calculate Your Results", body: "Hit Calculate to get RPM, feed rate, and chip load tailored to your chamfer geometry." },
     ],
   },
   drilling: {
-    title: "Drilling Tips",
+    title: "Steps to Navigate the Drilling Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose the ISO category and specific material you're cutting. The engine uses calibrated SFM and chip load values validated for each material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Hole Details", body: "Input your hole depth and hole type — through hole, blind, or counterbore. These drive cycle time, peck strategy, and chip evacuation recommendations." },
       { heading: "3. Enter Tool Info (Specials Only)", body: "Upload your Core Cutter special drill print — the app reads the drawing and auto-fills all tool geometry for you. No manual entry required." },
-      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
-      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc. If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
+      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc.\n\n• !!If you're running Big-Plus dual contact holders, hit the red Dual Contact button — this makes a BIG difference in your running parameters.!! It sits just under the spindle taper. Dual contact adds simultaneous taper AND face contact between spindle and holder, which raises rigidity, cuts deflection and micro-vibration, and lets the engine push your numbers accordingly. If you have it and don't select it, you're leaving performance on the table. (HSK and CAPTO are inherently dual contact, so the button doesn't appear for them.)\n• If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
       { heading: "6. Coolant", body: "Review the default coolant setting and confirm it matches your actual setup. Coolant selection affects SFM and tool life recommendations — flood, mist, through-spindle, and dry all behave differently depending on material and tool coating." },
       { heading: "7. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent — vise, pallet, chuck, tombstone, etc. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
       { heading: "8. Calculate Your Results", body: "Hit Calculate to get RPM, feed rate, cycle time, and HP draw for your drill operation." },
     ],
   },
   reaming: {
-    title: "Reaming Tips",
+    title: "Steps to Navigate the Reaming Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — reaming SFM is significantly lower than drilling for the same material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Enter Tool Info (Specials Only)", body: "Upload your Core Cutter special reamer print — the app reads the drawing and auto-fills all tool geometry for you. No manual entry required." },
       { heading: "3. Hole Details", body: "Enter your finished hole diameter, hole depth, and hole type (through or blind) — all three are required to generate your cutting parameters." },
-      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
-      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc. If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
+      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc.\n\n• !!If you're running Big-Plus dual contact holders, hit the red Dual Contact button — this makes a BIG difference in your running parameters.!! It sits just under the spindle taper. Dual contact adds simultaneous taper AND face contact between spindle and holder, which raises rigidity, cuts deflection and micro-vibration, and lets the engine push your numbers accordingly. If you have it and don't select it, you're leaving performance on the table. (HSK and CAPTO are inherently dual contact, so the button doesn't appear for them.)\n• If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
       { heading: "6. Coolant", body: "Review the default coolant setting and confirm it matches your actual setup. Coolant selection affects SFM and tool life recommendations — flood, mist, through-spindle, and dry all behave differently depending on material and tool coating." },
       { heading: "7. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent — vise, pallet, chuck, tombstone, etc. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
       { heading: "8. Calculate Your Results", body: "Hit Calculate to get RPM, feed rate, and chip load optimized for your reaming operation." },
     ],
   },
   threadmilling: {
-    title: "Thread Milling Tips",
+    title: "Steps to Navigate the Thread Milling Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — thread milling SFM and chip load are calibrated per material. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "2. Thread Details", body: "Enter the thread you need to cut — final major diameter, pitch diameter, thread depth, thread hand (RH or LH), and your G-code dialect (Fanuc/Haas or Siemens 840D). These drive the helical interpolation path geometry and the ready-to-use G-code output. Cut direction is automatically selected based on your material and hole type — top-down for most applications, bottom-up for tough materials (Inconel, titanium) and blind holes. You can override it if your specific setup requires." },
       { heading: "3. Tool Geometry (Specials Only)", body: "Upload your Core Cutter special thread mill print (CC-XXXXX) — the app reads the drawing and auto-fills all tool geometry for you. No manual entry required. Review the extracted fields and correct any misreads before running." },
-      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
-      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc. If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
+      { heading: "4. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "5. Tool Holder", body: "Select the correct toolholder type for your setup — shrink fit, hydraulic, ER collet, etc.\n\n• !!If you're running Big-Plus dual contact holders, hit the red Dual Contact button — this makes a BIG difference in your running parameters.!! It sits just under the spindle taper. Dual contact adds simultaneous taper AND face contact between spindle and holder, which raises rigidity, cuts deflection and micro-vibration, and lets the engine push your numbers accordingly. If you have it and don't select it, you're leaving performance on the table. (HSK and CAPTO are inherently dual contact, so the button doesn't appear for them.)\n• If you're using an extension or extended-reach holder, enable that option and enter the gage length and toolholder nose diameter. These inputs allow the stability engine to model the full stickout stack and flag any additional chatter risk introduced by the extension." },
       { heading: "6. Coolant", body: "Review the default coolant setting and confirm it matches your actual setup. Coolant selection affects SFM and tool life recommendations — flood, mist, through-spindle, and dry all behave differently depending on material and tool coating." },
       { heading: "7. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent — vise, pallet, chuck, tombstone, etc. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
       { heading: "8. Calculate Your Results", body: "Hit Calculate to get RPM, feed, and a ready-to-use G-code helical interpolation block for your thread." },
     ],
   },
   keyseat: {
-    title: "Keyseat Cutter Tips",
+    title: "Steps to Navigate the Keyseat Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — keyseat cutters run at reduced SFM due to their side-cutting geometry and full-width engagement. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "Machining Strategy", body: "Keyseat cutters are force-dominated tools — your control knobs are chip thickness, tool deflection, and chip evacuation. NOT max RPM or SFM chasing.\n\n• Full slot engagement (180°) is fixed by tool geometry — no chip thinning benefit, high radial load\n• Never treat like an endmill — chip load must be derated 30–50% vs standard slotting IPT\n• Depth strategy: small tools (<3/8\") step down in multiple passes; medium tools can often go full depth with reduced feed; large tools (>3/4\") use a 2-pass approach — 60–70% depth first, then finish pass at full depth with lighter feed\n• Always climb mill — reduces rubbing, improves tool life, better chip evacuation direction\n• Entry: never straight plunge into full width — pre-drill or pre-mill relief if possible, otherwise arc/roll in\n• If it chatters: reduce stickout first, then reduce depth, then reduce feed — in that order" },
       { heading: "2. Enter Tool Info (Specials Only)", body: "Upload your Core Cutter special keyseat print (CC-XXXXX) — the app reads the drawing and auto-fills Cut Dia, Flutes, LOC, Arbor/Neck Dia, and Reach/TSC for you. Review those fields and correct any misreads, then fill in the two fields the print won't have:\n\n• Cut Pass Depth — axial depth per pass; the engine suggests a safe starting depth based on tool size, neck strength, and material\n• **Final Slot Depth** — total required slot depth for your part; the engine calculates how many passes are needed and flags survivability concerns" },
-      { heading: "3. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "3. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
       { heading: "4. Tool Holder", body: "Shrink fit is the top choice for keyseat work — these tools behave like thin discs on a stick and need maximum grip rigidity. Hydraulic is also good; high-quality ER collet is acceptable. Avoid worn collets and long gauge lengths. Keep stickout as short as possible — stickout is the single biggest driver of deflection and breakage on keyseat cutters." },
       { heading: "5. Coolant", body: "Through-spindle coolant is ideal for keyseat work — chips have nowhere to go in a full-slot engagement and recutting chips is the #1 cause of breakage. High-pressure flood aimed directly into the cut is the next best option. Air blast assist is very effective. Avoid light mist only — it won't evacuate chips reliably in a closed slot." },
       { heading: "6. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
@@ -424,7 +424,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   surfacing: {
-    title: "3D Surface Contouring Tips",
+    title: "Steps to Navigate the 3D Surface Contouring Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — surfacing SFM is based on the effective cutting diameter at the contact point, not the tool OD. Soft materials like aluminum allow very high SFM even at small D_eff; tough materials like stainless and titanium need conservative SFM to avoid edge burn at the contact zone. Also confirm your hardness if known — it adjusts SFM automatically." },
       { heading: "2. Tool Setup — Corner Condition", body: "Select Ball Nose or Bull Nose (corner radius) — square-corner endmills are not available in surfacing mode. For bull nose tools, enter the corner radius accurately — D_eff calculation depends on it when step-down (ap) is shallower than the CR." },
@@ -441,7 +441,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   feedmill: {
-    title: "High-Feed Milling Tips",
+    title: "Steps to Navigate the High-Feed Milling Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — high-feed mills are optimized for light DOC and high feed. They work across steel, stainless, titanium, Inconel, cast iron, and aluminum. Hardness limit is 52 HRC — above that expect rapid corner wear. Enter your actual hardness for the most accurate SFM derate." },
       { heading: "What Makes HFM Different", body: "This is a chip thinning machine, not a conventional rougher.\n\n• Chip thinning is geometric — programmed IPT is 2–3× the actual chip thickness. On lead-angle insert mills it comes from the lead angle (e.g. 20°); on radius-form solid-carbide cutters it comes from the corner radius at a shallow DOC (a deeper DOC into the radius means LESS thinning)\n• Forces are redirected axially (into the spindle), not radially — this is why HFM works on long-reach setups\n• WOC is your #1 control knob — target 6–12% of diameter. Sweet spot: 8–10%\n• DOC is typically 0.5–1.5×D (some setups 2×D) — the opposite of conventional logic\n• Low WOC + high feed + moderate DOC + constant-engagement path = maximum MRR with low chatter risk\n\nIf it sounds smooth and light — you're rubbing. If it feels aggressive — you're in the right zone. Never reduce feed as your first move. Adjust WOC first." },
@@ -454,12 +454,12 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   dovetail: {
-    title: "Dovetail Cutter Tips",
+    title: "Steps to Navigate the Dovetail Calculator",
     sections: [
       { heading: "1. Select Your Material", body: "Choose your material — dovetail cutters run at reduced SFM due to their angled side-cutting geometry and interrupted engagement. Also check and confirm your actual hardness — select HRC or HRB and enter your value. The engine applies a default if left blank, but entering your actual hardness gives you more accurate results." },
       { heading: "Machining Strategy", body: "Dovetail cutters are finishing tools — not roughing tools. Zero forgiveness due to their necked geometry, small effective cutting diameter, and long moment arm.\n\n• Pre-machine the slot first with a square or bull nose endmill — leave 0.005\"–0.015\" radial stock per side and open the full axial depth\n• Enter laterally only — never plunge\n• Run the dovetail per side, climb cutting each wall separately\n• Radial engagement: 0.003\"–0.010\" per side maximum\n• Axial DOC: full depth is fine once the slot is roughed\n• Chip load: start at 30–50% of your standard endmill IPT — effective diameter is small and too much chip load causes instant failure\n• If it sounds wrong, it is wrong — dovetails don't forgive" },
       { heading: "2. Enter Tool Info (Specials Only)", body: "Upload your Core Cutter special dovetail print (CC-XXXXX) — the app reads the drawing and auto-fills all tool geometry for you. No manual entry required. Review the extracted fields and correct any misreads, then fill in the two fields the print won't have:\n\n• Radial Pass Depth — how far the cutter steps into the dovetail wall per pass. Dovetail cutters always enter laterally from outside the part or a pre-slotted pocket — never plunge. The neck is narrower than the cutting head so keep passes conservative.\n• **Final Wall Depth** — total radial depth from the pre-slotted pocket edge to full dovetail form. The engine calculates how many lateral passes are needed and flags survivability concerns." },
-      { heading: "3. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations. Also set your Max RPM Use — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
+      { heading: "3. Set Your Machine", body: "Search from over 800 machines in our database or build your own if your machine isn't listed. Selecting a machine pre-fills spindle HP, max RPM, taper, drive type, and coolant options — all of which drive the HP and stability calculations.\n\n• !!The saved machines carry their spindle power and torque curves — so the app knows what your spindle actually delivers at the recommended RPM, not just its nameplate HP.!! That's what powers the torque check in your results: available vs. required torque, a green/yellow/red zone, and a flag when you're running below the peak-torque RPM where a geared spindle still has pulling power.\n• This is the main reason to pick your real machine instead of a generic one — a 30 HP spindle at 800 RPM and the same spindle at 8,000 RPM are not the same machine.\n• Also set your **Max RPM Use** — this caps how much of your spindle's max RPM the engine will target. Use 95% for standard work; drop to 90% or lower for older spindles, high runout, or long-reach setups where vibration is a concern." },
       { heading: "4. Tool Holder", body: "Hydraulic or shrink-fit holders are strongly preferred for dovetail work — dovetail tools behave like thin cantilever beams with an offset load and require maximum grip rigidity. Dual contact (where available) adds further stability. Keep stickout as short as your setup allows — every extra inch of stickout multiplies deflection force significantly. If you're using an extension holder, enter the gage length and nose diameter so the engine can model the full stickout stack." },
       { heading: "5. Coolant", body: "Air blast is the preferred coolant method for dovetail cutters — the goal is chip evacuation, not cooling. Mist is also good. Flood is acceptable but watch for chip packing in the slot. Through-spindle coolant is rarely applicable. Select the method that best clears chips from the engaged wall." },
       { heading: "6. Workholding", body: "Check the workholding selection and confirm it matches your exact setup. If your fixture isn't listed, select the closest equivalent. Workholding rigidity directly influences the stability calculation and chatter risk assessment." },
@@ -467,7 +467,7 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
     ],
   },
   deep_pocket: {
-    title: "Deep Pocket / Thin Wall Tips",
+    title: "Steps to Navigate the Deep Pocket / Thin Wall Calculator",
     sections: [
       { heading: "1. Select Your Material & Setup", body: "Material, machine, toolholder, and workholding must all be filled in before running the sequence — the engine uses these to calculate speeds/feeds per tool. Hard materials (Inconel, Ti, hardened) automatically tighten the corner engagement factor to 65% (vs 75% standard) to protect tools in the corner zone." },
       { heading: "2. Target Depth & Corner Radius", body: "Enter your finished pocket depth and the inside corner radius. The 75% engagement rule is applied automatically — tool diameter is set to ≤75% of the corner diameter to prevent full-corner engagement spikes. Corner finish tool uses 60% rule (tighter, for light finishing passes)." },
@@ -482,34 +482,36 @@ const OPERATION_HELP: Record<string, { title: string; sections: { heading: strin
 
 const PAGE_HELP: Record<string, { title: string; sections: { heading: string; body: string }[] }> = {
   "/": {
-    title: "Milling & Chamfer Tips",
+    title: "Steps to Navigate the Milling & Chamfer Calculator",
     sections: [],  // replaced dynamically by operation
   },
   "/catalog": {
-    title: "Tool Finder",
+    title: "Steps to Navigate the Tool Finder",
     sections: [
-      { heading: "Quick Search", body: "Type a diameter, series name, flute count, or coating into the search bar. Results update instantly as you type." },
-      { heading: "Tool Type", body: "Select Endmill or Chamfer Mill to narrow results to the correct tool family before applying further filters." },
-      { heading: "Filters", body: "Drill-down fields allow you to select specific tool geometry — diameter, flutes, coating, corner condition and more — to filter out tools you don't need and zero in on exactly the right cutter." },
-      { heading: "Part Feature Match", body: "Three powerful optional fields that match the tool directly to your part geometry — and can further restrict your filtered results:\n\n• **Final Axial Cut Depth** — ensures the LOC covers your required depth.\n• **Min. Part Radius (Wall to Wall)** — matches the corner radius to your inside wall.\n• **Max. Part Floor Radius (Floor to Wall)** — ensures the corner radius clears your floor blend.\n\nEnter your part dimensions and the finder returns only tools that fit — eliminating guesswork." },
-      { heading: "Use Tool", body: "Found the right cutter? Hit Use Tool on any result to instantly transfer all tool geometry to the Milling & Chamfer Mentor — no typing required." },
+      { heading: "Two ways in — pick one", body: "You don't have to do both.\n\n• **Not sure what you need?** Start with **Step 1 — Quick Pick**. Answer a few questions and it sets the filters for you.\n• **Already know the tool configuration specs you need?** Skip Quick Pick and go straight to **Step 2 — Filters**.\n\nQuick Pick just pre-fills the filters below it, so you can always start there and fine-tune afterward." },
+      { heading: "Step 1 — Quick Pick (optional)", body: "The yellow card at the top. Hit **Help me choose →** and answer the questions — the breadcrumb across the top tracks where you are:\n\n• **Material** — what you're cutting.\n• **Operation** — roughing (HEM or traditional), finishing, facing, slotting, circular interpolation, 3D contouring, or chamfering.\n• **Diameter** — small, medium, or large ballpark.\n• **Depth of Cut** — endmills only; this is your axial DOC, not the tool's LOC.\n\nWhen it's done the button reads **✓ Applied** and the filters below are set for you. Use **← Back** to change an answer, or **✕ Close** to start over." },
+      { heading: "Step 2 — Filters", body: "The card below Quick Pick. **Product Category is required** — pick **Endmill** or **Chamfer Mill** first or the rest stays locked (you'll see '⚠ Select one to activate filters').\n\nFrom there narrow with any combination of:\n\n• **Endmills** — Cut Material, Tool Series, Cut Diameter, Flute Count, Length of Cut (LOC), Length Below Shank (LBS), Corner Condition, Coating, Center Cutting, Flute Geometry.\n• **Chamfer mills** — Chamfer Angle, Tip Diameter, Flute Style, Part Chamfer Length.\n\n!!Not all filters have to be selected — select the ones that mean the most to your search.!!" },
+      { heading: "Step 3 — Part Feature Match (optional)", body: "The indigo sub-panel at the bottom of the filters, endmills only. Three optional fields that match the tool to your part geometry instead of to a spec:\n\n• **Final Axial Cut Depth (in)** — ensures the LOC covers your required depth.\n• **Min. Part Radius — Wall to Wall (in)** — matches the corner radius to your inside wall.\n• **Max. Part Floor Radius — Floor to Wall (in)** — ensures the corner radius clears your floor blend.\n\nEnter your part dimensions and the finder returns only tools that fit — eliminating guesswork." },
+      { heading: "Step 4 — Search Tools", body: "Hit **🔍 Search Tools** to run it.\n\n• !!Results do not update as you change filters — you have to press the button each time.!!\n• If the button reads 'Select Filters to Search', you still need to pick a Product Category.\n• **Clear All** resets everything and starts you over." },
+      { heading: "Step 5 — Read your results", body: "Above the table you'll see the tool count, a **Filters:** row, and a **Part Match:** row — each chip has an ✕ if you want to drop that filter without going back up.\n\nIn the table:\n\n• **Close Match** — a near-fit worth a look.\n• **CB** / **VXR** — chipbreaker and truncated-rougher geometry.\n• Tap ☆ in the **Favorite** column to save a tool for later.\n• Only the first 200 results show — narrow your filters if you hit that cap." },
+      { heading: "Step 6 — Use Tool →", body: "Found the right cutter?\n\n• Hit **Use Tool →** in the **Insert into Speed & Feed** column, far right of any row.\n• That transfers all tool geometry into the Milling & Chamfer Calculator — no typing required." },
       { heading: "STP File Downloads", body: "Every EDP has a downloadable STP file — an exact replica of that tool as a solid model, for direct use in your CAM system. Find the tool and grab the file in one step. Because it's the real geometry, your toolpath simulation and collision checks run against the actual cutter instead of a generic stick.\n\n• **Specials:** not in the catalog, but a .stp file can be requested for every custom tool upload — just let us know you need it." },
       { heading: "Not finding what you need?", body: "Use the 'Contact us' link at the bottom of the page — Core Cutter can quote a special to your print." },
     ],
   },
   "/toolbox": {
-    title: "Toolbox",
+    title: "Steps to Navigate the Toolbox",
     sections: [
       { heading: "Sign In", body: "Enter your email address to receive a one-time code. No password needed — the code signs you in and keeps you logged in on this device." },
-      { heading: "Save a Setup", body: "After running a calculation in the Milling Mentor, click Save Setup. Give it a name or use the default. It saves your full input set." },
-      { heading: "Re-run a Setup", body: "Click Re-run this setup on any saved item to restore all inputs back into the Milling Mentor — ready to calculate or adjust." },
+      { heading: "Save a Setup", body: "After running a calculation in the Milling Calculator, click Save Setup. Give it a name or use the default. It saves your full input set." },
+      { heading: "Re-run a Setup", body: "Click Re-run this setup on any saved item to restore all inputs back into the Milling Calculator — ready to calculate or adjust." },
       { heading: "Save Your Machines", body: "Save your shop machines with spindle HP, taper, RPM, and toolholder info for quick recall on any future job." },
     ],
   },
   "/calculators": {
-    title: "Calculators",
+    title: "Steps to Navigate the Misc Calculators",
     sections: [
-      { heading: "Speed & Feed", body: "RPM ↔ SFM, Feed Rate, Chip Thinning, Feed from SFM, Engagement Angle, Min Chip Thickness. Use these to validate or fine-tune values from the mentor." },
+      { heading: "Speed & Feed", body: "RPM ↔ SFM, Feed Rate, Chip Thinning, Feed from SFM, Engagement Angle, Min Chip Thickness. Use these to validate or fine-tune values from the calculator." },
       { heading: "Surface Finish", body: "Cusp Height (ball end), Effective Diameter (ball end), Surface Finish from step-over, Ball Nose Velocity Adjustment. Useful for finishing pass planning." },
       { heading: "Arcs & Contours", body: "Feed Correction for Arc moves, Helix Entry sizing, No Middle Post bore calculator, Bolt Circle, Chord/Sagitta, Bore Enlargement, Corner Clearance, Entry Angle & Load Spike, Chamfer Mill geometry." },
       { heading: "Hole Making", body: "Tap Drill Size (inch & metric), Drill Point Length, Drilling Torque. Quick reference for any hole-making operation." },
@@ -521,16 +523,37 @@ const PAGE_HELP: Record<string, { title: string; sections: { heading: string; bo
 };
 
 function HelpButton() {
-  // Persisted: Pro Tips stays pinned open across form edits and page changes
+  // Persisted: How to Use stays pinned open across form edits and page changes
   // until the user explicitly dismisses it with ✕.
   const { open, openTab, closeTab } = useSideTab("cc_protips_open");
   const [overviewOpen, setOverviewOpen] = React.useState(false);
   const [location] = useLocation();
 
+  // Mentor owns the active operation but renders in a sibling subtree, so its
+  // state changes can't reach us. Mirror the localStorage values it writes and
+  // refresh them on the event it fires (see Mentor.tsx syncHelpContext).
+  const readHelpContext = () => ({
+    op: localStorage.getItem("cc_operation") || "milling",
+    toolType: localStorage.getItem("cc_tool_type") || "endmill",
+    mode: localStorage.getItem("cc_mode") || "",
+  });
+  const [helpCtx, setHelpCtx] = React.useState(readHelpContext);
+  React.useEffect(() => {
+    const refresh = () => setHelpCtx(prev => {
+      const next = readHelpContext();
+      // Unrelated form edits fire this too — don't re-render a pinned panel for them.
+      return (next.op === prev.op && next.toolType === prev.toolType && next.mode === prev.mode)
+        ? prev : next;
+    });
+    refresh();
+    window.addEventListener("cc_help_context_changed", refresh);
+    return () => window.removeEventListener("cc_help_context_changed", refresh);
+  }, []);
+
   // On the main mentor page, use operation-specific tips
   let pageHelp = PAGE_HELP[location] ?? null;
   if (location === "/") {
-    const op = localStorage.getItem("cc_operation") || "milling";
+    const op = helpCtx.op;
     if (op === "toolfinder") {
       pageHelp = PAGE_HELP["/catalog"] ?? null;
     } else if (op === "feedmilling") {
@@ -538,8 +561,8 @@ function HelpButton() {
     } else if (op === "toolbox") {
       pageHelp = PAGE_HELP["/toolbox"] ?? null;
     } else if (op === "milling") {
-      const toolType = localStorage.getItem("cc_tool_type") || "endmill";
-      const mode = localStorage.getItem("cc_mode") || "";
+      const toolType = helpCtx.toolType;
+      const mode = helpCtx.mode;
       if (toolType === "chamfer_mill") {
         pageHelp = OPERATION_HELP["feedmilling"];
       } else if (mode === "surfacing") {
@@ -559,10 +582,10 @@ function HelpButton() {
       <button
         onClick={openTab}
         className="fixed right-0 z-[60] text-white text-[11px] font-semibold px-2 rounded-l-lg shadow-lg transition-colors flex items-center justify-center"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 148px)", height: 74, background: "linear-gradient(180deg,#6366f1,#4f46e5)" }}
-        aria-label="Pro Tips"
+        style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", top: "calc(50% - 148px)", height: 86, background: "linear-gradient(180deg,#6366f1,#4f46e5)" }}
+        aria-label="How to Use"
       >
-        Pro Tips
+        How to Use
       </button>
       {open && (
         // No backdrop: the panel is pinned alongside the form so the user can
@@ -580,7 +603,7 @@ function HelpButton() {
               {/* Page-specific help */}
               {pageHelp && (
                 <div className="mb-1">
-                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-3">{pageHelp.title} — Tips</p>
+                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-3">{pageHelp.title}</p>
                   {pageHelp.sections.map(s => (
                     <div key={s.heading} className="mb-3">
                       <p className="text-xs font-semibold text-white mb-0.5">{s.heading}</p>
@@ -637,13 +660,13 @@ function HelpButton() {
 const TRAINING_VIDEOS = [
   { id: "overview",      title: "Getting Started / Overview",         desc: "App layout, registration, and your first calculation.",                       youtubeId: "" },
   { id: "tool_finder",   title: "Tool Finder",                        desc: "Search the catalog, filter by material and operation, load into calculator.",  youtubeId: "" },
-  { id: "milling",       title: "Milling — Standard Endmill",         desc: "HEM, conventional, finish, slot — speeds, feeds, stability mentor.",          youtubeId: "" },
+  { id: "milling",       title: "Milling — Standard Endmill",         desc: "HEM, conventional, finish, slot — speeds, feeds, stability analysis.",          youtubeId: "" },
   { id: "chamfer",       title: "Chamfer Mill",                       desc: "CMS/CMH series, effective diameter, multi-pass strategy.",                    youtubeId: "" },
   { id: "specials",      title: "Special Tools — PDF Upload",         desc: "Upload a Core Cutter special print and auto-fill tool geometry.",             youtubeId: "" },
   { id: "drilling",      title: "Drilling & Reaming",                 desc: "Carbide drill, peck cycles, reamer stock, surface finish risk.",              youtubeId: "" },
   { id: "threadmill",    title: "Thread Milling",                     desc: "UN/Metric/NPT, radial passes, G-code output.",                               youtubeId: "" },
   { id: "feedmill",      title: "Feed Milling (High-Feed Mill)",      desc: "Lead angle chip thinning, WOC/DOC limits, ramp angle.",                      youtubeId: "" },
-  { id: "stability",     title: "Stability Mentor",                   desc: "Reading the chatter risk score, acting on suggestions.",                     youtubeId: "" },
+  { id: "stability",     title: "Stability Analysis",                 desc: "Reading the chatter risk score, acting on suggestions.",                     youtubeId: "" },
   { id: "toolbox",       title: "Toolbox & Saved Setups",             desc: "Save machines, re-run setups, team sharing.",                                youtubeId: "" },
   { id: "roi",           title: "ROI Calculator",                     desc: "Build a cost-per-part comparison for a customer presentation.",              youtubeId: "" },
 ];

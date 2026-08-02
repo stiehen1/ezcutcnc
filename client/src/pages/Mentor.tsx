@@ -3285,9 +3285,15 @@ export default function Mentor() {
   const [form, setForm] = React.useState(INITIAL_FORM);
 
   // ── Sync active operation to localStorage for context-aware Help tab ──────
-  React.useEffect(() => { localStorage.setItem("cc_operation", operation); }, [operation]);
-  React.useEffect(() => { localStorage.setItem("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
-  React.useEffect(() => { localStorage.setItem("cc_mode", form.mode || ""); }, [form.mode]);
+  // The How to Use panel lives outside this subtree, so a state change here can't
+  // re-render it. Fire an event after each write so a pinned panel re-reads.
+  const syncHelpContext = (key: string, value: string) => {
+    localStorage.setItem(key, value);
+    window.dispatchEvent(new CustomEvent("cc_help_context_changed"));
+  };
+  React.useEffect(() => { syncHelpContext("cc_operation", operation); }, [operation]);
+  React.useEffect(() => { syncHelpContext("cc_tool_type", form.tool_type || "endmill"); }, [form.tool_type]);
+  React.useEffect(() => { syncHelpContext("cc_mode", form.mode || ""); }, [form.mode]);
 
   // Re-arm the material-mismatch gate whenever the material selection or the print's
   // material changes — an "override" acknowledged for one mismatch must not silently

@@ -593,7 +593,7 @@ export default function Catalog({ embedded = false }: { embedded?: boolean } = {
               <h1 className="text-2xl font-bold text-white">SKU Catalog</h1>
               <p className="text-sm text-gray-400 mt-1">Upload your cutting tool catalog as CSV. Each upload creates a new version.</p>
             </div>
-            <a href="/" className="text-xs text-indigo-400 hover:text-indigo-300 underline">← Back to Mentor</a>
+            <a href="/" className="text-xs text-indigo-400 hover:text-indigo-300 underline">← Back to Calculator</a>
           </div>
         )}
 
