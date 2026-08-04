@@ -4175,6 +4175,10 @@ export default function Mentor() {
   // length in a collet with no stop. Collapsed by default so Actual Stickout leads the
   // section; auto-opens below whenever either value is actually set.
   const [cutoffOpen, setCutoffOpen] = React.useState(false);
+  // "What do I measure?" note under the part overhang / diameter fields. Collapsed by
+  // default — most parts are simple rounds where the fields are self-explanatory; the
+  // note is for the stepped/plate/tube cases where the wrong pick is silently unsafe.
+  const [partMeasureOpen, setPartMeasureOpen] = React.useState(false);
   const [tmStickoutText, setTmStickoutText] = React.useState("");
   const [feedmillPocketDepthText, setFeedmillPocketDepthText] = React.useState("");
   const [feedmillDocText, setFeedmillDocText] = React.useState("");
@@ -11080,7 +11084,7 @@ ${stabSection}
                   }
                 }}
               />
-              <p className="text-[10px] text-zinc-500 mt-1">Used to adjust workholding compliance in the stability model — longer overhang increases chatter risk.</p>
+              <p className="text-[10px] text-zinc-500 mt-1">Measured from the workholding face to the <span className="text-zinc-400">cut location</span> — not to the end of the part. Longer overhang increases chatter risk.</p>
             </div>
           )}
 
@@ -11089,7 +11093,7 @@ ${stabSection}
               only once an overhang is entered. Blank → engine uses a conservative estimate. */}
           {form.part_stickout > 0 && (
             <div className="mt-3">
-              <FieldLabel hint="The part's cross-section diameter at the overhang. Combined with the overhang length, this sizes the part as a cantilever — a slender part flexes far more (deflection scales with 1/diameter⁴). Enter the smallest diameter along the overhang for a solid round; leave blank and the model assumes a conservative ~2× tool-diameter stub.">
+              <FieldLabel hint="The part's cross-section at the overhang, sized as a cantilever together with the overhang length. Deflection scales with 1/diameter⁴, so this is the most error-sensitive field here. Enter the THINNEST section between the jaws and the cut — not the chucked-up end. For plate or a web, use the thickness in the direction the tool pushes. See &quot;Part isn't a simple rod?&quot; below for stepped, tube, and casting cases. Leave blank and the model assumes a conservative ~2× tool-diameter stub.">
                 Part Diameter at Overhang (in)
               </FieldLabel>
               <Input
@@ -11109,6 +11113,65 @@ ${stabSection}
                 }}
               />
               <p className="text-[10px] text-zinc-500 mt-1">Drives the part-as-cantilever deflection. Leave blank for a conservative estimate — a real value sharpens the Workpiece Rigidity score.</p>
+
+              {/* ── "What do I measure?" — the d⁴ trap ────────────────────────────────
+                  Real parts are stepped shafts, plates and weldments, not simple rods, and
+                  the intuitive pick (the big chucked-up diameter) is the DANGEROUS one:
+                  I = π·d⁴/64, so entering 2.000 on a part that necks to 1.000 tells the
+                  model there's 16× less flex than there is. Both fields are measured
+                  together, so one note covers both. Collapsed — simple rounds don't need it. */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setPartMeasureOpen(!partMeasureOpen)}
+                  className="group flex w-full items-start gap-1.5 text-left transition-colors"
+                >
+                  <span className="text-[9px] leading-4 text-amber-400/70 group-hover:text-amber-300">{partMeasureOpen ? "▾" : "▸"}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-medium leading-4 text-amber-400 group-hover:text-amber-300">
+                      Part isn't a simple rod? What exactly to measure
+                    </span>
+                    {!partMeasureOpen && (
+                      <span className="block text-[10px] leading-tight text-zinc-400">
+                        Stepped shafts, plate and tube — use the thinnest section, not the chucked-up end
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {partMeasureOpen && (
+                  <div className="mt-2 space-y-2 border-l border-amber-500/30 pl-3 text-[10px] leading-relaxed text-zinc-400">
+                    <p className="text-amber-200/90">
+                      Measure the <span className="font-semibold">thinnest cross-section in the load path</span> — between the jaw face and where you're cutting. Bending happens at the weakest point, not at the grip.
+                    </p>
+                    <p className="text-amber-300/70">
+                      Stiffness goes as diameter<span className="align-super">4</span>, so this is the field that punishes a guess. Entering a 2.000" chucked diameter on a part that necks to 1.000" tells the model the part is <span className="font-semibold">16× stiffer</span> than it really is. When unsure, go smaller — it errs toward a safer feed.
+                    </p>
+                    <ul className="space-y-1.5">
+                      <li>
+                        <span className="font-semibold text-zinc-300">Stepped shaft / turned part</span> — the smallest diameter between the jaws and the cut, wherever the neck sits. A 2" flange necking to 0.875" past the jaws is a <span className="text-zinc-300">0.875</span> part.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-zinc-300">Cutting before the step</span> — if the thin section is <em>beyond</em> your cut it isn't carrying the bending. Use the section that is: jaws to cut.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-zinc-300">Plate, bracket, web</span> — enter the <span className="font-semibold">thickness in the direction the tool pushes</span>, not the width. A 4" wide × 0.5" thick web resists sideways like a 0.5" member.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-zinc-300">Tube / hollow</span> — the model assumes solid, so entering the OD reads <em>softer</em> than reality. Safe direction; a tube is stiffer than the number shown.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-zinc-300">Casting / weldment / irregular</span> — thinnest section carrying load. Ignore bosses and ribs that don't span the bending path.
+                      </li>
+                    </ul>
+                    <p className="text-zinc-500">
+                      Overhang is measured to the <span className="font-semibold text-zinc-400">cut location</span>, not the end of the part — as a cut walks toward the free end the effective overhang grows, so use the deepest point of the pass.
+                    </p>
+                    <p className="text-zinc-500">
+                      One limitation: the diameter also sizes overhung <em>mass</em>, assuming a solid cylinder. On a heavy flange hung off a thin neck the thin section is still the right stiffness input, but expect the chatter estimate to run slightly optimistic.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
