@@ -721,8 +721,12 @@ def workpiece_deflection(force, overhang, part_dia, iso_group="P",
     force     — radial cutting force at the tool tip (lbf); we treat the part tip load
                 as the same radial force the tool sees (Newton's third law).
     overhang  — part_stickout: length the part sticks out past the jaws (in).
-    part_dia  — solid-round cross-section diameter at the overhang (in). Conservative;
-                a tube is stiffer, a thin web is softer.
+    part_dia  — equivalent solid-round bending section over the overhang (in): the
+                THINNEST section between the grip and the cut. For a non-round part this
+                is the thickness in the direction of the radial force, not the wider face
+                (a 4x0.5 web resists sideways like a 0.5 member). Entering it that way is
+                conservative -- I=pi*d^4/64 vs the true b*h^3/12 puts a square bar at
+                ~59% of real stiffness, a thin web lower. A tube is stiffer than modeled.
     iso_group — material ISO letter → WORKPIECE_MODULUS / WORKPIECE_DENSITY.
     fixture_key — workholding enum key → FIXTURE_COMPLIANCE base give.
     supported — True when a tailstock / live center / steady rest constrains the far end,

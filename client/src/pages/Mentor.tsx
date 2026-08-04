@@ -11093,12 +11093,12 @@ ${stabSection}
               only once an overhang is entered. Blank → engine uses a conservative estimate. */}
           {form.part_stickout > 0 && (
             <div className="mt-3">
-              <FieldLabel hint="The part's cross-section at the overhang, sized as a cantilever together with the overhang length. Deflection scales with 1/diameter⁴, so this is the most error-sensitive field here. Enter the THINNEST section between the jaws and the cut — not the chucked-up end. For plate or a web, use the thickness in the direction the tool pushes. See &quot;Part isn't a simple rod?&quot; below for stepped, tube, and casting cases. Leave blank and the model assumes a conservative ~2× tool-diameter stub.">
-                Part Diameter at Overhang (in)
+              <FieldLabel hint="Sized as a cantilever together with the overhang length. The model is a solid round, so a non-round part is entered as its equivalent bending section. Round bar → the diameter (the neck, on a stepped shaft). Square, rectangular, plate or a web → the thickness in the direction the tool pushes, NOT the wider face: a 4&quot; × 0.5&quot; block resists sideways like a 0.5&quot; member. Stiffness scales with the 4th power, so this is the most error-sensitive field here — a stepped part entered at its chucked-up size can read 16× stiffer than it is. See &quot;Part isn't a simple rod?&quot; below for tube and casting cases. Leave blank and the model assumes a conservative ~2× tool-diameter stub.">
+                Smallest Section in the Overhang — Dia. or Thickness (in)
               </FieldLabel>
               <Input
                 type="text" inputMode="decimal" className="no-spinners"
-                placeholder="e.g. 1.000 (blank = estimate)"
+                placeholder="e.g. 0.875 — dia. or thickness (blank = estimate)"
                 value={partDiaText}
                 onChange={e => setPartDiaText(e.target.value)}
                 onBlur={() => {
@@ -11112,7 +11112,7 @@ ${stabSection}
                   }
                 }}
               />
-              <p className="text-[10px] text-zinc-500 mt-1">Drives the part-as-cantilever deflection. Leave blank for a conservative estimate — a real value sharpens the Workpiece Rigidity score.</p>
+              <p className="text-[10px] text-zinc-500 mt-1">Round → diameter. Square, rectangular or plate → <span className="text-zinc-400">thickness in the direction the tool pushes</span>, not the wider face. Not the chucked-up end. Leave blank for a conservative estimate.</p>
 
               {/* ── "What do I measure?" — the d⁴ trap ────────────────────────────────
                   Real parts are stepped shafts, plates and weldments, not simple rods, and
@@ -11129,11 +11129,11 @@ ${stabSection}
                   <span className="text-[9px] leading-4 text-amber-400/70 group-hover:text-amber-300">{partMeasureOpen ? "▾" : "▸"}</span>
                   <span className="min-w-0">
                     <span className="block text-[11px] font-medium leading-4 text-amber-400 group-hover:text-amber-300">
-                      Part isn't a simple rod? What exactly to measure
+                      Part isn't a simple round bar? What exactly to measure
                     </span>
                     {!partMeasureOpen && (
                       <span className="block text-[10px] leading-tight text-zinc-400">
-                        Stepped shafts, plate and tube — use the thinnest section, not the chucked-up end
+                        Stepped shafts, square bar, plate, tube, castings — and why guessing high is unsafe
                       </span>
                     )}
                   </span>
@@ -11141,20 +11141,23 @@ ${stabSection}
                 {partMeasureOpen && (
                   <div className="mt-2 space-y-2 border-l border-amber-500/30 pl-3 text-[10px] leading-relaxed text-zinc-400">
                     <p className="text-amber-200/90">
-                      Measure the <span className="font-semibold">thinnest cross-section in the load path</span> — between the jaw face and where you're cutting. Bending happens at the weakest point, not at the grip.
+                      Two rules, in order: take the <span className="font-semibold">thinnest section between the grip and the cut</span> (bending happens at the weakest point, not at the grip), and on anything non-round take the <span className="font-semibold">thickness in the direction the tool pushes</span> — the part only resists in the direction it's being bent.
                     </p>
                     <p className="text-amber-300/70">
-                      Stiffness goes as diameter<span className="align-super">4</span>, so this is the field that punishes a guess. Entering a 2.000" chucked diameter on a part that necks to 1.000" tells the model the part is <span className="font-semibold">16× stiffer</span> than it really is. When unsure, go smaller — it errs toward a safer feed.
+                      Stiffness goes as the 4th power of that number, so this is the field that punishes a guess. Entering a 2.000" chucked size on a part that necks to 1.000" tells the model the part is <span className="font-semibold">16× stiffer</span> than it really is. When unsure, go smaller — it errs toward a safer feed.
                     </p>
                     <ul className="space-y-1.5">
                       <li>
-                        <span className="font-semibold text-zinc-300">Stepped shaft / turned part</span> — the smallest diameter between the jaws and the cut, wherever the neck sits. A 2" flange necking to 0.875" past the jaws is a <span className="text-zinc-300">0.875</span> part.
+                        <span className="font-semibold text-zinc-300">Round bar / stepped shaft</span> — the smallest diameter between the grip and the cut, wherever the neck sits. A 2" flange necking to 0.875" past the jaws is a <span className="text-zinc-300">0.875</span> part.
                       </li>
                       <li>
-                        <span className="font-semibold text-zinc-300">Cutting before the step</span> — if the thin section is <em>beyond</em> your cut it isn't carrying the bending. Use the section that is: jaws to cut.
+                        <span className="font-semibold text-zinc-300">Square or rectangular bar</span> — the side facing the cutting force, not the bigger one. A 2" × 1" block pushed across its narrow face is a <span className="text-zinc-300">1.000</span>. Square bar is just the side length.
                       </li>
                       <li>
-                        <span className="font-semibold text-zinc-300">Plate, bracket, web</span> — enter the <span className="font-semibold">thickness in the direction the tool pushes</span>, not the width. A 4" wide × 0.5" thick web resists sideways like a 0.5" member.
+                        <span className="font-semibold text-zinc-300">Plate, bracket, web</span> — the <span className="font-semibold">thickness</span>, not the width. On a 4" × 0.5" web, entering 0.500 lands close to the real bending stiffness; entering 4.000 overstates it by <span className="font-semibold">~300×</span>. This is the single worst mistake available on this field.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-zinc-300">Cutting before the step</span> — if the thin section is <em>beyond</em> your cut it isn't carrying the bending. Use the section that is: grip to cut.
                       </li>
                       <li>
                         <span className="font-semibold text-zinc-300">Tube / hollow</span> — the model assumes solid, so entering the OD reads <em>softer</em> than reality. Safe direction; a tube is stiffer than the number shown.
@@ -11167,7 +11170,10 @@ ${stabSection}
                       Overhang is measured to the <span className="font-semibold text-zinc-400">cut location</span>, not the end of the part — as a cut walks toward the free end the effective overhang grows, so use the deepest point of the pass.
                     </p>
                     <p className="text-zinc-500">
-                      One limitation: the diameter also sizes overhung <em>mass</em>, assuming a solid cylinder. On a heavy flange hung off a thin neck the thin section is still the right stiffness input, but expect the chatter estimate to run slightly optimistic.
+                      The model is a solid round throughout, so a non-round part entered this way lands on the <span className="text-zinc-400">safe side</span> — a square bar reads about 60% of its true stiffness, a thin web less. You'll get a slightly conservative feed, not an unsafe one.
+                    </p>
+                    <p className="text-zinc-500">
+                      One limitation in the other direction: this number also sizes overhung <em>mass</em>, assuming a solid cylinder. On a heavy flange hung off a thin neck the thin section is still the right stiffness input, but expect the chatter estimate to run slightly optimistic.
                     </p>
                   </div>
                 )}
