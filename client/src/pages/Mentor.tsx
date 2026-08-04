@@ -1289,9 +1289,86 @@ const STOCK_CONDITION_ORDER: StockConditionKey[] = [
 // In that case the entered HRC IS the skin, so skip the SFM derate (return 1.0) and let
 // the engine's hardness-driven SFM stand. The IPT derate is independent (abrasive-skin
 // chip-load reduction, not modeled by the HRC SFM penalty) and always applies.
-function effectiveSkinSfmMult(sc: { sfmMult: number }, stockKey: string, hardnessValue: number): number {
+// The weldStrategy arg is optional so non-weldment callers can omit it; for a weldment it
+// scales the derate by distance-from-joint (full across the bead, partial in the near-HAZ).
+function effectiveSkinSfmMult(
+  sc: { sfmMult: number }, stockKey: string, hardnessValue: number, weldStrategy?: string,
+): number {
   if (stockKey === "case_hard" && hardnessValue > 0) return 1.0;
-  return sc.sfmMult;
+  return blendDerate(sc.sfmMult, derateFraction(stockKey, weldStrategy ?? "crosses"));
+}
+
+// IPT counterpart — same distance-scaling, so the near-HAZ chip-load reduction is partial
+// too. Kept beside the SFM version so the two can't drift apart.
+function effectiveSkinIptMult(
+  sc: { iptMult: number }, stockKey: string, weldStrategy?: string,
+): number {
+  return blendDerate(sc.iptMult, derateFraction(stockKey, weldStrategy ?? "crosses"));
+}
+
+// How much of the full across-weld derate applies when cutting NEAR a joint (alongside the
+// bead, inside the affected zone but not in weld metal). Hardness tapers with distance from
+// the fusion line rather than stopping at an edge, so the near-HAZ is elevated but well short
+// of weld-metal/self-quench hardness. 0.5 = take half the derate, i.e. split the difference
+// between parent metal and across-weld. The Calculators weldment guide quotes 75–85% SFM in
+// the HAZ vs 50–60% across the bead; half of a ×0.55 derate lands at ×0.78, inside that band.
+// (Estimate, not shop-measured — real HAZ hardness depends on alloy, heat input and PWHT.)
+const WELD_NEAR_DERATE_FRAC = 0.5;
+
+// Blend a full derate multiplier toward 1.0 (no derate) by the given fraction.
+// frac 1.0 => full derate, 0.5 => half, 0.0 => none.
+function blendDerate(mult: number, frac: number): number {
+  return 1.0 - (1.0 - mult) * frac;
+}
+
+// Fraction of the tabulated stock-condition derate that applies to THIS cut. Only the
+// weldment near-HAZ case is partial; every other condition is all-or-nothing.
+function derateFraction(stockKey: string, weldStrategy: string): number {
+  if (stockKey !== "weldment") return 1.0;
+  if (weldStrategy === "near") return WELD_NEAR_DERATE_FRAC;
+  return 1.0;
+}
+
+// Does the stock-condition derate GOVERN this cut (headline) or merely precede it (subtext)?
+//
+// Default model: the derate is a first-pass skin-breaking adjustment, so steady-state is
+// the headline and the reduced numbers are subtext. Two conditions opt out, because for
+// them the derated numbers are what the tool actually runs for the whole pass:
+//   • case_hard + "skin"          — light-WOC wall finish lives in the case; no core pass exists.
+//   • weldment + "crosses"/"near" — the tool is in (or alongside) the joint. Weld hardness is
+//     LOCALIZED, not a skin: you never "get past it" the way you break through scale, so
+//     "first pass then steady-state" doesn't describe the cut. The joint governs the pass.
+//     "near" governs at a reduced fraction (see derateFraction) rather than in full.
+// Callers pass whether the derate is actually active so a ×1.00/×1.00 condition can't
+// promote itself to headline.
+function derateIsHeadline(
+  stockKey: string,
+  caseStrategy: string,
+  weldStrategy: string,
+  derateActive: boolean,
+): boolean {
+  if (!derateActive) return false;
+  if (stockKey === "case_hard") return caseStrategy === "skin";
+  if (stockKey === "weldment") return weldStrategy === "crosses" || weldStrategy === "near";
+  return false;
+}
+
+// Wording for the derate, which differs by condition: a case-hard skin pass is "in-case",
+// a weld crossing is "across the weld", everything else is a "first pass". Keeps the
+// export/advisory copy from having to re-derive the same three-way branch at each site.
+function derateWording(stockKey: string, headline: boolean, weldStrategy?: string): {
+  shortLabel: string;   // compact label for setup-sheet / email rows
+  headingSuffix: string; // advisory-box heading suffix
+} {
+  if (stockKey === "weldment") {
+    if (weldStrategy === "crosses") return { shortLabel: "Across-Weld Adj.", headingSuffix: "across-weld parameters" };
+    if (weldStrategy === "near")    return { shortLabel: "Near-HAZ Adj.",    headingSuffix: "near-HAZ parameters" };
+    return { shortLabel: "In-Weld Adj.", headingSuffix: "if the cut reaches the weld" };
+  }
+  if (stockKey === "case_hard" && headline) {
+    return { shortLabel: "In-Case Adj.", headingSuffix: "in-case parameters" };
+  }
+  return { shortLabel: "First-Pass Adj.", headingSuffix: "first-pass adjustment" };
 }
 
 // Floor-aware case-hard / stock-condition IPT derate.
@@ -3225,6 +3302,18 @@ export default function Mentor() {
     // (e.g. a light-WOC wall finish) so the reduced case parameters apply to EVERY pass;
     // "through" = the cut breaks into the soft core (first pass derated, steady-state after).
     case_strategy: "through" as "skin" | "through",
+    // Weldment cut strategy. Unlike a skin condition, weld hardness is spatially
+    // LOCALIZED and TAPERS with distance from the bead, so "first pass then steady-state"
+    // is the wrong model and a clear/not-clear binary is too coarse:
+    //   "crosses" = toolpath runs through the bead/HAZ — full derate governs, headlines.
+    //   "near"    = cut runs alongside the joint, outside the bead but within the
+    //               affected zone. Hardness is elevated but not weld-metal high, so a
+    //               PARTIAL derate governs (see WELD_NEAR_DERATE_FRAC).
+    //   "clear"   = well away from any bead — steady-state governs, derate is advisory.
+    // Defaults to "crosses" (the conservative case): selecting Weldment at all implies the
+    // cut is expected to meet the joint, so the full derate should apply without the user
+    // having to remember to set it. Selecting the Weldment chip re-seeds this.
+    weld_strategy: "crosses" as "crosses" | "near" | "clear",
     // Powder Metal (PM) modifier — overlays the base material with sintered-PM behavior.
     pm_enabled: false,
     pm_density: 0,
@@ -5271,8 +5360,9 @@ export default function Mentor() {
       !isBlank(value) ? `<div class="kpi"><div class="kpi-val">${value}</div><div class="kpi-lbl">${label}</div></div>` : "";
 
     const _scInfo = STOCK_CONDITION_INFO[form.stock_condition];
-    const _skinSfmMult = _scInfo ? effectiveSkinSfmMult(_scInfo, form.stock_condition, form.hardness_value) : 1.0;
-    const _scActive = !!_scInfo && (_skinSfmMult < 1.0 || _scInfo.iptMult < 1.0);
+    const _skinSfmMult = _scInfo ? effectiveSkinSfmMult(_scInfo, form.stock_condition, form.hardness_value, form.weld_strategy) : 1.0;
+    const _skinIptMult = _scInfo ? effectiveSkinIptMult(_scInfo, form.stock_condition, form.weld_strategy) : 1.0;
+    const _scActive = !!_scInfo && (_skinSfmMult < 1.0 || _skinIptMult < 1.0);
     const _skinSfm = _scActive && mil?.sfm != null ? mil.sfm * _skinSfmMult : null;
     const _skinRpm = _skinSfm != null && form.tool_dia > 0 ? (_skinSfm * 12) / (Math.PI * form.tool_dia) : null;
     // Full (un-derated) actual chip = adj_fpt × RCTF — the chip before the stock-condition derate.
@@ -5280,7 +5370,7 @@ export default function Mentor() {
     const _pdfActualChipFull = mil?.adj_fpt != null ? mil.adj_fpt * _pdfCtf : null;
     const _skinClamp = (_scActive && mil?.feed_ipm != null && mil?.rpm && _skinRpm != null)
       ? flooredSkinIpm({
-          baseFeedIpm: mil.feed_ipm, iptMult: _scInfo!.iptMult, rpmRatio: _skinRpm / mil.rpm,
+          baseFeedIpm: mil.feed_ipm, iptMult: _skinIptMult, rpmRatio: _skinRpm / mil.rpm,
           actualChipFull: _pdfActualChipFull, minChipIn: eng?.min_chip_in ?? null,
         })
       : null;
@@ -5289,7 +5379,9 @@ export default function Mentor() {
     // Stay-in-skin: the in-case numbers ARE the running values, so the PDF leads with them
     // and demotes steady-state to "if into core". Otherwise steady-state leads and the
     // reduced numbers are the "first skim pass" subtext.
-    const _stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && _scActive;
+    const _stayInSkin = derateIsHeadline(
+      form.stock_condition, form.case_strategy, form.weld_strategy, _scActive,
+    );
     const _headRpm = _stayInSkin ? _skinRpm : (mil?.rpm ?? null);
     const _headSfm = _stayInSkin ? _skinSfm : (mil?.sfm ?? null);
     const _headIpm = _stayInSkin ? _skinIpm : (mil?.feed_ipm ?? null);
@@ -5854,7 +5946,19 @@ ${(() => {
     return row(_label, `<span class="edp">${_id}</span>${skuDescription ? ` &nbsp;—&nbsp; <span style="color:#444;font-weight:400;">${skuDescription}</span>` : ""}`);
   })()}
   ${row("Material", matLabel + (form.hardness_value ? ` — ${form.hardness_value} ${form.hardness_scale?.toUpperCase() ?? "HRC"}` : ""))}
-  ${form.stock_condition && form.stock_condition !== "billet_cf" ? row("Stock Condition", STOCK_CONDITION_INFO[form.stock_condition].short + ` (first pass: SFM ×${STOCK_CONDITION_INFO[form.stock_condition].sfmMult.toFixed(2)}, IPT ×${STOCK_CONDITION_INFO[form.stock_condition].iptMult.toFixed(2)})`) : ""}
+  ${form.stock_condition && form.stock_condition !== "billet_cf" ? (() => {
+    // Label the derate by what it actually describes for this condition ("first pass" is
+    // wrong for a weldment — the joint governs the whole pass) and print the EFFECTIVE
+    // multipliers, which the near-HAZ case scales down from the table values.
+    const _w = derateWording(form.stock_condition, _stayInSkin, form.weld_strategy);
+    const _prefix = form.stock_condition === "weldment"
+      ? (form.weld_strategy === "crosses" ? "across weld" : form.weld_strategy === "near" ? "near HAZ" : "if into weld")
+      : "first pass";
+    const _detail = (_skinSfmMult < 1.0 || _skinIptMult < 1.0)
+      ? ` (${_prefix}: SFM ×${_skinSfmMult.toFixed(2)}, IPT ×${_skinIptMult.toFixed(2)})`
+      : "";
+    return row("Stock Condition", STOCK_CONDITION_INFO[form.stock_condition].short + _detail);
+  })() : ""}
   ${row("Operation", opLabel)}
   ${row("Tool Diameter", `${form.tool_dia?.toFixed(4)}" (${(form.tool_dia * 25.4).toFixed(2)} mm)`)}
   ${row("Flute Count", `${form.flutes}-flute`)}
@@ -6552,12 +6656,24 @@ ${stabSection}
     if (form.hardness_value > 0) lines.push(L("Hardness", `${form.hardness_value} ${form.hardness_scale.toUpperCase()}`));
     if (form.stock_condition && form.stock_condition !== "billet_cf") {
       const sc = STOCK_CONDITION_INFO[form.stock_condition];
-      const skinSfmMult = effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value);
-      lines.push(L("Stock Condition", `${sc.short}`));
-      if (skinSfmMult < 1.0 || sc.iptMult < 1.0) {
+      const skinSfmMult = effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value, form.weld_strategy);
+      const skinIptMult = effectiveSkinIptMult(sc, form.stock_condition, form.weld_strategy);
+      // Name which part of the weldment this cut is in — a setup sheet goes to the floor,
+      // and "Weldment / HAZ" alone doesn't tell the operator whether to expect the joint.
+      const weldWhere = form.stock_condition === "weldment"
+        ? (form.weld_strategy === "crosses" ? " — cut crosses weld"
+          : form.weld_strategy === "near" ? " — cut runs near HAZ"
+          : " — cut clear of weld")
+        : "";
+      lines.push(L("Stock Condition", `${sc.short}${weldWhere}`));
+      if (skinSfmMult < 1.0 || skinIptMult < 1.0) {
         const sfmGated = form.stock_condition === "case_hard" && form.hardness_value > 0 && sc.sfmMult < 1.0;
-        const label = form.stock_condition === "case_hard" && form.case_strategy === "skin" ? "In-Case Adj." : "First-Pass Adj.";
-        lines.push(L(label, `SFM × ${skinSfmMult.toFixed(2)}, IPT × ${sc.iptMult.toFixed(2)}${sfmGated ? `  (SFM set by ${form.hardness_value} HRC)` : ""}`));
+        const label = derateWording(
+          form.stock_condition,
+          derateIsHeadline(form.stock_condition, form.case_strategy, form.weld_strategy, true),
+          form.weld_strategy,
+        ).shortLabel;
+        lines.push(L(label, `SFM × ${skinSfmMult.toFixed(2)}, IPT × ${skinIptMult.toFixed(2)}${sfmGated ? `  (SFM set by ${form.hardness_value} HRC)` : ""}`));
       }
       if (sc.note) {
         // Wrap note across multiple lines so it reads cleanly in a text export
@@ -7043,9 +7159,12 @@ ${stabSection}
         lines.push("");
       } else {
       const _txtSc = STOCK_CONDITION_INFO[form.stock_condition];
-      const _txtSkinSfmMult = _txtSc ? effectiveSkinSfmMult(_txtSc, form.stock_condition, form.hardness_value) : 1.0;
-      const _txtSkinActive = !!_txtSc && (_txtSkinSfmMult < 1.0 || _txtSc.iptMult < 1.0) && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0;
-      const _txtStayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && _txtSkinActive;
+      const _txtSkinSfmMult = _txtSc ? effectiveSkinSfmMult(_txtSc, form.stock_condition, form.hardness_value, form.weld_strategy) : 1.0;
+      const _txtSkinIptMult = _txtSc ? effectiveSkinIptMult(_txtSc, form.stock_condition, form.weld_strategy) : 1.0;
+      const _txtSkinActive = !!_txtSc && (_txtSkinSfmMult < 1.0 || _txtSkinIptMult < 1.0) && cust.sfm != null && cust.feed_ipm != null && cust.rpm > 0 && form.tool_dia > 0;
+      const _txtStayInSkin = derateIsHeadline(
+        form.stock_condition, form.case_strategy, form.weld_strategy, _txtSkinActive,
+      );
       const _txtCtf = form.woc_pct > 0 ? Math.sin(Math.acos(Math.max(-1, Math.min(1, 1 - 2 * form.woc_pct / 100)))) : 1.0;
       const _txtClamp = (() => {
         if (!_txtSkinActive) return null;
@@ -7053,7 +7172,7 @@ ${stabSection}
         const skinRpm = (skinSfm * 12) / (Math.PI * form.tool_dia);
         const actualChipFull = cust.adj_fpt != null ? cust.adj_fpt * _txtCtf : null;
         const c = flooredSkinIpm({
-          baseFeedIpm: cust.feed_ipm!, iptMult: _txtSc!.iptMult, rpmRatio: skinRpm / cust.rpm,
+          baseFeedIpm: cust.feed_ipm!, iptMult: _txtSkinIptMult, rpmRatio: skinRpm / cust.rpm,
           actualChipFull, minChipIn: eng?.min_chip_in ?? null,
         });
         return { ...c, skinSfm, skinRpm };
@@ -7072,10 +7191,14 @@ ${stabSection}
         lines.push(L("SFM",            String(Math.round(headSfm))));
         lines.push(L(form.mode === "circ_interp" ? "Feed (Centerline)" : "Feed Rate", `${headIpm.toFixed(2)} IPM${_feedNote}`));
         if (_txtSkinActive && _txtClamp) {
+          const _isWeld = form.stock_condition === "weldment";
           if (_txtStayInSkin) {
-            lines.push(L("  If into core",  `${Math.round(cust.rpm).toLocaleString()} RPM · ${Math.round(cust.sfm ?? 0)} SFM · ${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
+            // Headline is the derated number; the secondary line is the un-derated one.
+            lines.push(L(_isWeld ? "  Clear of weld" : "  If into core",
+              `${Math.round(cust.rpm).toLocaleString()} RPM · ${Math.round(cust.sfm ?? 0)} SFM · ${(cust.feed_ipm ?? 0).toFixed(2)} IPM`));
           } else {
-            lines.push(L("  First Pass",  `${Math.round(_txtClamp.skinRpm).toLocaleString()} RPM · ${Math.round(_txtClamp.skinSfm)} SFM · ${_txtClamp.ipm.toFixed(2)} IPM  (${_txtSc!.short})`));
+            lines.push(L(_isWeld ? "  Across Weld" : "  First Pass",
+              `${Math.round(_txtClamp.skinRpm).toLocaleString()} RPM · ${Math.round(_txtClamp.skinSfm)} SFM · ${_txtClamp.ipm.toFixed(2)} IPM  (${_txtSc!.short})`));
           }
         }
       }
@@ -8062,7 +8185,14 @@ ${stabSection}
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => setForm((p) => ({ ...p, stock_condition: k }))}
+                            // Re-seed the weld strategy on every Weldment selection so a stale
+                            // "Clear"/"Near HAZ" from an earlier part can't silently suppress the
+                            // derate — the conservative across-weld case is always the entry state.
+                            onClick={() => setForm((p) => ({
+                              ...p,
+                              stock_condition: k,
+                              ...(k === "weldment" ? { weld_strategy: "crosses" as const } : {}),
+                            }))}
                             className="rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-all whitespace-nowrap"
                             style={{
                               background: active ? "#f97316" : "transparent",
@@ -8127,6 +8257,46 @@ ${stabSection}
                         );
                       })}
                     </div>
+                  </div>
+                )}
+                {/* Weldment: does the toolpath run through the joint, or stay in parent metal?
+                    Weld hardness is localized (bead + ~0.25" HAZ) rather than a skin you break
+                    through, so crossing the joint makes the derated numbers govern the pass —
+                    they become the headline instead of a first-pass footnote. */}
+                {form.stock_condition === "weldment" && (
+                  <div className="mt-1.5 border-t border-orange-500/20 pt-1.5">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-orange-400/90 mb-1">This cut</div>
+                    <div className="flex gap-1">
+                      {([
+                        { k: "crosses" as const, label: "Crosses", desc: "Toolpath runs through the bead — full derate governs the pass" },
+                        { k: "near" as const,    label: "Near HAZ", desc: "Runs alongside the joint, within ~0.25\" of a bead — partial derate governs" },
+                        { k: "clear" as const,   label: "Clear",   desc: "Well away from any bead — steady-state numbers govern" },
+                      ]).map(({ k, label, desc }) => {
+                        const active = form.weld_strategy === k;
+                        return (
+                          <button
+                            key={k}
+                            type="button"
+                            title={desc}
+                            onClick={() => setForm((p) => ({ ...p, weld_strategy: k }))}
+                            className="flex-1 rounded px-1.5 py-1 text-[10px] font-semibold border transition-all leading-tight"
+                            style={{
+                              background: active ? "#f97316" : "transparent",
+                              borderColor: active ? "#f97316" : "#52525b",
+                              color: active ? "#fff" : "#a1a1aa",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Distortion warning — the most expensive weldment failure mode, and
+                        previously only documented in the Calculators guide, never here. */}
+                    <p className="mt-1.5 text-[9px] leading-snug text-orange-200/70">
+                      Weldments move as stock comes off one side. Rough, let it relax, then finish.
+                      Confirm whether the part was stress-relieved (PWHT) — if not, expect to re-indicate.
+                    </p>
                   </div>
                 )}
               </div>
@@ -17728,10 +17898,11 @@ ${stabSection}
 
                 {(() => {
                   const sc = STOCK_CONDITION_INFO[form.stock_condition];
-                  const skinSfmMult = sc ? effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value) : 1.0;
+                  const skinSfmMult = sc ? effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value, form.weld_strategy) : 1.0;
+                  const skinIptMult = sc ? effectiveSkinIptMult(sc, form.stock_condition, form.weld_strategy) : 1.0;
                   // Show the first/skim pass row when EITHER the SFM or the IPT is reduced. (When
                   // HRC gates off the SFM derate, IPT ×0.60 still differentiates the skim pass.)
-                  const showFirstPass = sc && (skinSfmMult < 1.0 || sc.iptMult < 1.0) && customer.sfm != null && customer.feed_ipm != null;
+                  const showFirstPass = sc && (skinSfmMult < 1.0 || skinIptMult < 1.0) && customer.sfm != null && customer.feed_ipm != null;
                   const skimSfm = showFirstPass ? customer.sfm * skinSfmMult : null;
                   const skimRpm = showFirstPass && customer.diameter ? (skimSfm! * 12) / (Math.PI * customer.diameter) : null;
                   // Floor-aware case-hard IPT derate: never let the skim chip drop below the
@@ -17740,22 +17911,29 @@ ${stabSection}
                   const _liveActualChipFull = customer.adj_fpt != null ? customer.adj_fpt * _liveCtf : null;
                   const _skimClamp = (showFirstPass && customer.rpm && skimRpm != null)
                     ? flooredSkinIpm({
-                        baseFeedIpm: customer.feed_ipm, iptMult: sc!.iptMult, rpmRatio: skimRpm / customer.rpm,
+                        baseFeedIpm: customer.feed_ipm, iptMult: skinIptMult, rpmRatio: skimRpm / customer.rpm,
                         actualChipFull: _liveActualChipFull, minChipIn: engineering?.min_chip_in ?? null,
                       })
                     : null;
                   const skimIpm = _skimClamp ? _skimClamp.ipm : null;
-                  // Stay-in-case (e.g. a light-WOC wall finish): the reduced case numbers apply to
-                  // EVERY pass, so they become the headline and steady-state drops to "if into core".
-                  // Cuts-to-core: steady-state leads, reduced numbers are the "first skim pass" subtext.
-                  const stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin" && showFirstPass;
+                  // Does the derate govern this cut? Stay-in-case (light-WOC wall finish) and
+                  // crosses-weld (toolpath through the bead/HAZ) both run the reduced numbers for
+                  // the whole pass, so they headline and steady-state drops to subtext. Otherwise
+                  // steady-state leads and the reduced numbers are the "first skim pass" hint.
+                  const stayInSkin = derateIsHeadline(
+                    form.stock_condition, form.case_strategy, form.weld_strategy, !!showFirstPass,
+                  );
                   const headSfm = stayInSkin ? skimSfm : customer.sfm;
                   const headRpm = stayInSkin ? skimRpm : customer.rpm;
                   const headIpm = stayInSkin ? skimIpm : customer.feed_ipm;
                   const subSfm = stayInSkin ? customer.sfm : skimSfm;
                   const subRpm = stayInSkin ? customer.rpm : skimRpm;
                   const subIpm = stayInSkin ? customer.feed_ipm : skimIpm;
-                  const subLabel = stayInSkin ? "if cut breaks into core" : "first skim pass";
+                  const subLabel = form.stock_condition === "weldment"
+                    ? (stayInSkin
+                        ? "clear of the weld"
+                        : form.weld_strategy === "near" ? "near HAZ" : "across weld / HAZ")
+                    : (stayInSkin ? "if cut breaks into core" : "first skim pass");
                   // Only show the secondary line in the cuts-to-core case (skimRpm != null), or
                   // when staying in skin (then it's the steady-state "if into core" hint).
                   const showSub = showFirstPass;
@@ -18173,14 +18351,17 @@ ${stabSection}
                   // Stay-in-skin: show the floored skin chip (after the floor-aware case-hard
                   // derate) — that's what the tool actually bites on the running pass.
                   const _sc = STOCK_CONDITION_INFO[form.stock_condition];
-                  const _stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin"
-                    && !!_sc && _sc.iptMult < 1.0;
+                  const _scIptMult = _sc ? effectiveSkinIptMult(_sc, form.stock_condition, form.weld_strategy) : 1.0;
+                  const _stayInSkin = derateIsHeadline(
+                    form.stock_condition, form.case_strategy, form.weld_strategy,
+                    _scIptMult < 1.0,
+                  );
                   let actualChip = full;
                   if (_stayInSkin && customer.rpm && customer.sfm != null) {
-                    const _ssfm = customer.sfm * effectiveSkinSfmMult(_sc!, form.stock_condition, form.hardness_value);
+                    const _ssfm = customer.sfm * effectiveSkinSfmMult(_sc!, form.stock_condition, form.hardness_value, form.weld_strategy);
                     const _srpm = (_ssfm * 12) / (Math.PI * customer.diameter);
                     const _c = flooredSkinIpm({
-                      baseFeedIpm: customer.feed_ipm ?? 0, iptMult: _sc!.iptMult, rpmRatio: _srpm / customer.rpm,
+                      baseFeedIpm: customer.feed_ipm ?? 0, iptMult: _scIptMult, rpmRatio: _srpm / customer.rpm,
                       actualChipFull: full, minChipIn: engineering?.min_chip_in ?? null,
                     });
                     actualChip = full * _c.effMult;
@@ -18721,20 +18902,36 @@ ${stabSection}
               {(() => {
                 const sc = STOCK_CONDITION_INFO[form.stock_condition];
                 if (!sc || !sc.note) return null;
-                const skinSfmMult = effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value);
+                const skinSfmMult = effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value, form.weld_strategy);
+                const skinIptMult = effectiveSkinIptMult(sc, form.stock_condition, form.weld_strategy);
                 // Nothing to show if neither speed nor feed is actually reduced.
-                if (skinSfmMult >= 1.0 && sc.iptMult >= 1.0) return null;
-                const stayInSkin = form.stock_condition === "case_hard" && form.case_strategy === "skin";
+                if (skinSfmMult >= 1.0 && skinIptMult >= 1.0) return null;
+                const stayInSkin = derateIsHeadline(
+                  form.stock_condition, form.case_strategy, form.weld_strategy, true,
+                );
+                const isWeld = form.stock_condition === "weldment";
+                const nearHaz = isWeld && form.weld_strategy === "near";
                 const sfmGated = form.stock_condition === "case_hard" && form.hardness_value > 0 && sc.sfmMult < 1.0;
                 return (
                   <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-                    <div className="font-semibold text-amber-300 mb-0.5">⚠ {sc.short} — {stayInSkin ? "in-case parameters" : "first-pass adjustment"}</div>
+                    <div className="font-semibold text-amber-300 mb-0.5">⚠ {sc.short} — {derateWording(form.stock_condition, stayInSkin, form.weld_strategy).headingSuffix}</div>
                     <div className="text-amber-200/90 leading-relaxed">{sc.note}</div>
                     <div className="text-[10px] text-amber-300/70 mt-1">
-                      {stayInSkin
-                        ? <>Staying in the case: SFM × {skinSfmMult.toFixed(2)} · IPT × {sc.iptMult.toFixed(2)} applies to <span className="font-semibold">every pass</span> — the headline speed above is the in-case number. There is no steady-state core pass.</>
-                        : <>First pass: SFM × {skinSfmMult.toFixed(2)} · IPT × {sc.iptMult.toFixed(2)}. Use these reduced numbers for any cut in the hard skin; the steady-state values above apply only once the cut is fully past it (in the soft core).</>}
+                      {isWeld
+                        ? (nearHaz
+                          ? <>Cutting alongside the joint: SFM × {skinSfmMult.toFixed(2)} · IPT × {skinIptMult.toFixed(2)} is the <span className="font-semibold">headline</span> speed above — a partial derate ({Math.round(WELD_NEAR_DERATE_FRAC * 100)}% of the across-weld reduction). HAZ hardness tapers with distance from the fusion line, so metal near a bead is elevated but short of weld-metal hardness. If the path touches the bead itself, switch to <span className="font-semibold">Crosses weld</span> for the full derate.</>
+                          : stayInSkin
+                          ? <>Crossing the joint: SFM × {skinSfmMult.toFixed(2)} · IPT × {skinIptMult.toFixed(2)} is the <span className="font-semibold">headline</span> speed above. Weld hardness is localized, not a skin — you don't break past it, so hold these numbers for the whole pass rather than expecting to recover steady-state mid-cut. The values in parentheses apply only well clear of the HAZ.</>
+                          : <>Cut is clear of the weld, so the steady-state numbers above govern. If any pass comes within ~0.25" of a bead, switch to <span className="font-semibold">Near HAZ</span> — or <span className="font-semibold">Crosses weld</span> if it touches the bead — to load the appropriate derate.</>)
+                        : (stayInSkin
+                          ? <>Staying in the case: SFM × {skinSfmMult.toFixed(2)} · IPT × {skinIptMult.toFixed(2)} applies to <span className="font-semibold">every pass</span> — the headline speed above is the in-case number. There is no steady-state core pass.</>
+                          : <>First pass: SFM × {skinSfmMult.toFixed(2)} · IPT × {skinIptMult.toFixed(2)}. Use these reduced numbers for any cut in the hard skin; the steady-state values above apply only once the cut is fully past it (in the soft core).</>)}
                       {sfmGated && <span className="block mt-0.5 text-amber-400/70">SFM not further derated — your {form.hardness_value} HRC case hardness already sets the in-case speed.</span>}
+                      {isWeld && (
+                        <span className="block mt-0.5 text-amber-400/70">
+                          Hardness is still {form.hardness_value > 0 ? `${form.hardness_value} ${form.hardness_scale.toUpperCase()}` : "the parent-metal value"} — force, deflection and tool life are computed off parent metal, not a self-quenched HAZ. If the joint measures 45+ HRC, enter that hardness to load the full physics.
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
