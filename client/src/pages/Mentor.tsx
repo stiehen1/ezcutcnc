@@ -4415,13 +4415,42 @@ export default function Mentor() {
   // Set by in-place re-runs (speed preset / feed level clicks) to cancel the scroll for
   // that one run — those fire the same run path but from a user already at the results.
   const suppressResultsScrollRef = React.useRef(false);
+  // Whether the results card was on screen when Run was pressed — sampled at click time
+  // because the card's height can change during the run (see the scroll effect below).
+  const resultsVisibleAtRunRef = React.useRef(false);
+  // Is a meaningful slice of the results card in the viewport right now? Requires more than
+  // the card's last pixel row peeking in, so being parked at the very bottom of the form
+  // (Run button visible, results not) still counts as off-screen and still scrolls.
+  const resultsCardInView = () => {
+    const el = resultsCardRef.current;
+    if (!el) return false;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    const r = el.getBoundingClientRect();
+    const visible = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+    return visible >= Math.min(240, r.height * 0.25);
+  };
   // Runs after every commit, so by the time it fires the results card holds the new
   // numbers and is at its final height. Only acts when a run armed the flag, so
   // ordinary re-renders (typing, toggling a preset) never move the page.
   React.useEffect(() => {
     if (!scrollToResultsRef.current) return;
     scrollToResultsRef.current = false;
-    resultsCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = resultsCardRef.current;
+    if (!el) return;
+    // Only scroll when the results were OFF-SCREEN at the moment Run was pressed. The
+    // scroll exists because the Run button sits below a long form and the results render
+    // above it — but once the user has scrolled up to watch the stability dashboard,
+    // re-running to compare a changed parameter yanked the page out from under them at the
+    // exact moment they were watching the numbers move. If they could already see the card,
+    // they can watch it update; moving the viewport only costs them their place.
+    //
+    // Measured at CLICK time, not here: this effect runs after the new results paint, and a
+    // re-run can change the card's height (a new suggestion step, a preview table), which
+    // would shift its top and make an on-screen card read as off-screen.
+    const wasVisible = resultsVisibleAtRunRef.current;
+    resultsVisibleAtRunRef.current = false;
+    if (wasVisible) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   // Auto-populate keyseat cut pass depth when both diameters are known
@@ -4972,6 +5001,9 @@ export default function Mentor() {
     // early-returned re-run and silently swallow the scroll on the next real Run.
     const _suppressScroll = suppressResultsScrollRef.current;
     suppressResultsScrollRef.current = false;
+    // Sample NOW, while the page is still where the user left it. Anything already on
+    // screen doesn't need to be scrolled to — see the scroll effect for the full reasoning.
+    resultsVisibleAtRunRef.current = resultsCardInView();
     // Must have an EDP or CC print PDF (not required for deep pocket — tools are selected by the sequencer)
     if (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted) {
       setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);

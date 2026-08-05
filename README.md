@@ -36,6 +36,18 @@ That's the wrong answer as well as too many. Reach past what the cut needs is ca
 - **Ranked by what makes the tool stiffer** rather than by EDP number: shortest LOC that still covers the cut, then shortest LBS, then same geometry as the tool being run, then EDP as a stable tie-break. Coating variants — most same-dia/same-LOC ties — collapse to one representative instead of the whole family. The old `ORDER BY s.edp` sorted this case correctly by luck; it was not doing so by design.
 - **"+N more variants (coating / length) — ask us"** so the trimmed options are still reachable and nothing is silently dropped.
 
+### Re-run no longer yanks the page away from the stability dashboard
+The post-run scroll fired on **every** run. Its reason is real — the Run button sits below a long form while results render above it, so a first run left the user staring at the button with their numbers off-screen. But it also fired when the user had scrolled up to watch the Stability Assessment, changed one parameter, and hit re-run to compare: the page jumped at the exact moment they were watching the numbers move.
+
+The scroll is now conditional on the results card being **off-screen when Run was pressed**, which covers both cases where it's actually wanted — clicking the green Run button at the bottom of the form, or re-running while scrolled to the bottom of the calculator — and skips it whenever the user can already see the card update.
+
+Two details that matter:
+
+- **Visibility is sampled at click time, not in the scroll effect.** That effect runs after the new results paint, and a re-run can change the card's height (a new suggestion step, a hover preview table); measuring afterward would let a card that was on screen read as off-screen and scroll anyway.
+- **"In view" requires a real slice of the card** — `min(240px, 25% of height)` — not just its bottom edge peeking in. Parked at the very bottom of the form with the card's last 20px technically visible still counts as off-screen and still scrolls.
+
+The existing in-place suppression for speed-preset and feed-level clicks is unchanged; those still never scroll.
+
 ### Dual Contact now moves the Holder Rigidity sub-score
 Selecting **Big-Plus Dual Contact** and re-running visibly lowered tool flex (~7.4%, the engine's `rigidity_factor()` 1.08 multiplier) while **Holder Rigidity sat unchanged at Fair 48** — the sub-score named as the holder axis was ignoring a holder-interface upgrade the engine had already applied.
 
