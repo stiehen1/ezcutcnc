@@ -17817,11 +17817,29 @@ ${stabSection}
                 // w/.030 Corner Radius", "... — Ball Nose"), which the Corner Condition
                 // chip below already states. Drop the trailing clause so the one line we
                 // have left carries series/flutes/coating instead of repeating itself.
-                const _desc = (skuDescription || "").trim()
+                const _descFull = (skuDescription || "").trim();
+                const _descTrim = _descFull
                   .replace(/[\s,–—-]*\bw\/?\s*\.?\d*\.?\d+\s*"?\s*(corner\s*)?rad(ius)?\b.*$/i, "")
                   .replace(/[\s,–—-]*\b(square|ball[\s-]?nose|ball[\s-]?end|corner\s*rad(ius)?)\s*(end)?\s*$/i, "")
+                  // "-RN" tools carry "Reduced Neck" — the LBS and Neck Ø fields below say
+                  // it in numbers. Kill the PARENTHESISED form first and as a whole unit:
+                  // a bare /reduced neck.*$/ strips from inside "(Reduced Neck)" and leaves
+                  // an orphaned "(" at the end of the line.
+                  .replace(/\s*[([]\s*reduced\s*neck[^)\]]*[)\]]/ig, "")
+                  .replace(/[\s,–—-]*\breduced\s*neck\b.*$/i, "")
+                  // Any bracket left unclosed by the strips above (or already unbalanced in
+                  // the source) would render as a dangling "(" — drop the fragment.
+                  .replace(/\s*[([][^)\]]*$/, "")
                   .replace(/[\s,–—-]+$/, "")
                   .trim();
+                // Hard-cap the remainder at a WORD boundary. CSS truncate alone cut
+                // mid-word and left a dangling fragment ("...Coated Reduced ..."), which
+                // reads like the data is broken rather than deliberately shortened.
+                const _DESC_MAX = 72;
+                const _desc = _descTrim.length > _DESC_MAX
+                  ? _descTrim.slice(0, _descTrim.lastIndexOf(" ", _DESC_MAX) > 0
+                      ? _descTrim.lastIndexOf(" ", _DESC_MAX) : _DESC_MAX).replace(/[\s,–—-]+$/, "") + "…"
+                  : _descTrim;
                 const _cr   = Number(form.corner_radius || 0);
                 const _end  = form.corner_condition === "ball" ? "Ball Nose"
                             : form.corner_condition === "corner_radius" && _cr > 0 ? `${_cr.toFixed(3)}" Corner Rad`
@@ -17884,8 +17902,23 @@ ${stabSection}
                   // Center-cutting decides whether the tool can plunge/ramp into solid stock,
                   // so it belongs on the identity card. null = the SKU never specified it;
                   // say "not specified" rather than guessing either way.
-                  const _cc = (form as any).center_cutting as boolean | null | undefined;
+                  const _cc = form.center_cutting as boolean | null | undefined;
                   _spec.push(["Center Cutting", _cc == null ? "Not specified" : _cc ? "Yes" : "No"]);
+                }
+                // Coating drives SFM (T-Max +10%, D-Max on ferrous -10%, etc.) and is part
+                // of what you order, so it belongs on the card. Blank means the tool is
+                // genuinely uncoated — say "Uncoated" rather than omitting the row, since a
+                // missing coating line reads as "we didn't know" instead of "there is none".
+                _spec.push(["Coating", (form.coating || "").trim() || "Uncoated"]);
+                // Variable pitch / helix are the chatter-resistance geometry (up to 1.75×
+                // the stability limit when both are on), and the engine scores them — so
+                // show which the tool actually has rather than leaving it to the series
+                // name. "Standard" is the honest label when it has neither.
+                {
+                  const _vp = !!form.variable_pitch;
+                  const _vh = !!form.variable_helix;
+                  _spec.push(["Tool Design",
+                    _vp && _vh ? "Variable Pitch + Helix" : _vp ? "Variable Pitch" : _vh ? "Variable Helix" : "Standard"]);
                 }
                 // Tapered specials — the taper is the whole point of the tool. Angle is
                 // stored INCLUDED; show both that and per-side, since prints call it out
@@ -17899,19 +17932,24 @@ ${stabSection}
                 // Stickout deliberately NOT listed — it's a setup value, not part of the
                 // tool's identity, and the stability panel already reports it with L/D.
                 return (
-                  <div className="mb-4 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
+                  /* Deliberately understated: this is a quick "am I looking at the right
+                     tool" reference, not a headline. Tight padding, small type and a muted
+                     border keep the cutting parameters below as the focal point. */
+                  <div className="mb-3 rounded-lg border border-zinc-700/70 bg-zinc-900/40 px-3 py-2">
                     <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Tool Being Run</span>
+                      <span className="text-[10px] font-semibold text-orange-400/90 uppercase tracking-widest">Tool Being Run</span>
                       {/* EDP# / CC# is the number you order against — the single most
                           important string on this card. Sized and coloured to be findable
                           at a glance rather than reading as a caption. */}
+                      {/* EDP# / CC# stays bold yellow even as the card shrinks — it's the
+                          number you order against, and the one thing worth finding fast. */}
                       {(_edp || _ccNum) && (
-                        <span className="text-sm font-bold text-yellow-400 tracking-wide">
+                        <span className="text-xs font-bold text-yellow-400 tracking-wide">
                           {_edp ? `EDP# ${_edp}` : `CC# ${_ccNum}`}
                           {_ser
-                            ? <span className="font-semibold text-zinc-300"> <span className="text-zinc-600">|</span> Series {_ser}</span>
+                            ? <span className="font-semibold text-zinc-400"> <span className="text-zinc-600">|</span> Series {_ser}</span>
                             : !_edp
-                            ? <span className="font-semibold text-zinc-300"> <span className="text-zinc-600">|</span> Special</span>
+                            ? <span className="font-semibold text-zinc-400"> <span className="text-zinc-600">|</span> Special</span>
                             : null}
                         </span>
                       )}
@@ -17919,10 +17957,10 @@ ${stabSection}
                     {/* One line only — catalog descriptions run long and a wrapped second
                         line pushed the spec row down. Truncated with the full text on hover
                         so nothing is actually lost. */}
-                    {_desc && <div className="mt-1.5 text-xs text-zinc-200 leading-snug truncate" title={_desc}>{_desc}</div>}
-                    {!_desc && _ser && !_edp && <div className="mt-1.5 text-xs text-zinc-200 leading-snug truncate">{_ser} series</div>}
+                    {_desc && <div className="mt-0.5 text-[10px] text-zinc-500 leading-snug truncate" title={_descFull}>{_desc}</div>}
+                    {!_desc && _ser && !_edp && <div className="mt-0.5 text-[10px] text-zinc-500 leading-snug truncate">{_ser} series</div>}
                     {!_edp && !_desc && (
-                      <div className="mt-1.5 text-xs text-zinc-400 leading-snug truncate">
+                      <div className="mt-0.5 text-[10px] text-zinc-500 leading-snug truncate">
                         {_ccNum
                           ? `Customer print ${_ccNum} — specs read from the uploaded drawing.${form.is_tapered ? " Tapered special." : ""}`
                           : _isSpec
@@ -17940,9 +17978,9 @@ ${stabSection}
                         Stickout is estimated from the print — measure the actual tool and correct it if you have room.
                       </div>
                     )}
-                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] leading-tight">
                       {_spec.map(([k, v]) => (
-                        <span key={k}><span className="text-muted-foreground">{k}</span><span className="ml-1.5 font-semibold text-zinc-100">{v}</span></span>
+                        <span key={k}><span className="text-zinc-500">{k}</span><span className="ml-1 font-semibold text-zinc-300">{v}</span></span>
                       ))}
                     </div>
                   </div>
