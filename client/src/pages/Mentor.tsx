@@ -3734,12 +3734,14 @@ export default function Mentor() {
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       // Titanium HEM: shop-validated "hybrid HEM" — a heavier radial bite at a LOWER
       // surface speed outruns the classic light-WOC/high-SFM recipe. So the Ti ladder is
-      // 7 / 10 / 20 (the 20% top step is the hybrid recipe, gated to 4-6 flutes below).
+      // 7 / 10 / 25 (the 25% top step is the hybrid recipe, gated to 4-6 flutes below).
+      // 25 sits just under the .130-on-a-1/2" (27%) that was actually run, so the button
+      // is a touch conservative and the operator can nudge up to the proven value.
       // Other ISO S (Inconel/HRSA) keeps the conservative light-radial regime — that one
       // is separately shop-calibrated at 2-3% and heavy WOC there is NOT validated.
       : iso === "S" && isTi ? (geometry === "chipbreaker"
-          ? { low: 8, med: 10, high: hybridOk ? 20 : 12 }
-          : { low: 7, med: 10, high: hybridOk ? 20 : 12 })
+          ? { low: 8, med: 10, high: hybridOk ? 25 : 12 }
+          : { low: 7, med: 10, high: hybridOk ? 25 : 12 })
       : iso === "S" ? (geometry === "chipbreaker" ? { low: 8, med: 10, high: 12 } : { low: 3, med: 5, high: 8 })   // superalloys / Inconel — CB needs ≥8% to engage
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
       : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
@@ -3859,7 +3861,7 @@ export default function Mentor() {
   const isTiHybridWoc =
     (form.mode === "hem" || form.mode === "trochoidal") &&
     /^titanium/i.test(form.material ?? "") &&
-    dynPresets.woc.high >= 20;
+    dynPresets.woc.high >= 25;
 
   // Keep WOC_PRESETS / DOC_PRESETS as aliases pointing to dynamic values for
   // any existing code that references them directly

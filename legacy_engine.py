@@ -5253,6 +5253,15 @@ def run(payload=None):
     data["_hem_force_decouple"] = 1.0
     if data["mode"] in ("hem", "trochoidal"):
         _hem_ipt_mult = HEM_IPT_MULT.get(_mat_key, HEM_IPT_MULT.get(material_group, 2.0))
+        # HYBRID HEM (titanium) needs its own boost, not the 2.0 the light-radial recipe
+        # uses. The 2.0 is premised on HEAVY chip thinning: at 7% WOC the chip is thinned
+        # 1.96x, so doubling the programmed feed just restores a sane chip. At the hybrid's
+        # ~25% WOC the thinning is only 1.15x, so that same 2.0 stacks on an already-thick
+        # chip and asks for ~.0043 fpt in Ti — roughly 1.6x what the shop actually ran.
+        # 1.35 reproduces the validated .0027 adjusted fpt / 27 IPM at 25-27% WOC on a
+        # 1/2" 6-flute. Titanium-only, matching the rest of the hybrid gating.
+        if data.get("hybrid_hem") and material_group == "Titanium":
+            _hem_ipt_mult = 1.35
         # HEM feed level — throttle only the boost ABOVE conventional (mult - 1.0)
         # so cautious shops can break a tool in and work up. full=100% (default,
         # unchanged), moderate=90%, mild=75%. Scaling the excess (not the whole
@@ -5573,7 +5582,9 @@ def run(payload=None):
             # reduced surface speed, so clamping it to 15% here would silently undo the
             # strategy the operator picked. Cap lifts to 20% for that case only.
             if data.get("mode") == "hem" and material_group in ["Inconel", "Titanium", "Stainless"]:
-                _hrsa_cap_frac = 0.20 if (data.get("hybrid_hem") and material_group == "Titanium") else 0.15
+                # 0.30 leaves headroom above the 25% hybrid step so an operator who nudges
+                # up to the .130 / 27% that was actually validated isn't clamped back down.
+                _hrsa_cap_frac = 0.30 if (data.get("hybrid_hem") and material_group == "Titanium") else 0.15
                 max_hem_woc = data["diameter"] * _hrsa_cap_frac
                 if woc > max_hem_woc:
                     print(f"⚠ HEM radial capped at {_hrsa_cap_frac*100:.0f}% Ø for HRSA stability")
