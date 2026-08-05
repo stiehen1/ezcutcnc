@@ -17799,37 +17799,56 @@ ${stabSection}
             </>
           ) : (
             <>
-              {/* Machining Tips accordion — endmill milling (top of results) */}
-              {operation === "milling" && form.tool_type !== "chamfer_mill" && (
-                <div className="mb-4 rounded-xl border border-zinc-700 overflow-hidden">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                    onClick={() => setMachiningTipsOpen(o => !o)}
-                  >
-                    <div>
-                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                      {form.mode && MILLING_MODE_TIPS[tipsModeKey] && (
-                        <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
-                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting — Traditional", slot_hem:"Slotting — HEM / Trochoidal", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[tipsModeKey] ?? ""}
-                        </span>
-                      )}
+              {/* Tool being run — identity card at the top of results. The numbers below
+                  are only trustworthy if they're for the RIGHT tool, so restate what the
+                  engine actually ran against before showing any of them. Renders whatever
+                  identity we have: catalog EDP + description when one was entered, else
+                  the geometry the user typed (a special/print tool still gets a card). */}
+              {operation === "milling" && form.tool_type !== "chamfer_mill" && (() => {
+                const _edp  = (edpText || "").trim();
+                const _desc = (skuDescription || "").trim();
+                const _ser  = (form.tool_series || "").trim();
+                const _cr   = Number(form.corner_radius || 0);
+                const _end  = form.corner_condition === "ball" ? "Ball Nose"
+                            : form.corner_condition === "corner_radius" && _cr > 0 ? `${_cr.toFixed(3)}" Corner Rad`
+                            : "Square";
+                const _geo  = form.geometry === "chipbreaker" ? "Chipbreaker"
+                            : form.geometry === "truncated_rougher" ? "Truncated Rougher" : "";
+                const _spec: Array<[string, string]> = [
+                  ["Ø", `${form.tool_dia?.toFixed(4) ?? "—"}"`],
+                  ["Flutes", String(form.flutes ?? "—")],
+                  ["LOC", form.loc > 0 ? `${form.loc.toFixed(3)}"` : "—"],
+                  ["OAL", (form.oal_in ?? 0) > 0 ? `${Number(form.oal_in).toFixed(3)}"` : "—"],
+                  ["Shank", (form.shank_dia ?? 0) > 0 ? `${Number(form.shank_dia).toFixed(4)}"` : "—"],
+                  ["End", _end],
+                ];
+                if (_geo) _spec.push(["Geometry", _geo]);
+                // Stickout deliberately NOT listed — it's a setup value, not part of the
+                // tool's identity, and the stability panel already reports it with L/D.
+                return (
+                  <div className="mb-4 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Tool Being Run</span>
+                      {_edp && <span className="text-[10px] text-zinc-400 uppercase tracking-widest">EDP {_edp}{_ser ? ` · ${_ser}` : ""}</span>}
                     </div>
-                    <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-                  </button>
-                  {machiningTipsOpen && (() => {
-                    const tips = MILLING_MODE_TIPS[tipsModeKey] ?? MILLING_MODE_TIPS.hem;
-                    return (
-                      <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                        {tips.map((tip, i) => (
-                          <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
-                        ))}
-                        <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Endmills & Special Profiles) for you — contact us!</span></div>
+                    {/* One line only — catalog descriptions run long and a wrapped second
+                        line pushed the spec row down. Truncated with the full text on hover
+                        so nothing is actually lost. */}
+                    {_desc && <div className="mt-1.5 text-xs text-zinc-200 leading-snug truncate" title={_desc}>{_desc}</div>}
+                    {!_desc && _ser && !_edp && <div className="mt-1.5 text-xs text-zinc-200 leading-snug truncate">{_ser} series</div>}
+                    {!_edp && !_desc && (
+                      <div className="mt-1.5 text-xs text-zinc-400 leading-snug">
+                        Special / manually-entered tool — no catalog EDP. Specs below are what you entered.
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
+                      {_spec.map(([k, v]) => (
+                        <span key={k}><span className="text-muted-foreground">{k}</span><span className="ml-1.5 font-semibold text-zinc-100">{v}</span></span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Dovetail info */}
               {dovetailResult && (
@@ -20070,6 +20089,41 @@ ${stabSection}
                   {customer.status_hint}
                 </div>
               ) : null}
+
+              {/* Machining Tips accordion — endmill milling. Lives at the BOTTOM of the
+                  results: it's background reading for the strategy, not something that
+                  should sit between the user and their numbers. The tool identity card
+                  took its place at the top. */}
+              {operation === "milling" && form.tool_type !== "chamfer_mill" && (
+                <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                    onClick={() => setMachiningTipsOpen(o => !o)}
+                  >
+                    <div>
+                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                      {form.mode && MILLING_MODE_TIPS[tipsModeKey] && (
+                        <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
+                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting — Traditional", slot_hem:"Slotting — HEM / Trochoidal", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[tipsModeKey] ?? ""}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {machiningTipsOpen && (() => {
+                    const tips = MILLING_MODE_TIPS[tipsModeKey] ?? MILLING_MODE_TIPS.hem;
+                    return (
+                      <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                        {tips.map((tip, i) => (
+                          <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
+                        ))}
+                        <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Endmills & Special Profiles) for you — contact us!</span></div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
             </>
           )}
