@@ -4363,6 +4363,22 @@ export default function Mentor() {
   const [runBlocked, setRunBlocked] = React.useState(false);
   // Snapshot of form at the moment of the last successful run; dirty = current form !== snapshot
   const lastRunFormRef = React.useRef<string>("");
+  // The Run button sits at the BOTTOM of a long form, but results render ABOVE it — so
+  // after a run the user was left staring at the button with their numbers off-screen,
+  // with nothing telling them to scroll up. Scroll the results card into view instead.
+  const resultsCardRef = React.useRef<HTMLDivElement | null>(null);
+  const scrollToResultsRef = React.useRef(false);
+  // Set by in-place re-runs (speed preset / feed level clicks) to cancel the scroll for
+  // that one run — those fire the same run path but from a user already at the results.
+  const suppressResultsScrollRef = React.useRef(false);
+  // Runs after every commit, so by the time it fires the results card holds the new
+  // numbers and is at its final height. Only acts when a run armed the flag, so
+  // ordinary re-renders (typing, toggling a preset) never move the page.
+  React.useEffect(() => {
+    if (!scrollToResultsRef.current) return;
+    scrollToResultsRef.current = false;
+    resultsCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   // Auto-populate keyseat cut pass depth when both diameters are known
   React.useEffect(() => {
@@ -4907,6 +4923,11 @@ export default function Mentor() {
 
   const run = async () => {
     setRunBlocked(false);   // reset; set true only on a hard "can't run" block below
+    // Consume the in-place-rerun suppression HERE, at entry, so it can only ever affect
+    // the run it was set for. Left to be cleared on success it would survive a failed or
+    // early-returned re-run and silently swallow the scroll on the next real Run.
+    const _suppressScroll = suppressResultsScrollRef.current;
+    suppressResultsScrollRef.current = false;
     // Must have an EDP or CC print PDF (not required for deep pocket — tools are selected by the sequencer)
     if (form.mode !== "deep_pocket" && !skuLocked && !pdfExtracted) {
       setRunWarnings(["Enter a Core Cutter EDP# or upload a CC print PDF to run the calculator."]);
@@ -5211,6 +5232,11 @@ export default function Mentor() {
       });
       lastRunFormRef.current = JSON.stringify(form);
       setFormDirty(false);
+      // Arm the scroll rather than doing it here: the results card hasn't rendered its
+      // new content yet, so scrolling now would target a stale height. A committed
+      // effect below fires once React has painted. In-place re-runs (speed/feed clicks)
+      // captured _suppressScroll at entry and leave the page where it is.
+      if (!_suppressScroll) scrollToResultsRef.current = true;
       trackCalculation(form.material, form.mode, form.tool_dia);
       // Fetch optimal tool recommendation if a specific EDP is locked.
       // IMPORTANT: do NOT blank the existing card up front — clearing it before
@@ -5351,6 +5377,10 @@ export default function Mentor() {
   React.useEffect(() => {
     if (!speedRerunArmed.current) return;
     speedRerunArmed.current = false;
+    // In-place re-run: the user is ALREADY looking at the results when they click a
+    // speed preset or feed level, so suppress the scroll the run would otherwise arm.
+    // Jumping the page under them here would be worse than the problem it fixes.
+    suppressResultsScrollRef.current = true;
     void runRef.current();
   }, [speedRerunTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // Export-friendly label for the chosen speed preset (fuller than the button
@@ -16657,7 +16687,7 @@ ${stabSection}
       })()}
 
       {/* OUTPUT CARD — hidden for deep pocket (per-tool cards shown above instead) */}
-      {(form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && <Card className="rounded-2xl">
+      {(form.mode !== "deep_pocket" || (dpSpecialTool && pdfExtracted)) && <Card ref={resultsCardRef} className="rounded-2xl">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recommendation</CardTitle>
