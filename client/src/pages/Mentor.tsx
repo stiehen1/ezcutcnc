@@ -1047,6 +1047,44 @@ const SLOT_CORE_RATIO: Record<number, number> = {
   2: 0.60, 3: 0.65, 4: 0.70, 5: 0.75, 6: 0.80, 7: 0.82, 8: 0.84, 9: 0.86, 10: 0.87, 11: 0.88, 12: 0.89,
 };
 
+// Estimate Current-vs-Optimized ratios for a stability-step tool swap, from the
+// candidate's {loc, flutes} meta. Same-diameter comparison: force ∝ flutes, stiffness
+// ∝ core_ratio(flutes)^4, and a shorter flute length lets the tool sit shorter (L³ on
+// the cantilever). Client-side approximation — the real numbers land when the user
+// clicks the EDP and it re-runs.
+//
+// Module scope (not inside the results render closure) because the PDF builder needs
+// the SAME math: the printed sheet headlines the stability advisor's pick, and its
+// comparison table has to agree with the on-screen hover preview for the same tool.
+// Two copies of this drifted once already — keep it single-source.
+function estStepToolPreview(
+  m: any,
+  cur: { flutes: number; loc: number; stickout: number },
+) {
+  if (!m) return null;
+  const curFl = Number(cur.flutes) || 0;
+  const newFl = Number(m.flutes) || curFl;
+  const curLoc = Number(cur.loc) || 0;
+  const newLoc = Number(m.loc) || curLoc;
+  const curSo = Number(cur.stickout) || 0;
+  if (!curFl || !newFl) return null;
+  const fluteForce = newFl / curFl;
+  const crCur = SLOT_CORE_RATIO[curFl] ?? 0.70;
+  const crNew = SLOT_CORE_RATIO[newFl] ?? 0.70;
+  const stiffGain = Math.pow(crNew / crCur, 4);
+  let reachFlex = 1;
+  if (curSo > 0 && newLoc > 0 && newLoc < curLoc - 0.02) {
+    const newSo = Math.max(curSo - (curLoc - newLoc), curSo * 0.5);
+    reachFlex = Math.pow(newSo / curSo, 3);
+  }
+  return {
+    defl_ratio: (fluteForce / stiffGain) * reachFlex,
+    force_ratio: fluteForce,
+    mrr_ratio: fluteForce,
+    feed_ratio: fluteForce,
+  };
+}
+
 // Estimate Current-vs-Optimized ratios for a candidate slotting tool.
 //
 // The stability-step version of this models flute count + reach only, because those
@@ -5765,39 +5803,88 @@ export default function Mentor() {
       </div>` : "";
 
     const optimalSection = (() => {
-      if (!optimalRec || !pdfIncludeOptimal) return "";
+      if (!pdfIncludeOptimal) return "";
+
+      // ── Which pick headlines the sheet ────────────────────────────────────
+      // Two different engines answer two different questions here:
+      //   • the stability advisor fixes the tool you are ALREADY holding (same
+      //     diameter/geometry) — and it is the app's single on-screen source of
+      //     recommendations (the scorer's banner is disabled in the results view);
+      //   • /api/optimal-tool scores the WHOLE catalog and is free to swap the tool
+      //     entirely, so it routinely lands on a different EDP.
+      // Headlining the scorer made the sheet star a tool the user never saw, print a
+      // stability number that contradicted the on-screen panel, and (when the scorer
+      // picked a coating variant of the current tool) tell them to buy a new EDP for
+      // the tool already in their hand. So the advisor's picks headline the sheet and
+      // the scorer is demoted to a clearly-labeled alternate.
+      const stepToolPicks = (stab?.suggestions ?? [])
+        .filter((s: any) => s.type !== "info")
+        .map((s: any) => {
+          const edps: string[] = (s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [])
+            .map((e: any) => String(e).trim())
+            .filter(Boolean);
+          if (!edps.length) return null;
+          return {
+            label: String(s.label ?? "").replace(/<[^>]*>/g, ""),
+            detail: String(s.detail ?? "").replace(/<[^>]*>/g, ""),
+            edps,
+            more: Number(s.suggested_edps_more) || 0,
+            meta: s.suggested_edp_meta ?? {},
+          };
+        })
+        .filter(Boolean) as Array<{ label: string; detail: string; edps: string[]; more: number; meta: any }>;
+
+      const headline = stepToolPicks[0] ?? null;
+      // Nothing to print at all — no advisor tool pick AND no scorer pick.
+      if (!headline && !optimalRec) return "";
+
       const rec = optimalRec;
-      const recSku = rec.recommended_sku;
-      const recCust = rec.recommended_result?.customer ?? {};
-      const recEng  = rec.recommended_result?.engineering ?? {};
-      const recStab = rec.recommended_result?.stability ?? {};
+      const recSku = rec?.recommended_sku ?? null;
       const curMrr     = customer?.mrr_in3_min ?? 0;
-      const recMrr     = recCust?.mrr_in3_min ?? 0;
       const curFeed    = (result as any)?.customer?.feed_ipm ?? 0;
-      const recFeed    = recCust?.feed_ipm ?? 0;
       const curStabPct = stab?.deflection_pct ?? null;
-      const recStabPct = recStab?.deflection_pct ?? null;
       const curForce   = eng?.force_lbf ?? null;
-      const recForce   = recEng?.force_lbf ?? null;
       const geomLabel: Record<string, string> = { chipbreaker: "CB", truncated_rougher: "VRX", standard: "Std" };
-      const tags = [
-        recSku.geometry && recSku.geometry !== "standard" ? geomLabel[recSku.geometry] ?? recSku.geometry : null,
-        recSku.coating ?? null,
-        recSku.series ?? null,
-        recSku.variable_pitch && recSku.variable_helix ? "Var Pitch+Helix"
-          : recSku.variable_pitch ? "Var Pitch"
-          : recSku.variable_helix ? "Var Helix" : null,
-      ].filter(Boolean).join(" · ");
       const meaningful = (cur: number, opt: number, pct = 5) => Math.abs((opt - cur) / (cur || 1)) * 100 >= pct;
+
+      // Headline EDP + its estimated effect. The advisor may offer several EDPs for one
+      // fix (coating / length variants of the same geometry); they share flute count and
+      // LOC, so one preview covers the group — lead with the first and list the rest.
+      const headEdp = headline ? headline.edps[0] : null;
+      const headMeta = headline && headEdp ? (headline.meta?.[headEdp] ?? null) : null;
+      const headPrev = headMeta
+        ? estStepToolPreview(headMeta, {
+            flutes: Number(form.flutes) || 0,
+            loc: Number(form.loc) || 0,
+            stickout: Number(form.stickout) || 0,
+          })
+        : null;
+
+      const headTags = headMeta ? [
+        headMeta.flutes ? `${headMeta.flutes}-flute` : null,
+        headMeta.dia ? `${Number(headMeta.dia).toFixed(4)}"Ø` : null,
+        headMeta.loc ? `${Number(headMeta.loc).toFixed(4)}" LOC` : null,
+      ].filter(Boolean).join(" · ") : "";
+
+      // Rows are built from ratios so the printed table matches the on-screen hover
+      // preview for the same tool, rather than a second opinion from another engine.
       const rows: { label: string; cur: string; opt: string; better: boolean }[] = [];
-      if (curStabPct != null && recStabPct != null)
-        rows.push({ label: "Stability", cur: `${Math.round(curStabPct)}%`, opt: `${Math.round(recStabPct)}%`, better: recStabPct < curStabPct && meaningful(curStabPct, recStabPct) });
-      if (curForce != null && recForce != null)
-        rows.push({ label: "Force (lbf)", cur: Math.round(curForce).toString(), opt: Math.round(recForce).toString(), better: recForce < curForce && meaningful(curForce, recForce) });
-      if (curMrr > 0 && recMrr > 0)
-        rows.push({ label: "MRR (in³/min)", cur: curMrr.toFixed(3), opt: recMrr.toFixed(3), better: recMrr > curMrr && meaningful(curMrr, recMrr) });
-      if (curFeed > 0 && recFeed > 0)
-        rows.push({ label: "Feed (IPM)", cur: curFeed.toFixed(1), opt: recFeed.toFixed(1), better: recFeed > curFeed && meaningful(curFeed, recFeed) });
+      if (headPrev) {
+        const defs: Array<[string, number | null, number | null, (n: number) => string, boolean]> = [
+          ["Tool Flex", curStabPct, headPrev.defl_ratio, (n) => `${Math.round(n)}%`, true],
+          ["Force (lbf)", curForce, headPrev.force_ratio, (n) => Math.round(n).toString(), true],
+          ["MRR (in³/min)", curMrr > 0 ? curMrr : null, headPrev.mrr_ratio, (n) => n.toFixed(3), false],
+          ["Feed (IPM)", curFeed > 0 ? curFeed : null, headPrev.feed_ratio, (n) => n.toFixed(1), false],
+        ];
+        for (const [label, cur, ratio, fmt, lowerBetter] of defs) {
+          if (cur == null || ratio == null) continue;
+          const after = cur * ratio;
+          const better = lowerBetter
+            ? after < cur && meaningful(cur, after)
+            : after > cur && meaningful(cur, after);
+          rows.push({ label, cur: fmt(cur), opt: fmt(after), better });
+        }
+      }
 
       const tableHtml = rows.length > 0 ? `
         <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:10px;">
@@ -5805,7 +5892,7 @@ export default function Mentor() {
             <tr style="background:#e55a00;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
               <th style="padding:4px 8px;text-align:left;font-weight:700;text-transform:uppercase;letter-spacing:.04em;"></th>
               <th style="padding:4px 8px;text-align:center;font-weight:700;">Current (${form.edp ? `EDP# ${form.edp}` : pdfToolNumber ? `CC# ${pdfToolNumber}` : "—"})</th>
-              <th style="padding:4px 8px;text-align:center;font-weight:700;background:#166534;-webkit-print-color-adjust:exact;print-color-adjust:exact;">Optimized (EDP# ${recSku.edp})</th>
+              <th style="padding:4px 8px;text-align:center;font-weight:700;background:#166534;-webkit-print-color-adjust:exact;print-color-adjust:exact;">Recommended (EDP# ${headEdp})</th>
             </tr>
           </thead>
           <tbody>
@@ -5818,50 +5905,76 @@ export default function Mentor() {
           </tbody>
         </table>` : "";
 
-      // This block comes from the whole-catalog tool SCORER, which answers a different
-      // question than the flex steps: the scorer picks the best overall tool for the job,
-      // while the flex steps fix the tool you're already holding. They routinely land on
-      // different EDPs, and on paper — with no on-screen card to compare against — that
-      // reads as the sheet recommending a tool the app never showed you. So carry the
-      // stability steps' own EDPs onto the sheet alongside it: whatever the app offered on
-      // screen is what the printed sheet offers, and the two picks are labeled by what
-      // each is actually optimizing for.
-      const stepEdps: string[] = Array.from(new Set(
-        (stab?.suggestions ?? [])
-          .filter((s: any) => s.type !== "info")
-          .flatMap((s: any) => (s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : []))
-          .map((e: any) => String(e).trim())
-          .filter(Boolean)
-      ));
-      const stepEdpsOther = stepEdps.filter(e => e.toLowerCase() !== String(recSku.edp ?? "").toLowerCase());
-      // Pull each step's label so the tool is listed under the fix it belongs to, not as a
-      // bare EDP with no reason attached.
-      const stepPicks = (stab?.suggestions ?? [])
-        .filter((s: any) => s.type !== "info")
-        .map((s: any) => {
-          const edps: string[] = (s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [])
-            .map((e: any) => String(e).trim())
-            .filter((e: string) => e && e.toLowerCase() !== String(recSku.edp ?? "").toLowerCase());
-          return edps.length ? { label: String(s.label ?? "").replace(/<[^>]*>/g, ""), edps } : null;
-        })
-        .filter(Boolean) as Array<{ label: string; edps: string[] }>;
-      const stepEdpsSection = stepEdpsOther.length > 0 ? `
+      // Remaining advisor tool picks, listed under the fix each one belongs to rather than
+      // as bare EDPs with no reason attached.
+      const otherPicks = stepToolPicks
+        .slice(1)
+        .map(p => ({ ...p, edps: p.edps.filter(e => e.toLowerCase() !== String(headEdp ?? "").toLowerCase()) }))
+        .filter(p => p.edps.length > 0);
+      const otherPicksSection = otherPicks.length > 0 ? `
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid #bbf7d0;">
-          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#166534;margin-bottom:4px;">Also recommended — from the Rigidity &amp; Chatter Audit</div>
-          <p style="font-size:9px;color:#555;margin-bottom:4px;">These keep your current tool's diameter and geometry and fix the setup. The match above is free to change the tool entirely — that's why the EDPs differ.</p>
-          ${stepPicks.map(p => `<p style="font-size:9px;color:#333;margin-top:2px;"><strong>${p.edps.join(", ")}</strong> &mdash; ${p.label}</p>`).join("")}
+          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#166534;margin-bottom:4px;">Also from the Rigidity &amp; Chatter Audit</div>
+          ${otherPicks.map(p => `<p style="font-size:9px;color:#333;margin-top:2px;"><strong>${p.edps.join(", ")}</strong> &mdash; ${p.label}</p>`).join("")}
         </div>` : "";
+
+      // The whole-catalog scorer, demoted. It is free to change diameter, flute count and
+      // geometry, so it is genuinely useful — but only as an alternate, and only when it is
+      // actually a different tool than the one headlining the sheet.
+      const scorerEdp = recSku ? String(recSku.edp ?? "").trim() : "";
+      const scorerIsDistinct = scorerEdp &&
+        !stepToolPicks.some(p => p.edps.some(e => e.toLowerCase() === scorerEdp.toLowerCase())) &&
+        scorerEdp.toLowerCase() !== String(form.edp ?? "").trim().toLowerCase();
+      const scorerTags = recSku ? [
+        recSku.geometry && recSku.geometry !== "standard" ? geomLabel[recSku.geometry] ?? recSku.geometry : null,
+        recSku.coating ?? null,
+        recSku.series ?? null,
+        recSku.variable_pitch && recSku.variable_helix ? "Var Pitch+Helix"
+          : recSku.variable_pitch ? "Var Pitch"
+          : recSku.variable_helix ? "Var Helix" : null,
+      ].filter(Boolean).join(" · ") : "";
+      const scorerGeomNote = recSku?.geometry === "chipbreaker"
+        ? "Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate."
+        : recSku?.geometry === "truncated_rougher"
+        ? "VRX (Truncated Rougher) geometry removes more material per pass with lower cutting forces than a standard flute."
+        : "";
+      const scorerSection = scorerIsDistinct ? `
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid #bbf7d0;">
+          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:4px;">Alternate — best overall catalog match</div>
+          <p style="font-size:9px;color:#333;margin-top:2px;"><strong>EDP# ${scorerEdp}</strong>${scorerTags ? ` &mdash; ${scorerTags}` : ""}</p>
+          <p style="font-size:9px;color:#555;margin-top:2px;">A whole-catalog match for this job that is free to change diameter, flute count and geometry — a bigger change than the fixes above, which keep your current tool's diameter.${scorerGeomNote ? ` ${scorerGeomNote}` : ""}</p>
+        </div>` : "";
+
+      // No advisor tool pick (setup-only fixes, e.g. shorten stickout) — print the scorer
+      // alone rather than an empty box, but without the "recommended" star.
+      if (!headline) {
+        return scorerIsDistinct ? `
+        <div style="margin:14px 0;padding:10px 14px;border:1px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
+          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#166534;margin-bottom:4px;">Alternate tool — best overall catalog match</div>
+          <p style="font-size:11px;font-weight:700;color:#111;margin-top:2px;">EDP# ${scorerEdp}${scorerTags ? `<span style="font-size:10px;font-weight:400;color:#555;"> &nbsp;·&nbsp; ${scorerTags}</span>` : ""}</p>
+          <p style="font-size:9px;color:#555;margin-top:3px;">Scored against the whole catalog for this job. Your current setup's own fixes are listed in the Rigidity &amp; Chatter Audit.${scorerGeomNote ? ` ${scorerGeomNote}` : ""}</p>
+        </div>` : "";
+      }
+
+      const headEdpList = headline.edps.length > 1
+        ? `<p style="font-size:9px;color:#555;margin-top:4px;">Also stocked for this fix: <strong>${headline.edps.slice(1).join(", ")}</strong>${headline.more > 0 ? ` &mdash; +${headline.more} more ${headline.more === 1 ? "variant" : "variants"} (coating / length), ask us` : ""}</p>`
+        : headline.more > 0
+        ? `<p style="font-size:9px;color:#555;margin-top:4px;">+${headline.more} more ${headline.more === 1 ? "variant" : "variants"} (coating / length) available &mdash; ask us</p>`
+        : "";
+
       return `
       <div style="margin:14px 0;padding:10px 14px;border:2px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
         <div style="line-height:1.6;padding-bottom:8px;">
-          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:inline-block;margin-right:6px;vertical-align:middle;">&#9733; Optimized EDP Match for This Setup</span>
-          <span style="font-size:12px;font-weight:700;color:#111;vertical-align:middle;">EDP# ${recSku.edp}</span>
-          ${tags ? `<span style="font-size:10px;color:#555;vertical-align:middle;">&nbsp;·&nbsp;${tags}</span>` : ""}
+          <span style="background:#166534;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:inline-block;margin-right:6px;vertical-align:middle;">&#9733; Recommended EDP for This Setup</span>
+          <span style="font-size:12px;font-weight:700;color:#111;vertical-align:middle;">EDP# ${headEdp}</span>
+          ${headTags ? `<span style="font-size:10px;color:#555;vertical-align:middle;">&nbsp;·&nbsp;${headTags}</span>` : ""}
         </div>
+        <p style="font-size:10px;color:#166534;font-weight:700;margin:0 0 2px;">${headline.label}</p>
+        ${headline.detail ? `<p style="font-size:9px;color:#555;margin:0;">${headline.detail}</p>` : ""}
         ${tableHtml}
-        ${stepEdpsSection}
-        ${recSku.geometry === "chipbreaker" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate.</p>` : ""}
-        ${recSku.geometry === "truncated_rougher" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">VRX (Truncated Rougher) geometry removes more material per pass with lower cutting forces than a standard flute.</p>` : ""}
+        ${rows.length > 0 ? `<p style="font-size:8px;color:#888;font-style:italic;margin-top:3px;">Estimated from tool geometry (flute count, core diameter, reach) — same preview shown in the app. Re-run with this EDP selected for exact numbers.</p>` : ""}
+        ${headEdpList}
+        ${otherPicksSection}
+        ${scorerSection}
       </div>`;
     })();
 
@@ -16754,10 +16867,14 @@ ${stabSection}
                     Print / Save PDF
                   </button>
                 </div>
-                {optimalRec && (
+                {/* The recommended-EDP block prints from the stability advisor's tool picks,
+                    falling back to the catalog scorer — so the toggle has to appear when
+                    EITHER source has something, not just the scorer. */}
+                {(optimalRec || (result?.stability?.suggestions ?? []).some((s: any) =>
+                  s.type !== "info" && (s.suggested_edps?.length || s.suggested_edp))) && (
                   <label
                     className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer select-none"
-                    title="When off, the 'Optimized EDP Match' block is omitted from the PDF — useful if the optimized tool is out of stock."
+                    title="When off, the 'Recommended EDP' block is omitted from the PDF — useful if the recommended tool is out of stock."
                   >
                     <input
                       type="checkbox"
@@ -20707,35 +20824,12 @@ ${stabSection}
               // trip): force ∝ flutes; stiffness ∝ core_ratio(flutes)^4; a shorter flute/reach
               // cuts the cantilever (L³). Good enough to show direction + rough magnitude;
               // the real numbers land when the user clicks the EDP and it re-runs.
-              const CORE_RATIO: Record<number, number> = { 2:0.60,3:0.65,4:0.70,5:0.75,6:0.80,7:0.82,8:0.84,9:0.86,10:0.87,11:0.88,12:0.89 };
-              const estToolPreview = (m: any) => {
-                if (!m) return null;
-                const curFl = Number(form.flutes) || 0;
-                const newFl = Number(m.flutes) || curFl;
-                const curLoc = Number(form.loc) || 0;
-                const newLoc = Number(m.loc) || curLoc;
-                const curSo  = Number(form.stickout) || 0;
-                if (!curFl || !newFl) return null;
-                // Flute effect: force & feed & mrr scale with flute count; stiffness with core^4.
-                const fluteForce = newFl / curFl;
-                const crCur = CORE_RATIO[curFl] ?? 0.70;
-                const crNew = CORE_RATIO[newFl] ?? 0.70;
-                const stiffGain = Math.pow(crNew / crCur, 4);
-                // Reach effect: a shorter flute lets the tool sit shorter (approx: stickout drops
-                // by the LOC saved, floored so we don't over-credit). L³ stiffness on stickout.
-                let reachFlex = 1;
-                if (curSo > 0 && newLoc > 0 && newLoc < curLoc - 0.02) {
-                  const newSo = Math.max(curSo - (curLoc - newLoc), curSo * 0.5);
-                  reachFlex = Math.pow(newSo / curSo, 3);
-                }
-                const deflRatio = (fluteForce / stiffGain) * reachFlex;
-                return {
-                  defl_ratio: deflRatio,
-                  force_ratio: fluteForce,      // more teeth engaged → more total force
-                  mrr_ratio: fluteForce,        // more flutes → higher feed → more MRR
-                  feed_ratio: fluteForce,
-                };
-              };
+              const estToolPreview = (m: any) =>
+                estStepToolPreview(m, {
+                  flutes: Number(form.flutes) || 0,
+                  loc: Number(form.loc) || 0,
+                  stickout: Number(form.stickout) || 0,
+                });
 
               // Shared 4-row Current-vs-Optimized chart. `p` is a ratio object
               // {defl_ratio, force_ratio, mrr_ratio, feed_ratio}; applied to the current
