@@ -17804,7 +17804,13 @@ ${stabSection}
                   engine actually ran against before showing any of them. Renders whatever
                   identity we have: catalog EDP + description when one was entered, else
                   the geometry the user typed (a special/print tool still gets a card). */}
-              {operation === "milling" && form.tool_type !== "chamfer_mill" && (() => {
+              {operation === "milling" && (() => {
+                const _isCham = form.tool_type === "chamfer_mill";
+                // A scanned customer print has no catalog EDP — its identity is the CC
+                // tool number and the fact that it's a special. Surface that instead of
+                // falling through to the "no EDP" apology.
+                const _ccNum  = (pdfToolNumber || "").trim();
+                const _isSpec = !!_ccNum || !!form.is_tapered;
                 const _edp  = (edpText || "").trim();
                 const _ser  = (form.tool_series || "").trim();
                 // Catalog descriptions tail off with the corner condition ("... Endmill
@@ -17830,19 +17836,74 @@ ${stabSection}
                   ["Shank", (form.shank_dia ?? 0) > 0 ? `${Number(form.shank_dia).toFixed(4)}"` : "—"],
                   ["Corner Condition", _end],
                 ];
-                if (_geo) _spec.push(["Geometry", _geo]);
-                // Center-cutting decides whether the tool can plunge/ramp into solid stock,
-                // so it belongs on the identity card. null = the SKU never specified it;
-                // say "not specified" rather than guessing either way.
-                const _cc = (form as any).center_cutting as boolean | null | undefined;
-                _spec.push(["Center Cutting", _cc == null ? "Not specified" : _cc ? "Yes" : "No"]);
+                // Chamfer mills are a different tool: angle and tip Ø define them, and the
+                // corner-condition / center-cutting language above doesn't apply. Swap the
+                // spec set rather than showing endmill fields that read as blank or wrong.
+                if (_isCham) {
+                  _spec.length = 0;
+                  const _tip = Number(form.chamfer_tip_dia ?? 0);
+                  _spec.push(
+                    ["Ø", `${form.tool_dia?.toFixed(4) ?? "—"}"`],
+                    ["Flutes", String(form.flutes ?? "—")],
+                    ["Included Angle", (form.chamfer_angle ?? 0) > 0 ? `${form.chamfer_angle}°` : "—"],
+                    ["Per Side", (form.chamfer_angle ?? 0) > 0 ? `${(Number(form.chamfer_angle) / 2).toFixed(1)}°` : "—"],
+                    ["Tip Ø", _tip > 0 ? `${_tip.toFixed(4)}"` : "Sharp / pointed"],
+                  );
+                  // Usable edge length — how much chamfer face the tool can actually cut
+                  // before running out of ground flank. The #1 thing to check against the
+                  // requested chamfer width, so compute it rather than making them do it.
+                  const _ang = Number(form.chamfer_angle ?? 0);
+                  if (_ang > 0 && (form.tool_dia ?? 0) > 0) {
+                    const _reach = (Number(form.tool_dia) - _tip) / 2;
+                    const _edge  = _reach / Math.sin((_ang / 2) * (Math.PI / 180));
+                    if (isFinite(_edge) && _edge > 0) _spec.push(["Usable Edge", `${_edge.toFixed(4)}"`]);
+                  }
+                  if ((form.chamfer_depth ?? 0) > 0) _spec.push(["Chamfer Width", `${Number(form.chamfer_depth).toFixed(4)}"`]);
+                  if ((form.oal_in ?? 0) > 0) _spec.push(["OAL", `${Number(form.oal_in).toFixed(3)}"`]);
+                  if ((form.shank_dia ?? 0) > 0) _spec.push(["Shank", `${Number(form.shank_dia).toFixed(4)}"`]);
+                } else {
+                  if (_geo) _spec.push(["Geometry", _geo]);
+                  // LBS (Length Below Shoulder) — the defining dimension of a necked/
+                  // reduced-neck tool: it's the reach, AND it's the stickout floor, since
+                  // the shank can bury right to the neck. Only meaningful when non-zero.
+                  if ((form.lbs ?? 0) > 0) _spec.push(["LBS (neck reach)", `${Number(form.lbs).toFixed(4)}"`]);
+                  // Necked reach tools store the reduced neck Ø in keyseat_arbor_dia — it's
+                  // the weak link in the LOC→LBS span, so show it beside the LBS it belongs to.
+                  if ((form.keyseat_arbor_dia ?? 0) > 0) _spec.push(["Neck Ø", `${Number(form.keyseat_arbor_dia).toFixed(4)}"`]);
+                  // Center-cutting decides whether the tool can plunge/ramp into solid stock,
+                  // so it belongs on the identity card. null = the SKU never specified it;
+                  // say "not specified" rather than guessing either way.
+                  const _cc = (form as any).center_cutting as boolean | null | undefined;
+                  _spec.push(["Center Cutting", _cc == null ? "Not specified" : _cc ? "Yes" : "No"]);
+                }
+                // Tapered specials — the taper is the whole point of the tool. Angle is
+                // stored INCLUDED; show both that and per-side, since prints call it out
+                // either way and mixing them up doubles the taper.
+                if (form.is_tapered) {
+                  const _tInc = Number(form.taper_included_angle_deg ?? 0);
+                  const _tLen = Number(form.taper_length_in ?? 0);
+                  if (_tInc > 0) _spec.push(["Taper", `${_tInc}° incl (${(_tInc / 2).toFixed(1)}° per side)`]);
+                  if (_tLen > 0) _spec.push(["Taper Length", `${_tLen.toFixed(4)}"`]);
+                }
                 // Stickout deliberately NOT listed — it's a setup value, not part of the
                 // tool's identity, and the stability panel already reports it with L/D.
                 return (
                   <div className="mb-4 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
                     <div className="flex items-baseline justify-between gap-3 flex-wrap">
                       <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Tool Being Run</span>
-                      {_edp && <span className="text-[10px] text-zinc-400 uppercase tracking-widest">EDP {_edp}{_ser ? ` · ${_ser}` : ""}</span>}
+                      {/* EDP# / CC# is the number you order against — the single most
+                          important string on this card. Sized and coloured to be findable
+                          at a glance rather than reading as a caption. */}
+                      {(_edp || _ccNum) && (
+                        <span className="text-sm font-bold text-yellow-400 tracking-wide">
+                          {_edp ? `EDP# ${_edp}` : `CC# ${_ccNum}`}
+                          {_ser
+                            ? <span className="font-semibold text-zinc-300"> <span className="text-zinc-600">|</span> Series {_ser}</span>
+                            : !_edp
+                            ? <span className="font-semibold text-zinc-300"> <span className="text-zinc-600">|</span> Special</span>
+                            : null}
+                        </span>
+                      )}
                     </div>
                     {/* One line only — catalog descriptions run long and a wrapped second
                         line pushed the spec row down. Truncated with the full text on hover
@@ -17850,8 +17911,22 @@ ${stabSection}
                     {_desc && <div className="mt-1.5 text-xs text-zinc-200 leading-snug truncate" title={_desc}>{_desc}</div>}
                     {!_desc && _ser && !_edp && <div className="mt-1.5 text-xs text-zinc-200 leading-snug truncate">{_ser} series</div>}
                     {!_edp && !_desc && (
-                      <div className="mt-1.5 text-xs text-zinc-400 leading-snug">
-                        Special / manually-entered tool — no catalog EDP. Specs below are what you entered.
+                      <div className="mt-1.5 text-xs text-zinc-400 leading-snug truncate">
+                        {_ccNum
+                          ? `Customer print ${_ccNum} — specs read from the uploaded drawing.${form.is_tapered ? " Tapered special." : ""}`
+                          : _isSpec
+                          ? "Special tool — specs below are what you entered."
+                          : _isCham
+                          ? "Chamfer mill — specs below are what you entered."
+                          : "Special / manually-entered tool — no catalog EDP. Specs below are what you entered."}
+                      </div>
+                    )}
+                    {/* Scanned prints estimate stickout from parsed dimensions rather than
+                        catalog geometry, so the floor can't be trusted — say so here, next
+                        to the specs it qualifies, not just in the stability advisor. */}
+                    {_isSpec && form.stickout_is_estimate && (
+                      <div className="mt-1 text-[10px] text-amber-400/90 leading-snug">
+                        Stickout is estimated from the print — measure the actual tool and correct it if you have room.
                       </div>
                     )}
                     <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
