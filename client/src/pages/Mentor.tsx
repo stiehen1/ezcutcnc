@@ -20866,23 +20866,28 @@ ${stabSection}
                   });
                 if (!rows.length) return null;
                 return (
+                  /* Column widths are fixed (not grid-cols-3) because the delta badge lives in
+                     the "If applied" column: with an auto-sized track, a row carrying a badge
+                     made its own value cell wider than the rows without one, so the resultant
+                     numbers no longer lined up under each other or under "Current". The badge
+                     gets its own right-hand track so the value stays centered in a column of
+                     constant width, and the two never crowd each other. */
                   <div className="mt-2 rounded-lg overflow-hidden border border-zinc-700/50 text-xs">
-                    <div className="grid grid-cols-3 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                    <div className="grid grid-cols-[1fr_4.25rem_4.25rem_3.5rem] gap-x-1.5 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
                       <span></span>
                       <span className="text-center">Current</span>
                       <span className="text-center text-emerald-400">If applied</span>
+                      <span></span>
                     </div>
                     {rows.map((r) => (
-                      <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                      <div key={r.label} className="grid grid-cols-[1fr_4.25rem_4.25rem_3.5rem] gap-x-1.5 px-2 py-1.5 border-t border-zinc-700/30 items-center">
                         <span className="text-zinc-400">{r.label}</span>
-                        <span className="text-center text-zinc-300">{r.cur}</span>
-                        <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : r.worse ? "text-red-400" : "text-zinc-300"}`}>
+                        <span className="text-center text-zinc-300 tabular-nums">{r.cur}</span>
+                        <span className={`text-center font-semibold tabular-nums ${r.better ? "text-emerald-400" : r.worse ? "text-red-400" : "text-zinc-300"}`}>
                           {r.after}
-                          {(r.better || r.worse) && (
-                            <span className="ml-1 text-[10px] font-bold whitespace-nowrap">
-                              {r.up ? "▲" : "▼"} {Math.abs(r.pct)}%
-                            </span>
-                          )}
+                        </span>
+                        <span className={`text-right text-[10px] font-bold tabular-nums whitespace-nowrap ${r.better ? "text-emerald-400" : r.worse ? "text-red-400" : "text-transparent"}`}>
+                          {(r.better || r.worse) ? `${r.up ? "▲" : "▼"} ${Math.abs(r.pct)}%` : ""}
                         </span>
                       </div>
                     ))}
