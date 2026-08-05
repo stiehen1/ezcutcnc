@@ -8,6 +8,16 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Hover previews show the change, not two numbers to diff
+The "If applied" preview printed the resulting value with a bare ✓ or ⚠, leaving the user to work out the size of the move themselves. Each row now carries a **signed percentage and a direction arrow** — `▼ 32%`, `▲ 15%`.
+
+Arrow direction is physical (did the number go up or down); color is the judgement. Tool Flex and Force are lower-better, MRR and Feed are higher-better, so a down arrow renders green on flex and red on MRR — the same movement, correctly read as good or bad per row. Worse values moved from amber to red, since amber was also doing duty for ordinary warnings elsewhere in the panel.
+
+### The recommendations header now reads as a heading, and says the steps are clickable
+"Steps to help lower your tool flex" rendered smaller and dimmer than the orange step titles beneath it, so the section heading looked like a caption on the row above. It's now a proper heading, with a subtitle that tells the user the list is interactive — clicking applies a step and re-runs, hovering previews it. Nothing on screen had ever said so.
+
+The subtitle points at *underlined* steps and tool numbers specifically, because only some steps are clickable: stickout, DOC, WOC and holder changes map to a form field and become buttons, while tool swaps (reduced-neck, diameter step-up) are applied through their EDP chips instead. Amber-underlined is the shared affordance for both, so the wording teaches that rule rather than promising every step responds to a click.
+
 ### Stability steps show the best 3 tools, not every tool that qualifies
 The reduced-neck step was listing five EDPs — 605621N, 605721, 605721N, 605821, 605921 — that a reader couldn't tell apart. They were identical in diameter, flute count, LOC, corner radius and coating; the only difference was **LBS (reach)**: 1.75" / 2.00" / 2.25" / 2.50" / 3.50". Every one cleared the 1.57" the job needed, so all five were "valid" and the step dumped the lot.
 

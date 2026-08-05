@@ -20751,7 +20751,16 @@ ${stabSection}
                     const changed = Math.abs((ratio as number) - 1) > 0.01;
                     const better = changed && (lowerBetter ? after < (cur as number) : after > (cur as number));
                     const worse = changed && !better;
-                    return { label, cur: fmt(cur as number), after: fmt(after), better, worse };
+                    // Signed % change, so the user reads the MOVE (down 32%) instead of
+                    // diffing two absolute numbers in their head. Direction is physical
+                    // (did it go up or down); color/arrow is judgement (is that good here) —
+                    // flex and force are lower-better, MRR and feed are higher-better, so a
+                    // down arrow is green on one row and red on another.
+                    const pct = Math.round(((ratio as number) - 1) * 100);
+                    return {
+                      label, cur: fmt(cur as number), after: fmt(after), better, worse,
+                      pct, up: pct > 0,
+                    };
                   });
                 if (!rows.length) return null;
                 return (
@@ -20765,8 +20774,13 @@ ${stabSection}
                       <div key={r.label} className="grid grid-cols-3 px-2 py-1.5 border-t border-zinc-700/30 items-center">
                         <span className="text-zinc-400">{r.label}</span>
                         <span className="text-center text-zinc-300">{r.cur}</span>
-                        <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : r.worse ? "text-amber-400" : "text-zinc-300"}`}>
-                          {r.after}{r.better ? " ✓" : r.worse ? " ⚠" : ""}
+                        <span className={`text-center font-semibold ${r.better ? "text-emerald-400" : r.worse ? "text-red-400" : "text-zinc-300"}`}>
+                          {r.after}
+                          {(r.better || r.worse) && (
+                            <span className="ml-1 text-[10px] font-bold whitespace-nowrap">
+                              {r.up ? "▲" : "▼"} {Math.abs(r.pct)}%
+                            </span>
+                          )}
                         </span>
                       </div>
                     ))}
@@ -20776,7 +20790,16 @@ ${stabSection}
 
               return (
               <div className="border-t border-zinc-700/40 pt-3 space-y-2">
-                <div className="text-xs font-semibold text-zinc-400">{_stepsHeader}</div>
+                {/* This is the section heading over the whole recommendation list, but it was
+                    rendering smaller and dimmer than the orange step titles under it, so it
+                    read as a caption. It also never said the steps are interactive — a user
+                    could work the whole list without discovering that clicking applies it. */}
+                <div className="pb-1">
+                  <h4 className="text-sm font-bold uppercase tracking-wider text-orange-400">{_stepsHeader}</h4>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    Click any <span className="text-amber-400 font-medium underline underline-offset-2">underlined</span> step or tool number to apply it and re-run · hover to preview its effect
+                  </p>
+                </div>
                 <ul className="space-y-3">
                   {actionItems.map((s: any, idx: number) => {
                     const isBest = stability.suggestions.indexOf(s) === firstActionIdx && deflPct >= 175;
