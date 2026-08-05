@@ -221,16 +221,31 @@ SPEED_PRESET_BIAS = {
 # are abrasion-dominated and intolerant of high speed — kept conservative up).
 _SPEED_PRESET_DEFAULT = {"max_life": 0.65, "better_life": 0.80, "balanced": 1.00, "high_throughput": 1.06, "max_mrr": 1.12}
 
-def speed_preset_factor(preset: str, material_group: str) -> float:
+# Hybrid HEM (titanium) gets its OWN spread rather than borrowing the Titanium row.
+# Its base is already the low end of the useful window (227), so the upside has more
+# room than classic HEM does — the top step reaches ~261 SFM, where the same 1.15 applied
+# to the classic 360 base would give 414 and blow past the ceiling that base was tuned to.
+# The downside is narrow on purpose: hybrid IS the tool-life-friendly recipe, so there is
+# little left to buy by slowing further, and the 180 rubbing floor catches the bottom.
+_SPEED_PRESET_HYBRID_HEM = {
+    "max_life": 0.79, "better_life": 0.90, "balanced": 1.00,
+    "high_throughput": 1.08, "max_mrr": 1.15,
+}
+
+def speed_preset_factor(preset: str, material_group: str, hybrid_hem: bool = False) -> float:
     """SFM multiplier for the chosen speed preset within the material's group.
 
     Unknown/blank preset → 1.00 (balanced). Group falls back to a conservative
     generic table. Result is clamped to a sane band so a bad input can never
-    drive SFM to an unphysical value."""
+    drive SFM to an unphysical value. hybrid_hem selects the titanium hybrid
+    spread, which is centred on a much lower base and so scales differently."""
     key = (preset or "balanced").strip().lower()
     if key not in SPEED_PRESET_ORDER:
         return 1.0
-    tbl = SPEED_PRESET_BIAS.get(material_group, _SPEED_PRESET_DEFAULT)
+    if hybrid_hem and material_group == "Titanium":
+        tbl = _SPEED_PRESET_HYBRID_HEM
+    else:
+        tbl = SPEED_PRESET_BIAS.get(material_group, _SPEED_PRESET_DEFAULT)
     return max(0.50, min(1.35, tbl.get(key, 1.0)))
 
 # Minimum viable SFM by material group — the "Max Life" preset must not drive
@@ -252,12 +267,12 @@ SPEED_PRESET_MIN_SFM = {
     "Cast Iron": 160,
 }
 
-def biased_sfm(rated_sfm: float, preset: str, material_group: str) -> float:
+def biased_sfm(rated_sfm: float, preset: str, material_group: str, hybrid_hem: bool = False) -> float:
     """Apply the speed preset to a rated SFM, then enforce the per-group minimum
     so 'Max Life' can't push titanium/HRSA/stainless into the rubbing zone.
     The floor only applies when slowing down (factor < 1.0) and never raises SFM
     above the rated value."""
-    factor = speed_preset_factor(preset, material_group)
+    factor = speed_preset_factor(preset, material_group, hybrid_hem)
     out = rated_sfm * factor
     if factor < 1.0:
         floor = SPEED_PRESET_MIN_SFM.get(material_group)
@@ -266,13 +281,13 @@ def biased_sfm(rated_sfm: float, preset: str, material_group: str) -> float:
             out = max(out, min(float(floor), rated_sfm))
     return out
 
-def speed_envelope(rated_sfm: float, material_group: str):
+def speed_envelope(rated_sfm: float, material_group: str, hybrid_hem: bool = False):
     """Return (lo, hi) — the safe SFM band a manual override is clamped to.
     Defined by the speed-preset extremes: lo = the Max Life value (incl. the
     rubbing floor), hi = the Max MRR value. Keeps manual entry inside the same
     calibrated range the preset buttons cover."""
-    lo = biased_sfm(rated_sfm, "max_life", material_group)
-    hi = rated_sfm * speed_preset_factor("max_mrr", material_group)
+    lo = biased_sfm(rated_sfm, "max_life", material_group, hybrid_hem)
+    hi = rated_sfm * speed_preset_factor("max_mrr", material_group, hybrid_hem)
     if lo > hi:  # degenerate (floor above ceiling for a very slow job) — swap
         lo, hi = hi, lo
     return lo, hi
@@ -289,7 +304,10 @@ def resolve_sfm(rated_sfm: float, payload: dict, material_group: str):
         override = float(payload.get("sfm_override", 0) or 0)
     except (TypeError, ValueError):
         override = 0.0
-    lo, hi = speed_envelope(rated_sfm, material_group)
+    # Hybrid HEM has its own preset spread, so the manual-override envelope has to use it
+    # too — otherwise the clamp band and the buttons would disagree about the same job.
+    _hyb = bool(payload.get("hybrid_hem")) and material_group == "Titanium"
+    lo, hi = speed_envelope(rated_sfm, material_group, _hyb)
     if override > 0:
         clamped_val = max(lo, min(hi, override))
         return clamped_val, {
@@ -299,7 +317,7 @@ def resolve_sfm(rated_sfm: float, payload: dict, material_group: str):
             "lo": round(lo, 1), "hi": round(hi, 1),
         }
     preset = str(payload.get("speed_preset") or "balanced")
-    return biased_sfm(rated_sfm, preset, material_group), {
+    return biased_sfm(rated_sfm, preset, material_group, _hyb), {
         "mode": "preset", "clamped": False, "requested": None,
         "lo": round(lo, 1), "hi": round(hi, 1),
     }
