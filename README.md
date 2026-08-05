@@ -36,6 +36,15 @@ That's the wrong answer as well as too many. Reach past what the cut needs is ca
 - **Ranked by what makes the tool stiffer** rather than by EDP number: shortest LOC that still covers the cut, then shortest LBS, then same geometry as the tool being run, then EDP as a stable tie-break. Coating variants — most same-dia/same-LOC ties — collapse to one representative instead of the whole family. The old `ORDER BY s.edp` sorted this case correctly by luck; it was not doing so by design.
 - **"+N more variants (coating / length) — ask us"** so the trimmed options are still reachable and nothing is silently dropped.
 
+### Dual Contact now moves the Holder Rigidity sub-score
+Selecting **Big-Plus Dual Contact** and re-running visibly lowered tool flex (~7.4%, the engine's `rigidity_factor()` 1.08 multiplier) while **Holder Rigidity sat unchanged at Fair 48** — the sub-score named as the holder axis was ignoring a holder-interface upgrade the engine had already applied.
+
+`holderRigidityScore()` took only the holder key and mapped its dropdown rank onto the 40–100 band, so it was a pure function of dropdown position: ER collet is rank 1 of 8 → `40 + (1/8)×60` → 48, and nothing else could move it. The spindle interface is part of holder rigidity, and the engine treats it that way — 1.08 for Big-Plus, 1.05 for HSK.
+
+The sub-score now reads the taper and the dual-contact flag, with credit expressed in dropdown-steps so it stays commensurate with the rank band (one rung = 7.5 pts): dual contact ≈ 1 step (+8% rigidity ≈ one rung of the ladder), HSK ≈ 0.65 step. ER collet on a CAT40 now reads **48 → 55**. Capped at 100, so dual contact on a Capto can't overflow the band, and HSK/CAPTO get the inherent-dual credit rather than being double-counted if a stale form still carries the flag. The `useMemo` dependency array picked up both fields — without that the panel wouldn't recompute on toggle.
+
+Dual contact also joins the holder rigidity ladder (below) tagged **"same taper — holders only"**, since at +8% it sits between HP collet and milling chuck while usually being the cheapest rigidity on the list — Big-Plus holders on the taper already in the machine, no new holder system.
+
 ### Holder and workholding steps now show what each upgrade buys
 The two soft setup steps — "Possibly look toward a more rigid tool holder" and its workholding twin — fire when a *setup* sub-score is the weak link while tool flex is already inside its limit. That means the engine's flex-suggestion path never runs, so unlike every other step these two arrived with **no numbers at all**: they named the problem and left the user to guess which holder to buy and how much it would actually gain.
 

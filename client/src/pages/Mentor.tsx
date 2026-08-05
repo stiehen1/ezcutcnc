@@ -6448,11 +6448,34 @@ ${stabSection}
   // usable-but-flagged setup), best tops at 100; each step up is ~7.5 points —
   // comfortably larger than the 1–3 pt dip a faster feed puts on Tool Flex /
   // Spindle Load, so an upgrade always raises the overall Setup Score.
-  function holderRigidityScore(holder: string | undefined): number {
+  // The SPINDLE interface is part of holder rigidity too, and the engine already treats
+  // it that way: rigidity_factor() multiplies the holder value by 1.08 for Big-Plus dual
+  // contact and 1.05 for HSK. Scoring on dropdown rank alone meant selecting Dual Contact
+  // visibly lowered tool flex (~7.4%) while Holder Rigidity sat unchanged — the sub-score
+  // named as the holder axis ignored a holder-interface upgrade the engine had applied.
+  //
+  // Credit is expressed in dropdown-steps so it stays commensurate with the rank band:
+  // one step is 60/8 = 7.5 pts, and dual contact (+8%) is worth roughly the same as one
+  // rung of the holder ladder, so it earns ~1 step. HSK (+5%) earns a partial step. Both
+  // are capped at 100 — dual contact on a Capto can't push past the ceiling.
+  const DUAL_CONTACT_STEP = 1.0;   // ~+8% rigidity ≈ one holder rung
+  const HSK_TAPER_STEP    = 0.65;  // ~+5% rigidity
+  function holderRigidityScore(
+    holder: string | undefined,
+    dualContact?: boolean,
+    spindleTaper?: string,
+  ): number {
     const idx = HOLDER_QUALITY_RANK.indexOf(holder ?? "er_collet");
     const rank = idx < 0 ? 1 : idx; // unknown holder → treat as ER baseline
     const span = HOLDER_QUALITY_RANK.length - 1;
-    return Math.round(40 + (rank / span) * 60);
+    const taper = (spindleTaper ?? "").toUpperCase();
+    // HSK/CAPTO are inherently dual contact — the UI hides the toggle on those tapers, so
+    // don't award the bonus twice if a stale form still carries the flag.
+    const inherentlyDual = taper.startsWith("HSK") || taper.startsWith("CAPTO");
+    let bonus = 0;
+    if (inherentlyDual) bonus += HSK_TAPER_STEP;
+    else if (dualContact) bonus += DUAL_CONTACT_STEP;
+    return Math.round(Math.min(100, 40 + ((rank + bonus) / span) * 60));
   }
 
   // Workholding rigidity — a stiffness value per workholding type (LOWER = stiffer,
@@ -6518,6 +6541,8 @@ ${stabSection}
     holder: string | undefined,
     workholding: string | undefined,
     machineType: string | undefined,
+    dualContact?: boolean,
+    spindleTaper?: string,
   ): { overall: number; defl: number; load: number; chip: number; ld: number; rigidity: number; workholding: number; workpiece: number } | null {
     if (!stab && !eng && !cust) return null;
     // Deflection score (0–100): 0% deflection = 100, 100% = 50, 175%+ = 0
@@ -6552,7 +6577,7 @@ ${stabSection}
     // (0.18 + 0.15) that a single-step upgrade in either reliably clears the 1–3 pt
     // dip in Tool Flex / Spindle Load caused by the higher feed a stiffer setup
     // unlocks — so the overall score always moves UP on an upgrade, never flat/down.
-    const rigScore = holderRigidityScore(holder);
+    const rigScore = holderRigidityScore(holder, dualContact, spindleTaper);
     const whScore  = workholdingRigidityScore(workholding, machineType);
     // Workpiece Rigidity — the PART as a cantilever off the jaws/trunnion. Only meaningful
     // when the part sticks out past its workholding (part_stickout > 0); otherwise the part
@@ -6603,8 +6628,8 @@ ${stabSection}
   }
 
   const stabilityIndex = React.useMemo(() =>
-    calcStabilityIndex(result?.stability, result?.engineering, result?.customer, form.toolholder, form.workholding, form.machine_type),
-    [result, form.toolholder, form.workholding, form.machine_type]
+    calcStabilityIndex(result?.stability, result?.engineering, result?.customer, form.toolholder, form.workholding, form.machine_type, form.dual_contact, form.spindle_taper),
+    [result, form.toolholder, form.workholding, form.machine_type, form.dual_contact, form.spindle_taper]
   );
 
   const [camCopied, setCamCopied] = React.useState(false);
@@ -20923,7 +20948,7 @@ ${stabSection}
                 const curLbl = isHolder ? _rigLblSoft : _whLblSoft;
                 // Holder values are STIFFNESS (higher better); workholding values are
                 // COMPLIANCE (lower better). Normalize both to a "stiffer by %" figure.
-                let opts: Array<{ key: string; gainPct: number; capital: boolean }>;
+                let opts: Array<{ key: string; label?: string; gainPct: number; capital: boolean; note?: string }>;
                 if (isHolder) {
                   const cur = TOOLHOLDER_RIGIDITY_VALUE[curKey] ?? 1.0;
                   opts = HOLDER_QUALITY_RANK
@@ -20935,6 +20960,26 @@ ${stabSection}
                       gainPct: Math.round((o.v / cur - 1) * 100),
                       capital: o.key === "shrink_fit" || o.key === "capto",
                     }));
+                  // Big-Plus dual contact is a holder-interface upgrade too — the engine gives
+                  // it +8% in rigidity_factor(), same axis as the interfaces above. It belongs
+                  // on this list because it's usually the CHEAPEST rigidity on offer: Big-Plus
+                  // holders on the taper already in the machine, no new holder system. Only
+                  // shown when it's actually available and not already on: the UI hides the
+                  // toggle on HSK/CAPTO/VDI/BMT (HSK/CAPTO are inherently dual contact).
+                  const _t = (form.spindle_taper ?? "").toUpperCase();
+                  const _dcAvailable = !form.dual_contact
+                    && !_t.startsWith("HSK") && !_t.startsWith("CAPTO")
+                    && !_t.startsWith("VDI") && !_t.startsWith("BMT");
+                  if (_dcAvailable) {
+                    opts.push({
+                      key: "__dual_contact",
+                      label: "Big-Plus dual contact",
+                      gainPct: 8,
+                      capital: false,
+                      note: "same taper — holders only",
+                    });
+                    opts.sort((a, b) => a.gainPct - b.gainPct);
+                  }
                 } else {
                   const cur = WORKHOLDING_RIGIDITY_VALUE[curKey] ?? 1.0;
                   // Scope to what THIS machine actually exposes — offering a mill fixture
@@ -20983,8 +21028,9 @@ ${stabSection}
                     {opts.map(o => (
                       <div key={o.key} className="grid grid-cols-[1fr_5rem] gap-x-1.5 px-2 py-1.5 border-t border-zinc-700/30 items-center">
                         <span className="text-zinc-300">
-                          {labels[o.key] ?? o.key.replace(/_/g, " ")}
+                          {o.label ?? labels[o.key] ?? o.key.replace(/_/g, " ")}
                           {o.capital && <span className="ml-1 text-[10px] text-zinc-600">capital equipment</span>}
+                          {o.note && <span className="ml-1 text-[10px] text-emerald-600/80">{o.note}</span>}
                         </span>
                         <span className="text-right font-semibold text-emerald-400 tabular-nums whitespace-nowrap">
                           ▲ {o.gainPct}%
