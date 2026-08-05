@@ -7321,18 +7321,35 @@ def run(payload=None):
     # (below 1.2× minimum) still speaks up; no catalog tool is red at preferred.
     _pref_so_ovr = float(data.get("pref_stickout_override", 0) or 0)
     _at_or_inside_pref = _pref_so_ovr > 0 and _so <= _pref_so_ovr + 0.0005
+    # Below the 1.2× minimum the shank can TIP in the collet, not just flex — the contact
+    # patch is too short to keep the axis true, so tip TIR grows with the lever arm. That
+    # runout is NOT in the rigidity multiplier (which only softens the holder) and it is
+    # deliberately not modelled as a numeric TIR adder — we have no calibration for it and
+    # a made-up number would double-penalize a setup grip_state() already derates. Say it
+    # in words instead: uneven flute loading is what actually chips the corners.
+    _grip_runout_note = (
+        " Grip that short also lets the shank tip in the holder, so expect noticeably more"
+        " runout at the tip — one flute takes more than its share of the chip, which shows up"
+        " as corner chipping and short tool life before it ever shows up as deflection."
+    ) if _grip_sev == "red" else ""
+    # Hoisted out of the branch below: the reduced-neck step (3) also needs to know the tool's
+    # OAL / shank Ø and whether it is bottomed on the holder's back stop.
+    _oal_in_now    = float(data.get("oal_in", 0) or 0)
+    _shank_dia_now = float(data.get("shank_dia", 0) or 0)
+    _bore_dep_now  = float(data.get("holder_bore_depth_in", 0) or 0)
+    _bottomed_grip = _bore_dep_now > 0 and (_oal_in_now - _so) >= _bore_dep_now - 1e-4
     if (_grip_in is not None and _grip_mult < 0.999
             and (_grip_sev == "red" or (_grip_sev == "warn" and not _at_or_inside_pref))):
-        _oal_now = float(data.get("oal_in", 0) or 0)
-        _shank_now = float(data.get("shank_dia", 0) or 0)
-        _bore_now  = float(data.get("holder_bore_depth_in", 0) or 0)
+        _oal_now = _oal_in_now
+        _shank_now = _shank_dia_now
+        _bore_now  = _bore_dep_now
         # Bottomed on a positive back stop? Then grip is capped by BORE DEPTH, not by how
         # much shank exists, and pushing the tool in further is physically impossible — the
         # stop is already holding it. State the constraint and point at a deeper-bore holder.
         # Deliberately NOT suggesting a shank cut-off: it's destructive and irreversible on a
         # carbide tool. Cut-off is something we ACCOMMODATE when a shop has already done it for
         # shrink-fit clearance (that's the Cut-off OAL field), never something we encourage.
-        _bottomed = _bore_now > 0 and (_oal_now - _so) >= _bore_now - 1e-4
+        _bottomed = _bottomed_grip
         if _bottomed:
             _need_grip = GRIP_MIN_X_SHANK * _shank_now
             _hw_suggestions.append({
@@ -7348,6 +7365,7 @@ def run(payload=None):
                     f' A holder with a deeper bore (≥ {_need_grip:.3f}" to make the'
                     f" {GRIP_MIN_X_SHANK:.1f}× minimum) is the fix here; otherwise lean on DOC"
                     f" and WOC to bring the flex down."
+                    f"{_grip_runout_note}"
                 ),
                 "gain_pct": 0,
                 "grip_in": round(_grip_in, 4),
@@ -7384,7 +7402,7 @@ def run(payload=None):
                         f'{" — below the " + format(GRIP_MIN_X_SHANK, ".1f") + "× minimum" if _grip_sev == "red" else ""}.'
                         f' Push the tool in to {_so_target:.3f}" stickout for {_grip_after:.1f}× shank Ø'
                         f" of grip. Costs nothing — the holder is doing less work, so feed and"
-                        f" DOC come back with it.{_at_min_note}"
+                        f" DOC come back with it.{_grip_runout_note}{_at_min_note}"
                     ),
                     "stickout_in": round(_so_target, 4),
                     "gain_pct": _grip_gain,
@@ -7529,7 +7547,25 @@ def run(payload=None):
     # 3) Reduced-neck tool — same reach, shorter flute section, multiple passes.
     # Uses _doc_target (the user's intended depth, defined above) to size the necked flute —
     # the whole point of a necked tool is to reach that full depth.
-    if _lbs == 0 and _defl > _dlim and _so > 0 and _doc_target > 0:
+    #
+    # TWO triggers, because a long-reach setup fails in two independent ways:
+    #   a) DEFLECTION over limit — the classic case.
+    #   b) SHANK GRIP below the 1.2× minimum that pushing the tool in CANNOT fix. On a
+    #      standard tool the collet stops at the flutes (_min_so = LOC + flute_wash), so a
+    #      deep reach forces the shank out of the holder and there is no free fix. A necked
+    #      tool's floor is the LBS instead — the shank buries right to the neck — so the SAME
+    #      reach is achieved with the tool pushed much further in. Flex can be under limit
+    #      while grip is red (short stiff tool, big overhang), and that case previously got
+    #      only "push it in" with no reachable target.
+    _grip_forces_neck = False
+    if (_lbs == 0 and _grip_in is not None and _grip_sev == "red"
+            and not _bottomed_grip and _min_so > 0 and _shank_dia_now > 0):
+        # Could pushing in to the tool's own floor restore the 1.2× minimum? If yes this is a
+        # setup mistake, not a tool-selection problem — the free fix already covers it.
+        _grip_at_floor = (_oal_in_now - _min_so) / _shank_dia_now
+        _grip_forces_neck = _grip_at_floor < GRIP_MIN_X_SHANK
+    if (_lbs == 0 and _so > 0 and _doc_target > 0
+            and (_defl > _dlim or _grip_forces_neck)):
         import math as _math
         _flutes_n    = int(data.get("flutes", 4) or 4)
         _core_ratio_n = {2:0.60,3:0.65,4:0.70,5:0.75,6:0.80,7:0.82}.get(_flutes_n, 0.70)
@@ -7550,7 +7586,17 @@ def run(payload=None):
                 (_so**3 - _loc_neck**3) / _I_neck_n
             )
             _defl_neck_pct = round(_defl_neck / _dlim * 100, 1) if _dlim > 0 else 0
-            if _defl_neck < _defl * 0.85:
+            # The 15%-better-flex test is the right bar for the DEFLECTION trigger — don't
+            # recommend a tool swap that barely moves the needle. It is the WRONG bar for the
+            # grip trigger: there the win is holder engagement, not flex, so a necked tool that
+            # only ties on deflection is still the correct answer (and the grip multiplier it
+            # restores lifts feed/DOC on its own). When grip forces it, this step is mandatory.
+            if _defl_neck < _defl * 0.85 or _grip_forces_neck:
+                # Stickout the necked tool can run at: its floor is the LBS, and the LBS only
+                # has to equal the reach we need — so the shank buries to _so_neck and the
+                # grip comes back. This is the number that makes the swap worth it.
+                _so_neck    = _loc_neck + _d * 0.20      # necked floor + the standard working buffer
+                _grip_neck  = (_oal_in_now - _so_neck) / _shank_dia_now if _shank_dia_now > 0 else 0.0
                 # Carry lookup fields so the server enriches this with a REAL reduced-neck
                 # EDP from the catalog — same as the _lbs>0 path does. A necked tool needs:
                 #   • the same dia / flutes / corner as the job,
@@ -7559,10 +7605,30 @@ def run(payload=None):
                 # lookup_lbs = _so drives the `COALESCE(s.lbs_in,0) >= lookup_lbs` filter, so
                 # only genuine reduced-neck SKUs (which carry lbs_in) can match; if none exist
                 # the server appends "— available as a special" automatically.
+                _neck_detail = (
+                    f"{_passes} axial pass{'es' if _passes > 1 else ''} to full depth — "
+                    f"est. flex drops to {_defl_neck_pct}% of limit"
+                )
+                if _grip_forces_neck:
+                    # Lead with the grip story: that's the failing constraint, and the reason
+                    # this tool is the fix rather than a nice-to-have.
+                    _neck_detail = (
+                        f'Only {_grip_in:.3f}" of shank is in the holder ({_grip_x:.1f}× shank Ø,'
+                        f" below the {GRIP_MIN_X_SHANK:.1f}× minimum), and this tool can't be pushed"
+                        f' in far enough to fix it — the collet reaches the flutes at {_min_so:.3f}".'
+                        f" A necked tool buries the shank to the neck instead, so the same"
+                        f' {_so:.2f}" reach runs at about {_so_neck:.2f}" stickout'
+                        f"{f' — roughly {_grip_neck:.1f}× shank Ø of grip' if _grip_neck > 0 else ''}."
+                        f" {_passes} axial pass{'es' if _passes > 1 else ''} to full depth."
+                    )
                 _hw_suggestions.append({
                     "type": "tool",
-                    "label": f'Reduced-neck tool: {_so:.2f}" reach, {_loc_neck:.3f}" LOC ({round(_loc_neck/_d,1)}×D)',
-                    "detail": f"{_passes} axial pass{'es' if _passes > 1 else ''} to full depth — est. flex drops to {_defl_neck_pct}% of limit",
+                    "label": (
+                        f'Reduced-neck tool: {_so:.2f}" reach, {_loc_neck:.3f}" LOC ({round(_loc_neck/_d,1)}×D)'
+                        + (" — restores shank grip" if _grip_forces_neck else "")
+                    ),
+                    "detail": _neck_detail,
+                    "grip_driven": _grip_forces_neck,
                     "lookup_flutes": _flutes_n,
                     "lookup_dia":    _d,
                     "lookup_loc":    round(_loc_neck, 4),
