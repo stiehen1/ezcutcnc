@@ -20952,13 +20952,19 @@ ${stabSection}
                     }));
                 }
                 if (!opts.length) return null;
-                // Cap the list so the hover stays readable. A soft-jaw lathe setup has 12
-                // stiffer options; a wall of them reads as a catalog, not advice. Keep the
-                // nearest upgrades (smallest gain first, already sorted) plus the stiffest
-                // option, so the user sees both the cheap next step and the ceiling.
-                const MAX_ROWS = 6;
+                // Cap WORKHOLDING only. A soft-jaw lathe setup has 12 stiffer options and a
+                // wall of them reads as a catalog rather than advice; keep the nearest
+                // upgrades (smallest gain first, already sorted) plus the stiffest, so the
+                // user sees both the cheap next step and the ceiling.
+                //
+                // The HOLDER ladder is never capped. It tops out at 7 rows (ER collet is the
+                // bottom of the real-world range), and every rung is a distinct interface a
+                // shop might own — capping it at 6 silently dropped SHRINK FIT while keeping
+                // Capto, which is both the wrong one to lose and confusing next to the
+                // "capital equipment" tag on the row that survived.
                 let trimmed = 0;
-                if (opts.length > MAX_ROWS) {
+                const MAX_ROWS = 6;
+                if (!isHolder && opts.length > MAX_ROWS) {
                   trimmed = opts.length - MAX_ROWS;
                   opts = [...opts.slice(0, MAX_ROWS - 1), opts[opts.length - 1]];
                 }
