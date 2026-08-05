@@ -5812,6 +5812,39 @@ export default function Mentor() {
           </tbody>
         </table>` : "";
 
+      // This block comes from the whole-catalog tool SCORER, which answers a different
+      // question than the flex steps: the scorer picks the best overall tool for the job,
+      // while the flex steps fix the tool you're already holding. They routinely land on
+      // different EDPs, and on paper — with no on-screen card to compare against — that
+      // reads as the sheet recommending a tool the app never showed you. So carry the
+      // stability steps' own EDPs onto the sheet alongside it: whatever the app offered on
+      // screen is what the printed sheet offers, and the two picks are labeled by what
+      // each is actually optimizing for.
+      const stepEdps: string[] = Array.from(new Set(
+        (stab?.suggestions ?? [])
+          .filter((s: any) => s.type !== "info")
+          .flatMap((s: any) => (s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : []))
+          .map((e: any) => String(e).trim())
+          .filter(Boolean)
+      ));
+      const stepEdpsOther = stepEdps.filter(e => e.toLowerCase() !== String(recSku.edp ?? "").toLowerCase());
+      // Pull each step's label so the tool is listed under the fix it belongs to, not as a
+      // bare EDP with no reason attached.
+      const stepPicks = (stab?.suggestions ?? [])
+        .filter((s: any) => s.type !== "info")
+        .map((s: any) => {
+          const edps: string[] = (s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [])
+            .map((e: any) => String(e).trim())
+            .filter((e: string) => e && e.toLowerCase() !== String(recSku.edp ?? "").toLowerCase());
+          return edps.length ? { label: String(s.label ?? "").replace(/<[^>]*>/g, ""), edps } : null;
+        })
+        .filter(Boolean) as Array<{ label: string; edps: string[] }>;
+      const stepEdpsSection = stepEdpsOther.length > 0 ? `
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid #bbf7d0;">
+          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#166534;margin-bottom:4px;">Also recommended — from the Rigidity &amp; Chatter Audit</div>
+          <p style="font-size:9px;color:#555;margin-bottom:4px;">These keep your current tool's diameter and geometry and fix the setup. The match above is free to change the tool entirely — that's why the EDPs differ.</p>
+          ${stepPicks.map(p => `<p style="font-size:9px;color:#333;margin-top:2px;"><strong>${p.edps.join(", ")}</strong> &mdash; ${p.label}</p>`).join("")}
+        </div>` : "";
       return `
       <div style="margin:14px 0;padding:10px 14px;border:2px solid #166534;border-radius:8px;background:#f0fdf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;">
         <div style="line-height:1.6;padding-bottom:8px;">
@@ -5820,6 +5853,7 @@ export default function Mentor() {
           ${tags ? `<span style="font-size:10px;color:#555;vertical-align:middle;">&nbsp;·&nbsp;${tags}</span>` : ""}
         </div>
         ${tableHtml}
+        ${stepEdpsSection}
         ${recSku.geometry === "chipbreaker" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">Chipbreaker geometry reduces cutting forces and interrupts chip flow — lowering chatter risk at the same feed rate.</p>` : ""}
         ${recSku.geometry === "truncated_rougher" ? `<p style="font-size:9px;color:#166534;margin-top:6px;">VRX (Truncated Rougher) geometry removes more material per pass with lower cutting forces than a standard flute.</p>` : ""}
       </div>`;
@@ -20854,6 +20888,14 @@ ${stabSection}
                                     })}
                                     {s.suggested_cr_note && (
                                       <span className="text-zinc-400">({s.suggested_cr_note})</span>
+                                    )}
+                                    {/* We cap the chips at the best few so the step reads as a
+                                        recommendation, not a catalog dump — but say so, since
+                                        the rest are usually coating variants worth asking about. */}
+                                    {s.suggested_edps_more > 0 && (
+                                      <span className="text-[10px] text-zinc-600">
+                                        +{s.suggested_edps_more} more {s.suggested_edps_more === 1 ? "variant" : "variants"} (coating / length) — ask us
+                                      </span>
                                     )}
                                     </span>
                                     {/* Per-tool "If applied" preview — shows when an EDP chip on

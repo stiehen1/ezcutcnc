@@ -8,6 +8,20 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Stability steps show the best 3 tools, not every tool that qualifies
+The reduced-neck step was listing five EDPs — 605621N, 605721, 605721N, 605821, 605921 — that a reader couldn't tell apart. They were identical in diameter, flute count, LOC, corner radius and coating; the only difference was **LBS (reach)**: 1.75" / 2.00" / 2.25" / 2.50" / 3.50". Every one cleared the 1.57" the job needed, so all five were "valid" and the step dumped the lot.
+
+That's the wrong answer as well as too many. Reach past what the cut needs is cantilever bought for nothing — on a step whose entire purpose is *reducing flex*, 605921's 3.50" neck is the worst option in the list, and nothing on screen said so.
+
+- **Capped at 3 chips**, centrally in `setSuggestedEdps()` so every step gets it — reduced-neck, shorter-LOC, flute-swap, diameter step-up, and the chipbreaker list, which fans out across the whole flute-option set and was the most prone to becoming a wall of EDPs.
+- **Ranked by what makes the tool stiffer** rather than by EDP number: shortest LOC that still covers the cut, then shortest LBS, then same geometry as the tool being run, then EDP as a stable tie-break. Coating variants — most same-dia/same-LOC ties — collapse to one representative instead of the whole family. The old `ORDER BY s.edp` sorted this case correctly by luck; it was not doing so by design.
+- **"+N more variants (coating / length) — ask us"** so the trimmed options are still reachable and nothing is silently dropped.
+
+### The PDF's optimized tool no longer contradicts the on-screen recommendations
+With **Incl. Opt EDP** checked, the sheet printed a tool the user had never seen. The block is fed by the whole-catalog **scorer** (`/api/optimal-tool`), which answers a different question than the stability steps: the scorer is free to change the tool entirely, while the steps keep your current diameter and geometry and fix the setup. They routinely pick different EDPs — and the on-screen card for the scorer's pick is currently disabled (`{false && …}`), so there was nothing to reconcile it against on screen. On paper it just read as the sheet recommending a tool out of nowhere.
+
+The block now carries **the stability steps' own EDPs onto the sheet**, each listed under the fix it belongs to, with a line stating why the two picks differ. Whatever the app offered on screen is what the printed sheet offers.
+
 ### Results scroll into view after a run
 The Run button sits at the bottom of a long form but the Recommendation card renders **above** it, so clicking Run left the user staring at the button with their parameters off-screen and no cue that anything had happened. The results card now scrolls into view. Armed as a ref flag and performed in a committed effect rather than inline — at the moment `mutateAsync` resolves the card still holds the previous render, so scrolling then targets a stale height. Suppressed for in-place re-runs (speed presets, feed levels): the user is already looking at the results when they click Balanced or Faster, and jumping the page there would be worse than the problem being fixed. The flag is read and cleared at `run()` entry rather than on success, so a re-run that fails validation can't leave it set and swallow the scroll on the next real Run.
 

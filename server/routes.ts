@@ -2185,8 +2185,38 @@ export async function registerRoutes(
         const matClause2 = matIsoCol
           ? `AND (s2.${matIsoCol} = TRUE OR UPPER(s2.series) IN ('QTR3','QTR3-RN'))`
           : "";
+        // How many EDP chips a single stability step may show. More than this and the step
+        // stops reading as a recommendation and starts reading as a catalog dump — the user
+        // can't tell the options apart (they often differ only by coating digit), so the step
+        // becomes noise instead of an answer. Show the best few and stop.
+        const MAX_SUGGESTED_EDPS = 3;
+        // Rank candidates so the ones we keep are the BEST few, not the first few by EDP
+        // number. Ordering (cheapest/stiffest fix first):
+        //   1. shortest LOC that still does the job — flute length past the cut is stickout
+        //      bought for nothing, and short flutes are stiffer (L³).
+        //   2. shortest LBS (reach) — same logic for the neck on a reduced-neck tool: only
+        //      buy the reach the job needs.
+        //   3. same geometry as the tool they're already running — a like-for-like swap.
+        //   4. EDP as a stable tie-break so the list doesn't shuffle between runs.
+        // Coating variants (which is what most same-dia/same-LOC ties are) collapse to the
+        // lowest EDP — one representative instead of the whole coating family.
+        const rankSuggested = (rows: any[]) => [...rows].sort((a: any, b: any) => {
+          const loc = (Number(a.loc_in ?? 0) || 0) - (Number(b.loc_in ?? 0) || 0);
+          if (Math.abs(loc) > 0.001) return loc;
+          const lbs = (Number(a.lbs_in ?? 0) || 0) - (Number(b.lbs_in ?? 0) || 0);
+          if (Math.abs(lbs) > 0.001) return lbs;
+          const geomRank = (r: any) =>
+            String(r.geometry ?? "standard").toLowerCase() === payloadGeometry ? 0 : 1;
+          const g = geomRank(a) - geomRank(b);
+          if (g !== 0) return g;
+          return String(a.edp ?? "").localeCompare(String(b.edp ?? ""));
+        });
         // Set suggested_edps + a per-EDP {dia, loc, flutes} map so the UI can label each chip.
-        const setSuggestedEdps = (sug: any, rows: any[]) => {
+        const setSuggestedEdps = (sug: any, allRows: any[]) => {
+          const ranked = rankSuggested(allRows);
+          const rows = ranked.slice(0, MAX_SUGGESTED_EDPS);
+          // Tell the UI how many more exist so it can offer them without listing them.
+          sug.suggested_edps_more = Math.max(0, ranked.length - rows.length);
           sug.suggested_edps = rows.map((r: any) => r.edp);
           sug.suggested_edp  = sug.suggested_edps[0];
           sug.suggested_edp_meta = {};
@@ -2241,7 +2271,7 @@ export async function registerRoutes(
               if (s.type === "tool" && currentEdp.length > 1 && /^\d/.test(currentEdp)) {
                 const derivedBase = String(flutes) + currentEdp.slice(1, -1); // all but last char
                 const q = await pool.query(
-                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE AND s.edp ILIKE $1
                      AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2277,7 +2307,7 @@ export async function registerRoutes(
               if (s.type === "shorter_loc") {
                 const inputLoc = Number((parsed.data as any).loc ?? 999);
                 const qsl = await pool.query(
-                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.oal_in FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.oal_in, s.lbs_in, s.geometry FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2306,7 +2336,8 @@ export async function registerRoutes(
                 };
                 const holdable = qsl.rows.filter(gripOk);
                 if (holdable.length > 0) {
-                  setSuggestedEdps(s, holdable.slice(0, 3));
+                  // setSuggestedEdps ranks (shortest LOC first) and caps the list itself.
+                  setSuggestedEdps(s, holdable);
                 } else if (qsl.rows.length > 0) {
                   // Shorter standard tools exist but NONE leave enough shank to grip — a
                   // reduced-neck tool is the better fit here. Flag it so the UI can say so
@@ -2336,7 +2367,7 @@ export async function registerRoutes(
                 };
                 // Primary: matching corner, tools at the minimum sufficient LOC only (all coating variants)
                 const qd1 = await pool.query(
-                  `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                  `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2367,7 +2398,7 @@ export async function registerRoutes(
                 } else {
                   // Fallback: ignore corner, tools at minimum sufficient LOC only
                   const qd2 = await pool.query(
-                    `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                    `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2400,7 +2431,7 @@ export async function registerRoutes(
                   } else {
                     // Last resort: closest LOC regardless of length
                     const qd3 = await pool.query(
-                      `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                      `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                        JOIN sku_uploads u ON s.upload_id = u.id
                        WHERE u.is_current = TRUE
                          AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2442,7 +2473,7 @@ export async function registerRoutes(
                     : [flutes];
                   try {
                     const qcb = await pool.query(
-                      `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes FROM skus s
+                      `SELECT s.edp, s.corner_condition, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                        JOIN sku_uploads u ON s.upload_id = u.id
                        WHERE u.is_current = TRUE
                          AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2457,10 +2488,14 @@ export async function registerRoutes(
                       [fluteOpts, dia, loc]
                     );
                     if (qcb.rows.length > 0) {
-                      s.suggested_edps_cb = qcb.rows.map((r: any) => r.edp);
+                      // Same cap as the standard chips — the CB list runs across the whole
+                      // flute-option set, so it's the most prone to becoming a wall of EDPs.
+                      const cbRows = qcb.rows.slice(0, MAX_SUGGESTED_EDPS);
+                      s.suggested_edps_cb = cbRows.map((r: any) => r.edp);
                       s.suggested_edp_cb  = s.suggested_edps_cb[0];
+                      s.suggested_edps_cb_more = Math.max(0, qcb.rows.length - cbRows.length);
                       s.suggested_edp_cb_meta = {};
-                      for (const r of qcb.rows) {
+                      for (const r of cbRows) {
                         if (r.edp == null) continue;
                         s.suggested_edp_cb_meta[String(r.edp)] = {
                           dia: r.cutting_diameter_in != null ? Number(r.cutting_diameter_in) : null,
@@ -2474,7 +2509,7 @@ export async function registerRoutes(
               } else {
               // Non-diameter suggestions: find the closest LOC
               const q2 = await pool.query(
-                `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
+                `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                  JOIN sku_uploads u ON s.upload_id = u.id
                  WHERE u.is_current = TRUE
                    AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2505,7 +2540,7 @@ export async function registerRoutes(
                 // Fallback: ignore corner, just match flutes + dia + closest LOC
                 // Still enforce LBS requirement so we don't return a short-reach tool for an LBS job
                 const q3 = await pool.query(
-                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
+                  `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                    JOIN sku_uploads u ON s.upload_id = u.id
                    WHERE u.is_current = TRUE
                      AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
@@ -2538,7 +2573,7 @@ export async function registerRoutes(
                   // Final fallback: no tool meets lbs >= lookupLbs — use highest available LBS
                   // (user may have manually entered a larger LBS than any stocked tool)
                   const q4 = await pool.query(
-                    `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in FROM skus s
+                    `SELECT s.edp, s.cutting_diameter_in, s.loc_in, s.flutes, s.lbs_in, s.geometry FROM skus s
                      JOIN sku_uploads u ON s.upload_id = u.id
                      WHERE u.is_current = TRUE
                        AND NOT (UPPER(COALESCE(s.series,'')) LIKE '%-RN' AND COALESCE(s.lbs_in, 0) = 0)
