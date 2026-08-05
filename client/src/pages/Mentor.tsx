@@ -5449,15 +5449,23 @@ export default function Mentor() {
     speedRerunArmed.current = true;
     setSpeedRerunTick(t => t + 1);
   };
+  // Re-run for an action taken FROM the results — a stability step, an EDP chip, a speed
+  // preset. The user is looking at the results card when they click, so the run must never
+  // scroll: applying a step and getting thrown to the top of the page loses the very
+  // comparison they clicked to see. Suppress explicitly rather than relying on the
+  // off-screen check in the scroll effect, because these callers usually mutate the form
+  // first (applySkuToForm), which can re-render the page at a different height and move the
+  // card out from under that measurement.
+  const rerunInPlace = (delayMs = 0) => {
+    suppressResultsScrollRef.current = true;
+    if (delayMs > 0) setTimeout(() => { suppressResultsScrollRef.current = true; void runRef.current(); }, delayMs);
+    else void runRef.current();
+  };
   // Fire the re-run after the speed change commits to form state.
   React.useEffect(() => {
     if (!speedRerunArmed.current) return;
     speedRerunArmed.current = false;
-    // In-place re-run: the user is ALREADY looking at the results when they click a
-    // speed preset or feed level, so suppress the scroll the run would otherwise arm.
-    // Jumping the page under them here would be worse than the problem it fixes.
-    suppressResultsScrollRef.current = true;
-    void runRef.current();
+    rerunInPlace();
   }, [speedRerunTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // Export-friendly label for the chosen speed preset (fuller than the button
   // labels). Used in copy/email text and PDF so a biased SFM is explained.
@@ -20438,7 +20446,7 @@ ${stabSection}
                                     const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
                                     const data: SkuRecord[] = await r.json();
                                     const match = data.find((s) => s.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                    if (match && applySkuToForm(match, { preserveCutParams: true })) setTimeout(() => runRef.current(), 100);
+                                    if (match && applySkuToForm(match, { preserveCutParams: true })) rerunInPlace(100);
                                   } catch {}
                                 }}
                               >{edp}</button>
@@ -20648,7 +20656,7 @@ ${stabSection}
                   onClick={() => {
                     if (applySkuToForm(recSku as any, { preserveCutParams: true })) {
                       setOptimalRec(null);
-                      setTimeout(() => runRef.current(), 100);
+                      rerunInPlace(100);
                     }
                   }}
                 >
@@ -21139,7 +21147,7 @@ ${stabSection}
                               <button type="button"
                                 className="font-medium text-amber-400 underline underline-offset-2 hover:text-amber-200 transition-colors cursor-pointer text-left"
                                 title="Apply this change and re-run"
-                                onClick={() => { doApply(); setTimeout(() => runRef.current(), 100); }}
+                                onClick={() => { doApply(); rerunInPlace(100); }}
                               >{s.label}</button>
                             );
                           })()}
@@ -21207,7 +21215,7 @@ ${stabSection}
                                                 const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
                                                 const data: SkuRecord[] = await r.json();
                                                 const match = data.find((sk) => sk.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                                if (match && applySkuToForm(match, { preserveCutParams: true })) setTimeout(() => runRef.current(), 100);
+                                                if (match && applySkuToForm(match, { preserveCutParams: true })) rerunInPlace(100);
                                               } catch {}
                                             }}
                                           >{edp}</button>
@@ -21276,7 +21284,7 @@ ${stabSection}
                                                 const r = await fetch(`/api/skus?q=${encodeURIComponent(edp.trim())}`);
                                                 const data: SkuRecord[] = await r.json();
                                                 const match = data.find((sk) => sk.edp?.toLowerCase() === edp.trim().toLowerCase()) ?? data[0];
-                                                if (match && applySkuToForm(match, { preserveCutParams: true })) setTimeout(() => runRef.current(), 100);
+                                                if (match && applySkuToForm(match, { preserveCutParams: true })) rerunInPlace(100);
                                               } catch {}
                                             }}
                                           >{edp}</button>

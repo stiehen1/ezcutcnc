@@ -46,7 +46,9 @@ Two details that matter:
 - **Visibility is sampled at click time, not in the scroll effect.** That effect runs after the new results paint, and a re-run can change the card's height (a new suggestion step, a hover preview table); measuring afterward would let a card that was on screen read as off-screen and scroll anyway.
 - **"In view" requires a real slice of the card** — `min(240px, 25% of height)` — not just its bottom edge peeking in. Parked at the very bottom of the form with the card's last 20px technically visible still counts as off-screen and still scrolls.
 
-The existing in-place suppression for speed-preset and feed-level clicks is unchanged; those still never scroll.
+Clicking a **stability step or EDP chip** was still jumping to the top, and needed a separate fix. Those callers ran `setTimeout(() => runRef.current(), 100)` with no suppression, relying on the off-screen check — but they call `applySkuToForm()` first, which mutates the form and can re-render the page at a different height, moving the card out from under that measurement before the sample is taken.
+
+All six in-place re-run sites (stability step apply, three EDP-chip lookups, the optimal-rec apply, and the speed/feed presets) now route through one `rerunInPlace()` helper that suppresses the scroll explicitly. Applying a step to see what it does should never cost you the comparison you clicked for.
 
 ### Dual Contact now moves the Holder Rigidity sub-score
 Selecting **Big-Plus Dual Contact** and re-running visibly lowered tool flex (~7.4%, the engine's `rigidity_factor()` 1.08 multiplier) while **Holder Rigidity sat unchanged at Fair 48** — the sub-score named as the holder axis was ignoring a holder-interface upgrade the engine had already applied.
