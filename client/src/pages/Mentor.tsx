@@ -17806,8 +17806,16 @@ ${stabSection}
                   the geometry the user typed (a special/print tool still gets a card). */}
               {operation === "milling" && form.tool_type !== "chamfer_mill" && (() => {
                 const _edp  = (edpText || "").trim();
-                const _desc = (skuDescription || "").trim();
                 const _ser  = (form.tool_series || "").trim();
+                // Catalog descriptions tail off with the corner condition ("... Endmill
+                // w/.030 Corner Radius", "... — Ball Nose"), which the Corner Condition
+                // chip below already states. Drop the trailing clause so the one line we
+                // have left carries series/flutes/coating instead of repeating itself.
+                const _desc = (skuDescription || "").trim()
+                  .replace(/[\s,–—-]*\bw\/?\s*\.?\d*\.?\d+\s*"?\s*(corner\s*)?rad(ius)?\b.*$/i, "")
+                  .replace(/[\s,–—-]*\b(square|ball[\s-]?nose|ball[\s-]?end|corner\s*rad(ius)?)\s*(end)?\s*$/i, "")
+                  .replace(/[\s,–—-]+$/, "")
+                  .trim();
                 const _cr   = Number(form.corner_radius || 0);
                 const _end  = form.corner_condition === "ball" ? "Ball Nose"
                             : form.corner_condition === "corner_radius" && _cr > 0 ? `${_cr.toFixed(3)}" Corner Rad`
@@ -17820,9 +17828,14 @@ ${stabSection}
                   ["LOC", form.loc > 0 ? `${form.loc.toFixed(3)}"` : "—"],
                   ["OAL", (form.oal_in ?? 0) > 0 ? `${Number(form.oal_in).toFixed(3)}"` : "—"],
                   ["Shank", (form.shank_dia ?? 0) > 0 ? `${Number(form.shank_dia).toFixed(4)}"` : "—"],
-                  ["End", _end],
+                  ["Corner Condition", _end],
                 ];
                 if (_geo) _spec.push(["Geometry", _geo]);
+                // Center-cutting decides whether the tool can plunge/ramp into solid stock,
+                // so it belongs on the identity card. null = the SKU never specified it;
+                // say "not specified" rather than guessing either way.
+                const _cc = (form as any).center_cutting as boolean | null | undefined;
+                _spec.push(["Center Cutting", _cc == null ? "Not specified" : _cc ? "Yes" : "No"]);
                 // Stickout deliberately NOT listed — it's a setup value, not part of the
                 // tool's identity, and the stability panel already reports it with L/D.
                 return (

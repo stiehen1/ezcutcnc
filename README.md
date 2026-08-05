@@ -8,6 +8,14 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Results now lead with the tool being run; Machining Tips moved to the bottom
+The Machining Tips accordion sat between the "Recommendation" heading and the first number — background reading on the strategy, standing between the user and their parameters. Its place goes to a **Tool Being Run** card: EDP + series, the catalog description, then Ø / flutes / LOC / OAL / shank / end condition (plus geometry for chipbreaker or truncated rougher). The numbers below are only trustworthy if they're for the *right* tool, so the results restate what the engine actually ran against before showing any of them. A special or manually-entered tool says so outright and shows the typed geometry instead of rendering an empty card. Description is clamped to one line (full text on hover); stickout is deliberately excluded as a setup value the stability panel already reports with L/D.
+
+### Fix: the hybrid DOC cap was stealing axial depth from *classic* titanium HEM
+Regression from the hybrid work above. The 2×D DOC cap gated on `hybridOk` — "this tool is **eligible** for hybrid" (Ti, 4–6 flute) — instead of whether hybrid was actually selected, so every titanium 4–6 flute tool lost axial depth on classic light-WOC HEM too. Caught on EDP 505221 (5-fl, 0.500" Ø, 1.250" LOC): High DOC offered 2.0×D = 1.000" when the tool has **2.5×D of flute** and nothing was capping it but the bug. The shop has run a 1/2" tool **3×D** deep in HEM at light WOC, so the 5+ flute 3.0×D cap is real and this was silently removing it.
+- Gate is now the committed `hybrid_hem` selection, passed into `getDynamicPresets` separately from eligibility. The WOC ladder still offers the 25% Hybrid step to any eligible tool; only *choosing* it pulls DOC to 2×D.
+- **`doc_xd` re-seeds when the hybrid toggle moves the ceiling.** Without it a DOC picked under the old cap is stranded — above the new max after turning hybrid on, or stuck shallow after turning it off — while the button row shows different numbers. Keeps the operator's low/med/high step, recomputed against the new cap.
+
 ### "Hybrid HEM" for titanium — heavy radial bite at reduced speed, calibrated to a shop run
 Shop finding: in Ti-6Al-4V a **heavier** radial bite at a **lower** surface speed beats the classic light-WOC/high-SFM HEM recipe. It rides the WOC quick-picks rather than a separate selector, so the strategy lives on the control that defines it. Titanium HEM now offers **7% / 10% / Hybrid 25%** on 4–6 flute tools; 3-flute (no chip space for a heavy bite) and 7+ flute (chip too thin at that engagement) fall back to **7 / 10 / 12**, and QTR3 is 3-flute so it never qualifies.
 - **Anchor run** (1/2" 6-flute, 1.0 LOC): `SFM 220 · adj FPT .0027 · 27 IPM · RDOC .130 (26%) · ADOC 1" (2×D)`. Engine reproduces it at **.00269 / 28.0 IPM** on a hydraulic holder.
