@@ -3694,7 +3694,7 @@ export default function Mentor() {
   }
 
   // Derive dynamic presets for the current mode/material/flutes
-  function getDynamicPresets(mode: string, isoRaw: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard", material = ""): {
+  function getDynamicPresets(mode: string, isoRaw: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard", material = "", hybridActive = false): {
     woc: { low: number; med: number; high: number };
     doc: { low: number; med: number; high: number };
   } {
@@ -3754,11 +3754,13 @@ export default function Mentor() {
         hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
       } else {
         // HEM DOC cap by flute count: 3-fl → 1.5×D, 4-fl → 2.0×D, 5+fl → 3.0×D (hardened always 1.5×D)
-        // Hybrid HEM trades axial for radial: the 20% bite is validated to 2×D, not the
-        // 3×D a 5/6-flute gets at light WOC. Cap it so the High DOC button can't offer a
-        // depth the heavy-radial recipe was never run at.
+        // Hybrid HEM trades axial for radial: the heavy bite is validated to 2×D, not the
+        // 3×D a 5/6-flute gets at light WOC. Gate on hybridActive (the operator actually
+        // PICKED Hybrid), never on hybridOk (merely eligible) — otherwise every Ti 4-6
+        // flute tool loses axial depth on classic HEM too. A 5-fl 0.500" with 1.250" LOC
+        // is 2.5×D of flute and should offer all of it until Hybrid is chosen.
         const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5 : flutes === 4 ? 2.0
-                     : hybridOk ? 2.0 : 3.0;
+                     : hybridActive ? 2.0 : 3.0;
         const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
         const docHigh = Math.round(rawHigh * 4) / 4;
         const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
@@ -3849,8 +3851,12 @@ export default function Mentor() {
     // deep DOC — not the full-width slot ceilings. Traditional slotting keeps "slot".
     getDynamicPresets(
       (form.mode === "slot" && form.slot_strategy === "hem") ? "trochoidal" : form.mode,
-      isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard", form.material ?? ""),
-    [form.mode, form.slot_strategy, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series, form.geometry, form.material] // eslint-disable-line
+      isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard", form.material ?? "",
+      // Pass the COMMITTED hybrid selection, not eligibility — only a chosen Hybrid
+      // should pull the DOC cap down to 2×D. The WOC ladder still offers the 25% step
+      // to any eligible tool regardless of this flag.
+      form.hybrid_hem),
+    [form.mode, form.slot_strategy, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series, form.geometry, form.material, form.hybrid_hem] // eslint-disable-line
   );
 
   // Hybrid HEM (titanium) — the heavy-radial / reduced-SFM recipe. Available only when the
@@ -14262,8 +14268,26 @@ ${stabSection}
                           // (or Hybrid on a non-qualifying tool) turns it back off, so the
                           // SFM base can never stay at 227 after leaving the heavy WOC.
                           const _hyb = isTiHybridWoc && key === "high";
-                          setForm((p) => ({ ...p, woc_pct: val, hybrid_hem: _hyb }));
+                          // Toggling hybrid moves the DOC ceiling (2×D vs 3×D), so a DOC
+                          // chosen under the old cap can be left stranded above the new
+                          // one — or stuck shallow after switching back off. Re-seed from
+                          // the preset that matches the NEW cap, keeping whichever
+                          // low/med/high step the operator had picked.
+                          let _docNext: number | null = null;
+                          if (_hyb !== form.hybrid_hem && docPreset && docPreset !== "optimal") {
+                            const _cap = form.flutes <= 3 ? 1.5 : form.flutes === 4 ? 2.0 : (_hyb ? 2.0 : 3.0);
+                            const _raw = form.loc > 0 && dia > 0 ? Math.min(form.loc / dia, _cap) : _cap;
+                            const _hi  = Math.round(_raw * 4) / 4;
+                            const _med = Math.round(_hi * 0.75 * 4) / 4;
+                            const _low = Math.round(_med * 0.75 * 4) / 4;
+                            _docNext = docPreset === "high" ? _hi : docPreset === "med" ? _med : _low;
+                          }
+                          setForm((p) => ({
+                            ...p, woc_pct: val, hybrid_hem: _hyb,
+                            ...(_docNext != null ? { doc_xd: _docNext } : {}),
+                          }));
                           setWocText(((val / 100) * dia).toFixed(4));
+                          if (_docNext != null) setDocText((_docNext * dia).toFixed(4));
                           setWocPreset(key);
                         }}
                         className="flex-1 rounded py-0.5 text-[10px] font-semibold border transition-all leading-tight"
