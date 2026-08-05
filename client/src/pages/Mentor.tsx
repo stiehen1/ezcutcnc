@@ -3275,6 +3275,10 @@ export default function Mentor() {
 
     // Speed preset — biases recommended SFM to trade speed for tool life. balanced = no change.
     speed_preset: "balanced" as "max_life" | "better_life" | "balanced" | "high_throughput" | "max_mrr",
+    // Hybrid HEM (titanium) — set when the operator picks the "Hybrid" WOC step. Drives
+    // the engine's reduced SFM base (227 balanced). Kept in form state (not derived at
+    // send time) so it round-trips through save/load with the rest of the inputs.
+    hybrid_hem: false,
     hem_feed: "full" as "mild" | "moderate" | "full",
     rough_feed: "full" as "mild" | "moderate" | "full",
     // Manual SFM override — when > 0, used directly (clamped to safe band) instead of the preset.
@@ -3690,10 +3694,14 @@ export default function Mentor() {
   }
 
   // Derive dynamic presets for the current mode/material/flutes
-  function getDynamicPresets(mode: string, isoRaw: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard"): {
+  function getDynamicPresets(mode: string, isoRaw: string, flutes: number, dia: number, loc: number, tool_series = "", geometry = "standard", material = ""): {
     woc: { low: number; med: number; high: number };
     doc: { low: number; med: number; high: number };
   } {
+    // TITANIUM specifically — not all of ISO S. Inconel/HRSA share the S category but are
+    // separately calibrated at 2-3% WOC, and the heavy-radial hybrid recipe below is NOT
+    // validated for them. Match the material key, not the ISO letter.
+    const isTi = /^titanium/i.test(material);
     // Material system uses N1 (clean non-ferrous: aluminum/brass/copper) and N2
     // (abrasive non-ferrous: Mn/Si bronze, Cu-Be — tooled like steel). The preset
     // logic below was written against a single "N"; map N1 → "N" so clean
@@ -3706,6 +3714,11 @@ export default function Mentor() {
       const { wocMed: alWocMed } = getHemMed(iso, flutes); // aluminum keeps per-flute table
       const isVxr  = tool_series === "VXR4" || tool_series === "VXR5";
       const isQtr3 = /^QTR3/i.test(tool_series);
+      // Hybrid HEM (titanium only): heavy 20% radial at a reduced SFM. Shop-validated on
+      // 4-6 flute tools ONLY — a 3-flute lacks the chip space to carry a 20% bite, and 7+
+      // flutes thin the chip too far at that engagement. Outside 4-6 the third WOC button
+      // stays the normal High preset. QTR3 is 3-flute so it never qualifies.
+      const hybridOk = isTi && !isQtr3 && flutes >= 4 && flutes <= 6;
       const hemWoc =
         isVxr                ? { low: 10, med: 15, high: 18 } // VXR truncated rougher — high MRR
       // QTR3: 3-fl variable pitch+helix, P-Max, .0625–.250" — ISO-aware HEM WOC
@@ -3719,6 +3732,14 @@ export default function Mentor() {
         :               { low: 8,  med: 10, high: 12 }  // P steel — 3-fl + var helix supports 8–12%
       )
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
+      // Titanium HEM: shop-validated "hybrid HEM" — a heavier radial bite at a LOWER
+      // surface speed outruns the classic light-WOC/high-SFM recipe. So the Ti ladder is
+      // 7 / 10 / 20 (the 20% top step is the hybrid recipe, gated to 4-6 flutes below).
+      // Other ISO S (Inconel/HRSA) keeps the conservative light-radial regime — that one
+      // is separately shop-calibrated at 2-3% and heavy WOC there is NOT validated.
+      : iso === "S" && isTi ? (geometry === "chipbreaker"
+          ? { low: 8, med: 10, high: hybridOk ? 20 : 12 }
+          : { low: 7, med: 10, high: hybridOk ? 20 : 12 })
       : iso === "S" ? (geometry === "chipbreaker" ? { low: 8, med: 10, high: 12 } : { low: 3, med: 5, high: 8 })   // superalloys / Inconel — CB needs ≥8% to engage
       : iso === "H" ? { low: 3, med: 4, high: 5 }   // hardened — very conservative
       : flutes >= 9  ? { low: 5, med: 7, high: 9 }   // P / M / K — 9+ flutes
@@ -3731,7 +3752,11 @@ export default function Mentor() {
         hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
       } else {
         // HEM DOC cap by flute count: 3-fl → 1.5×D, 4-fl → 2.0×D, 5+fl → 3.0×D (hardened always 1.5×D)
-        const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5 : flutes === 4 ? 2.0 : 3.0;
+        // Hybrid HEM trades axial for radial: the 20% bite is validated to 2×D, not the
+        // 3×D a 5/6-flute gets at light WOC. Cap it so the High DOC button can't offer a
+        // depth the heavy-radial recipe was never run at.
+        const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5 : flutes === 4 ? 2.0
+                     : hybridOk ? 2.0 : 3.0;
         const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
         const docHigh = Math.round(rawHigh * 4) / 4;
         const docMed  = Math.round(docHigh * 0.75 * 4) / 4;
@@ -3822,9 +3847,19 @@ export default function Mentor() {
     // deep DOC — not the full-width slot ceilings. Traditional slotting keeps "slot".
     getDynamicPresets(
       (form.mode === "slot" && form.slot_strategy === "hem") ? "trochoidal" : form.mode,
-      isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard"),
-    [form.mode, form.slot_strategy, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series] // eslint-disable-line
+      isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series ?? "", form.geometry ?? "standard", form.material ?? ""),
+    [form.mode, form.slot_strategy, isoCategory, form.flutes, form.tool_dia, form.loc, form.tool_series, form.geometry, form.material] // eslint-disable-line
   );
+
+  // Hybrid HEM (titanium) — the heavy-radial / reduced-SFM recipe. Available only when the
+  // WOC preset actually resolved to the 20% hybrid step, which already encodes the
+  // material (titanium), mode (HEM/trochoidal) and flute gate (4-6). Deriving it from the
+  // resolved preset rather than re-testing those conditions keeps the button label, the
+  // SFM override and the active-state check from ever disagreeing.
+  const isTiHybridWoc =
+    (form.mode === "hem" || form.mode === "trochoidal") &&
+    /^titanium/i.test(form.material ?? "") &&
+    dynPresets.woc.high >= 20;
 
   // Keep WOC_PRESETS / DOC_PRESETS as aliases pointing to dynamic values for
   // any existing code that references them directly
@@ -3848,6 +3883,17 @@ export default function Mentor() {
   };
   const [wocPreset, setWocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>(null);
   const [docPreset, setDocPreset] = React.useState<"low" | "med" | "high" | "optimal" | null>("med");
+  // Hybrid HEM is ACTIVE only once the operator has actually picked that top WOC step.
+  // Declared after wocPreset so it reads the committed value, not a TDZ reference.
+  const hybridHemActive = isTiHybridWoc && wocPreset === "high";
+  // Clear the flag the moment it stops being offerable — switching material off titanium,
+  // changing to a 3-fl/7+fl tool, or leaving HEM must not leave a stale hybrid_hem=true
+  // pinning SFM at 227 on a job that is no longer the hybrid recipe.
+  React.useEffect(() => {
+    if (form.hybrid_hem && !hybridHemActive) {
+      setForm(p => ({ ...p, hybrid_hem: false }));
+    }
+  }, [form.hybrid_hem, hybridHemActive]);
 
   // Local text state for WOC/DOC — WOC shows actual inches (woc_pct/100 × tool_dia)
   const [wocText, setWocText] = React.useState("");
@@ -14195,7 +14241,13 @@ ${stabSection}
                 const btns = [
                   { key: "low" as const,  label: "Low",  val: wp.low },
                   { key: "med" as const,  label: "Med",  val: wp.med },
-                  { key: "high" as const, label: "High", val: wp.high },
+                  // Titanium HEM's top step is the shop-validated "hybrid HEM" recipe —
+                  // heavy 20% radial at a reduced SFM — so it gets its own name rather
+                  // than reading as just a bigger High. Only when the preset actually
+                  // resolved to 20 (4-6 flute); a 3-fl or 7+ fl Ti tool shows plain High.
+                  isTiHybridWoc
+                    ? { key: "high" as const, label: "Hybrid", val: wp.high }
+                    : { key: "high" as const, label: "High",   val: wp.high },
                 ];
                 return (
                   <div className="flex gap-1 mt-1">
@@ -14204,7 +14256,11 @@ ${stabSection}
                         key={key}
                         type="button"
                         onClick={() => {
-                          setForm((p) => ({ ...p, woc_pct: val }));
+                          // Picking the Hybrid step turns the recipe ON; picking Low/Med
+                          // (or Hybrid on a non-qualifying tool) turns it back off, so the
+                          // SFM base can never stay at 227 after leaving the heavy WOC.
+                          const _hyb = isTiHybridWoc && key === "high";
+                          setForm((p) => ({ ...p, woc_pct: val, hybrid_hem: _hyb }));
                           setWocText(((val / 100) * dia).toFixed(4));
                           setWocPreset(key);
                         }}

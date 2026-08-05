@@ -127,6 +127,11 @@ export const mentorSchemas = {
     // Speed preset — biases recommended SFM within a bounded, per-material envelope
     // so users can trade speed for tool life (or the reverse). balanced = no change.
     speed_preset: z.enum(["max_life", "better_life", "balanced", "high_throughput", "max_mrr"]).default("balanced"),
+    // Hybrid HEM (titanium) — the shop-validated heavy-radial / reduced-speed recipe:
+    // ~20% WOC at ~227 SFM balanced, instead of the classic light-WOC/high-SFM HEM.
+    // Set by the client when the operator picks the "Hybrid" WOC step (Ti, 4-6 flute).
+    // The engine uses it to replace the HEM SFM base; WOC/DOC come through normally.
+    hybrid_hem: z.boolean().default(false),
     // Manual SFM override — when > 0, used directly (clamped to the safe envelope)
     // instead of the preset. 0 = use the preset. Engine returns customer.sfm_control.
     sfm_override: z.number().min(0).default(0),

@@ -201,7 +201,13 @@ SPEED_PRESET_ORDER = ["max_life", "better_life", "balanced", "high_throughput", 
 
 SPEED_PRESET_BIAS = {
     # group                  max_life  better_life  balanced  high_throughput  max_mrr
-    "Titanium":            {"max_life": 0.55, "better_life": 0.72, "balanced": 1.00, "high_throughput": 1.10, "max_mrr": 1.18},
+    # Titanium upside deliberately narrow. Ti is heat-limited: pushing surface speed past
+    # the balanced value buys very little MRR and costs edge life fast, and shop experience
+    # is that the old 1.18 top (425 SFM in HEM) was further than anyone actually runs. The
+    # ceiling is now ~380 SFM in HEM / ~190 conventional, with the two upper steps spaced
+    # so they stay distinguishable. The downside range is unchanged — slowing Ti down DOES
+    # buy real life, which is the whole point of the Max Life end.
+    "Titanium":            {"max_life": 0.72, "better_life": 0.86, "balanced": 1.00, "high_throughput": 1.03, "max_mrr": 1.055},
     "Inconel":             {"max_life": 0.55, "better_life": 0.72, "balanced": 1.00, "high_throughput": 1.08, "max_mrr": 1.15},
     "Stainless":           {"max_life": 0.68, "better_life": 0.82, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.22},
     "Steel":               {"max_life": 0.70, "better_life": 0.84, "balanced": 1.00, "high_throughput": 1.12, "max_mrr": 1.25},
@@ -234,7 +240,12 @@ def speed_preset_factor(preset: str, material_group: str) -> float:
 # where a low balanced baseline × 0.55 could otherwise dip into the rub zone.
 # Groups not listed have no practical low-speed rubbing limit (alu/brass/plastic).
 SPEED_PRESET_MIN_SFM = {
-    "Titanium":  115,   # Ti-6Al-4V: below ~110-120 SFM the edge rubs and heat spikes
+    # Ti-6Al-4V: 180 SFM is the practical floor. The old 115 was the theoretical rubbing
+    # line, but it let Max Life land at 125 SFM off the hybrid HEM base (227 × 0.55) — deep
+    # in the zone where the edge stops cutting and starts plowing, which SHORTENS life
+    # rather than extending it. Shop practice is that nothing below ~180 is worth running
+    # in Ti regardless of how conservative you want to be.
+    "Titanium":  180,
     "Inconel":    75,   # Ni/Co superalloys already run slow; floor keeps off the rub line
     "Stainless": 120,   # austenitic work-hardens fast if speed drops too low
     "Steel":     150,
@@ -5031,6 +5042,17 @@ def run(payload=None):
         if _mat_key in _hem_sfm_override:
             base_sfm = _hem_sfm_override[_mat_key]
 
+        # HYBRID HEM (titanium) — shop-validated: a heavier radial bite (~20% Ø) at a much
+        # LOWER surface speed outruns the classic light-WOC/high-SFM recipe in Ti-6Al-4V.
+        # The heavier engagement thins the chip far less (1.25× at 20% vs 1.96× at 7%), so
+        # each tooth takes a real bite instead of skiving, and the reduced speed keeps the
+        # heat in the chip rather than the edge — which is what actually limits Ti.
+        # 227 SFM is the balanced anchor; the presets scale around it as normal.
+        # Gated to titanium only: Inconel/HRSA share ISO S but are separately calibrated
+        # at 2-3% WOC, and heavy radial there is NOT validated.
+        if data.get("hybrid_hem") and material_group == "Titanium":
+            base_sfm = 227.0
+
     # Apply hardness SFM reduction — skip for Inconel/HRSA (hardness is intrinsic, not a variable)
     _hrc = float(data.get("hardness_hrc", 0) or 0)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
@@ -5528,11 +5550,15 @@ def run(payload=None):
                 if not ball_finish_mode:
                     woc = max_woc_for_doc
 
-            # HEM radial cap for HRSA stability
+            # HEM radial cap for HRSA stability. Hybrid HEM in titanium is the deliberate
+            # exception: the whole recipe IS a heavier radial bite (~20%) traded against a
+            # reduced surface speed, so clamping it to 15% here would silently undo the
+            # strategy the operator picked. Cap lifts to 20% for that case only.
             if data.get("mode") == "hem" and material_group in ["Inconel", "Titanium", "Stainless"]:
-                max_hem_woc = data["diameter"] * 0.15
+                _hrsa_cap_frac = 0.20 if (data.get("hybrid_hem") and material_group == "Titanium") else 0.15
+                max_hem_woc = data["diameter"] * _hrsa_cap_frac
                 if woc > max_hem_woc:
-                    print("⚠ HEM radial capped at 15% Ø for HRSA stability")
+                    print(f"⚠ HEM radial capped at {_hrsa_cap_frac*100:.0f}% Ø for HRSA stability")
                     woc = max_hem_woc
 
             # Trochoidal hard cap: ae must not exceed 20% Dc (spec requirement)
