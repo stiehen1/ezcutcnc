@@ -3753,13 +3753,19 @@ export default function Mentor() {
         const vxrCap = (n: number) => loc > 0 && dia > 0 ? Math.min(loc / dia, n) : n;
         hemDoc = { low: vxrCap(1.5), med: vxrCap(2.0), high: vxrCap(2.5) };
       } else {
-        // HEM DOC cap by flute count: 3-fl → 1.5×D, 4-fl → 2.0×D, 5+fl → 3.0×D (hardened always 1.5×D)
+        // HEM DOC cap by flute count: 3-fl → 1.5×D, 4+fl → 3.0×D (hardened always 1.5×D).
+        // 4-flute used to be held to 2.0×D while 5-fl got 3.0×D, which is backwards for the
+        // chip-evacuation argument that sets these caps — a 4-flute has MORE room per tooth
+        // than a 5-flute, and HEM's light radial bite is exactly where deep axial pays off.
+        // It also fought the engine, whose own HEM cap (legacy_engine.py `_hem_doc_cap`) is
+        // material-driven with no flute term at all, so the advisor would recommend stepping
+        // DOC past a depth the UI ladder refused to offer.
         // Hybrid HEM trades axial for radial: the heavy bite is validated to 2×D, not the
-        // 3×D a 5/6-flute gets at light WOC. Gate on hybridActive (the operator actually
+        // 3×D a 4/5/6-flute gets at light WOC. Gate on hybridActive (the operator actually
         // PICKED Hybrid), never on hybridOk (merely eligible) — otherwise every Ti 4-6
         // flute tool loses axial depth on classic HEM too. A 5-fl 0.500" with 1.250" LOC
         // is 2.5×D of flute and should offer all of it until Hybrid is chosen.
-        const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5 : flutes === 4 ? 2.0
+        const hemCap = iso === "H" ? 1.5 : flutes <= 3 ? 1.5
                      : hybridActive ? 2.0 : 3.0;
         const rawHigh = loc > 0 && dia > 0 ? Math.min(loc / dia, hemCap) : hemCap;
         const docHigh = Math.round(rawHigh * 4) / 4;
@@ -14339,7 +14345,9 @@ ${stabSection}
                           // low/med/high step the operator had picked.
                           let _docNext: number | null = null;
                           if (_hyb !== form.hybrid_hem && docPreset && docPreset !== "optimal") {
-                            const _cap = form.flutes <= 3 ? 1.5 : form.flutes === 4 ? 2.0 : (_hyb ? 2.0 : 3.0);
+                            // Mirrors getDynamicPresets' hemCap — keep the two in step, or
+                            // toggling Hybrid re-seeds DOC to a ceiling the ladder disagrees with.
+                            const _cap = isoCategory === "H" ? 1.5 : form.flutes <= 3 ? 1.5 : (_hyb ? 2.0 : 3.0);
                             const _raw = form.loc > 0 && dia > 0 ? Math.min(form.loc / dia, _cap) : _cap;
                             const _hi  = Math.round(_raw * 4) / 4;
                             const _med = Math.round(_hi * 0.75 * 4) / 4;

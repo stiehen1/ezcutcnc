@@ -8,6 +8,15 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### 4-flute HEM DOC raised to 3×D — it was capped tighter than a 5-flute
+The HEM DOC ladder held 4-flute tools to **2.0×D** while giving 5-flute and up **3.0×D**. A 405221 (4-fl, 0.500"Ø, 1.250" LOC) has 2.5×D of flute available, and the cap — not the geometry — was what stopped the High preset at 2.0, leaving half a diameter of usable flute unreachable from the buttons.
+
+That was backwards for the reasoning these caps encode. Chip evacuation sets the ceiling, and a 4-flute has *more* room per tooth than a 5-flute; HEM's light radial bite is exactly the case where deep axial engagement is supposed to pay off. The comment above the code already made this argument — it just applied it to 5-flute and denied it to 4.
+
+It also fought the engine. `legacy_engine.py`'s own `_hem_doc_cap` is **material**-driven with no flute term (Aluminum/Ti/Inconel 3.0, Stainless 2.5, Hardened 1.5), as is the deep-pocket depth-headroom check, so the stability advisor would recommend stepping DOC to a depth the UI ladder refused to offer.
+
+4-flute now falls through to the same branch as 5+: **3.0×D**, still clamped to actual flute length. The guardrails are untouched — 3-flute and ISO H stay at 1.5×D, and a selected Hybrid HEM still pulls the ceiling back to 2.0×D (and now correctly covers 4-flute, which is inside Hybrid's own 4-6 flute gate). The duplicate copy of this cap in the WOC-preset handler, which re-seeds DOC when Hybrid is toggled, was aligned to match — it had drifted and was also missing the ISO H term.
+
 ### Hover previews show the change, not two numbers to diff
 The "If applied" preview printed the resulting value with a bare ✓ or ⚠, leaving the user to work out the size of the move themselves. Each row now carries a **signed percentage and a direction arrow** — `▼ 32%`, `▲ 15%`.
 
