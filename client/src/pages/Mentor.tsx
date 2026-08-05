@@ -17828,26 +17828,46 @@ ${stabSection}
                             : "Square";
                 const _geo  = form.geometry === "chipbreaker" ? "Chipbreaker"
                             : form.geometry === "truncated_rougher" ? "Truncated Rougher" : "";
+                // Ordered the way the dimensions read off a tool print, front of the tool
+                // back: Cut Ø, Shank Ø, LOC, LBS (necked only), OAL. LBS sits between LOC
+                // and OAL because that's where it falls on the tool.
                 const _spec: Array<[string, string]> = [
-                  ["Ø", `${form.tool_dia?.toFixed(4) ?? "—"}"`],
-                  ["Flutes", String(form.flutes ?? "—")],
+                  ["Cut Ø", `${form.tool_dia?.toFixed(4) ?? "—"}"`],
+                  ["Shank Ø", (form.shank_dia ?? 0) > 0 ? `${Number(form.shank_dia).toFixed(4)}"` : "—"],
                   ["LOC", form.loc > 0 ? `${form.loc.toFixed(3)}"` : "—"],
-                  ["OAL", (form.oal_in ?? 0) > 0 ? `${Number(form.oal_in).toFixed(3)}"` : "—"],
-                  ["Shank", (form.shank_dia ?? 0) > 0 ? `${Number(form.shank_dia).toFixed(4)}"` : "—"],
-                  ["Corner Condition", _end],
                 ];
+                // LBS (Length Below Shoulder) — the defining dimension of a necked/
+                // reduced-neck tool: it's the reach, AND it's the stickout floor, since
+                // the shank can bury right to the neck. Only meaningful when non-zero.
+                if (!_isCham && (form.lbs ?? 0) > 0) {
+                  _spec.push(["LBS (neck reach)", `${Number(form.lbs).toFixed(4)}"`]);
+                  // Reduced neck Ø (stored in keyseat_arbor_dia) is the weak link in the
+                  // LOC→LBS span, so keep it next to the LBS rather than adrift later.
+                  if ((form.keyseat_arbor_dia ?? 0) > 0) _spec.push(["Neck Ø", `${Number(form.keyseat_arbor_dia).toFixed(4)}"`]);
+                }
+                _spec.push(
+                  ["OAL", (form.oal_in ?? 0) > 0 ? `${Number(form.oal_in).toFixed(3)}"` : "—"],
+                  ["Flutes", String(form.flutes ?? "—")],
+                  ["Corner Condition", _end],
+                );
                 // Chamfer mills are a different tool: angle and tip Ø define them, and the
                 // corner-condition / center-cutting language above doesn't apply. Swap the
                 // spec set rather than showing endmill fields that read as blank or wrong.
                 if (_isCham) {
                   _spec.length = 0;
                   const _tip = Number(form.chamfer_tip_dia ?? 0);
+                  // Same front-to-back reading order as the endmill set: Cut Ø, Tip Ø,
+                  // Shank Ø, OAL — then the angles and derived edge length.
                   _spec.push(
-                    ["Ø", `${form.tool_dia?.toFixed(4) ?? "—"}"`],
+                    ["Cut Ø", `${form.tool_dia?.toFixed(4) ?? "—"}"`],
+                    ["Tip Ø", _tip > 0 ? `${_tip.toFixed(4)}"` : "Sharp / pointed"],
+                  );
+                  if ((form.shank_dia ?? 0) > 0) _spec.push(["Shank Ø", `${Number(form.shank_dia).toFixed(4)}"`]);
+                  if ((form.oal_in ?? 0) > 0)    _spec.push(["OAL", `${Number(form.oal_in).toFixed(3)}"`]);
+                  _spec.push(
                     ["Flutes", String(form.flutes ?? "—")],
                     ["Included Angle", (form.chamfer_angle ?? 0) > 0 ? `${form.chamfer_angle}°` : "—"],
                     ["Per Side", (form.chamfer_angle ?? 0) > 0 ? `${(Number(form.chamfer_angle) / 2).toFixed(1)}°` : "—"],
-                    ["Tip Ø", _tip > 0 ? `${_tip.toFixed(4)}"` : "Sharp / pointed"],
                   );
                   // Usable edge length — how much chamfer face the tool can actually cut
                   // before running out of ground flank. The #1 thing to check against the
@@ -17859,17 +17879,8 @@ ${stabSection}
                     if (isFinite(_edge) && _edge > 0) _spec.push(["Usable Edge", `${_edge.toFixed(4)}"`]);
                   }
                   if ((form.chamfer_depth ?? 0) > 0) _spec.push(["Chamfer Width", `${Number(form.chamfer_depth).toFixed(4)}"`]);
-                  if ((form.oal_in ?? 0) > 0) _spec.push(["OAL", `${Number(form.oal_in).toFixed(3)}"`]);
-                  if ((form.shank_dia ?? 0) > 0) _spec.push(["Shank", `${Number(form.shank_dia).toFixed(4)}"`]);
                 } else {
                   if (_geo) _spec.push(["Geometry", _geo]);
-                  // LBS (Length Below Shoulder) — the defining dimension of a necked/
-                  // reduced-neck tool: it's the reach, AND it's the stickout floor, since
-                  // the shank can bury right to the neck. Only meaningful when non-zero.
-                  if ((form.lbs ?? 0) > 0) _spec.push(["LBS (neck reach)", `${Number(form.lbs).toFixed(4)}"`]);
-                  // Necked reach tools store the reduced neck Ø in keyseat_arbor_dia — it's
-                  // the weak link in the LOC→LBS span, so show it beside the LBS it belongs to.
-                  if ((form.keyseat_arbor_dia ?? 0) > 0) _spec.push(["Neck Ø", `${Number(form.keyseat_arbor_dia).toFixed(4)}"`]);
                   // Center-cutting decides whether the tool can plunge/ramp into solid stock,
                   // so it belongs on the identity card. null = the SKU never specified it;
                   // say "not specified" rather than guessing either way.
