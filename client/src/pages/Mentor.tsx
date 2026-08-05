@@ -6434,6 +6434,16 @@ ${stabSection}
     "shrink_fit",       // thermal shrink, <1 µm TIR
     "capto",            // polygon taper + face contact — best
   ];
+  // Holder grip-stiffness values — mirrors the engine's TOOLHOLDER_RIGIDITY
+  // (legacy_engine.py) exactly, and the same ladder its hard "Upgrade to X" holder
+  // step walks. Used to show the rigidity gain of each stiffer holder on hover, so
+  // the percentage the panel quotes is the one the engine would act on. HIGHER =
+  // stiffer, unlike WORKHOLDING_RIGIDITY_VALUE below, which is compliance.
+  const TOOLHOLDER_RIGIDITY_VALUE: Record<string, number> = {
+    right_angle_head: 0.72, er_collet: 1.00, hp_collet: 1.05, weldon: 1.08,
+    shell_mill_arbor: 1.10, milling_chuck: 1.12, hydraulic: 1.14,
+    press_fit: 1.17, shrink_fit: 1.18, capto: 1.20,
+  };
   // Map dropdown rank onto a 0–100 quality band. Worst holder floors at ~40 (a
   // usable-but-flagged setup), best tops at 100; each step up is ~7.5 points —
   // comfortably larger than the 1–3 pt dip a faster feed puts on Tool Flex /
@@ -20895,6 +20905,97 @@ ${stabSection}
                 );
               };
 
+              // Rigidity ladder for the two SOFT steps (holder / workholding). Those steps
+              // fire when a setup sub-score is the weak link but tool flex is already within
+              // limit — so the engine's flex-suggestion path never runs and the step arrives
+              // with no numbers: "possibly look toward a more rigid holder" and nothing about
+              // which one, or by how much. This lists every option we offer that's stiffer
+              // than what they picked, with the gain, using the SAME tables the engine and the
+              // sub-scores use (TOOLHOLDER_RIGIDITY / WORKHOLDING_COMPLIANCE).
+              //
+              // Deliberately quotes stiffness only, not a flex %: tool flex is inside the
+              // limit at this point, so promising a flex drop would be inventing a number the
+              // engine never produced. Clicking still isn't offered here — a holder or fixture
+              // change is a purchase, not a form tweak.
+              const renderRigidityLadder = (kind: "holder" | "workholding") => {
+                const isHolder = kind === "holder";
+                const curKey = (isHolder ? form.toolholder : form.workholding) ?? "";
+                const curLbl = isHolder ? _rigLblSoft : _whLblSoft;
+                // Holder values are STIFFNESS (higher better); workholding values are
+                // COMPLIANCE (lower better). Normalize both to a "stiffer by %" figure.
+                let opts: Array<{ key: string; gainPct: number; capital: boolean }>;
+                if (isHolder) {
+                  const cur = TOOLHOLDER_RIGIDITY_VALUE[curKey] ?? 1.0;
+                  opts = HOLDER_QUALITY_RANK
+                    .map(k => ({ key: k, v: TOOLHOLDER_RIGIDITY_VALUE[k] ?? 1.0 }))
+                    .filter(o => o.key !== curKey && o.v > cur + 0.001)
+                    .sort((a, b) => a.v - b.v)
+                    .map(o => ({
+                      key: o.key,
+                      gainPct: Math.round((o.v / cur - 1) * 100),
+                      capital: o.key === "shrink_fit" || o.key === "capto",
+                    }));
+                } else {
+                  const cur = WORKHOLDING_RIGIDITY_VALUE[curKey] ?? 1.0;
+                  // Scope to what THIS machine actually exposes — offering a mill fixture
+                  // plate on a lathe would be advice the user can't act on.
+                  const allowed = WORKHOLDING_ALLOWED[form.machine_type ?? "vmc"]
+                    ?? Object.keys(WORKHOLDING_RIGIDITY_VALUE);
+                  opts = allowed
+                    .map(k => ({ key: k, v: WORKHOLDING_RIGIDITY_VALUE[k] ?? 1.0 }))
+                    .filter(o => o.key !== curKey && o.v < cur - 0.001)
+                    .sort((a, b) => b.v - a.v)   // softest of the stiffer options first
+                    .map(o => ({
+                      key: o.key,
+                      gainPct: Math.round((cur / o.v - 1) * 100),
+                      capital: false,
+                    }));
+                }
+                if (!opts.length) return null;
+                // Cap the list so the hover stays readable. A soft-jaw lathe setup has 12
+                // stiffer options; a wall of them reads as a catalog, not advice. Keep the
+                // nearest upgrades (smallest gain first, already sorted) plus the stiffest
+                // option, so the user sees both the cheap next step and the ceiling.
+                const MAX_ROWS = 6;
+                let trimmed = 0;
+                if (opts.length > MAX_ROWS) {
+                  trimmed = opts.length - MAX_ROWS;
+                  opts = [...opts.slice(0, MAX_ROWS - 1), opts[opts.length - 1]];
+                }
+                const labels = isHolder ? TOOLHOLDER_LABELS : WORKHOLDING_LABELS;
+                const colTitle = isHolder ? "Stiffer holder" : "Stiffer workholding";
+                return (
+                  <div className="mt-2 rounded-lg overflow-hidden border border-zinc-700/50 text-xs">
+                    <div className="grid grid-cols-[1fr_5rem] gap-x-1.5 bg-zinc-800/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                      <span>{colTitle}</span>
+                      <span className="text-right text-emerald-400">Stiffness</span>
+                    </div>
+                    <div className="grid grid-cols-[1fr_5rem] gap-x-1.5 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                      <span className="text-zinc-500">{curLbl} <span className="text-zinc-600">(current)</span></span>
+                      <span className="text-right text-zinc-500 tabular-nums">—</span>
+                    </div>
+                    {opts.map(o => (
+                      <div key={o.key} className="grid grid-cols-[1fr_5rem] gap-x-1.5 px-2 py-1.5 border-t border-zinc-700/30 items-center">
+                        <span className="text-zinc-300">
+                          {labels[o.key] ?? o.key.replace(/_/g, " ")}
+                          {o.capital && <span className="ml-1 text-[10px] text-zinc-600">capital equipment</span>}
+                        </span>
+                        <span className="text-right font-semibold text-emerald-400 tabular-nums whitespace-nowrap">
+                          ▲ {o.gainPct}%
+                        </span>
+                      </div>
+                    ))}
+                    <div className="px-2 py-1.5 border-t border-zinc-700/30 text-[10px] text-zinc-500">
+                      {trimmed > 0 && <span className="text-zinc-600">+{trimmed} more option{trimmed === 1 ? "" : "s"} between these. </span>}
+                      {isHolder
+                        ? `Grip stiffness at the holder interface, relative to ${curLbl}. A stiffer grip also runs lower runout — better finish and tool life.`
+                        : `Fixture stiffness relative to ${curLbl}, limited to options this machine supports. A stiffer setup resists chatter and part movement.`}
+                      {" "}Tool flex is already within limit here, so this is headroom, not a fix.
+                    </div>
+                  </div>
+                );
+              };
+
               return (
               <div className="border-t border-zinc-700/40 pt-3 space-y-2">
                 {/* This is the section heading over the whole recommendation list, but it was
@@ -20970,6 +21071,20 @@ ${stabSection}
                                   ⚠ A shorter stock tool wouldn't leave enough shank to hold (need ≥1.5×D grip). A reduced-neck tool is the better fit here — full shank to grip, thin neck for reach, short flute for stiffness. See the reduced-neck step above.
                                 </div>
                               )}
+                              {/* Holder-rigidity ladder on hover. The soft holder step fires when
+                                  the HOLDER is the weak sub-score but tool flex is fine, so the
+                                  engine's flex-suggestion path never runs and this step arrives
+                                  with no numbers at all — it just says "possibly look toward a
+                                  more rigid holder" and leaves the user to guess which, and by
+                                  how much. Show every holder we offer that's stiffer than theirs,
+                                  with the grip-stiffness gain, so the step names the options and
+                                  their size. Same table the engine uses (TOOLHOLDER_RIGIDITY), so
+                                  the % here matches what applying it would report.
+                                  Grip stiffness only — this is not the whole Setup Score, and it
+                                  deliberately does not claim a flex number, because at this point
+                                  tool flex is already within limit. */}
+                              {(s.type === "holder_soft" || s.type === "workholding_soft") && hoveredStepIdx === idx
+                                && renderRigidityLadder(s.type === "holder_soft" ? "holder" : "workholding")}
                               {(() => {
                                 const edps = s.suggested_edps?.length ? s.suggested_edps : s.suggested_edp ? [s.suggested_edp] : [];
                                 const minWoc = form.geometry === "truncated_rougher" ? 10 : 8;

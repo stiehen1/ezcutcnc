@@ -36,6 +36,18 @@ That's the wrong answer as well as too many. Reach past what the cut needs is ca
 - **Ranked by what makes the tool stiffer** rather than by EDP number: shortest LOC that still covers the cut, then shortest LBS, then same geometry as the tool being run, then EDP as a stable tie-break. Coating variants — most same-dia/same-LOC ties — collapse to one representative instead of the whole family. The old `ORDER BY s.edp` sorted this case correctly by luck; it was not doing so by design.
 - **"+N more variants (coating / length) — ask us"** so the trimmed options are still reachable and nothing is silently dropped.
 
+### Holder and workholding steps now show what each upgrade buys
+The two soft setup steps — "Possibly look toward a more rigid tool holder" and its workholding twin — fire when a *setup* sub-score is the weak link while tool flex is already inside its limit. That means the engine's flex-suggestion path never runs, so unlike every other step these two arrived with **no numbers at all**: they named the problem and left the user to guess which holder to buy and how much it would actually gain.
+
+Hovering either step now shows a ladder of every stiffer option, with the gain over what's currently selected:
+
+- **Holder** values mirror the engine's `TOOLHOLDER_RIGIDITY` exactly, so the percentages match the ladder its hard "Upgrade to X" step already walks — from an ER collet: HP +5%, Weldon +8%, milling chuck +12%, hydraulic +14%, press-fit +17%, shrink +18%, Capto +20%. Shrink-fit and Capto are tagged **capital equipment** rather than presented as peers.
+- **Workholding** reads `WORKHOLDING_COMPLIANCE` (lower = stiffer) and inverts it to the same "stiffer by %" figure, scoped to `WORKHOLDING_ALLOWED` for the current machine type — a lathe is never offered a mill fixture plate.
+- Long lists cap at 6 rows, keeping the nearest upgrades plus the stiffest option so both the cheap next step and the ceiling are visible; the remainder is counted, not silently dropped (soft jaws on a lathe has 12 stiffer options).
+- The ladder hides itself when the current pick is already the stiffest, instead of rendering an empty box.
+
+It quotes **stiffness only — never a flex percentage**. Tool flex is within limit whenever these steps fire, so a predicted flex drop would be a number the engine never produced. The footer says as much: this is headroom, not a fix. Neither step is clickable either, since a holder or fixture change is a purchase rather than a form tweak.
+
 ### The PDF now headlines the tool the app actually recommended
 With **Incl. Opt EDP** checked, the sheet gave its star badge and comparison table to the whole-catalog **scorer**'s pick (`/api/optimal-tool`) — a tool the user had never seen, because the scorer's on-screen banner is disabled (`{false && …}`) precisely so it can't contradict the stability advisor. Carrying the advisor's EDPs onto the sheet as a footnote (previous entry) narrowed the gap but left the hierarchy inverted: on a 4-flute Ti HEM job the sheet starred `405221C` while the panel on screen recommended the 5-flute `505221 / 505522 / 505221C`.
 
