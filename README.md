@@ -8,6 +8,11 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Exports: entry moves numbered #1..#n, and the HEM acknowledgement cut to three lines
+The export listed each entry move with a `BEST` / `OK` / `AVOID` tag, which duplicated information the list order already carried — the moves come out of `rankEntryMoves` sorted best-first, so a tag column was a second encoding of position. Both the text and PDF exports now number them `#1`, `#2`, `#3`, best to worst. Same ordering, same context-aware ranking rules; one signal instead of two. The on-screen cards keep their rating chips.
+
+The HEM acknowledgement block was seven lines, most of it explanation the shop doesn't need on a printed setup sheet: how adaptive toolpaths manage radial engagement, and a list of five CAM products (Mastercam Dynamic, Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining). It's now three lines — the end user acknowledged a true HEM / adaptive toolpath, these feeds are unsafe on a conventional contour or pocket path, Core Cutter LLC assumes no responsibility. The consent text on the checkbox itself is unchanged, since that's the language the user reads *before* ticking it and the specificity earns its length there.
+
 ### Entry Moves are ranked into tiers, and helix pitch leads the row
 Customers tick every entry type at once to compare them, and the panel turned into one undifferentiated blob. Colour was the main culprit — it encoded *recommendation quality* (green recommended, indigo fine, amber caution), which is sound logic, but with six sections and three ratings green was doubled (Sweep + Pre-drill) and indigo was doubled (Ramp + Helical). Colour could tell you how good a method was, but no longer *which method you were reading*.
 

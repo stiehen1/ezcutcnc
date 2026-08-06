@@ -5731,18 +5731,17 @@ export default function Mentor() {
       ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
       straight: "Straight Plunge",
     };
-    const EM_TIER_TAG   = ["BEST", "OK", "AVOID"];
-    const EM_TIER_COLOR = ["#16a34a", "#0284c7", "#d97706"];
+    // Already sorted best-first by rankEntryMoves — number them 1..n rather than
+    // tagging tiers; the position in the list carries the preference.
     const emRanked = rankEntryMoves(entryTypes, emCaution).filter(e => emSpec[e.key]);
     let entryRowsHtml = "";
-    for (const e of emRanked) {
+    emRanked.forEach((e, i) => {
       entryRowsHtml += '<tr>'
-        + '<td style="padding:3px 6px 3px 0;white-space:nowrap;font-size:8px;font-weight:700;letter-spacing:.06em;color:'
-        + EM_TIER_COLOR[e.tier] + '">' + EM_TIER_TAG[e.tier] + '</td>'
+        + '<td style="padding:3px 6px 3px 0;white-space:nowrap;font-weight:700;color:#555;">#' + (i + 1) + '</td>'
         + '<td style="padding:3px 8px 3px 0;white-space:nowrap;font-weight:700;">' + EM_NAME[e.key] + '</td>'
         + '<td style="padding:3px 0;">' + emSpec[e.key] + '</td>'
         + '</tr>';
-    }
+    });
     if (entryRowsHtml) {
       entryRowsHtml += '<tr><td colspan="3" style="font-size:9px;color:#888;padding:4px 0 0 0;font-style:italic;">'
         + "Entry feeds are already reduced to " + emFeedPct + "% of full feed &mdash; program them as shown, don't cut them again."
@@ -6291,7 +6290,7 @@ ${(() => {
   if (!_ackHem) return "";
   return `<div style="margin:10px 0;border:1.5px solid #d97706;background:#fffbeb;border-radius:6px;padding:8px 10px;">
     <div style="font-weight:700;font-size:11px;color:#b45309;margin-bottom:2px;">⚠ HEM / Adaptive Toolpath — Acknowledged</div>
-    <div style="font-size:9.5px;color:#78350f;line-height:1.45;">User confirmed these parameters will run on a <strong>true HEM / adaptive toolpath</strong> that actively manages radial engagement to keep it low — by holding IPM or WOC constant, or dynamically varying either or both (e.g. Mastercam Dynamic, Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining). These chip-thinned feeds are <strong>unsafe on a conventional contour or pocket path</strong> — engagement spikes in corners can overload or break the tool. <strong>Core Cutter LLC assumes no responsibility for outcomes.</strong></div>
+    <div style="font-size:9.5px;color:#78350f;line-height:1.45;">End user acknowledged these parameters run on a <strong>true HEM / adaptive toolpath</strong>. They are <strong>unsafe on a conventional contour or pocket path</strong>. <strong>Core Cutter LLC assumes no responsibility for outcomes.</strong></div>
   </div>`;
 })()}
 
@@ -7441,12 +7440,8 @@ ${stabSection}
         if (_ackHem) {
           lines.push("HEM TOOLPATH — ACKNOWLEDGED");
           lines.push(DIV);
-          lines.push("User confirmed these parameters will be run on a TRUE HEM / adaptive");
-          lines.push("toolpath that actively manages radial engagement to keep it low — by");
-          lines.push("holding IPM or WOC constant, OR dynamically varying either or both (e.g.");
-          lines.push("Mastercam Dynamic, Fusion Adaptive, VoluMill, hyperMILL MAXX, iMachining).");
-          lines.push("These chip-thinned feeds are UNSAFE on a conventional contour or pocket");
-          lines.push("path — engagement spikes in corners can overload or break the tool.");
+          lines.push("End user acknowledged these parameters run on a TRUE HEM / adaptive");
+          lines.push("toolpath. They are UNSAFE on a conventional contour or pocket path.");
           lines.push("Core Cutter LLC assumes no responsibility for outcomes.");
           lines.push("");
         }
@@ -7749,11 +7744,12 @@ ${stabSection}
           ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
           straight: "Straight Plunge",
         };
-        const _tierTag = ["BEST", "OK", "AVOID"];
+        // Already sorted best-first by rankEntryMoves — number them 1..n rather than
+        // tagging tiers; the position in the list carries the preference.
         const _ranked = rankEntryMoves(entryTypes, em?.entry_caution).filter(e => _entryLine[e.key]);
-        for (const e of _ranked) {
-          lines.push(`  ${_tierTag[e.tier].padEnd(6)} ${_entryName[e.key].padEnd(19)} ${_entryLine[e.key]}`);
-        }
+        _ranked.forEach((e, i) => {
+          lines.push(`  #${i + 1}  ${_entryName[e.key].padEnd(19)} ${_entryLine[e.key]}`);
+        });
         if (_ranked.length > 0) {
           lines.push("");
           lines.push(`  Entry feeds above are already reduced to ${_pct}% of full feed — program them as shown.`);
