@@ -1051,10 +1051,15 @@ const SLOT_CORE_RATIO: Record<number, number> = {
 };
 
 // Estimate Current-vs-Optimized ratios for a stability-step tool swap, from the
-// candidate's {loc, flutes} meta. Same-diameter comparison: force ∝ flutes, stiffness
-// ∝ core_ratio(flutes)^4, and a shorter flute length lets the tool sit shorter (L³ on
-// the cantilever). Client-side approximation — the real numbers land when the user
-// clicks the EDP and it re-runs.
+// candidate's {dia, loc, flutes} meta: force ∝ flutes × diameter, stiffness ∝
+// core_ratio(flutes)^4 × D⁴, and a shorter flute length lets the tool sit shorter
+// (L³ on the cantilever). Client-side approximation — the real numbers land when the
+// user clicks the EDP and it re-runs.
+//
+// The diameter term matters even though MOST steps (flute swap, reduced neck, shorter
+// LOC) compare tools at the same Ø: the "Increase Tool Diameter" step does NOT, and
+// without a D term it returned all-1.0 ratios — an "If applied" table showing zero
+// change on the one step whose entire argument is the D⁴ stiffness gain.
 //
 // Module scope (not inside the results render closure) because the PDF builder needs
 // the SAME math: the printed sheet headlines the stability advisor's pick, and its
@@ -1062,7 +1067,7 @@ const SLOT_CORE_RATIO: Record<number, number> = {
 // Two copies of this drifted once already — keep it single-source.
 function estStepToolPreview(
   m: any,
-  cur: { flutes: number; loc: number; stickout: number },
+  cur: { flutes: number; loc: number; stickout: number; dia?: number },
 ) {
   if (!m) return null;
   const curFl = Number(cur.flutes) || 0;
@@ -1071,20 +1076,29 @@ function estStepToolPreview(
   const newLoc = Number(m.loc) || curLoc;
   const curSo = Number(cur.stickout) || 0;
   if (!curFl || !newFl) return null;
+  // Diameter is optional on both sides: a candidate without a usable dia (or a caller
+  // that doesn't know the current one) falls back to the same-Ø comparison rather than
+  // inventing a ratio.
+  const curD = Number(cur.dia) || 0;
+  const newD = Number(m.dia) || curD;
+  const diaRatio = curD > 0 && newD > 0 ? newD / curD : 1;
+  // A bigger tool takes a proportionally bigger bite per tooth at the same %-of-D WOC,
+  // so force (and the MRR/feed it buys) scales with D on top of flute count.
   const fluteForce = newFl / curFl;
+  const forceRatio = fluteForce * diaRatio;
   const crCur = SLOT_CORE_RATIO[curFl] ?? 0.70;
   const crNew = SLOT_CORE_RATIO[newFl] ?? 0.70;
-  const stiffGain = Math.pow(crNew / crCur, 4);
+  const stiffGain = Math.pow(crNew / crCur, 4) * Math.pow(diaRatio, 4);
   let reachFlex = 1;
   if (curSo > 0 && newLoc > 0 && newLoc < curLoc - 0.02) {
     const newSo = Math.max(curSo - (curLoc - newLoc), curSo * 0.5);
     reachFlex = Math.pow(newSo / curSo, 3);
   }
   return {
-    defl_ratio: (fluteForce / stiffGain) * reachFlex,
-    force_ratio: fluteForce,
-    mrr_ratio: fluteForce,
-    feed_ratio: fluteForce,
+    defl_ratio: (forceRatio / stiffGain) * reachFlex,
+    force_ratio: forceRatio,
+    mrr_ratio: forceRatio,
+    feed_ratio: forceRatio,
   };
 }
 
@@ -6002,6 +6016,7 @@ export default function Mentor() {
             flutes: Number(form.flutes) || 0,
             loc: Number(form.loc) || 0,
             stickout: Number(form.stickout) || 0,
+            dia: Number(form.tool_dia) || 0,
           })
         : null;
 
@@ -21237,6 +21252,7 @@ ${stabSection}
                   flutes: Number(form.flutes) || 0,
                   loc: Number(form.loc) || 0,
                   stickout: Number(form.stickout) || 0,
+                  dia: Number(form.tool_dia) || 0,
                 });
 
               // Shared 4-row Current-vs-Optimized chart. `p` is a ratio object

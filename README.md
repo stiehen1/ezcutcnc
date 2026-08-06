@@ -8,6 +8,15 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### The diameter step-up preview showed zero change on the one step that's entirely about diameter
+Hovering "Increase Tool Diameter to 0.625"" produced an *If applied* table with no movement on any row — no flex drop, no force rise — while the step's own subtitle claimed "2.4× stiffer (D⁴ law)" two lines above it. The step was arguing for itself and its own preview was contradicting it.
+
+`estStepToolPreview()` modeled **flute count and reach only**; its comment said so outright — *"Same-diameter comparison."* That holds for most stability steps, since a flute swap, a reduced neck and a shorter LOC all compare tools at the same Ø. The diameter step-up is the one that doesn't. Against a candidate with the same flute count and the same LOC, every input to the estimator was identical to the current tool: force ratio 6/6, core-ratio gain (0.80/0.80)⁴, no reach change. All four ratios returned exactly 1.000, the >1% change test rejected every row, and the table rendered as zeros.
+
+The diameter term is now in, mirroring the math `estSlotToolPreview()` already used for the slotting picks: force scales with D (a bigger tool takes a proportionally bigger bite per tooth at the same %-of-D WOC), stiffness scales with D⁴ on top of the flute core ratio. On a 0.500"→0.625" step-up that's 2.44× stiffness — matching the figure the step label was already printing — for flex 159%→81% and a 25% rise in force, MRR and feed. The spindle-power caveat the step carries in prose is now also a number the user can check against their available HP.
+
+Diameter is optional on both sides of the comparison, so a candidate without a usable `dia` falls back to the previous same-Ø behaviour rather than inventing a ratio. Both call sites pass it — the results panel and the PDF builder, which share this estimator deliberately so the printed sheet can't drift from the screen.
+
 ### Exports: the optional advanced entry feeds now print; Straight Plunge moves last and is gone at 6+ flutes
 Collapsing the entry-move block to one line per move dropped the optional chip-thinned alternates entirely — the Advanced Ramp and Advanced Helical feeds were on screen but absent from both the text and PDF sheets, so anyone programming from the export never saw them. Each one is now a single indented `→ Advanced Option: …` line directly beneath its parent move, carrying the same feed / angle / pitch it carries on screen. The footnote explains what they are once: faster alternates that lean on chip-thinning at light radial engagement, for rigid setups, proven on your own machine.
 
