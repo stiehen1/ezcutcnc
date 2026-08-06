@@ -5849,7 +5849,7 @@ export default function Mentor() {
         + "&nbsp; &middot; &nbsp;pitch " + (em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5) + '"/rev';
     }
     const EM_NAME: Record<string, string> = {
-      sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical",
+      sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical Interpolation",
       ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
       straight: "Straight Plunge",
     };
@@ -7884,7 +7884,7 @@ ${stabSection}
             + `  ·  pitch ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}"/rev`;
         }
         const _entryName: Record<string, string> = {
-          sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical",
+          sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical Interpolation",
           ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
           straight: "Straight Plunge",
         };
@@ -16118,7 +16118,7 @@ ${stabSection}
                 const opts: Record<string, Opt> = {
                   sweep:         { key: "sweep",         label: "Sweep / Roll-in", color: "text-green-400 border-green-500/60",   recommended: sweepRec,    tooltip: "Tangential arc lead-in from outside the stock. Tool engagement builds from zero — lowest shock load, smoothest chip formation. Recommended for HEM and adaptive toolpaths. Requires an open stock edge to swing in from (closed pockets cannot use this entry, even with a pre-drilled hole)." },
                   ramp:          { key: "ramp",          label: "Straight Ramp",   color: "text-indigo-300 border-indigo-500/60", recommended: false,       tooltip: "Ramp to depth — two common styles, same feed rules: (1) Straight zigzag: tool descends at 2–5° back and forth like a slalom — smooth, consistent load, preferred for production. (2) Corner ramp: descends at angle, makes a 90° turn, descends again — use when pocket walls prevent a clean zigzag reversal. Both use 40–50% of full feed. CAM controls which style; the physics are the same." },
-                  helical:       { key: "helical",       label: "Helical",         color: "text-indigo-300 border-indigo-500/60", recommended: helicalRec,  tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets, and for clearing the remaining floor stock below a pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
+                  helical:       { key: "helical",       label: "Helical Interpolation", color: "text-indigo-300 border-indigo-500/60", recommended: helicalRec,  tooltip: "Circular XY motion with simultaneous Z descent — tool spirals down to depth, then opens to full width. Best for closed pockets, and for clearing the remaining floor stock below a pre-drilled hole. Ramp angle ≤2–3°; set ramp feed to 40–50% of lateral feed. Requires center-cutting geometry." },
                   straight:      { key: "straight",      label: "Straight Plunge", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Straight vertical plunge directly to depth. Only use if the tool is center-cutting AND depth is shallow. Generates the highest axial shock load — use pre-drill + drop-in whenever possible. Not recommended for ferrous or hard materials." },
                   slot_straight: { key: "slot_straight", label: "Straight Entry",  color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "Entering the slot from an open outside edge — tool feeds in laterally at reduced feed before reaching full slot width. Reduces shock vs. plunging directly into the slot center. Use 50% of full feed at first engagement." },
                   xy_radial:     { key: "xy_radial",     label: "Straight Radial", color: "text-amber-400 border-amber-500/60",   recommended: false,       tooltip: "From inside the pre-drilled hole, feed straight out to the pocket wall. This breakout move is effectively a slotting cut — feed and SFM should match slotting parameters until the tool clears enough material to begin side-milling. Higher shock than Sweep; use only when there is not enough room for a tangential arc." },
