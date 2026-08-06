@@ -5646,8 +5646,9 @@ export default function Mentor() {
         <tr><td colspan="2" style="padding:${(sweepRows || rampRows) ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Min Bore Dia</td><td style="font-weight:600;">≥${em.helix_bore_min_in.toFixed(4)}"</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Ideal Bore Dia</td><td style="font-weight:600;">${em.helix_bore_ideal_low.toFixed(4)}" – ${em.helix_bore_ideal_high.toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Bore Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Helical Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}° <span style="color:#888;font-weight:400;">(chip-thinned — shallower pitch, faster feed)</span></td></tr>` : "";
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Pitch (program this)</td><td style="font-weight:700;">${em.helix_pitch_in.toFixed(5)}" per rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Bore Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Helical Feed</td><td style="font-weight:600;color:#818cf8;">Pitch ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" per rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}° &nbsp;·&nbsp; ${em.advanced_helix_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(chip-thinned — shallower pitch, faster feed)</span></td></tr>` : "";
     const straightRows = (em && entryTypes.includes("straight")) ? `
         <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight Plunge</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Plunge Feed (Z)</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — hold for the entire plunge)</span></td></tr>
@@ -7645,8 +7646,9 @@ ${stabSection}
         }
         if (em && entryTypes.includes("helical")) {
           lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
-          lines.push(L("Helix Standard Bore Feed",  `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
-          lines.push(L("Helix Advanced Feed",       `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned — shallower pitch, faster feed)`));
+          lines.push(L("Helix Pitch (program this)", `${em.helix_pitch_in.toFixed(5)}" per rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
+          lines.push(L("Helix Standard Bore Feed",  `${em.standard_helix_ipm.toFixed(1)} IPM`));
+          lines.push(L("Helix Advanced Feed",       `Pitch ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" per rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  ·  ${em.advanced_helix_ipm.toFixed(1)} IPM  (chip-thinned — shallower pitch, faster feed)`));
         }
         if (em && entryTypes.includes("ramp")) {
           lines.push(L("Ramp Angle",    ((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`));
@@ -16293,9 +16295,8 @@ ${stabSection}
                     ? (timeToDepth < 1 ? `${(timeToDepth * 60).toFixed(0)} sec` : `${timeToDepth.toFixed(1)} min`)
                     : null;
                   const cells: Array<[string, string, string?]> = [
+                    ["Pitch", `${zPerRev.toFixed(4)}" per rev @ ${angle.toFixed(2)}°`, "← program this"],
                     ["Reduced Entry Feed", `${entryFeed.toFixed(1)} IPM`, `already ${Math.round(feedMult*100)}% of main`],
-                    ["Ramp Angle", `${angle.toFixed(1)}°`],
-                    ["Z / rev",    `${zPerRev.toFixed(4)}"`],
                     ["Z Feed",     `${zPerMin.toFixed(2)} IPM`],
                     ["Ramp Depth", `${rampDepth.toFixed(3)}"`],
                     ...(timeStr ? [["Time to Depth", timeStr] as [string, string]] : []),
@@ -19627,9 +19628,9 @@ ${stabSection}
                       {entryMode === "helical" && helixPitch != null && helixFeed != null ? (
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <div className="text-[9px] text-zinc-500">Helix pitch</div>
-                            <div className="text-[11px] font-semibold text-sky-300">{helixPitch.toFixed(4)}"/rev</div>
-                            <div className="text-[9px] text-zinc-500">(2° ramp angle)</div>
+                            <div className="text-[9px] text-zinc-500">Pitch</div>
+                            <div className="text-[11px] font-semibold text-sky-300">{helixPitch.toFixed(4)}" per rev @ 2.00°</div>
+                            <div className="text-[9px] text-zinc-500">← program this</div>
                           </div>
                           <div>
                             <div className="text-[9px] text-zinc-500">Helix feed</div>
@@ -20128,11 +20129,84 @@ ${stabSection}
                       : `⚠ Medium-hard material: entry feed reduced to ${feedPct}% of full feed. Avoid straight-in perpendicular entry.`}
                   </div>
                 ) : null;
+
+                // ── Entry-move ranking ───────────────────────────────────
+                // With several entries selected at once (customers tick them all to
+                // compare), a flat list of same-weight headers reads as one blob and
+                // colour stops meaning anything. Rank each move into a tier, sort by
+                // it, and let tier drive colour — so two greens are two BEST options,
+                // not a coincidence. Tiers are context-aware and follow the same rules
+                // as the auto-select effect above (closed pocket has no open edge to
+                // sweep from; pre-drill is the cleanest start for HEM/trochoidal).
+                const _isClosed    = form.mode === "deep_pocket" && form.dp_closed_pocket;
+                const _hasPreDrill = _isClosed && form.dp_pre_drill;
+                const _isHemMode   = form.mode === "hem" || form.mode === "trochoidal"
+                                     || (form.mode === "slot" && form.slot_strategy === "hem")
+                                     || (form.mode === "deep_pocket" && form.dp_cutting_style === "hem");
+                const _hardEntry   = caution === "high_hardness";
+                // tier: 0 = best, 1 = workable, 2 = last resort
+                const entryRank = (k: string): { tier: number; note: string } => {
+                  switch (k) {
+                    case "predrill_plunge":
+                      return { tier: 0, note: _isHemMode ? "cleanest HEM start — zero edge contact" : "no shock load, no helix bore" };
+                    case "sweep":
+                      return _isClosed && !_hasPreDrill
+                        ? { tier: 2, note: "needs an open edge — none on a closed pocket" }
+                        : { tier: 0, note: "arc builds engagement gradually" };
+                    case "helical":
+                      return { tier: _isClosed && !_hasPreDrill ? 0 : 1, note: _isClosed && !_hasPreDrill ? "best Z-entry with no open edge" : "good Z-entry when there's no pre-hole" };
+                    case "ramp":
+                      return { tier: 1, note: _hardEntry ? "keep the ramp near-flat in hard material" : "simple Z-entry, needs ramp room" };
+                    case "slot_straight":
+                      return { tier: 1, note: "enters from outside stock — full-width engagement" };
+                    case "xy_radial":
+                      return { tier: 1, note: "breakout from pre-drilled hole — treat as slotting" };
+                    case "straight":
+                      return { tier: 2, note: _hardEntry ? "do not plunge in hard material" : "a drill's job, not an endmill's" };
+                    default:
+                      return { tier: 1, note: "" };
+                  }
+                };
+                const TIER_ORDER = ["sweep", "predrill_plunge", "helical", "ramp", "slot_straight", "xy_radial", "straight"];
+                const rankedEntries = TIER_ORDER
+                  .filter(k => entryTypes.includes(k))
+                  .map(k => ({ key: k, ...entryRank(k) }))
+                  .sort((a, b) => a.tier - b.tier || TIER_ORDER.indexOf(a.key) - TIER_ORDER.indexOf(b.key));
+                const entryPos = new Map(rankedEntries.map((e, i) => [e.key, i + 1]));
+                const tierOf   = (k: string) => rankedEntries.find(e => e.key === k)?.tier ?? 1;
+                const noteOf   = (k: string) => rankedEntries.find(e => e.key === k)?.note ?? "";
+                const isCompare = rankedEntries.length > 2;
+                // Tier styling — the ONLY source of colour for a section header.
+                const TIER_STYLE = [
+                  { badge: "★ BEST",      chip: "bg-green-500/15 text-green-300 border-green-500/40",   head: "text-green-300",  card: "border-green-500/30 bg-green-500/[0.04]",  band: "text-green-400",  rule: "border-green-500/20" },
+                  { badge: "WORKABLE",    chip: "bg-sky-500/15 text-sky-300 border-sky-500/40",         head: "text-sky-300",    card: "border-sky-500/25 bg-sky-500/[0.03]",      band: "text-sky-400",    rule: "border-sky-500/20" },
+                  { badge: "⚠ LAST RESORT", chip: "bg-amber-500/15 text-amber-300 border-amber-500/40", head: "text-amber-300",  card: "border-amber-500/30 bg-amber-500/[0.04]",  band: "text-amber-400",  rule: "border-amber-500/20" },
+                ];
+                const TIER_LABEL = ["Best choice", "Workable", "Last resort"];
+                // Wraps each entry section in a numbered, tier-coloured card.
+                const entryCard = (key: string, title: string, body: React.ReactNode) => {
+                  const t = TIER_STYLE[tierOf(key)];
+                  const n = entryPos.get(key);
+                  return (
+                    <div className={`rounded-md border px-2.5 py-2 ${t.card}`}>
+                      <div className={`flex items-baseline gap-2 flex-wrap border-b pb-1 mb-1.5 ${t.rule}`}>
+                        {isCompare && <span className="text-[10px] font-bold text-zinc-500 tabular-nums">{n}.</span>}
+                        <span className={`text-[11px] font-bold uppercase tracking-wide ${t.head}`}>{title}</span>
+                        <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-px rounded border ${t.chip}`}>{t.badge}</span>
+                        {noteOf(key) && <span className="text-[9px] text-zinc-500">{noteOf(key)}</span>}
+                      </div>
+                      {body}
+                    </div>
+                  );
+                };
+
                 return (
                   <div className="rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-3 py-2.5 space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400">Entry Moves</p>
-                      <span className="text-[9px] text-zinc-500">★ = recommended</span>
+                      <span className="text-[9px] text-zinc-500">
+                        {isCompare ? `${rankedEntries.length} selected · ranked best → last resort` : "★ = recommended"}
+                      </span>
                     </div>
 
                     {(form.mode === "hem" || form.mode === "trochoidal") && (
@@ -20143,21 +20217,19 @@ ${stabSection}
 
                     {caution && <div className="grid grid-cols-2">{cautionBanner}</div>}
 
-                    <div className="space-y-3 text-xs">
-
-                      {/* Sweep / Roll-in */}
-                      {entryTypes.includes("sweep") && (() => {
+                    <div className="space-y-2 text-xs">
+                      {/* Each entry renders into a keyed map, then the ranked list below
+                          emits tier bands + cards in best-first order. */}
+                      {(() => {
+                      const sections: Record<string, React.ReactNode> = {};
+                      sections.sweep = !entryTypes.includes("sweep") ? null : (() => {
                         const dia = form.tool_dia ?? 0;
                         const radMin = (em.sweep_arc_radius_min_in != null && em.sweep_arc_radius_min_in > 0) ? em.sweep_arc_radius_min_in : dia * 0.50;
                         const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : dia * 0.75;
                         const entryFeed = (em.sweep_entry_ipm != null && em.sweep_entry_ipm > 0) ? em.sweep_entry_ipm : (em.standard_ramp_ipm ?? 0);
                         const fullFeed  = (em.sweep_full_ipm  != null && em.sweep_full_ipm  > 0) ? em.sweep_full_ipm  : (result?.milling?.feed_ipm ?? 0);
-                        return (
-                          <div>
-                            <div className="flex items-center gap-1.5 border-b border-green-500/20 pb-1 mb-1.5">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-green-400">Sweep / Roll-in ★</span>
-                              <span className="text-[9px] text-green-600 ml-1">Recommended — arc builds engagement gradually</span>
-                            </div>
+                        return entryCard("sweep", "Sweep / Roll-in", (
+                          <>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div><span className="text-zinc-500">Arc Radius (min)</span><span className="ml-2 font-medium">{radMin.toFixed(4)}"</span></div>
                               <div><span className="text-zinc-500">Arc Radius (rec)</span><span className="ml-2 font-medium text-green-300">{radRec.toFixed(4)}"</span></div>
@@ -20165,82 +20237,80 @@ ${stabSection}
                               <div><span className="text-zinc-500">Full Feed (after arc)</span><span className="ml-2 font-medium text-green-300">{fullFeed.toFixed(1)} IPM</span></div>
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes. The entry feed above is already reduced to {feedPct}% of full feed — program that number directly, don't cut it again.</p>
-                          </div>
-                        );
-                      })()}
+                          </>
+                        ));
+                      })();
 
-                      {/* Ramp */}
-                      {entryTypes.includes("ramp") && (
-                        <div>
-                          <div className="border-b border-indigo-500/20 pb-1 mb-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Ramp Entry</span>
-                          </div>
+                      // Ramp
+                      sections.ramp = !entryTypes.includes("ramp") ? null : entryCard("ramp", "Ramp Entry", (
+                        <>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Ramp Angle</span><span className="ml-2 font-medium">{((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</span></div>
                             <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{(em as any).ramp_pitch_in_per_in?.toFixed(4) ?? (Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Reduced Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown</span></div>
                           </div>
-                          <div className="mt-1.5 rounded-md border border-indigo-400/40 bg-indigo-500/10 px-2 py-1.5">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-300">Advanced Ramp Feed</span>
-                              <span className="text-[9px] text-indigo-400/80">shallow 0.5–1° ramp, chip-thinned</span>
+                          <div className="mt-1.5 rounded border-l-2 border-zinc-500/50 bg-zinc-800/40 pl-2 pr-2 py-1.5">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Optional · Advanced Ramp Feed</span>
+                              <span className="text-[9px] text-zinc-500">shallow 0.5–1° ramp, chip-thinned</span>
                             </div>
-                            <div className="mt-0.5 font-semibold text-indigo-200">{em.advanced_ramp_ipm.toFixed(1)} IPM</div>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">Faster than the standard entry feed, not slower. A near-flat 0.5–1° ramp thins the chip enough to carry more feed for the same edge load — use it when the setup is rigid and the control can hold a shallow ramp.</p>
+                            <div className="mt-0.5 font-semibold text-zinc-200">{em.advanced_ramp_ipm.toFixed(1)} IPM</div>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Faster than the standard entry feed, not slower. A near-flat 0.5–1° ramp thins the chip enough to carry more feed for the same edge load — use it when the setup is rigid and the control can hold a shallow ramp.</p>
                           </div>
                           <p className="text-[10px] text-zinc-500 mt-1">Entry feed above is already reduced to {feedPct}% of full feed — program it directly, don't cut it again.</p>
-                        </div>
-                      )}
+                        </>
+                      ));
 
-                      {/* Helical */}
-                      {entryTypes.includes("helical") && (
-                        <div>
-                          <div className="border-b border-indigo-500/20 pb-1 mb-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-300">Helical Entry</span>
-                          </div>
+                      // Helical
+                      sections.helical = !entryTypes.includes("helical") ? null : entryCard("helical", "Helical Entry", (
+                        <>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Ideal Bore Dia</span><span className="ml-2 font-medium">{em.helix_bore_ideal_low.toFixed(4)}" – {em.helix_bore_ideal_high.toFixed(4)}"</span></div>
-                            <div className="col-span-2"><span className="text-zinc-500">Standard Bore Feed</span><span className="ml-2 font-medium">{em.standard_helix_ipm.toFixed(1)} IPM · {em.helix_pitch_in.toFixed(5)}" / rev @ {em.helix_angle_deg.toFixed(2)}°</span></div>
-                          </div>
-                          <div className="mt-1.5 rounded-md border border-indigo-400/40 bg-indigo-500/10 px-2 py-1.5">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-300">Advanced Helical Feed</span>
-                              <span className="text-[9px] text-indigo-400/80">chip-thinned, shallow pitch</span>
+                            <div className="col-span-2 rounded bg-zinc-800/50 px-1.5 py-1 -mx-0.5">
+                              <span className="text-zinc-400">Pitch</span>
+                              <span className="ml-2 font-bold text-white">{em.helix_pitch_in.toFixed(5)}" per rev</span>
+                              <span className="ml-1.5 text-zinc-400">@ {em.helix_angle_deg.toFixed(2)}°</span>
+                              <span className="ml-2 text-[9px] text-zinc-500">← program this</span>
                             </div>
-                            <div className="mt-0.5 font-semibold text-indigo-200">{em.advanced_helix_ipm.toFixed(1)} IPM · {(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev @ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</div>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">Trades pitch for feed: a shallower helix angle thins the chip, so the tool can bore in faster at the same edge load. Needs a rigid setup and light engagement.</p>
+                            <div className="col-span-2"><span className="text-zinc-500">Standard Bore Feed</span><span className="ml-2 font-medium">{em.standard_helix_ipm.toFixed(1)} IPM</span></div>
+                          </div>
+                          <div className="mt-1.5 rounded border-l-2 border-zinc-500/50 bg-zinc-800/40 pl-2 pr-2 py-1.5">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Optional · Advanced Helical Feed</span>
+                              <span className="text-[9px] text-zinc-500">chip-thinned, shallow pitch</span>
+                            </div>
+                            <div className="mt-0.5">
+                              <span className="text-zinc-400 text-[10px]">Pitch</span>
+                              <span className="ml-1.5 font-bold text-zinc-100">{(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" per rev</span>
+                              <span className="ml-1.5 text-zinc-400">@ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</span>
+                              <span className="ml-2 text-zinc-500">·</span>
+                              <span className="ml-2 font-semibold text-zinc-200">{em.advanced_helix_ipm.toFixed(1)} IPM</span>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Trades pitch for feed: a shallower helix angle thins the chip, so the tool can bore in faster at the same edge load. Needs a rigid setup and light engagement.</p>
                           </div>
                           <p className="text-[10px] text-zinc-500 mt-1">Use a tangent arc lead-in into the bore; step to full feed once engagement stabilizes.</p>
-                        </div>
-                      )}
+                        </>
+                      ));
 
-                      {/* Straight Plunge */}
-                      {entryTypes.includes("straight") && (
-                        <div>
-                          <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Plunge</span>
-                            <span className="text-[9px] text-amber-600 ml-2">Rarely correct</span>
-                          </div>
+                      // Straight Plunge
+                      sections.straight = !entryTypes.includes("straight") ? null : entryCard("straight", "Straight Plunge", (
+                        <>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div className="col-span-2"><span className="text-zinc-500">Reduced Plunge Feed (Z)</span><span className="ml-2 font-medium text-amber-300">{em.straight_entry_ipm?.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown, for the whole plunge</span></div>
                           </div>
                           <p className="text-[10px] text-amber-600/80 mt-1">⚠ Straight plunging is what a drill is made to do — not an endmill. Full axial load hits instantly, edge shock is severe, and the bottom cutting geometry on most endmills is not designed for it. This takes a huge toll on the tool and is rarely the right call. Use a ramp, helical entry, or pre-drilled hole instead.</p>
                           <p className="text-[10px] text-zinc-500 mt-1">This is a straight-down Z feed, already derated to {feedPct}% of the side-milling feed — program it directly, don't cut it again. Unlike an arc or ramp, a plunge has no gradual build-up: the tool is fully engaged the moment the tip touches, so hold this reduced feed for the entire plunge rather than stepping up partway down.</p>
-                        </div>
-                      )}
+                        </>
+                      ));
 
-                      {/* Straight Radial — XY breakout from pre-drilled hole to wall */}
-                      {entryTypes.includes("xy_radial") && (() => {
+                      // Straight Radial — XY breakout from pre-drilled hole to wall
+                      sections.xy_radial = !entryTypes.includes("xy_radial") ? null : (() => {
                         // Breakout from hole to wall is effectively slotting — use slot feed (50% until engaged).
                         const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
                         const entryFeed = fullFeed * 0.50;
-                        return (
-                          <div>
-                            <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Radial</span>
-                              <span className="text-[9px] text-amber-600 ml-2">XY breakout from pre-drilled hole — treat as slotting</span>
-                            </div>
+                        return entryCard("xy_radial", "Straight Radial", (
+                          <>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div className="flex flex-col">
                                 <div><span className="text-zinc-500">Breakout Feed</span><span className="ml-2 font-medium text-amber-300">{entryFeed.toFixed(1)} IPM</span></div>
@@ -20251,21 +20321,17 @@ ${stabSection}
                               </div>
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">From inside the pre-drilled hole, feed straight out toward the wall. This first move is effectively a slot — full WOC engagement on one side — so it needs slotting feed (~50% of side-mill feed) until the tool clears enough material to begin its normal side-milling pass.</p>
-                          </div>
-                        );
-                      })()}
+                          </>
+                        ));
+                      })();
 
-                      {/* Straight Entry — traditional slotting from outside stock */}
-                      {entryTypes.includes("slot_straight") && (() => {
+                      // Straight Entry — traditional slotting from outside stock
+                      sections.slot_straight = !entryTypes.includes("slot_straight") ? null : (() => {
                         const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
                         const entryFeed = fullFeed * 0.50;
                         const docIn = result?.milling?.doc_in ?? (form.doc_xd > 0 && form.tool_dia > 0 ? form.doc_xd * form.tool_dia : null);
-                        return (
-                          <div>
-                            <div className="border-b border-amber-500/30 pb-1 mb-1.5">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Straight Entry</span>
-                              <span className="text-[9px] text-amber-600 ml-2">Tool enters from outside stock edge</span>
-                            </div>
+                        return entryCard("slot_straight", "Straight Entry", (
+                          <>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div className="flex flex-col">
                                 <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{entryFeed.toFixed(1)} IPM</span></div>
@@ -20277,22 +20343,18 @@ ${stabSection}
                               </div>
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Approach from outside the workpiece edge — tool enters air before engaging material. Ramp to full feed once the tool is fully engaged in the slot.</p>
-                          </div>
-                        );
-                      })()}
+                          </>
+                        ));
+                      })();
 
-                      {/* Pre-drill + Plunge — closed slot entry */}
-                      {entryTypes.includes("predrill_plunge") && (() => {
+                      // Pre-drill + Plunge — closed slot entry
+                      sections.predrill_plunge = !entryTypes.includes("predrill_plunge") ? null : (() => {
                         const toolDia = Number(form.tool_dia) || 0;
                         const fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
                         const docIn = result?.milling?.doc_in ?? (form.doc_xd > 0 && form.tool_dia > 0 ? form.doc_xd * form.tool_dia : null);
                         if (toolDia <= 0) return null;
-                        return (
-                          <div>
-                            <div className="border-b border-green-500/30 pb-1 mb-1.5">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-green-400">Pre-drill + Plunge</span>
-                              <span className="text-[9px] text-green-500/80 ml-2">Closed slot — drop endmill into clearance hole, then feed through slot</span>
-                            </div>
+                        return entryCard("predrill_plunge", "Pre-drill + Plunge", (
+                          <>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div className="flex flex-col">
                                 <div><span className="text-zinc-500">Pre-drill Hole Dia</span><span className="ml-2 font-medium text-green-300">≥{(toolDia + 0.010).toFixed(4)}" <span className="text-green-400/70">({((toolDia + 0.010) * 25.4).toFixed(2)} mm)</span></span></div>
@@ -20307,8 +20369,28 @@ ${stabSection}
                               )}
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Drill a clearance hole at one end of the slot, plunge the endmill into it, then feed laterally through the slot at full feed. Cleanest entry for closed slots — no shock load, no helix bore needed.</p>
-                          </div>
-                        );
+                          </>
+                        ));
+                      })();
+
+                      // Emit in ranked order, with a tier band heading each group.
+                      const out: React.ReactNode[] = [];
+                      let lastTier = -1;
+                      for (const e of rankedEntries) {
+                        const node = sections[e.key];
+                        if (!node) continue;
+                        if (isCompare && e.tier !== lastTier) {
+                          lastTier = e.tier;
+                          out.push(
+                            <div key={`band-${e.tier}`} className="flex items-center gap-2 pt-1.5 first:pt-0">
+                              <span className={`text-[9px] font-bold uppercase tracking-widest ${TIER_STYLE[e.tier].band}`}>{TIER_LABEL[e.tier]}</span>
+                              <div className={`flex-1 border-t ${TIER_STYLE[e.tier].rule}`} />
+                            </div>
+                          );
+                        }
+                        out.push(<div key={e.key}>{node}</div>);
+                      }
+                      return <>{out}</>;
                       })()}
 
                       {entryTypes.length === 0 && (
