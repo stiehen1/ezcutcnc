@@ -254,12 +254,24 @@ function KpiSection({
   // conditioned out simply isn't here. Empty strings are the only falsy leftover worth filtering.
   const visible = React.Children.toArray(children).filter((c) => c !== "");
   if (visible.length === 0) return null;
+
+  // Column count follows the card count so the last row never holds a single orphan.
+  // Card counts are mode-dependent (facing adds Rec. Step-Over to Material Removal,
+  // surfacing adds D_eff and Scallop), so a fixed 3-up strands the 4th card on its own
+  // line. Full-width children (`col-span-*` notes, disclaimers) don't occupy a track,
+  // so count only the plain cards. 4 → 4-up; 3, 5 and 6 tile evenly at 3-up.
+  const cardCount = visible.filter((c) => {
+    const cls = React.isValidElement(c) ? String((c.props as any)?.className ?? "") : "";
+    return !cls.includes("col-span");
+  }).length;
+  const cols = cardCount === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3";
+
   return (
     <section className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 p-3">
       <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">
         {title}
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{visible}</div>
+      <div className={`grid grid-cols-2 gap-3 ${cols}`}>{visible}</div>
     </section>
   );
 }
@@ -16221,21 +16233,22 @@ ${stabSection}
                   );
                 }
 
-                // Finishing: the wall is already roughed, so there is no Z-entry to make.
+                // Finishing and facing both enter laterally — there is no Z-entry to make.
+                // On a finish pass the wall is already roughed; on a facing pass the tool
+                // comes down in open air above the stock and feeds in from off the edge.
                 // The generic list below offers Helical / Pre-drill+Plunge / Straight Plunge,
-                // which are all ways of getting DOWN into stock — meaningless on a finish
-                // pass, and a ramp leaves a witness mark where the Z motion stops. The only
-                // entry that belongs here is a tangential arc onto the wall.
-                if (form.mode === "finish" && form.tool_type !== "chamfer_mill") {
+                // which are all ways of getting DOWN into material, and a ramp leaves a
+                // witness mark where the Z motion stops. A tangential arc is the entry.
+                if ((form.mode === "finish" || form.mode === "face") && form.tool_type !== "chamfer_mill") {
                   return (
                     <>
                       <div className="flex flex-wrap gap-3">
                         {renderChip({ ...opts.sweep, recommended: true })}
                       </div>
                       <p className="text-[10px] text-zinc-500 mt-1.5">
-                        Finishing follows an already-roughed wall, so there's no Z-entry move to make —
-                        arc on tangentially to avoid leaving a witness mark at the entry point. Lead out
-                        the same way, and keep the feed constant through the arc.
+                        {form.mode === "face"
+                          ? "Facing takes a shallow cut across the top of the part — the tool comes down in open air beside the stock and feeds in laterally, so there's no Z-entry move to make. Arc on from off the edge so engagement builds from zero, and roll out the same way rather than stopping in the cut. Never plunge into a face."
+                          : "Finishing follows an already-roughed wall, so there's no Z-entry move to make — arc on tangentially to avoid leaving a witness mark at the entry point. Lead out the same way, and keep the feed constant through the arc."}
                       </p>
                     </>
                   );
@@ -19463,7 +19476,7 @@ ${stabSection}
                           wrapped to four lines and left the card tall and alone next to the
                           full-width disclaimer below it. Spanning the row puts the label on
                           the left and the number on the right, all on one line. */}
-                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                      <div className="col-span-full rounded-2xl border p-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <div className="text-xs text-muted-foreground flex items-center gap-1">
                           <TooltipProvider delayDuration={200}>
                             <Tooltip>
