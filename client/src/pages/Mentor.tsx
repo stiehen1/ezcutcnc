@@ -255,23 +255,24 @@ function KpiSection({
   const visible = React.Children.toArray(children).filter((c) => c !== "");
   if (visible.length === 0) return null;
 
-  // Column count follows the card count so the last row never holds a single orphan.
-  // Card counts are mode-dependent (facing adds Rec. Step-Over to Material Removal,
-  // surfacing adds D_eff and Scallop), so a fixed 3-up strands the 4th card on its own
-  // line. Full-width children (`col-span-*` notes, disclaimers) don't occupy a track,
-  // so count only the plain cards. 4 → 4-up; 3, 5 and 6 tile evenly at 3-up.
-  const cardCount = visible.filter((c) => {
-    const cls = React.isValidElement(c) ? String((c.props as any)?.className ?? "") : "";
-    return !cls.includes("col-span");
-  }).length;
-  const cols = cardCount === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3";
-
+  // Auto-fit rather than a fixed column count. Card counts are mode-dependent (facing adds
+  // Rec. Step-Over, surfacing adds D_eff and Scallop), so any fixed n strands a remainder
+  // card alone on the last row. Counting children to pick n doesn't work either — several
+  // children are fragments holding a card plus a full-width note, so the count over-reads.
+  // auto-fit lets the browser fit as many >=11rem tracks as the width allows and stretch
+  // them to fill, which tiles 3, 4 or 6 cards evenly without knowing how many there are.
+  // Full-width children keep working: `col-span-full` spans whatever the track count is.
   return (
     <section className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 p-3">
       <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">
         {title}
       </div>
-      <div className={`grid grid-cols-2 gap-3 ${cols}`}>{visible}</div>
+      {/* Two fixed columns on phones (11rem tracks won't fit side by side there anyway),
+          auto-fit from the sm breakpoint up. The arbitrary value has to be a single token,
+          so the commas and spaces inside minmax() are written as underscores. */}
+      <div className="grid grid-cols-2 gap-3 sm:[grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
+        {visible}
+      </div>
     </section>
   );
 }
@@ -18937,7 +18938,7 @@ ${stabSection}
                       {/* SFM — full-width row: value on the left, speed-preset
                           selector on the right with a tool-life↔throughput arrow.
                           Shown above RPM since it's the primary speed control. */}
-                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
+                      <div className="col-span-full rounded-2xl border p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                           {/* Speed values — SFM and RPM, each with its value on the left and a
                               "Set …" override box on the right. SFM and RPM overrides are mutually
@@ -19104,7 +19105,7 @@ ${stabSection}
                           traditional roughing: derate chip load, floored to avoid rubbing).
                           The selector only appears in modes where it applies. */}
                       <KpiSection title="Feed">
-                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
+                      <div className="col-span-full rounded-2xl border p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                           {/* Value */}
                           <div className="shrink-0 sm:w-40">
@@ -19379,7 +19380,7 @@ ${stabSection}
                           note below" pointer on the Feed (IPM) card refers to. `hemThinning` is
                           the same gate that renders that pointer, so the two can't disagree. */}
                       {hemThinning && (
-                        <div className="col-span-2 sm:col-span-3 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
+                        <div className="col-span-full rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
                           <div className="text-[11px] font-semibold text-sky-300 mb-0.5">
                             * This {UC(customer.feed_ipm, 25.4, metric ? 0 : 1)} {metric ? "mm/min" : "IPM"} is a ceiling, not a constant feed
                           </div>
@@ -19591,7 +19592,7 @@ ${stabSection}
                 {/* All four power numbers on ONE line. They're short values that belong read
                     together (Req / Avail / Util / Margin), so they get their own 4-across strip
                     spanning the section grid rather than wrapping 3+1 as separate cards. */}
-                <div className="col-span-2 sm:col-span-3 grid grid-cols-4 gap-2">
+                <div className="col-span-full grid grid-cols-4 gap-2">
                   <KpiCompact label={UL("HP Req", "kW Req")} hint="Estimated cutting power required for this operation. Calculated from MRR × material unit power (HP·min/in³), adjusted for geometry and workpiece hardness." value={UC(customer.hp_required, 0.7457, 2)} />
                   <KpiCompact label={UL("Avail HP", "Avail kW")} hint="Your machine's nameplate HP derated by spindle drive efficiency (Direct 96%, Belt 92%, Gear 88%). This is the actual cutting power available at the spindle." value={UC(customer.machine_hp, 0.7457, metric ? 1 : 1)} />
                   <KpiCompact
