@@ -8,6 +8,22 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### The results dashboard was one flat grid; it's now grouped by what you're reading
+Every KPI on the milling results panel — Material, Ø, Flutes, the SFM/RPM card, Feed, the three chip-load cards, DOC, WOC, MRR, and the four HP numbers — was a sibling in a single `grid-cols-2 sm:grid-cols-3`. Any visual grouping was an accident of source order, and the cards that fell outside it (Force, Torque, Deflection, Tooth Engagement, Chatter Risk) read as loose tiles with no heading at all.
+
+The panel is now five titled sections — **Setup**, **Speed**, **Feed**, **Material Removal**, **Horsepower** — plus three below for the engineering numbers: **Cutting Forces & Stability**, **Engagement Quality**, and **Tool & Wear**. The Base FPT / Adj FPT / Act. Chip cards sit under Feed, where they explain the IPM above them; the two engagement gauges sit directly beneath the Tooth Engagement number they expand on.
+
+Most children of these sections are mode-conditional, so a new `KpiSection` self-hides when every child is conditioned out — otherwise surfacing, circ-interp and chamfer would each show empty titled boxes. The Engagement Quality group needed the same treatment via hoisted `_showTeeth` / `_showAngle` guards, since both its gauges vanish in slot and face modes.
+
+The four horsepower numbers now share one 4-across strip via a compact `KpiCompact` variant rather than wrapping 3+1 as full-size cards, and the "this IPM is a ceiling, not a constant feed" note moved out of Horsepower into Feed — it was only there because it happened to be a sibling of the HP cards in the old flat grid. It now reads the same `hemThinning` const that gates the `* see note below` pointer, so the pointer and its target can't drift apart.
+
+### Two overlapping tip blocks became one, and it moved up to the process that drives it
+The milling results carried a hardcoded "Setup Tips" accordion covering 5 modes, while a second data-driven "Machining Tips & Tricks" accordion sat at the bottom of the results covering 10. Roughly half the short block restated the long one — the ①②③④ entry-order list was near-verbatim in both, along with the WOC 5–15% range, chip evacuation, and full-LOC engagement.
+
+The short block is gone. The `MILLING_MODE_TIPS`-driven accordion now sits **directly under the Process dropdown**, where the tips belong: they're per-process, so they should be next to the choice that selects them. It covers all ten processes instead of five, is one const to edit rather than JSX scattered inline, and no longer waits on a completed run before appearing — pick a process and the tips are there while you fill in the rest of the form.
+
+Two bullets in the deleted block were computed, not prose, and had no static equivalent: the facing stepover `(D − 2×CR) × 0.75` with the DOC floor, and the circ-interp core-post check that works out whether a helical entry leaves a standing post. Both are preserved as a highlighted **For this setup** panel at the top of the expanded accordion, above the static prose — a live number for the tool actually in the form should lead a rule of thumb. The panel only renders when it has something to say, so the other eight processes are unchanged.
+
 ### The diameter step-up preview showed zero change on the one step that's entirely about diameter
 Hovering "Increase Tool Diameter to 0.625"" produced an *If applied* table with no movement on any row — no flex drop, no force rise — while the step's own subtitle claimed "2.4× stiffer (D⁴ law)" two lines above it. The step was arguing for itself and its own preview was contradicting it.
 

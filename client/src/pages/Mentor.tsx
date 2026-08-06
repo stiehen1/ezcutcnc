@@ -199,6 +199,71 @@ function Kpi({
   );
 }
 
+/** Narrow variant of <Kpi> for packing several short values onto one line (the four HP
+ *  numbers). Same tap-tooltip behaviour; tighter padding, smaller label, and the label is
+ *  allowed to wrap so four fit across a phone without truncating. */
+function KpiCompact({
+  label,
+  value,
+  hint,
+  labelClassName,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+  labelClassName?: string;
+}) {
+  const t = useTapTooltip();
+  return (
+    <div className="rounded-xl border px-2 py-2 min-w-0">
+      <div className={`text-[10px] leading-tight flex items-start gap-0.5 ${labelClassName ?? "text-muted-foreground"}`}>
+        {hint ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
+              <TooltipTrigger asChild>
+                <span onClick={t.tap} className="flex items-start gap-0.5 cursor-pointer">
+                  {label}
+                  <svg className="inline w-2.5 h-2.5 mt-px shrink-0 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                    <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                  </svg>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-56 text-xs">{hint}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : label}
+      </div>
+      <div className="mt-0.5 text-base font-bold leading-tight tabular-nums truncate">{value}</div>
+    </div>
+  );
+}
+
+/** Titled group of KPI cards in the results dashboard (Speed / Feed / Material Removal / …).
+ *  Self-hiding: most children are mode-conditional, so a section that renders nothing in the
+ *  current mode would otherwise leave an empty titled box. React.Children.toArray() drops
+ *  null/undefined/false, so an empty result means "nothing to show here" — render nothing. */
+function KpiSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  // toArray() already drops null / undefined / booleans, so a `{cond && <Kpi/>}` child that
+  // conditioned out simply isn't here. Empty strings are the only falsy leftover worth filtering.
+  const visible = React.Children.toArray(children).filter((c) => c !== "");
+  if (visible.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 p-3">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">
+        {title}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{visible}</div>
+    </section>
+  );
+}
+
 type SkuRecord = {
   // Identity — DB returns lowercase column names; EDP is an alias for edp
   EDP?: string;
@@ -4360,7 +4425,6 @@ export default function Mentor() {
   const [stickoutAutoSuggested, setStickoutAutoSuggested] = React.useState(false);
   const [stickoutViolation, setStickoutViolation] = React.useState<string | null>(null);
   const [tmGcodeExpanded, setTmGcodeExpanded] = React.useState(false);
-  const [modeTipsOpen, setModeTipsOpen] = React.useState(false);
 
   // EDP# / SKU lookup state
   const [edpText, setEdpText] = React.useState("");
@@ -8494,6 +8558,112 @@ ${stabSection}
                     )}
                   </span>
                 </label>
+              </div>
+            )}
+
+            {/* Machining Tips accordion — endmill milling. Sits directly under the
+                Process selector: the tips are per-process, so they belong with the
+                choice that drives them. Collapsed by default. Content is data-driven
+                from MILLING_MODE_TIPS (all 10 modes) — this replaced a shorter
+                hardcoded "Setup Tips" block that duplicated ~half of it. */}
+            {operation === "milling" && form.tool_type !== "chamfer_mill" && form.mode && (
+              <div className="mt-2 rounded-xl border border-zinc-700 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+                  onClick={() => setMachiningTipsOpen(o => !o)}
+                >
+                  <div>
+                    <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
+                    {form.mode && MILLING_MODE_TIPS[tipsModeKey] && (
+                      <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
+                        — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting — Traditional", slot_hem:"Slotting — HEM / Trochoidal", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[tipsModeKey] ?? ""}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
+                </button>
+                {machiningTipsOpen && (() => {
+                  const tips = MILLING_MODE_TIPS[tipsModeKey] ?? MILLING_MODE_TIPS.hem;
+
+                  /* ── For this setup ────────────────────────────────────────────────
+                     MILLING_MODE_TIPS is static prose. These two are computed off the
+                     CURRENT tool/bore numbers, so they lead the list — a live answer
+                     beats a rule of thumb. Carried over from the old "Setup Tips" block
+                     when it was folded into this accordion; the static tips repeat the
+                     general rule, these give the number for the tool in the form. */
+                  const _liveTips: React.ReactNode[] = [];
+
+                  // Facing: the stepover that puts the wiper flat to work, and the DOC
+                  // floor below which the corner arc (not the flat) does the cutting.
+                  if (tipsModeKey === "face" && form.tool_dia > 0) {
+                    if (form.corner_radius > 0) {
+                      _liveTips.push(
+                        <>
+                          <span className="font-semibold text-white">Optimal stepover = (D − 2×CR) × 0.75 = {((form.tool_dia - 2 * form.corner_radius) * 0.75).toFixed(4)}"</span>{" "}
+                          — wiper overlaps each pass by 25%, burnishing out the cusp line. Keep DOC above the
+                          corner radius ({form.corner_radius.toFixed(4)}") — minimum {(form.corner_radius + 0.003).toFixed(4)}" — or
+                          you're cutting on the arc only and the floor looks scalloped.
+                        </>
+                      );
+                    } else {
+                      _liveTips.push(
+                        <>
+                          <span className="font-semibold text-white">Use a corner radius tool.</span>{" "}
+                          CR 0.030"+ creates a wiper flat. Square corners leave visible lines at every stepover.
+                        </>
+                      );
+                    }
+                  }
+
+                  // Circ interp: does a helical entry clear the centre, or leave a post?
+                  if (tipsModeKey === "circ_interp") {
+                    const D = form.tool_dia;
+                    const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : (form as any).bore_dia;
+                    if (!(D > 0) || !(boreDia > 0)) {
+                      _liveTips.push(
+                        <>
+                          <span className="font-semibold text-white">Core post check:</span>{" "}
+                          Enter tool and bore diameters above to see whether helical entry leaves a standing post.
+                        </>
+                      );
+                    } else if (boreDia - 2 * D <= 0) {
+                      _liveTips.push(
+                        <>
+                          <span className="font-semibold text-white">Core post check ✓</span>{" "}
+                          — tool ({D.toFixed(4)}") ≥ half bore ({(boreDia / 2).toFixed(4)}"). No standing post.
+                        </>
+                      );
+                    } else {
+                      _liveTips.push(
+                        <>
+                          <span className="font-semibold text-amber-300">⚠ Core post warning:</span>{" "}
+                          Helical entry leaves a <strong className="text-amber-300">{(boreDia - 2 * D).toFixed(4)}" standing post</strong>.
+                          Use a tool ≥{(boreDia / 2).toFixed(4)}" or pre-interpolate a center pocket first.
+                        </>
+                      );
+                    }
+                  }
+
+                  return (
+                    <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
+                      {_liveTips.length > 0 && (
+                        <div className="rounded-lg border border-sky-700/40 bg-sky-950/20 px-3 py-2.5 space-y-2">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-sky-300">
+                            For this setup
+                          </div>
+                          {_liveTips.map((t, i) => (
+                            <div key={i} className="text-sky-100/90">{t}</div>
+                          ))}
+                        </div>
+                      )}
+                      {tips.map((tip, i) => (
+                        <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
+                      ))}
+                      <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Endmills & Special Profiles) for you — contact us!</span></div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -18600,8 +18770,11 @@ ${stabSection}
                 );
               })()}
 
-              {/* Customer KPIs (single grid, auto-flows) */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {/* Customer KPIs — grouped into titled sections (Setup / Speed / Feed /
+                  Material Removal / Horsepower). Each KpiSection is its own grid and
+                  self-hides when every child is conditioned out for the current mode. */}
+              <div className="space-y-3">
+              <KpiSection title="Setup">
                 <Kpi
                   label="Material"
                   value={(() => {
@@ -18621,8 +18794,12 @@ ${stabSection}
                 />
                 <Kpi label={UL("Ø (in)", "Ø (mm)")} hint="Cutting diameter of the tool as confirmed by the engine." value={UC(customer.diameter, 25.4, metric ? 2 : 3)} />
                 <Kpi label="Flutes" hint="Number of cutting flutes. More flutes increase feed rate but reduce chip clearance — critical in gummy materials like aluminum and stainless." value={fmtInt(customer.flutes)} />
+              </KpiSection>
 
-                {(() => {
+              {/* Speed + Feed. Both cards depend on the same skin/case-hard derate math
+                  (showSub / subIpm / hemLocked), so one IIFE computes it and emits both
+                  sections rather than duplicating the block. */}
+              {(() => {
                   const sc = STOCK_CONDITION_INFO[form.stock_condition];
                   const skinSfmMult = sc ? effectiveSkinSfmMult(sc, form.stock_condition, form.hardness_value, form.weld_strategy) : 1.0;
                   const skinIptMult = sc ? effectiveSkinIptMult(sc, form.stock_condition, form.weld_strategy) : 1.0;
@@ -18676,6 +18853,7 @@ ${stabSection}
                   const displayIpm = hemLocked && unthinnedIpm != null ? unthinnedIpm : headIpm;
                   return (
                     <>
+                      <KpiSection title="Speed">
                       {/* SFM — full-width row: value on the left, speed-preset
                           selector on the right with a tool-life↔throughput arrow.
                           Shown above RPM since it's the primary speed control. */}
@@ -18838,11 +19016,14 @@ ${stabSection}
                           </div>
                         </div>
                       </div>
+                      </KpiSection>
+
                       {/* ── FEED card ───────────────────────────────────────────────────
                           Feed is its OWN axis, separate from Speed (SFM/RPM above). Value on
                           the left; on the right, a feed-level selector (HEM: throttle the boost;
                           traditional roughing: derate chip load, floored to avoid rubbing).
                           The selector only appears in modes where it applies. */}
+                      <KpiSection title="Feed">
                       <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                           {/* Value */}
@@ -18982,9 +19163,6 @@ ${stabSection}
                           })()}
                         </div>
                       </div>
-                    </>
-                  );
-                })()}
 
                 {customer.peripheral_feed_ipm != null && (
                   <Kpi
@@ -19115,6 +19293,33 @@ ${stabSection}
                   );
                 })() : null}
 
+                      {/* HEM feed is a peak, not a constant — reassure customers who see a
+                          chip-thinned feed roughly double their old constant-engagement number.
+                          Lives at the foot of the Feed section because that's what the "* see
+                          note below" pointer on the Feed (IPM) card refers to. `hemThinning` is
+                          the same gate that renders that pointer, so the two can't disagree. */}
+                      {hemThinning && (
+                        <div className="col-span-2 sm:col-span-3 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
+                          <div className="text-[11px] font-semibold text-sky-300 mb-0.5">
+                            * This {UC(customer.feed_ipm, 25.4, metric ? 0 : 1)} {metric ? "mm/min" : "IPM"} is a ceiling, not a constant feed
+                          </div>
+                          <p className="text-[10.5px] leading-snug text-sky-100/90">
+                            HEM / adaptive toolpaths run this feed <span className="font-semibold">only in the light-engagement arcs</span> the
+                            path spends most of its time in — that light radial bite is exactly why the chip-thinned feed can sit near
+                            double a traditional constant-engagement number and still be safe. Your CAM's adaptive engine
+                            <span className="font-semibold"> automatically eases WOC and/or feed</span> wherever engagement climbs
+                            (corners, full-width entries, tight pockets), so the tool rarely holds the full number continuously.
+                            Program it as the max — the intelligent path dips below it for safety on its own. The
+                            <span className="font-semibold"> average</span> feed you'll observe is lower, and that's by design.
+                          </p>
+                        </div>
+                      )}
+                      </KpiSection>
+                    </>
+                  );
+                })()}
+
+              <KpiSection title="Material Removal">
                 {form.mode === "surfacing" && customer.d_eff_in != null && (
                   <Kpi
                     label={UL("D_eff (in)", "D_eff (mm)")}
@@ -19276,41 +19481,27 @@ ${stabSection}
                   );
                 })()}
 
-                <Kpi label={UL("HP Req", "kW Req")} hint="Estimated cutting power required for this operation. Calculated from MRR × material unit power (HP·min/in³), adjusted for geometry and workpiece hardness." value={UC(customer.hp_required, 0.7457, 2)} />
-                <Kpi label={UL("Avail HP", "Avail kW")} hint="Your machine's nameplate HP derated by spindle drive efficiency (Direct 96%, Belt 92%, Gear 88%). This is the actual cutting power available at the spindle." value={UC(customer.machine_hp, 0.7457, metric ? 1 : 1)} />
-                <Kpi
-                  label="HP Util (%)"
-                  hint="HP Required as a percentage of available spindle HP. Above 90% risks spindle overload and poor surface finish. Ideally 50–80% for a productive cut with headroom."
-                  value={
-                    customer.hp_util_pct != null
-                      ? `${fmtNum(customer.hp_util_pct, 0)}%`
-                      : "—"
-                  }
-                />
+              </KpiSection>
 
-                <Kpi label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
-
-                {/* HEM feed is a peak, not a constant — reassure customers who see a chip-thinned
-                    feed roughly double their old constant-engagement number. Only when the feed is
-                    actually thinning-boosted on an adaptive path. */}
-                {(form.mode === "hem" || form.mode === "trochoidal") && form.tool_type !== "chamfer_mill"
-                  && customer.adj_fpt != null && customer.fpt != null
-                  && Math.abs(customer.adj_fpt - customer.fpt) > 0.000005 && (
-                  <div className="col-span-full rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
-                    <div className="text-[11px] font-semibold text-sky-300 mb-0.5">
-                      * This {UC(customer.feed_ipm, 25.4, metric ? 0 : 1)} {metric ? "mm/min" : "IPM"} is a ceiling, not a constant feed
-                    </div>
-                    <p className="text-[10.5px] leading-snug text-sky-100/90">
-                      HEM / adaptive toolpaths run this feed <span className="font-semibold">only in the light-engagement arcs</span> the
-                      path spends most of its time in — that light radial bite is exactly why the chip-thinned feed can sit near
-                      double a traditional constant-engagement number and still be safe. Your CAM's adaptive engine
-                      <span className="font-semibold"> automatically eases WOC and/or feed</span> wherever engagement climbs
-                      (corners, full-width entries, tight pockets), so the tool rarely holds the full number continuously.
-                      Program it as the max — the intelligent path dips below it for safety on its own. The
-                      <span className="font-semibold"> average</span> feed you'll observe is lower, and that's by design.
-                    </p>
-                  </div>
-                )}
+              <KpiSection title="Horsepower">
+                {/* All four power numbers on ONE line. They're short values that belong read
+                    together (Req / Avail / Util / Margin), so they get their own 4-across strip
+                    spanning the section grid rather than wrapping 3+1 as separate cards. */}
+                <div className="col-span-2 sm:col-span-3 grid grid-cols-4 gap-2">
+                  <KpiCompact label={UL("HP Req", "kW Req")} hint="Estimated cutting power required for this operation. Calculated from MRR × material unit power (HP·min/in³), adjusted for geometry and workpiece hardness." value={UC(customer.hp_required, 0.7457, 2)} />
+                  <KpiCompact label={UL("Avail HP", "Avail kW")} hint="Your machine's nameplate HP derated by spindle drive efficiency (Direct 96%, Belt 92%, Gear 88%). This is the actual cutting power available at the spindle." value={UC(customer.machine_hp, 0.7457, metric ? 1 : 1)} />
+                  <KpiCompact
+                    // Utilisation is a ratio — stays "HP Util" in metric (no kW variant).
+                    label="HP Util"
+                    hint="HP Required as a percentage of available spindle HP. Above 90% risks spindle overload and poor surface finish. Ideally 50–80% for a productive cut with headroom."
+                    value={
+                      customer.hp_util_pct != null
+                        ? `${fmtNum(customer.hp_util_pct, 0)}%`
+                        : "—"
+                    }
+                  />
+                  <KpiCompact label={UL("HP Margin", "kW Margin")} hint="Available HP minus HP Required — your power headroom. Positive means the machine can handle this cut. Negative means the cut will overload the spindle." value={UC(customer.hp_margin_hp, 0.7457, 2)} />
+                </div>
 
                 {customer.torque_avail_ftlb != null && customer.torque_req_ftlb != null && (() => {
                   const zone = customer.torque_zone;
@@ -19439,6 +19630,7 @@ ${stabSection}
                     </div>
                   );
                 })()}
+              </KpiSection>
               </div>
 
               {/* Chamfer tips — rendered above geometry so the most actionable advice sits right under the KPIs */}
@@ -19663,11 +19855,14 @@ ${stabSection}
                 );
               })()}
 
-              {/* Engineering */}
+              {/* Engineering — cutting mechanics (force → deflection → chatter). Titled to
+                  match the Speed / Feed / Material Removal / Horsepower sections above; the
+                  engagement advisories and tool life that follow are part of the same story
+                  and are grouped under "Cutting Forces & Stability" below. */}
               {engineering ? (
                 <>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <KpiSection title="Cutting Forces & Stability">
                     <Kpi label={UL("Force (lbf)", "Force (N)")} hint="Estimated radial cutting force at the tool tip. Drives deflection and chatter. Increases with chip load, DOC, and material hardness. Key input to the stability model." value={UC(engineering?.force_lbf, 4.44822, 0)} />
                     <Kpi
                       label={UL("Torque (in-lbf)", "Torque (N·m)")}
@@ -19717,7 +19912,7 @@ ${stabSection}
                         return <span className={band.c}>{band.t}</span>;
                       })()}
                     />
-                  </div>
+                  </KpiSection>
                 </>
               ) : null}
 
@@ -19949,84 +20144,6 @@ ${stabSection}
                 );
               })()}
 
-              {/* Mode-specific Setup Tips — collapsible toggle */}
-              {customer && (form.mode === "face" || form.mode === "circ_interp" || form.mode === "hem" || form.mode === "trochoidal" || form.mode === "finish") && (
-                <div className="mt-3 rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => setModeTipsOpen(o => !o)}
-                    className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-sky-300 hover:text-sky-100 transition-colors"
-                  >
-                    <span>{form.mode === "face" ? "Facing / Planar Milling — Setup Tips" : form.mode === "circ_interp" ? "Circular Interpolation — Setup Tips" : form.mode === "finish" ? "Finishing — Setup Tips" : "HEM / Trochoidal — Setup Tips"}</span>
-                    <span className="text-sky-500 text-[11px]">{modeTipsOpen ? "▲ Hide" : "▼ Show"}</span>
-                  </button>
-                  {modeTipsOpen && (
-                    <div className="mt-2 space-y-1.5 border-t border-sky-800/40 pt-2">
-                      {form.mode === "face" ? (<>
-                        {form.tool_dia > 0 && form.corner_radius > 0 && (
-                          <p className="text-[10px] text-sky-200">• <span className="text-white">Optimal stepover = (D − 2×CR) × 0.75</span> = <span className="font-semibold text-sky-100">{((form.tool_dia - 2 * form.corner_radius) * 0.75).toFixed(4)}"</span> — wiper overlaps each pass by 25%, burnishing out the cusp line</p>
-                        )}
-                        {!form.corner_radius && (
-                          <p className="text-[10px] text-sky-200">• <span className="text-white">Use a corner radius tool</span> — CR 0.030"+ creates a wiper flat. Square corners leave visible lines at every stepover</p>
-                        )}
-                        {form.tool_dia > 0 && form.corner_radius > 0 && (
-                          <p className="text-[10px] text-sky-200">• <span className="text-white">DOC must exceed CR ({form.corner_radius.toFixed(4)}")</span> — below CR you're cutting only on the arc; wiper effect disappears and floor looks scalloped. Minimum DOC: {(form.corner_radius + 0.003).toFixed(4)}"</p>
-                        )}
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">0.005–0.020" finish DOC</span> is normal and correct — facing DOC is much shallower than peripheral milling</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Minimize stickout</span> — #1 rule for facing. Full diameter engages; any deflection shows as flatness error</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Climb mill on finish pass</span> — bi-directional OK for roughing. Uni-directional on finish pass only</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Spring pass:</span> re-run at zero Z offset, same direction — removes deflection bow from first pass</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Air blast over flood</span> — chips under the wiper get smeared and streak the surface</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Axial runout &lt;0.0005"</span> — Z-wobble leaves repeating witness arcs at every stepover. Use shrink-fit or precision collet, check face TIR</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Troubleshoot:</span> Scallop lines = stepover too wide or CR too small · Witness arcs = check axial runout · Wavy surface = reduce stickout + spring pass</p>
-                      </>) : form.mode === "circ_interp" ? (<>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">CAM feed vs. peripheral feed:</span> <strong>Feed (IPM)</strong> in results is already corrected for arc — enter that number in your CAM. <strong>Peripheral Feed</strong> is the actual chip load at the wall — use it to verify the cut, not to program.</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Larger bore = higher feed is correct:</span> As bore diameter increases, arc of engagement decreases and chip thinning kicks in — the engine boosts feed automatically. Higher Feed (IPM) on a large bore is expected, not a mistake.</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">CCW toolpath = climb milling</span> on an internal bore. Use CCW for finish passes; CW is conventional (better if backlash is a concern)</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Leave 0.005–0.010" stock</span> for a final cleanup pass at reduced feed — bore tolerances are tight and deflection on roughing passes leaves material</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entry bore clearance:</span> radial clearance (entry bore − tool dia) ÷ 2 should be ≥0.050" for rigid entry. Tighter = rubbing risk</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Stepover ≤15% of tool dia</span> for finishing passes — excessive stepover causes chatter and poor bore finish</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Minimize stickout</span> — at 2×D+ depth, deflection bows the bore. Keep gauge line as close to holder as part clearance allows</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">No pre-drilled hole? Use helical interpolation entry in CAM</span> — ramp in a continuous helix to bore depth, then circular passes to size the wall. Set ramp feed to <strong>40–50% of Feed (IPM)</strong>. Ramp angle ≤2°; center-cutting geometry required.</p>
-                        {(() => {
-                          const D = form.tool_dia;
-                          const boreDia = form.target_hole_dia > 0 ? form.target_hole_dia : (form as any).bore_dia;
-                          if (!(D > 0) || !(boreDia > 0)) return (
-                            <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> Enter tool and bore diameters above to see whether helical entry leaves a standing post.</p>
-                          );
-                          const postDia = boreDia - 2 * D;
-                          if (postDia <= 0) return (
-                            <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check ✓</span> — tool ({D.toFixed(4)}") ≥ half bore ({(boreDia/2).toFixed(4)}"). No standing post.</p>
-                          );
-                          return (
-                            <p className="text-[10px] text-sky-200">• <span className="text-white text-amber-300">⚠ Core post warning:</span> Helical entry leaves a <strong className="text-amber-300">{postDia.toFixed(4)}" standing post</strong>. Use a tool ≥{(boreDia/2).toFixed(4)}" or pre-interpolate a center pocket first.</p>
-                          );
-                        })()}
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Never dwell mid-pass</span> — stopping feed inside the bore leaves a witness ring. Lead tool out past bore edge on exit</p>
-                      </>) : form.mode === "finish" ? (<>
-                        <p className="text-[10px] text-sky-200">• WOC <span className="text-white">3–5% of diameter</span> — biggest lever for finish quality</p>
-                        <p className="text-[10px] text-sky-200">• DOC <span className="text-white">1–1.5×D</span> — one full-length pass beats stacked shallow cuts</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Climb mill always</span> — less rubbing, better Ra, longer tool life</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Spring pass:</span> repeat same path at zero offset to remove deflection stock</p>
-                        <p className="text-[10px] text-sky-200">• Leave <span className="text-white">0.005–0.015" stock</span> after roughing before finishing</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Stickout ≤3×D</span> — check this before adjusting speeds if chatter appears</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Runout &lt;0.0005"</span> at tip — causes lobing if exceeded</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Increase SFM 10–15%, reduce feed 15–25%</span> vs roughing</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Al:</span> air blast, D-Max/uncoated &nbsp;|&nbsp; <span className="text-white">Steel:</span> steady flood coolant &nbsp;|&nbsp; <span className="text-white">SS/Ti:</span> conservative SFM</p>
-                      </>) : (<>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">WOC 5–15% of tool diameter</span> is the sweet spot — keeps chip thinning in the useful range and arc of engagement low enough to prevent heat buildup</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Full LOC engagement</span> is the goal — use 1×D DOC or more. Distributes wear over the entire flute length instead of burning out the bottom edge</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">High-feed, high-RPM</span> — HEM feeds are much higher than conventional. If feed sounds alarming, check SFM and IPT; the physics are correct</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Chip evacuation is critical</span> — chips are thin but numerous. Flood coolant directed at the cut or high-pressure air. Poor evacuation re-cuts chips and kills tool life fast</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Entry order of preference:</span> ① Pre-drilled hole (best — cleanest entry, zero edge shock) → ② Sweep-in / roll-in arc from outside stock → ③ Helical interpolation (circular XY + descending Z, ramp ≤2–3°, ramp feed 40–50% of lateral) → ④ Linear ramp at 2–5°. Never straight plunge into full-width material.</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Core post check:</span> If helically entering a pocket, the tool must be ≥ half the final bore/pocket diameter to pass through center and avoid leaving a standing post. Min tool diameter = bore diameter ÷ 2. Use the <strong>No Middle Post</strong> calculator in the Calculators tab for a live check.</p>
-                        <p className="text-[10px] text-sky-200">• <span className="text-white">Avoid dwell and sharp direction changes</span> — trochoidal loops must be smooth arcs. Any abrupt deceleration inside the cut causes a heat spike at the tool edge</p>
-                      </>)}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Spindle-Limited Advisory — shown when machine can't reach target SFM */}
               {customer?.sfm_target > 0 && customer?.rpm > 0 && form.max_rpm > 0 && (() => {
                 const sfmActual  = customer.sfm ?? 0;
@@ -20093,8 +20210,26 @@ ${stabSection}
                 );
               })()}
 
+              {/* ── Engagement Quality ──────────────────────────────────────────────
+                  The two gauges below expand on the Tooth Engagement / engagement-arc
+                  numbers in the Cutting Forces section. Wrapped in a titled group (with
+                  the same self-hiding behaviour as KpiSection) so they don't read as two
+                  loose bars — both are conditioned out for slot/face, and the whole group
+                  disappears with them rather than leaving an empty heading. */}
+              {(() => {
+                const _showTeeth = form.woc_pct > 0 && form.flutes > 0
+                  && form.mode !== "slot" && form.mode !== "face";
+                const _showAngle = form.woc_pct > 0 && form.tool_type !== "chamfer_mill"
+                  && form.mode !== "circ_interp" && form.mode !== "face" && form.mode !== "slot";
+                if (!_showTeeth && !_showAngle) return null;
+                return (
+                  <section className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 p-3 space-y-3">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                      Engagement Quality
+                    </div>
+
               {/* Tooth Engagement Advisory — hidden for slotting and face only */}
-              {form.woc_pct > 0 && form.flutes > 0 && form.mode !== "slot" && form.mode !== "face" && (() => {
+              {_showTeeth && (() => {
                 const _wocFrac = form.woc_pct / 100;
                 const _arg = Math.max(-1, Math.min(1, 1 - 2 * _wocFrac));
                 const tic = Math.max(0.1, (2 * Math.acos(_arg) / (2 * Math.PI)) * form.flutes);
@@ -20162,7 +20297,7 @@ ${stabSection}
               })()}
 
               {/* Engagement Angle Advisory — hidden for circ_interp, face, and slot (always 180°) */}
-              {form.woc_pct > 0 && form.tool_type !== "chamfer_mill" && form.mode !== "circ_interp" && form.mode !== "face" && form.mode !== "slot" && (() => {
+              {_showAngle && (() => {
                 const wocFrac = form.woc_pct / 100;
                 const arg = Math.max(-1, Math.min(1, 1 - 2 * wocFrac));
                 const engAngleDeg = 2 * Math.acos(arg) * (180 / Math.PI);
@@ -20220,6 +20355,19 @@ ${stabSection}
                   </div>
                 );
               })()}
+                  </section>
+                );
+              })()}
+
+              {/* ── Tool & Wear ─────────────────────────────────────────────────────
+                  Coating and predicted tool life are both "what this cut costs the tool",
+                  so they read as one group rather than two loose rows. The coating row
+                  always renders (it falls back to a recommendation when no SKU coating is
+                  known), so this group never ends up empty. */}
+              <section className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 p-3 space-y-2.5">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                  Tool &amp; Wear
+                </div>
 
               {/* Coating — show actual SKU coating if known, otherwise generic recommendation */}
               {form.coating ? (() => {
@@ -20268,6 +20416,7 @@ ${stabSection}
                   </div>
                 </div>
               )}
+              </section>
 
               {/* Entry Moves */}
               {result?.entry_moves && (() => {
@@ -20838,41 +20987,6 @@ ${stabSection}
                   {customer.status_hint}
                 </div>
               ) : null}
-
-              {/* Machining Tips accordion — endmill milling. Lives at the BOTTOM of the
-                  results: it's background reading for the strategy, not something that
-                  should sit between the user and their numbers. The tool identity card
-                  took its place at the top. */}
-              {operation === "milling" && form.tool_type !== "chamfer_mill" && (
-                <div className="mt-4 rounded-xl border border-zinc-700 overflow-hidden">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
-                    onClick={() => setMachiningTipsOpen(o => !o)}
-                  >
-                    <div>
-                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-widest">Machining Tips & Tricks</span>
-                      {form.mode && MILLING_MODE_TIPS[tipsModeKey] && (
-                        <span className="ml-2 text-[10px] text-zinc-400 uppercase tracking-widest">
-                          — {{hem:"Roughing HEM", trochoidal:"Roughing HEM", traditional:"Traditional Roughing", finish:"Finishing", face:"Facing", slot:"Slotting — Traditional", slot_hem:"Slotting — HEM / Trochoidal", circ_interp:"Circular Interpolation", surfacing:"3D Surface Contouring", deep_pocket:"Deep Pocket / Thin Wall"}[tipsModeKey] ?? ""}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-zinc-400 text-sm">{machiningTipsOpen ? "▲" : "▼"}</span>
-                  </button>
-                  {machiningTipsOpen && (() => {
-                    const tips = MILLING_MODE_TIPS[tipsModeKey] ?? MILLING_MODE_TIPS.hem;
-                    return (
-                      <div className="border-t border-zinc-700 px-4 py-4 bg-zinc-950/50 space-y-3 text-[11px] text-zinc-300 leading-relaxed">
-                        {tips.map((tip, i) => (
-                          <div key={i}><span className="font-semibold text-white">{tip.title}</span> {tip.body}</div>
-                        ))}
-                        <div className="pt-2 text-center"><span className="font-semibold text-orange-400">Core Cutter can design, manufacture and deliver special configurations of (Endmills & Special Profiles) for you — contact us!</span></div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
 
             </>
           )}
