@@ -19458,20 +19458,39 @@ ${stabSection}
                   const meetsTarget = target > 0 ? (!floorMissed && raUin <= target + 0.01) : null;
                   return (
                     <>
-                      <Kpi
-                        label={form.mode === "finish" ? "Theoretical Wall Ra (µin)" : "Theoretical Ra (µin)"}
-                        hint={form.mode === "finish"
-                          ? "Side-milling a wall: roughness comes from the feed-per-tooth cusp left by the cylindrical flute periphery — driven by TOOL DIAMETER, not corner radius (the corner isn't engaged on a wall). This is far finer than a floor finish at the same feed, so feed is limited by deflection/chatter, not by the Ra target. Actual finish also depends on runout, machine rigidity, and chatter."
-                          : "Facing/floor finish: roughness comes from the corner/tip scallop between stepover passes — Ra ≈ FPT² × 1e6 / (8 × CR), so corner radius governs. Below the minimum chip thickness the tool rubs and finish degrades — feeding lighter past that point does not help. Actual finish depends on machine condition, tool runout, and coolant."}
-                        value={
-                          <span className={meetsTarget === true ? "text-emerald-400 font-semibold" : (meetsTarget === false || floorMissed) ? "text-red-400 font-semibold" : "font-semibold"}>
-                            {raUin.toFixed(1)} µin
-                            <span className="ml-1 text-xs font-normal text-muted-foreground">({(raUin * 0.0254).toFixed(3)} µm)</span>
-                            {meetsTarget === true && <span className="ml-1 text-xs"> ✓ meets {target} µin target</span>}
-                            {floorMissed && <span className="ml-1 text-xs"> ✗ target {target} not reachable</span>}
-                          </span>
-                        }
-                      />
+                      {/* Full-width row rather than a 1-of-3 card. The value carries a unit,
+                          a µm conversion and a target verdict — in a third of the width that
+                          wrapped to four lines and left the card tall and alone next to the
+                          full-width disclaimer below it. Spanning the row puts the label on
+                          the left and the number on the right, all on one line. */}
+                      <div className="col-span-2 sm:col-span-3 rounded-2xl border p-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="flex items-center gap-1 cursor-default">
+                                  {form.mode === "finish" ? "Theoretical Wall Ra" : "Theoretical Ra"}
+                                  <svg className="inline w-3 h-3 opacity-50" viewBox="0 0 16 16" fill="currentColor">
+                                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                    <text x="8" y="12" textAnchor="middle" fontSize="10" fontWeight="bold">i</text>
+                                  </svg>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                {form.mode === "finish"
+                                  ? "Side-milling a wall: roughness comes from the feed-per-tooth cusp left by the cylindrical flute periphery — driven by TOOL DIAMETER, not corner radius (the corner isn't engaged on a wall). This is far finer than a floor finish at the same feed, so feed is limited by deflection/chatter, not by the Ra target. Actual finish also depends on runout, machine rigidity, and chatter."
+                                  : "Facing/floor finish: roughness comes from the corner/tip scallop between stepover passes — Ra ≈ FPT² × 1e6 / (8 × CR), so corner radius governs. Below the minimum chip thickness the tool rubs and finish degrades — feeding lighter past that point does not help. Actual finish depends on machine condition, tool runout, and coolant."}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <div className={`text-lg font-bold leading-tight ${meetsTarget === true ? "text-emerald-400" : (meetsTarget === false || floorMissed) ? "text-red-400" : ""}`}>
+                          {raUin.toFixed(1)} <span className="text-sm font-semibold">µin</span>
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">({(raUin * 0.0254).toFixed(3)} µm)</span>
+                          {meetsTarget === true && <span className="ml-1.5 text-xs font-normal">✓ meets {target} µin target</span>}
+                          {floorMissed && <span className="ml-1.5 text-xs font-normal">✗ target {target} not reachable</span>}
+                        </div>
+                      </div>
                       {floorMissed ? (
                         <div className="col-span-full px-1 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
                           <span className="font-semibold">Ra {target} µin not reachable by feed alone</span> — it needs a chip below the rubbing floor, and feeding that light degrades the finish (rubbing/work-hardening). Best achievable here ≈ <span className="font-semibold">{raUin.toFixed(0)} µin</span> at {customer.feed_ipm?.toFixed(2)} IPM. To get finer: larger corner radius / ball nose, a finer-runout holder, or open the WOC.
