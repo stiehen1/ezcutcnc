@@ -3347,6 +3347,11 @@ export default function Mentor() {
     taper_included_angle_deg: 0,
     taper_length_in: 0,
 
+    // Facing — an enclosed face (boss top, interior pad, pocket floor) has no open
+    // stock edge to arc in from, so the tool has to get down to depth with a Z-entry
+    // move instead of a tangential sweep.
+    face_enclosed: false,
+
     // Slotting
     slot_closed: false,
     slot_strategy: "traditional" as "traditional" | "hem",
@@ -4159,8 +4164,12 @@ export default function Mentor() {
       const helical = ce === "helical" || (ce === "auto" && !hasHole);
       setEntryTypes(helical ? ["helical"] : ["sweep"]);
     }
+    // An enclosed face has no edge to sweep in from — default it to the ramp instead,
+    // otherwise switching into facing with the box already ticked lands on an entry the
+    // facing branch doesn't offer.
+    else if (form.mode === "face" && form.face_enclosed && form.tool_type !== "chamfer_mill") setEntryTypes(["ramp"]);
     else setEntryTypes(form.tool_type === "chamfer_mill" ? ["helical"] : ["sweep"]);
-  }, [form.tool_type, form.mode, form.circ_entry, form.existing_hole_dia]);
+  }, [form.tool_type, form.mode, form.circ_entry, form.existing_hole_dia, form.face_enclosed]);
   const [holderGageText, setHolderGageText] = React.useState("");
   const [holderNoseDiaText, setHolderNoseDiaText] = React.useState("");
   const [runoutText, setRunoutText] = React.useState("");
@@ -16233,24 +16242,62 @@ ${stabSection}
                   );
                 }
 
-                // Finishing and facing both enter laterally — there is no Z-entry to make.
-                // On a finish pass the wall is already roughed; on a facing pass the tool
-                // comes down in open air above the stock and feeds in from off the edge.
+                // Finishing: the wall is already roughed, so there is no Z-entry to make.
                 // The generic list below offers Helical / Pre-drill+Plunge / Straight Plunge,
-                // which are all ways of getting DOWN into material, and a ramp leaves a
-                // witness mark where the Z motion stops. A tangential arc is the entry.
-                if ((form.mode === "finish" || form.mode === "face") && form.tool_type !== "chamfer_mill") {
+                // which are all ways of getting DOWN into stock — meaningless on a finish
+                // pass, and a ramp leaves a witness mark where the Z motion stops. The only
+                // entry that belongs here is a tangential arc onto the wall.
+                if (form.mode === "finish" && form.tool_type !== "chamfer_mill") {
                   return (
                     <>
                       <div className="flex flex-wrap gap-3">
                         {renderChip({ ...opts.sweep, recommended: true })}
                       </div>
                       <p className="text-[10px] text-zinc-500 mt-1.5">
-                        {form.mode === "face"
-                          ? "Facing takes a shallow cut across the top of the part — the tool comes down in open air beside the stock and feeds in laterally, so there's no Z-entry move to make. Arc on from off the edge so engagement builds from zero, and roll out the same way rather than stopping in the cut. Never plunge into a face."
-                          : "Finishing follows an already-roughed wall, so there's no Z-entry move to make — arc on tangentially to avoid leaving a witness mark at the entry point. Lead out the same way, and keep the feed constant through the arc."}
+                        Finishing follows an already-roughed wall, so there's no Z-entry move to make —
+                        arc on tangentially to avoid leaving a witness mark at the entry point. Lead out
+                        the same way, and keep the feed constant through the arc.
                       </p>
                     </>
+                  );
+                }
+
+                // Facing: branch on whether the face has an open stock edge.
+                //   Open (default) → the tool comes down in air beside the stock and arcs on.
+                //   Enclosed (boss top, interior pad, pocket floor) → nothing to arc in FROM,
+                //   so it needs a Z-entry. A shallow ramp is the usual move: facing DOC is
+                //   0.005–0.030", so a 2–5° ramp reaches depth in very little travel. Helical
+                //   also works and suits a tight interior with no room for a linear ramp.
+                //   Straight Plunge stays out either way — a flat face is the worst possible
+                //   thing to plunge into.
+                if (form.mode === "face" && form.tool_type !== "chamfer_mill") {
+                  const enclosed = form.face_enclosed;
+                  const faceOpts: Opt[] = enclosed
+                    ? [{ ...opts.ramp, recommended: true }, opts.helical, opts.predrill_plunge]
+                    : [{ ...opts.sweep, recommended: true }];
+                  return (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+                          <input
+                            type="checkbox"
+                            checked={enclosed}
+                            onChange={e => { setForm(p => ({ ...p, face_enclosed: e.target.checked })); setEntryTypes(e.target.checked ? ["ramp"] : ["sweep"]); }}
+                            className="w-3.5 h-3.5 accent-sky-400"
+                          />
+                          <span className="text-zinc-300 whitespace-nowrap">Enclosed face (no open edge to lead in from)</span>
+                        </label>
+                        <p className="text-[10px] text-zinc-500 mt-0.5 ml-[22px]">
+                          Bounded on all sides — the top of a boss, an interior pad, or a pocket floor.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-3">{faceOpts.map(renderChip)}</div>
+                      <p className="text-[10px] text-zinc-500">
+                        {enclosed
+                          ? "No open edge to arc in from, so the tool has to reach depth with a Z-entry move. Facing DOC is shallow, so a 2–5° ramp gets there in very little travel; use a helix instead if the area is too tight for a linear ramp. Never plunge straight into a face."
+                          : "Facing takes a shallow cut across the top of the part — the tool comes down in open air beside the stock and feeds in laterally, so there's no Z-entry move to make. Arc on from off the edge so engagement builds from zero, and roll out the same way rather than stopping in the cut."}
+                      </p>
+                    </div>
                   );
                 }
 
