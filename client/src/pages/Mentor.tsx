@@ -120,13 +120,16 @@ function useTapTooltip() {
   return { open, onOpenChange: setOpen, tap };
 }
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint: React.ReactNode }) {
+// `className` is opt-in so the ~129 existing labels keep their nowrap behaviour;
+// pass "flex-wrap whitespace-normal" on the few that carry a parenthetical hint
+// long enough to overflow a narrow card.
+function FieldLabel({ children, hint, className }: { children: React.ReactNode; hint: React.ReactNode; className?: string }) {
   const t = useTapTooltip();
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip open={t.open} onOpenChange={t.onOpenChange}>
         <TooltipTrigger asChild>
-          <Label onClick={t.tap} className="flex items-center gap-1 cursor-pointer w-fit text-xs whitespace-nowrap">
+          <Label onClick={t.tap} className={`flex items-center gap-1 cursor-pointer w-fit text-xs whitespace-nowrap ${className ?? ""}`}>
             {children}
             <span className="text-muted-foreground/60 text-[10px] leading-none">ⓘ</span>
           </Label>
@@ -15834,8 +15837,10 @@ ${stabSection}
               <div className="flex-1 border-t-2 border-orange-500" />
             </div>
             <div className="space-y-2">
-              <FieldLabel hint="Select one or more entry strategies — selecting multiple shows all methods side by side for comparison. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
-                Entry Type Preferences
+              <FieldLabel className="flex-wrap whitespace-normal" hint="Select one or more entry strategies — selecting multiple shows all methods side by side for comparison. Sweep/Roll-in is recommended for most HEM toolpaths — the tangential arc builds engagement gradually (chip starts thin) instead of slamming the full WOC at once. Straight-in is rarely correct and is included for reference only.">
+                {/* The "pick several to compare" guidance lived only in the tooltip, so
+                    it was invisible unless you hovered. Say it inline instead. */}
+                Entry Type Preferences <span className="text-zinc-500 font-normal">(more than one choice can be selected)</span>
               </FieldLabel>
               {(() => {
                 // Deep pocket entry constraints:
