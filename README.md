@@ -8,6 +8,28 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Entry Moves are ranked into tiers, and helix pitch leads the row
+Customers tick every entry type at once to compare them, and the panel turned into one undifferentiated blob. Colour was the main culprit — it encoded *recommendation quality* (green recommended, indigo fine, amber caution), which is sound logic, but with six sections and three ratings green was doubled (Sweep + Pre-drill) and indigo was doubled (Ramp + Helical). Colour could tell you how good a method was, but no longer *which method you were reading*.
+
+Rather than give all six their own hue and destroy the quality signal, the ranking is now explicit. Sections sort into **BEST CHOICE / WORKABLE / LAST RESORT** bands, tier is the only thing that drives colour, and each entry is a numbered bordered card with a rating chip — so two greens read as "both of these are best" instead of a coincidence, and there are visible edges between sections.
+
+Ranking is **context-aware**, following the same rules as the entry auto-select effect: a closed pocket with no pre-drill demotes Sweep to last resort (there's no open edge to arc in from) and promotes Helical to best, pre-drill leads in HEM/trochoidal, and hard material pushes Straight Plunge to an explicit avoid. Previously sections rendered in fixed source order whether or not a method was physically usable in that setup.
+
+The Advanced Feed callouts were also reusing the ramp/helical header indigo, so a sub-item looked like a peer section — they're now a neutral left-rule "Optional ·" block that reads as belonging to its parent.
+
+Separately, per shop feedback: **pitch is what the programmer actually types**, so it now leads the helical rows as `Pitch  0.03290" per rev @ 1.00°` with a "program this" marker, instead of trailing the feed as `.03290"/rev`. Applied in five places including the deep-pocket card, where the same quantity was labelled `Z / rev` — a different name for an identical number.
+
+No fields or explanatory copy were removed; this is organisation only.
+
+### Entry feeds no longer read as "take 50% of this number"
+`Entry Feed  12.7 IPM (50%)` was ambiguous in the worst direction. The engine already applies `entry_feed_mult`, so the reduction was *baked into* the 12.7 — but the `(50%)` read as an instruction, and anyone who followed it programmed 6.35. Every occurrence is now **"Reduced Entry Feed"** with "already N% of full — program as shown".
+
+That percentage isn't always 50, which made the double-derate worse where it hurt most: it's hardness-driven (25% at ≥55 HRC, 35% at ≥40 HRC), so the compounding error landed hardest exactly where entry shock already destroys tools.
+
+Straight Plunge had a second problem — `(50% until full engagement)` describes something that cannot happen on a plunge. Unlike an arc or ramp there's no gradual build-up; the tool is fully engaged the moment the tip touches. It's now **"Reduced Plunge Feed (Z)"**, and the note says to hold the reduced feed for the *entire* plunge rather than stepping up partway down, which is what the old wording implied you could do.
+
+The Advanced Feeds were also reading as lesser options while being the opposite: `advanced_feed` carries a chip-thinning multiplier up to 1.5×, making it **faster** than the standard entry feed. They now say so, with the trade stated — a shallower ramp or pitch thins the chip so you can carry more feed at the same edge load, given a rigid setup.
+
 ### 4-flute HEM DOC raised to 3×D — it was capped tighter than a 5-flute
 The HEM DOC ladder held 4-flute tools to **2.0×D** while giving 5-flute and up **3.0×D**. A 405221 (4-fl, 0.500"Ø, 1.250" LOC) has 2.5×D of flute available, and the cap — not the geometry — was what stopped the High preset at 2.0, leaving half a diameter of usable flute unreachable from the buttons.
 
