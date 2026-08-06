@@ -16269,12 +16269,15 @@ ${stabSection}
                 //   so it needs a Z-entry. A shallow ramp is the usual move: facing DOC is
                 //   0.005–0.030", so a 2–5° ramp reaches depth in very little travel. Helical
                 //   also works and suits a tight interior with no room for a linear ramp.
-                //   Straight Plunge stays out either way — a flat face is the worst possible
-                //   thing to plunge into.
+                // Deliberately NOT offered: Straight Plunge (a flat face is the worst thing
+                // to plunge into) and Pre-drill + Plunge — a second tool and a drilling op to
+                // save 0.030" of Z is not a trade anyone makes, and the clearance hole has to
+                // be 15% WIDER than the cutter, so it would put a hole through the very face
+                // being produced.
                 if (form.mode === "face" && form.tool_type !== "chamfer_mill") {
                   const enclosed = form.face_enclosed;
                   const faceOpts: Opt[] = enclosed
-                    ? [{ ...opts.ramp, recommended: true }, opts.helical, opts.predrill_plunge]
+                    ? [{ ...opts.ramp, recommended: true }, opts.helical]
                     : [{ ...opts.sweep, recommended: true }];
                   return (
                     <div className="space-y-3">
