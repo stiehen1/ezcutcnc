@@ -8,6 +8,13 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Exports: the optional advanced entry feeds now print; Straight Plunge moves last and is gone at 6+ flutes
+Collapsing the entry-move block to one line per move dropped the optional chip-thinned alternates entirely — the Advanced Ramp and Advanced Helical feeds were on screen but absent from both the text and PDF sheets, so anyone programming from the export never saw them. Each one is now a single indented `→ Advanced Option: …` line directly beneath its parent move, carrying the same feed / angle / pitch it carries on screen. The footnote explains what they are once: faster alternates that lean on chip-thinning at light radial engagement, for rigid setups, proven on your own machine.
+
+Straight Plunge was sitting ahead of Pre-drill + Plunge in the Tool Entry chip row. That ordering read backwards — plunging an endmill straight down is the least favorable entry in the set (full axial shock the instant the tip touches, on bottom geometry not built for it), while dropping into a pre-drilled hole is the cleanest entry there is. Straight Plunge is now last in both the open and closed-pocket lists. The ranking that drives the export was already correct; only the input row was out of order.
+
+Straight Plunge is also no longer offered at 6 flutes or more. On a high-flute tool the gullets are too small for the chip to go anywhere — plunging drives the tool into its own flutes with no escape path, so it packs and breaks rather than cuts. The chip is hidden above 5 flutes, a line explains why, and the selection is dropped automatically if the flute count is raised into that range while it's ticked.
+
 ### Exports: entry moves numbered #1..#n, and the HEM acknowledgement cut to three lines
 The export listed each entry move with a `BEST` / `OK` / `AVOID` tag, which duplicated information the list order already carried — the moves come out of `rankEntryMoves` sorted best-first, so a tag column was a second encoding of position. Both the text and PDF exports now number them `#1`, `#2`, `#3`, best to worst. Same ordering, same context-aware ranking rules; one signal instead of two. The on-screen cards keep their rating chips.
 

@@ -4051,6 +4051,13 @@ export default function Mentor() {
       });
     }
   }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill, form.dp_target_depth, form.dp_pre_drill_depth, form.dp_cutting_style]);
+  // Straight plunge is only offered below 6 flutes. At 6 and above there is no room
+  // between the flutes for the chip to go: the tool is plunging into its own gullets
+  // with nowhere to eject, so it packs and breaks rather than cuts. If the flute count
+  // reaches 6 while straight plunge is ticked, drop it.
+  React.useEffect(() => {
+    if (form.flutes >= 6) setEntryTypes(p => p.includes("straight") ? p.filter(k => k !== "straight") : p);
+  }, [form.flutes]);
   React.useEffect(() => {
     if (form.mode === "slot") setEntryTypes([]);
     else if (form.mode === "circ_interp") {
@@ -5726,6 +5733,21 @@ export default function Mentor() {
     if (em && entryTypes.includes("straight")) {
       emSpec.straight = (em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1) + " IPM Z &mdash; hold for the whole plunge";
     }
+    // Optional advanced (chip-thinned) alternates — one row each, indented directly
+    // under its parent move. They were on screen but missing from the sheet entirely.
+    const emAdv: Record<string, string> = {};
+    if (em && entryTypes.includes("ramp") && em.advanced_ramp_ipm > 0) {
+      const aAng = (em as any).adv_ramp_angle_deg ?? 0;
+      const aPit = (em as any).adv_ramp_pitch_in_per_in ?? 0;
+      emAdv.ramp = "Advanced Option (chip-thinned, rigid setup only): " + em.advanced_ramp_ipm.toFixed(1) + " IPM"
+        + (aAng > 0 ? " @ " + aAng.toFixed(1) + "&deg;" : "")
+        + (aPit > 0 ? "&nbsp; &middot; &nbsp;pitch " + aPit.toFixed(4) + '" Z per in XY' : "");
+    }
+    if (em && entryTypes.includes("helical") && em.advanced_helix_ipm > 0) {
+      emAdv.helical = "Advanced Option (chip-thinned, shallow pitch): " + em.advanced_helix_ipm.toFixed(1)
+        + " IPM @ " + (em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2) + "&deg;"
+        + "&nbsp; &middot; &nbsp;pitch " + (em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5) + '"/rev';
+    }
     const EM_NAME: Record<string, string> = {
       sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical",
       ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
@@ -5741,11 +5763,18 @@ export default function Mentor() {
         + '<td style="padding:3px 8px 3px 0;white-space:nowrap;font-weight:700;">' + EM_NAME[e.key] + '</td>'
         + '<td style="padding:3px 0;">' + emSpec[e.key] + '</td>'
         + '</tr>';
+      if (emAdv[e.key]) {
+        entryRowsHtml += '<tr>'
+          + '<td style="padding:0 6px 3px 0;"></td>'
+          + '<td colspan="2" style="padding:0 0 3px 0;font-size:9px;color:#666;">&rarr; ' + emAdv[e.key] + '</td>'
+          + '</tr>';
+      }
     });
     if (entryRowsHtml) {
       entryRowsHtml += '<tr><td colspan="3" style="font-size:9px;color:#888;padding:4px 0 0 0;font-style:italic;">'
         + "Entry feeds are already reduced to " + emFeedPct + "% of full feed &mdash; program them as shown, don't cut them again."
         + (em && entryTypes.includes("ramp") ? " Ramp angle and feed go together: axial bite per tooth scales with the tangent of the ramp angle." : "")
+        + (emRanked.some(e => emAdv[e.key]) ? ' The "Advanced Option" lines are faster alternates that lean on chip-thinning at light radial engagement &mdash; rigid setups only, and prove them on your own machine.' : "")
         + '</td></tr>';
     }
     // Pre-drill banner: when pre-drill is on for a closed deep pocket, prefix the table with the Z/XY plan summary.
@@ -7739,6 +7768,20 @@ ${stabSection}
         if (em && entryTypes.includes("straight")) {
           _entryLine.straight = `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM Z — hold for the whole plunge (no gradual build-up)`;
         }
+        // Optional advanced (chip-thinned) alternates — one line each, directly under
+        // the parent move so it reads as a variant of that move, not a move of its own.
+        const _entryAdv: Record<string, string> = {};
+        if (em && entryTypes.includes("ramp") && em.advanced_ramp_ipm > 0) {
+          const advAngle = (em as any).adv_ramp_angle_deg as number | undefined;
+          const advPitch = (em as any).adv_ramp_pitch_in_per_in as number | undefined;
+          _entryAdv.ramp = `Advanced Option (chip-thinned, rigid setup only): ${em.advanced_ramp_ipm.toFixed(1)} IPM`
+            + (advAngle != null && advAngle > 0 ? ` @ ${advAngle.toFixed(1)}°` : "")
+            + (advPitch != null && advPitch > 0 ? `  ·  pitch ${advPitch.toFixed(4)}" Z per in XY` : "");
+        }
+        if (em && entryTypes.includes("helical") && em.advanced_helix_ipm > 0) {
+          _entryAdv.helical = `Advanced Option (chip-thinned, shallow pitch): ${em.advanced_helix_ipm.toFixed(1)} IPM @ ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°`
+            + `  ·  pitch ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}"/rev`;
+        }
         const _entryName: Record<string, string> = {
           sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical",
           ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
@@ -7749,10 +7792,15 @@ ${stabSection}
         const _ranked = rankEntryMoves(entryTypes, em?.entry_caution).filter(e => _entryLine[e.key]);
         _ranked.forEach((e, i) => {
           lines.push(`  #${i + 1}  ${_entryName[e.key].padEnd(19)} ${_entryLine[e.key]}`);
+          if (_entryAdv[e.key]) lines.push(`      → ${_entryAdv[e.key]}`);
         });
         if (_ranked.length > 0) {
           lines.push("");
           lines.push(`  Entry feeds above are already reduced to ${_pct}% of full feed — program them as shown.`);
+          if (_ranked.some(e => _entryAdv[e.key])) {
+            lines.push(`  "Advanced Option" lines are faster alternates that lean on chip-thinning at light`);
+            lines.push(`  radial engagement — use only on a rigid setup, and prove them on your own machine.`);
+          }
           if (em && entryTypes.includes("ramp")) {
             lines.push(`  Ramp angle and feed go together: axial bite per tooth scales with tan(angle).`);
           }
@@ -15989,14 +16037,26 @@ ${stabSection}
                 }
 
                 // No pre-drill: flat list with the same hide rules as before.
-                const flat: Opt[] = isClosed
-                  ? [opts.ramp, opts.helical, opts.straight, opts.predrill_plunge]
-                  : [opts.sweep, opts.ramp, opts.helical, opts.straight, opts.predrill_plunge];
+                // Straight Plunge goes LAST — it is the least favorable entry of the set
+                // (full axial shock, bottom geometry not built for it), so it should not
+                // sit ahead of Pre-drill + Plunge, which is the cleanest entry there is.
+                // At 6 flutes and above it isn't offered at all: there's no gullet room
+                // for the chip to escape, so a plunge packs the flutes instead of cutting.
+                const plungeOk = form.flutes < 6;
+                const flat: Opt[] = (isClosed
+                  ? [opts.ramp, opts.helical, opts.predrill_plunge, opts.straight]
+                  : [opts.sweep, opts.ramp, opts.helical, opts.predrill_plunge, opts.straight]
+                ).filter(o => o.key !== "straight" || plungeOk);
                 const stdToolDia = Number(form.tool_dia) || 0;
                 const stdPredrillDia = stdToolDia > 0 ? stdToolDia * 1.15 : 0;
                 return (
                   <>
                     <div className="flex flex-wrap gap-3">{flat.map(renderChip)}</div>
+                    {!plungeOk && (
+                      <p className="text-[10px] text-zinc-500 mt-1.5">
+                        Straight Plunge isn't offered on a {form.flutes}-flute tool — there's no gullet room for the chip to escape, so plunging packs the flutes instead of cutting. Use a ramp, helical entry, or a pre-drilled hole.
+                      </p>
+                    )}
                     {entryTypes.includes("predrill_plunge") && stdToolDia > 0 && (
                       <div className="mt-2 text-[11px] text-green-300/90 bg-green-500/5 border border-green-500/30 rounded px-2.5 py-1.5">
                         <span className="font-semibold">Pre-drill hole:</span>
