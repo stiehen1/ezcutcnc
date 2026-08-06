@@ -3968,6 +3968,53 @@ export default function Mentor() {
   const [stepReqSent, setStepReqSent] = React.useState(false);
   const [stepReqLoading, setStepReqLoading] = React.useState(false);
   const [entryTypes, setEntryTypes] = React.useState<string[]>(["sweep"]);
+
+  // ── Entry-move ranking, shared by the results panel and the exports ──────────
+  // Users tick every entry type to compare them, so the order has to carry the
+  // recommendation. Keeping ONE ranking function means the printed sheet can never
+  // drift from the screen. Tiers follow the same rules as the auto-select effect
+  // below: a closed pocket has no open edge to sweep in from, and a pre-drilled
+  // hole is the cleanest start for HEM/trochoidal.
+  const ENTRY_TIER_ORDER = ["sweep", "predrill_plunge", "helical", "ramp", "slot_straight", "xy_radial", "straight"];
+  const ENTRY_TIER_LABEL = ["Best choice", "Workable", "Last resort"];
+  const rankEntryMoves = React.useCallback((keys: string[], caution?: string | null) => {
+    const isClosed    = form.mode === "deep_pocket" && form.dp_closed_pocket;
+    const hasPreDrill = isClosed && form.dp_pre_drill;
+    const isHemMode   = form.mode === "hem" || form.mode === "trochoidal"
+                        || (form.mode === "slot" && form.slot_strategy === "hem")
+                        || (form.mode === "deep_pocket" && form.dp_cutting_style === "hem");
+    const hardEntry   = caution === "high_hardness";
+    // tier: 0 = best, 1 = workable, 2 = last resort
+    const rank = (k: string): { tier: number; note: string } => {
+      switch (k) {
+        case "predrill_plunge":
+          return { tier: 0, note: isHemMode ? "cleanest HEM start — zero edge contact" : "no shock load, no helix bore" };
+        case "sweep":
+          return (isClosed && !hasPreDrill)
+            ? { tier: 2, note: "needs an open edge — none on a closed pocket" }
+            : { tier: 0, note: "arc builds engagement gradually" };
+        case "helical":
+          return (isClosed && !hasPreDrill)
+            ? { tier: 0, note: "best Z-entry with no open edge" }
+            : { tier: 1, note: "good Z-entry when there's no pre-hole" };
+        case "ramp":
+          return { tier: 1, note: hardEntry ? "keep the ramp near-flat in hard material" : "simple Z-entry, needs ramp room" };
+        case "slot_straight":
+          return { tier: 1, note: "enters from outside stock — full-width engagement" };
+        case "xy_radial":
+          return { tier: 1, note: "breakout from pre-drilled hole — treat as slotting" };
+        case "straight":
+          return { tier: 2, note: hardEntry ? "do not plunge in hard material" : "a drill's job, not an endmill's" };
+        default:
+          return { tier: 1, note: "" };
+      }
+    };
+    return ENTRY_TIER_ORDER
+      .filter(k => keys.includes(k))
+      .map(k => ({ key: k, tier: rank(k).tier, note: rank(k).note }))
+      .sort((a, b) => a.tier - b.tier || ENTRY_TIER_ORDER.indexOf(a.key) - ENTRY_TIER_ORDER.indexOf(b.key));
+  }, [form.mode, form.dp_closed_pocket, form.dp_pre_drill, form.slot_strategy, form.dp_cutting_style]);
+
   // Closed pocket entry defaults:
   //   - No pre-drill: hide sweep (no open edge), fall back to helical Z-entry.
   //   - With pre-drill: sweep becomes the XY-entry from hole to wall. If pre-drill leaves
@@ -5631,51 +5678,74 @@ export default function Mentor() {
     const em = result?.entry_moves;
     const emFeedPct = em?.entry_feed_pct ?? 50;
     const emCaution = em?.entry_caution ?? null;
-    const sweepRows = (em && entryTypes.includes("sweep")) ? `
-        <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#16a34a;border-bottom:1px solid #16a34a40;">Sweep / Roll-in ★ Recommended</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Arc Radius (min)</td><td style="font-weight:600;">${(em.sweep_arc_radius_min_in ?? (form.tool_dia ?? 0) * 0.50).toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Arc Radius (rec)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_arc_radius_rec_in ?? (form.tool_dia ?? 0) * 0.75).toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Entry Feed</td><td style="font-weight:600;">${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (after arc)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM</td></tr>` : "";
-    const rampRows = (em && entryTypes.includes("ramp")) ? `
-        <tr><td colspan="2" style="padding:${sweepRows ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Ramp Angle</td><td style="font-weight:600;">${(em.ramp_angle_min_deg != null && em.ramp_angle_min_deg > 0 && em.ramp_angle_min_deg < em.ramp_angle_deg) ? `${em.ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</td></tr>
-        ${((em as any).ramp_angle_rec_deg > 0 && (em as any).ramp_ipm_rec > 0)
-          ? `<tr><td style="color:#888;padding:2px 8px 2px 0;">Program this</td><td style="font-weight:700;">${(em as any).ramp_ipm_rec.toFixed(1)} IPM @ ${(em as any).ramp_angle_rec_deg.toFixed(1)}° &nbsp;·&nbsp; Pitch = ${(em as any).ramp_pitch_rec_in_per_in?.toFixed(4)}" Z per in XY <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>`
-          : `<tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Entry Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>`}
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Ramp Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM${(em as any).adv_ramp_angle_deg > 0 ? ` @ ${(em as any).adv_ramp_angle_deg.toFixed(1)}°` : ""} <span style="color:#888;font-weight:400;">(chip-thinned at light engagement — faster, not slower; verify on your setup)</span></td></tr>` : "";
-    const helixRows = (em && entryTypes.includes("helical")) ? `
-        <tr><td colspan="2" style="padding:${(sweepRows || rampRows) ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Min Bore Dia</td><td style="font-weight:600;">≥${em.helix_bore_min_in.toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Ideal Bore Dia</td><td style="font-weight:600;">${em.helix_bore_ideal_low.toFixed(4)}" – ${em.helix_bore_ideal_high.toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Pitch (program this)</td><td style="font-weight:700;">${em.helix_pitch_in.toFixed(5)}" per rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Bore Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Helical Feed</td><td style="font-weight:600;color:#818cf8;">Pitch ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" per rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}° &nbsp;·&nbsp; ${em.advanced_helix_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(chip-thinned — shallower pitch, faster feed)</span></td></tr>` : "";
-    const straightRows = (em && entryTypes.includes("straight")) ? `
-        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight Plunge</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Plunge Feed (Z)</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — hold for the entire plunge)</span></td></tr>
-        <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">A plunge has no gradual build-up — the tool is fully engaged the moment the tip touches, so hold this reduced Z feed all the way down. Prefer a ramp, helical entry, or pre-drilled hole.</td></tr>` : "";
-    const slotStraightFeed = result?.milling?.feed_ipm ?? 0;
-    const slotEntryIpm = slotStraightFeed * 0.50;
-    const slotStraightRows = (entryTypes.includes("slot_straight") && slotStraightFeed > 0) ? `
-        <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f59e0b;border-bottom:1px solid #f59e0b40;">Straight Entry (Outside Edge)</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Entry Feed</td><td style="font-weight:600;color:#f59e0b;">${slotEntryIpm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(50% — shock load at first engagement)</span></td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (once engaged)</td><td style="font-weight:600;">${slotStraightFeed.toFixed(1)} IPM</td></tr>` : "";
-    const xyRadialFullFeed = result?.milling?.feed_ipm ?? 0;
-    const xyRadialEntryIpm = xyRadialFullFeed * 0.50;
-    const xyRadialRows = (entryTypes.includes("xy_radial") && xyRadialFullFeed > 0) ? `
-        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f59e0b;border-bottom:1px solid #f59e0b40;">Straight Radial — XY Breakout From Pre-Drilled Hole</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Breakout Feed</td><td style="font-weight:600;color:#f59e0b;">${xyRadialEntryIpm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(50% slot feed until clear)</span></td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Side-Mill Feed (after breakout)</td><td style="font-weight:600;">${xyRadialFullFeed.toFixed(1)} IPM</td></tr>
-        <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">First move from hole to wall is effectively slotting (full WOC on one side) — use slotting feed until the tool clears enough material for normal side-milling.</td></tr>` : "";
-    const predrillToolDia = Number(form.tool_dia) || 0;
-    const predrillFullFeed = result?.milling?.feed_ipm ?? 0;
-    const predrillPlungeRows = (entryTypes.includes("predrill_plunge") && predrillToolDia > 0) ? `
-        <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#22c55e;border-bottom:1px solid #22c55e40;">Pre-drill + Plunge (Closed Slot)</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Hole Dia</td><td style="font-weight:600;">≥${(predrillToolDia + 0.010).toFixed(4)}" <span style="color:#888;font-weight:400;">(${((predrillToolDia + 0.010) * 25.4).toFixed(2)} mm — tool dia + 0.010" clearance)</span></td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Hole Depth</td><td style="font-weight:600;">≥ slot DOC</td></tr>
-        ${predrillFullFeed > 0 ? `<tr><td style="color:#888;padding:2px 8px 2px 0;">Slot Feed (after drop-in)</td><td style="font-weight:600;">${predrillFullFeed.toFixed(1)} IPM</td></tr>` : ""}
-        <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">Drill clearance hole at one end of slot, drop endmill into hole, then feed laterally through slot at full feed.</td></tr>` : "";
+    // ── Entry moves: ONE row per selected move ────────────────────────────────
+    // Users tick every entry type to compare them. The old layout gave each move a
+    // heading plus 2-4 detail rows, so selecting them all buried the sheet — and the
+    // ramp block contradicted itself, printing the material angle BAND and a pitch
+    // taken from the steep end directly above a recommendation at the shallow end.
+    // Each move is now a single row holding only what gets programmed, so every
+    // selected move can be shown and still be scannable. Built with plain string
+    // concatenation on purpose: deeply nested template literals broke the parser here.
+    const emFullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
+    const emToolDia  = Number(form.tool_dia) || 0;
+    const emSpec: Record<string, string> = {};
+    if (em && entryTypes.includes("sweep")) {
+      const rRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : emToolDia * 0.75;
+      const rMin = (em.sweep_arc_radius_min_in != null && em.sweep_arc_radius_min_in > 0) ? em.sweep_arc_radius_min_in : emToolDia * 0.50;
+      emSpec.sweep = (em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1) + " IPM into the arc &rarr; "
+        + (em.sweep_full_ipm ?? emFullFeed).toFixed(1) + " IPM after"
+        + "&nbsp; &middot; &nbsp;arc R " + rRec.toFixed(4) + '" (min ' + rMin.toFixed(4) + '")';
+    }
+    if (em && entryTypes.includes("predrill_plunge") && emToolDia > 0) {
+      emSpec.predrill_plunge = "hole &empty; &ge;" + (emToolDia + 0.010).toFixed(4) + '" ('
+        + ((emToolDia + 0.010) * 25.4).toFixed(2) + " mm), depth &ge; slot DOC"
+        + (emFullFeed > 0 ? "&nbsp; &middot; &nbsp;" + emFullFeed.toFixed(1) + " IPM through the slot" : "");
+    }
+    if (em && entryTypes.includes("helical")) {
+      emSpec.helical = em.standard_helix_ipm.toFixed(1) + " IPM @ " + em.helix_angle_deg.toFixed(2) + "&deg;"
+        + "&nbsp; &middot; &nbsp;pitch " + em.helix_pitch_in.toFixed(5) + '"/rev'
+        + "&nbsp; &middot; &nbsp;bore &ge;" + em.helix_bore_min_in.toFixed(4) + '"';
+    }
+    if (em && entryTypes.includes("ramp")) {
+      const rAng = (em as any).ramp_angle_rec_deg ?? 0;
+      const rIpm = (em as any).ramp_ipm_rec ?? 0;
+      const rPit = (em as any).ramp_pitch_rec_in_per_in ?? 0;
+      emSpec.ramp = (rAng > 0 && rIpm > 0)
+        ? rIpm.toFixed(1) + " IPM @ " + rAng.toFixed(1) + "&deg;&nbsp; &middot; &nbsp;pitch " + rPit.toFixed(4) + '" Z per in XY'
+        : em.standard_ramp_ipm.toFixed(1) + " IPM @ &le;" + em.ramp_angle_deg + "&deg;";
+    }
+    if (em && entryTypes.includes("slot_straight") && emFullFeed > 0) {
+      emSpec.slot_straight = (emFullFeed * 0.50).toFixed(1) + " IPM until engaged &rarr; " + emFullFeed.toFixed(1) + " IPM full slot";
+    }
+    if (em && entryTypes.includes("xy_radial") && emFullFeed > 0) {
+      emSpec.xy_radial = (emFullFeed * 0.50).toFixed(1) + " IPM breaking out &rarr; " + emFullFeed.toFixed(1) + " IPM side-milling";
+    }
+    if (em && entryTypes.includes("straight")) {
+      emSpec.straight = (em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1) + " IPM Z &mdash; hold for the whole plunge";
+    }
+    const EM_NAME: Record<string, string> = {
+      sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical",
+      ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
+      straight: "Straight Plunge",
+    };
+    const EM_TIER_TAG   = ["BEST", "OK", "AVOID"];
+    const EM_TIER_COLOR = ["#16a34a", "#0284c7", "#d97706"];
+    const emRanked = rankEntryMoves(entryTypes, emCaution).filter(e => emSpec[e.key]);
+    let entryRowsHtml = "";
+    for (const e of emRanked) {
+      entryRowsHtml += '<tr>'
+        + '<td style="padding:3px 6px 3px 0;white-space:nowrap;font-size:8px;font-weight:700;letter-spacing:.06em;color:'
+        + EM_TIER_COLOR[e.tier] + '">' + EM_TIER_TAG[e.tier] + '</td>'
+        + '<td style="padding:3px 8px 3px 0;white-space:nowrap;font-weight:700;">' + EM_NAME[e.key] + '</td>'
+        + '<td style="padding:3px 0;">' + emSpec[e.key] + '</td>'
+        + '</tr>';
+    }
+    if (entryRowsHtml) {
+      entryRowsHtml += '<tr><td colspan="3" style="font-size:9px;color:#888;padding:4px 0 0 0;font-style:italic;">'
+        + "Entry feeds are already reduced to " + emFeedPct + "% of full feed &mdash; program them as shown, don't cut them again."
+        + (em && entryTypes.includes("ramp") ? " Ramp angle and feed go together: axial bite per tooth scales with the tangent of the ramp angle." : "")
+        + '</td></tr>';
+    }
     // Pre-drill banner: when pre-drill is on for a closed deep pocket, prefix the table with the Z/XY plan summary.
     const isDeepPocketPreDrill = form.mode === "deep_pocket" && form.dp_closed_pocket && form.dp_pre_drill;
     let preDrillBanner = "";
@@ -5694,13 +5764,13 @@ export default function Mentor() {
         ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drilled closed pocket — Z-entry through remaining ${gap.toFixed(3)}" gap: <b>${zLabel}</b>. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`
         : `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:#1e293b;color:#cbd5e1;">Pre-drill reaches floor — tool drops to depth. XY-entry from hole to wall: <b>${xyLabel}</b>.</p>`;
     }
-    const entrySection = (mil && (em && (sweepRows || rampRows || helixRows || straightRows)) || slotStraightRows || xyRadialRows || predrillPlungeRows) ? `
+    const entrySection = entryRowsHtml ? `
       <div class="pdf-section">
-      <h3>Entry Moves</h3>
+      <h3>Entry Moves${emRanked.length > 1 ? ` <span style="font-weight:400;font-size:9px;color:#888;">— ranked best to last resort</span>` : ""}</h3>
       ${preDrillBanner}
       ${emCaution ? `<p style="font-size:9px;padding:4px 6px;border-radius:4px;margin-bottom:6px;background:${emCaution === "high_hardness" ? "#450a0a" : "#451a03"};color:${emCaution === "high_hardness" ? "#fca5a5" : "#fcd34d"};">⚠ ${emCaution === "high_hardness" ? `Hard material (≥55 HRC): entry feed reduced to ${emFeedPct}% — do not skip arc lead-in.` : `Medium-hard material: entry feed reduced to ${emFeedPct}% of full feed.`}</p>` : ""}
       <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
-        ${sweepRows}${rampRows}${helixRows}${straightRows}${slotStraightRows}${xyRadialRows}${predrillPlungeRows}
+        ${entryRowsHtml}
       </table>
       </div>` : "";
 
@@ -7637,56 +7707,55 @@ ${stabSection}
             return selected.length > 0 ? selected.map(k => labelMap[k]).join(" / ") : "Helical / Ramp";
           })()));
         }
+        // One line per entry move, ranked best-first. Users tick every entry type to
+        // compare, and the old block printed 2-4 rows each — a wall of text where the
+        // ramp even contradicted itself (the material angle BAND and a pitch computed
+        // from the steep end, sitting above a recommendation at the shallow end).
+        // Each line now carries only what gets programmed, so all of them can show.
+        const _fullFeed = result?.milling?.feed_ipm ?? result?.customer?.feed_ipm ?? 0;
+        const _pct = em?.entry_feed_pct ?? 50;
+        const _dia = Number(form.tool_dia) || 0;
+        const _entryLine: Record<string, string> = {};
         if (em && entryTypes.includes("sweep")) {
-          const dia = form.tool_dia ?? 0;
-          const radMin = (em.sweep_arc_radius_min_in != null && em.sweep_arc_radius_min_in > 0) ? em.sweep_arc_radius_min_in : dia * 0.50;
-          const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : dia * 0.75;
-          lines.push(L("Sweep Arc (min)", `≥${radMin.toFixed(4)}"`));
-          lines.push(L("Sweep Arc (rec)", `${radRec.toFixed(4)}"`));
-          lines.push(L("Sweep Reduced Entry Feed", `${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
-          lines.push(L("Sweep Full Feed",  `${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM`));
+          const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : _dia * 0.75;
+          _entryLine.sweep = `${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM into the arc → ${(em.sweep_full_ipm ?? _fullFeed).toFixed(1)} IPM after  ·  arc R ${radRec.toFixed(4)}"`;
+        }
+        if (em && entryTypes.includes("predrill_plunge") && _dia > 0) {
+          _entryLine.predrill_plunge = `hole Ø ≥${(_dia + 0.010).toFixed(4)}" deep ≥ slot DOC  ·  ${_fullFeed.toFixed(1)} IPM through the slot`;
         }
         if (em && entryTypes.includes("helical")) {
-          lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
-          lines.push(L("Helix Pitch (program this)", `${em.helix_pitch_in.toFixed(5)}" per rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
-          lines.push(L("Helix Standard Bore Feed",  `${em.standard_helix_ipm.toFixed(1)} IPM`));
-          lines.push(L("Helix Advanced Feed",       `Pitch ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" per rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  ·  ${em.advanced_helix_ipm.toFixed(1)} IPM  (chip-thinned — shallower pitch, faster feed)`));
+          _entryLine.helical = `${em.standard_helix_ipm.toFixed(1)} IPM @ ${em.helix_angle_deg.toFixed(2)}°  ·  pitch ${em.helix_pitch_in.toFixed(5)}"/rev  ·  bore ≥${em.helix_bore_min_in.toFixed(4)}"`;
         }
         if (em && entryTypes.includes("ramp")) {
-          lines.push(L("Ramp Angle",    ((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`));
-          lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
-          const _rAng = (em as any).ramp_angle_rec_deg, _rIpm = (em as any).ramp_ipm_rec, _rPit = (em as any).ramp_pitch_rec_in_per_in;
-          if (_rAng > 0 && _rIpm > 0) {
-            lines.push(L("Ramp — PROGRAM THIS", `${_rIpm.toFixed(1)} IPM @ ${_rAng.toFixed(1)}°  ·  Pitch = ${_rPit?.toFixed(4)}" Z per in XY  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
-          } else {
-            lines.push(L("Ramp Reduced Entry Feed", `${em.standard_ramp_ipm.toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
-          }
-          lines.push(L("Ramp Advanced Feed",      `${em.advanced_ramp_ipm.toFixed(1)} IPM${(em as any).adv_ramp_angle_deg > 0 ? ` @ ${(em as any).adv_ramp_angle_deg.toFixed(1)}°` : ""}  (chip-thinned at light engagement — faster, not slower; verify on your setup)`));
+          const rAng = (em as any).ramp_angle_rec_deg, rIpm = (em as any).ramp_ipm_rec, rPit = (em as any).ramp_pitch_rec_in_per_in;
+          _entryLine.ramp = (rAng > 0 && rIpm > 0)
+            ? `${rIpm.toFixed(1)} IPM @ ${rAng.toFixed(1)}°  ·  pitch ${rPit.toFixed(4)}" Z per in XY`
+            : `${em.standard_ramp_ipm.toFixed(1)} IPM @ ≤${em.ramp_angle_deg}°`;
+        }
+        if (em && entryTypes.includes("slot_straight") && _fullFeed > 0) {
+          _entryLine.slot_straight = `${(_fullFeed * 0.50).toFixed(1)} IPM until engaged → ${_fullFeed.toFixed(1)} IPM full slot`;
+        }
+        if (hasXyRadial && _fullFeed > 0) {
+          _entryLine.xy_radial = `${(_fullFeed * 0.50).toFixed(1)} IPM breaking out → ${_fullFeed.toFixed(1)} IPM side-milling`;
         }
         if (em && entryTypes.includes("straight")) {
-          lines.push(L("Reduced Plunge Feed (Z)", `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — hold for the entire plunge; no gradual build-up on a plunge)`));
+          _entryLine.straight = `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM Z — hold for the whole plunge (no gradual build-up)`;
         }
-        if (entryTypes.includes("slot_straight")) {
-          const slotFull = result?.milling?.feed_ipm ?? 0;
-          if (slotFull > 0) {
-            lines.push(L("Slot Entry Feed", `${(slotFull * 0.50).toFixed(1)} IPM  (50% — shock load at first engagement)`));
-            lines.push(L("Slot Full Feed",  `${slotFull.toFixed(1)} IPM`));
-          }
+        const _entryName: Record<string, string> = {
+          sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical",
+          ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
+          straight: "Straight Plunge",
+        };
+        const _tierTag = ["BEST", "OK", "AVOID"];
+        const _ranked = rankEntryMoves(entryTypes, em?.entry_caution).filter(e => _entryLine[e.key]);
+        for (const e of _ranked) {
+          lines.push(`  ${_tierTag[e.tier].padEnd(6)} ${_entryName[e.key].padEnd(19)} ${_entryLine[e.key]}`);
         }
-        if (hasXyRadial) {
-          const xyFull = result?.milling?.feed_ipm ?? 0;
-          lines.push(L("Radial Breakout Feed", `${(xyFull * 0.50).toFixed(1)} IPM  (50% slot feed until clear)`));
-          lines.push(L("Side-Mill Feed (after breakout)", `${xyFull.toFixed(1)} IPM`));
-        }
-        if (entryTypes.includes("predrill_plunge")) {
-          const toolDia = Number(form.tool_dia) || 0;
-          const slotFull = result?.milling?.feed_ipm ?? 0;
-          if (toolDia > 0) {
-            lines.push(L("Pre-drill Hole Dia", `≥${(toolDia + 0.010).toFixed(4)}" (${((toolDia + 0.010) * 25.4).toFixed(2)} mm)  (tool dia + 0.010" clearance)`));
-            lines.push(L("Pre-drill Hole Depth", `≥ slot DOC`));
-            if (slotFull > 0) {
-              lines.push(L("Slot Feed (after drop-in)", `${slotFull.toFixed(1)} IPM`));
-            }
+        if (_ranked.length > 0) {
+          lines.push("");
+          lines.push(`  Entry feeds above are already reduced to ${_pct}% of full feed — program them as shown.`);
+          if (em && entryTypes.includes("ramp")) {
+            lines.push(`  Ramp angle and feed go together: axial bite per tooth scales with tan(angle).`);
           }
         }
         lines.push("");
