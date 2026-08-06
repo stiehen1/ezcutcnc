@@ -5635,22 +5635,23 @@ export default function Mentor() {
         <tr><td colspan="2" style="padding:3px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#16a34a;border-bottom:1px solid #16a34a40;">Sweep / Roll-in ★ Recommended</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Arc Radius (min)</td><td style="font-weight:600;">${(em.sweep_arc_radius_min_in ?? (form.tool_dia ?? 0) * 0.50).toFixed(4)}"</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Arc Radius (rec)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_arc_radius_rec_in ?? (form.tool_dia ?? 0) * 0.75).toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Entry Feed</td><td style="font-weight:600;">${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Full Feed (after arc)</td><td style="font-weight:600;color:#16a34a;">${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM</td></tr>` : "";
     const rampRows = (em && entryTypes.includes("ramp")) ? `
         <tr><td colspan="2" style="padding:${sweepRows ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Ramp Angle</td><td style="font-weight:600;">${(em.ramp_angle_min_deg != null && em.ramp_angle_min_deg > 0 && em.ramp_angle_min_deg < em.ramp_angle_deg) ? `${em.ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(0.5–1°, chip-thinning)</span></td></tr>` : "";
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Entry Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Ramp Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(shallow 0.5–1° ramp, chip-thinned — faster, not slower)</span></td></tr>` : "";
     const helixRows = (em && entryTypes.includes("helical")) ? `
         <tr><td colspan="2" style="padding:${(sweepRows || rampRows) ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Min Bore Dia</td><td style="font-weight:600;">≥${em.helix_bore_min_in.toFixed(4)}"</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Ideal Bore Dia</td><td style="font-weight:600;">${em.helix_bore_ideal_low.toFixed(4)}" – ${em.helix_bore_ideal_high.toFixed(4)}"</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</td></tr>` : "";
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Standard Bore Feed</td><td style="font-weight:600;">${em.standard_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${em.helix_pitch_in.toFixed(5)}" / rev &nbsp;@&nbsp; ${em.helix_angle_deg.toFixed(2)}°</td></tr>
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Helical Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_helix_ipm.toFixed(1)} IPM &nbsp;·&nbsp; ${((em as any).adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev &nbsp;@&nbsp; ${((em as any).adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}° <span style="color:#888;font-weight:400;">(chip-thinned — shallower pitch, faster feed)</span></td></tr>` : "";
     const straightRows = (em && entryTypes.includes("straight")) ? `
         <tr><td colspan="2" style="padding:6px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d97706;border-bottom:1px solid #d9770640;">Straight Plunge</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Entry Feed</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(${emFeedPct}%)</span></td></tr>` : "";
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Plunge Feed (Z)</td><td style="font-weight:600;">${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — hold for the entire plunge)</span></td></tr>
+        <tr><td colspan="2" style="font-size:9px;color:#888;padding:2px 0 0 0;font-style:italic;">A plunge has no gradual build-up — the tool is fully engaged the moment the tip touches, so hold this reduced Z feed all the way down. Prefer a ramp, helical entry, or pre-drilled hole.</td></tr>` : "";
     const slotStraightFeed = result?.milling?.feed_ipm ?? 0;
     const slotEntryIpm = slotStraightFeed * 0.50;
     const slotStraightRows = (entryTypes.includes("slot_straight") && slotStraightFeed > 0) ? `
@@ -7639,21 +7640,22 @@ ${stabSection}
           const radRec = (em.sweep_arc_radius_rec_in != null && em.sweep_arc_radius_rec_in > 0) ? em.sweep_arc_radius_rec_in : dia * 0.75;
           lines.push(L("Sweep Arc (min)", `≥${radMin.toFixed(4)}"`));
           lines.push(L("Sweep Arc (rec)", `${radRec.toFixed(4)}"`));
-          lines.push(L("Sweep Entry Feed", `${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM`));
+          lines.push(L("Sweep Reduced Entry Feed", `${(em.sweep_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
           lines.push(L("Sweep Full Feed",  `${(em.sweep_full_ipm ?? result?.milling?.feed_ipm ?? 0).toFixed(1)} IPM`));
         }
         if (em && entryTypes.includes("helical")) {
           lines.push(L("Helix Bore",    `≥${em.helix_bore_min_in.toFixed(4)}"  (ideal ${em.helix_bore_ideal_low.toFixed(4)}"–${em.helix_bore_ideal_high.toFixed(4)}")`));
-          lines.push(L("Helix Std",     `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
-          lines.push(L("Helix Adv",     `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned)`));
+          lines.push(L("Helix Standard Bore Feed",  `${em.standard_helix_ipm.toFixed(1)} IPM  ·  ${em.helix_pitch_in.toFixed(5)}" / rev  @  ${em.helix_angle_deg.toFixed(2)}°`));
+          lines.push(L("Helix Advanced Feed",       `${em.advanced_helix_ipm.toFixed(1)} IPM  ·  ${(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev  @  ${(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°  (chip-thinned — shallower pitch, faster feed)`));
         }
         if (em && entryTypes.includes("ramp")) {
           lines.push(L("Ramp Angle",    ((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`));
           lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
-          lines.push(L("Ramp Feed",     `${em.standard_ramp_ipm.toFixed(1)} IPM  (standard)  |  ${em.advanced_ramp_ipm.toFixed(1)} IPM  (advanced)`));
+          lines.push(L("Ramp Reduced Entry Feed", `${em.standard_ramp_ipm.toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
+          lines.push(L("Ramp Advanced Feed",      `${em.advanced_ramp_ipm.toFixed(1)} IPM  (shallow 0.5–1° ramp, chip-thinned — faster, not slower)`));
         }
         if (em && entryTypes.includes("straight")) {
-          lines.push(L("Straight Entry", `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM`));
+          lines.push(L("Reduced Plunge Feed (Z)", `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — hold for the entire plunge; no gradual build-up on a plunge)`));
         }
         if (entryTypes.includes("slot_straight")) {
           const slotFull = result?.milling?.feed_ipm ?? 0;
@@ -16291,7 +16293,7 @@ ${stabSection}
                     ? (timeToDepth < 1 ? `${(timeToDepth * 60).toFixed(0)} sec` : `${timeToDepth.toFixed(1)} min`)
                     : null;
                   const cells: Array<[string, string, string?]> = [
-                    ["Entry Feed", `${entryFeed.toFixed(1)} IPM`, `${Math.round(feedMult*100)}% of main`],
+                    ["Reduced Entry Feed", `${entryFeed.toFixed(1)} IPM`, `already ${Math.round(feedMult*100)}% of main`],
                     ["Ramp Angle", `${angle.toFixed(1)}°`],
                     ["Z / rev",    `${zPerRev.toFixed(4)}"`],
                     ["Z Feed",     `${zPerMin.toFixed(2)} IPM`],
@@ -20159,10 +20161,10 @@ ${stabSection}
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div><span className="text-zinc-500">Arc Radius (min)</span><span className="ml-2 font-medium">{radMin.toFixed(4)}"</span></div>
                               <div><span className="text-zinc-500">Arc Radius (rec)</span><span className="ml-2 font-medium text-green-300">{radRec.toFixed(4)}"</span></div>
-                              <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{entryFeed.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
+                              <div><span className="text-zinc-500">Reduced Entry Feed</span><span className="ml-2 font-medium">{entryFeed.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown</span></div>
                               <div><span className="text-zinc-500">Full Feed (after arc)</span><span className="ml-2 font-medium text-green-300">{fullFeed.toFixed(1)} IPM</span></div>
                             </div>
-                            <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes.</p>
+                            <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes. The entry feed above is already reduced to {feedPct}% of full feed — program that number directly, don't cut it again.</p>
                           </div>
                         );
                       })()}
@@ -20176,9 +20178,17 @@ ${stabSection}
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Ramp Angle</span><span className="ml-2 font-medium">{((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</span></div>
                             <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{(em as any).ramp_pitch_in_per_in?.toFixed(4) ?? (Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}"</span></div>
-                            <div><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}%)</span></span></div>
-                            <div className="col-span-2"><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_ramp_ipm.toFixed(1)} IPM <span className="text-zinc-500">(0.5–1°, chip-thinning)</span></span></div>
+                            <div><span className="text-zinc-500">Reduced Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown</span></div>
                           </div>
+                          <div className="mt-1.5 rounded-md border border-indigo-400/40 bg-indigo-500/10 px-2 py-1.5">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-300">Advanced Ramp Feed</span>
+                              <span className="text-[9px] text-indigo-400/80">shallow 0.5–1° ramp, chip-thinned</span>
+                            </div>
+                            <div className="mt-0.5 font-semibold text-indigo-200">{em.advanced_ramp_ipm.toFixed(1)} IPM</div>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">Faster than the standard entry feed, not slower. A near-flat 0.5–1° ramp thins the chip enough to carry more feed for the same edge load — use it when the setup is rigid and the control can hold a shallow ramp.</p>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 mt-1">Entry feed above is already reduced to {feedPct}% of full feed — program it directly, don't cut it again.</p>
                         </div>
                       )}
 
@@ -20191,10 +20201,17 @@ ${stabSection}
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Ideal Bore Dia</span><span className="ml-2 font-medium">{em.helix_bore_ideal_low.toFixed(4)}" – {em.helix_bore_ideal_high.toFixed(4)}"</span></div>
-                            <div><span className="text-zinc-500">Standard Feed</span><span className="ml-2 font-medium">{em.standard_helix_ipm.toFixed(1)} IPM · {em.helix_pitch_in.toFixed(5)}" / rev @ {em.helix_angle_deg.toFixed(2)}°</span></div>
-                            <div><span className="text-zinc-500">Advanced Feed</span><span className="ml-2 font-medium text-indigo-300">{em.advanced_helix_ipm.toFixed(1)} IPM · {(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev @ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</span></div>
+                            <div className="col-span-2"><span className="text-zinc-500">Standard Bore Feed</span><span className="ml-2 font-medium">{em.standard_helix_ipm.toFixed(1)} IPM · {em.helix_pitch_in.toFixed(5)}" / rev @ {em.helix_angle_deg.toFixed(2)}°</span></div>
                           </div>
-                          <p className="text-[10px] text-zinc-500 mt-1">Advanced entry uses chip-thinning at light engagement. Use tangent arc lead-in into bore; step to full feed once engagement stabilizes.</p>
+                          <div className="mt-1.5 rounded-md border border-indigo-400/40 bg-indigo-500/10 px-2 py-1.5">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-300">Advanced Helical Feed</span>
+                              <span className="text-[9px] text-indigo-400/80">chip-thinned, shallow pitch</span>
+                            </div>
+                            <div className="mt-0.5 font-semibold text-indigo-200">{em.advanced_helix_ipm.toFixed(1)} IPM · {(em.adv_helix_pitch_in ?? em.helix_pitch_in).toFixed(5)}" / rev @ {(em.adv_helix_angle_deg ?? em.helix_angle_deg).toFixed(2)}°</div>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">Trades pitch for feed: a shallower helix angle thins the chip, so the tool can bore in faster at the same edge load. Needs a rigid setup and light engagement.</p>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 mt-1">Use a tangent arc lead-in into the bore; step to full feed once engagement stabilizes.</p>
                         </div>
                       )}
 
@@ -20206,9 +20223,10 @@ ${stabSection}
                             <span className="text-[9px] text-amber-600 ml-2">Rarely correct</span>
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                            <div className="col-span-2"><span className="text-zinc-500">Entry Feed</span><span className="ml-2 font-medium text-amber-300">{em.straight_entry_ipm?.toFixed(1)} IPM <span className="text-zinc-500">({feedPct}% until full engagement)</span></span></div>
+                            <div className="col-span-2"><span className="text-zinc-500">Reduced Plunge Feed (Z)</span><span className="ml-2 font-medium text-amber-300">{em.straight_entry_ipm?.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown, for the whole plunge</span></div>
                           </div>
                           <p className="text-[10px] text-amber-600/80 mt-1">⚠ Straight plunging is what a drill is made to do — not an endmill. Full axial load hits instantly, edge shock is severe, and the bottom cutting geometry on most endmills is not designed for it. This takes a huge toll on the tool and is rarely the right call. Use a ramp, helical entry, or pre-drilled hole instead.</p>
+                          <p className="text-[10px] text-zinc-500 mt-1">This is a straight-down Z feed, already derated to {feedPct}% of the side-milling feed — program it directly, don't cut it again. Unlike an arc or ramp, a plunge has no gradual build-up: the tool is fully engaged the moment the tip touches, so hold this reduced feed for the entire plunge rather than stepping up partway down.</p>
                         </div>
                       )}
 
