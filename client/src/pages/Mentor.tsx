@@ -5850,7 +5850,7 @@ export default function Mentor() {
     }
     const EM_NAME: Record<string, string> = {
       sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical Interpolation",
-      ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
+      ramp: "Straight Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
       straight: "Straight Plunge",
     };
     // Already sorted best-first by rankEntryMoves — number them 1..n rather than
@@ -7825,7 +7825,7 @@ ${stabSection}
             const labelMap: Record<string, string> = {
               sweep: "Sweep / Roll-in",
               ramp: "Straight Ramp",
-              helical: "Helical",
+              helical: "Helical Interpolation",
               straight: "Straight Plunge",
               slot_straight: "Straight Entry (outside edge)",
               xy_radial: "Straight Radial (from pre-drilled hole)",
@@ -7885,7 +7885,7 @@ ${stabSection}
         }
         const _entryName: Record<string, string> = {
           sweep: "Sweep / Roll-in", predrill_plunge: "Pre-drill + Plunge", helical: "Helical Interpolation",
-          ramp: "Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
+          ramp: "Straight Ramp", slot_straight: "Straight Entry", xy_radial: "Straight Radial",
           straight: "Straight Plunge",
         };
         // Already sorted best-first by rankEntryMoves — number them 1..n rather than
@@ -20674,7 +20674,7 @@ ${stabSection}
                         // One angle + the feed that belongs to it. Axial bite per tooth
                         // scales with tan(angle), so a band can't share a single IPM.
                         const hasRec = angleRec != null && angleRec > 0 && ipmRec != null && ipmRec > 0;
-                        return entryCard("ramp", "Ramp Entry", (
+                        return entryCard("ramp", "Straight Ramp", (
                         <>
                           {hasRec ? (
                             <>
@@ -20754,7 +20754,7 @@ ${stabSection}
                       })();
 
                       // Helical
-                      sections.helical = !entryTypes.includes("helical") ? null : entryCard("helical", "Helical Entry", (
+                      sections.helical = !entryTypes.includes("helical") ? null : entryCard("helical", "Helical Interpolation", (
                         <>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
