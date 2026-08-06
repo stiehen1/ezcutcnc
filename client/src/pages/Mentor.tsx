@@ -5640,8 +5640,10 @@ export default function Mentor() {
     const rampRows = (em && entryTypes.includes("ramp")) ? `
         <tr><td colspan="2" style="padding:${sweepRows ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Ramp Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;width:40%">Ramp Angle</td><td style="font-weight:600;">${(em.ramp_angle_min_deg != null && em.ramp_angle_min_deg > 0 && em.ramp_angle_min_deg < em.ramp_angle_deg) ? `${em.ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Entry Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>
-        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Ramp Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(shallow 0.5–1° ramp, chip-thinned — faster, not slower)</span></td></tr>` : "";
+        ${((em as any).ramp_angle_rec_deg > 0 && (em as any).ramp_ipm_rec > 0)
+          ? `<tr><td style="color:#888;padding:2px 8px 2px 0;">Program this</td><td style="font-weight:700;">${(em as any).ramp_ipm_rec.toFixed(1)} IPM @ ${(em as any).ramp_angle_rec_deg.toFixed(1)}° &nbsp;·&nbsp; Pitch = ${(em as any).ramp_pitch_rec_in_per_in?.toFixed(4)}" Z per in XY <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>`
+          : `<tr><td style="color:#888;padding:2px 8px 2px 0;">Reduced Entry Feed</td><td style="font-weight:600;">${em.standard_ramp_ipm.toFixed(1)} IPM <span style="color:#888;font-weight:400;">(already ${emFeedPct}% of full — program as shown)</span></td></tr>`}
+        <tr><td style="color:#888;padding:2px 8px 2px 0;">Advanced Ramp Feed</td><td style="font-weight:600;color:#818cf8;">${em.advanced_ramp_ipm.toFixed(1)} IPM${(em as any).adv_ramp_angle_deg > 0 ? ` @ ${(em as any).adv_ramp_angle_deg.toFixed(1)}°` : ""} <span style="color:#888;font-weight:400;">(chip-thinned at light engagement — faster, not slower; verify on your setup)</span></td></tr>` : "";
     const helixRows = (em && entryTypes.includes("helical")) ? `
         <tr><td colspan="2" style="padding:${(sweepRows || rampRows) ? "6px" : "3px"} 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6366f1;border-bottom:1px solid #6366f140;">Helical Entry</td></tr>
         <tr><td style="color:#888;padding:2px 8px 2px 0;">Min Bore Dia</td><td style="font-weight:600;">≥${em.helix_bore_min_in.toFixed(4)}"</td></tr>
@@ -7653,8 +7655,13 @@ ${stabSection}
         if (em && entryTypes.includes("ramp")) {
           lines.push(L("Ramp Angle",    ((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`));
           lines.push(L("Ramp Pitch",    `≤${(Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}" Z per inch XY`));
-          lines.push(L("Ramp Reduced Entry Feed", `${em.standard_ramp_ipm.toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
-          lines.push(L("Ramp Advanced Feed",      `${em.advanced_ramp_ipm.toFixed(1)} IPM  (shallow 0.5–1° ramp, chip-thinned — faster, not slower)`));
+          const _rAng = (em as any).ramp_angle_rec_deg, _rIpm = (em as any).ramp_ipm_rec, _rPit = (em as any).ramp_pitch_rec_in_per_in;
+          if (_rAng > 0 && _rIpm > 0) {
+            lines.push(L("Ramp — PROGRAM THIS", `${_rIpm.toFixed(1)} IPM @ ${_rAng.toFixed(1)}°  ·  Pitch = ${_rPit?.toFixed(4)}" Z per in XY  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
+          } else {
+            lines.push(L("Ramp Reduced Entry Feed", `${em.standard_ramp_ipm.toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — program as shown)`));
+          }
+          lines.push(L("Ramp Advanced Feed",      `${em.advanced_ramp_ipm.toFixed(1)} IPM${(em as any).adv_ramp_angle_deg > 0 ? ` @ ${(em as any).adv_ramp_angle_deg.toFixed(1)}°` : ""}  (chip-thinned at light engagement — faster, not slower; verify on your setup)`));
         }
         if (em && entryTypes.includes("straight")) {
           lines.push(L("Reduced Plunge Feed (Z)", `${(em.straight_entry_ipm ?? em.standard_ramp_ipm).toFixed(1)} IPM  (already ${em.entry_feed_pct ?? 50}% of full — hold for the entire plunge; no gradual build-up on a plunge)`));
@@ -20233,8 +20240,19 @@ ${stabSection}
                             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                               <div><span className="text-zinc-500">Arc Radius (min)</span><span className="ml-2 font-medium">{radMin.toFixed(4)}"</span></div>
                               <div><span className="text-zinc-500">Arc Radius (rec)</span><span className="ml-2 font-medium text-green-300">{radRec.toFixed(4)}"</span></div>
-                              <div><span className="text-zinc-500">Reduced Entry Feed</span><span className="ml-2 font-medium">{entryFeed.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown</span></div>
-                              <div><span className="text-zinc-500">Full Feed (after arc)</span><span className="ml-2 font-medium text-green-300">{fullFeed.toFixed(1)} IPM</span></div>
+                            </div>
+                            {/* Same "Program this" box as the ramp and helical cards. */}
+                            <div className="mt-1.5 rounded border border-zinc-600/60 bg-zinc-800/50 px-2.5 py-2">
+                              <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Program this</div>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="text-base font-bold text-white leading-none">{entryFeed.toFixed(1)} IPM</span>
+                                <span className="text-[10px] text-zinc-500">entering the arc</span>
+                                <span className="text-zinc-600 mx-1">·</span>
+                                <span className="text-zinc-400">then</span>
+                                <span className="text-base font-bold text-green-300 leading-none">{fullFeed.toFixed(1)} IPM</span>
+                                <span className="text-[10px] text-zinc-500">once the arc completes</span>
+                              </div>
+                              <div className="mt-1 text-[10px] text-zinc-500">Arc radius {radRec.toFixed(4)}" recommended ({radMin.toFixed(4)}" minimum)</div>
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Tangent arc approach from outside material. Chip starts at zero, builds to full WOC. Step to full feed once arc completes and engagement stabilizes. The entry feed above is already reduced to {feedPct}% of full feed — program that number directly, don't cut it again.</p>
                           </>
@@ -20242,24 +20260,96 @@ ${stabSection}
                       })();
 
                       // Ramp
-                      sections.ramp = !entryTypes.includes("ramp") ? null : entryCard("ramp", "Ramp Entry", (
+                      sections.ramp = !entryTypes.includes("ramp") ? null : (() => {
+                        const aMin = (em as any).ramp_angle_min_deg as number | undefined;
+                        const aMax = em.ramp_angle_deg;
+                        const hasBand = aMin != null && aMin > 0 && aMin < aMax;
+                        const pitchMax   = (em as any).ramp_pitch_in_per_in ?? Math.tan(aMax * Math.PI / 180);
+                        const angleRec   = (em as any).ramp_angle_rec_deg as number | undefined;
+                        const ipmRec     = (em as any).ramp_ipm_rec as number | undefined;
+                        const pitchRec   = (em as any).ramp_pitch_rec_in_per_in as number | undefined;
+                        const axialRatio = (em as any).ramp_axial_ratio as number | undefined;
+                        // One angle + the feed that belongs to it. Axial bite per tooth
+                        // scales with tan(angle), so a band can't share a single IPM.
+                        const hasRec = angleRec != null && angleRec > 0 && ipmRec != null && ipmRec > 0;
+                        return entryCard("ramp", "Ramp Entry", (
                         <>
+                          {hasRec ? (
+                            <>
+                              <div className="rounded border border-zinc-600/60 bg-zinc-800/50 px-2.5 py-2">
+                                <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Program this</div>
+                                {/* Feed @ angle, Pitch — one line, in the order it gets programmed. */}
+                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                  <span className="text-base font-bold text-white leading-none">{ipmRec.toFixed(1)} IPM</span>
+                                  <span className="text-zinc-500">@</span>
+                                  <span className="text-base font-bold text-white leading-none">{angleRec.toFixed(1)}°</span>
+                                  <span className="text-zinc-600 mx-1">·</span>
+                                  <span className="text-zinc-400">Pitch =</span>
+                                  <span className="text-base font-bold text-white leading-none">{pitchRec?.toFixed(4)}"</span>
+                                  <span className="text-[10px] text-zinc-500">Z per in XY</span>
+                                </div>
+                                {hasBand && <div className="mt-1 text-[10px] text-zinc-500">material band {aMin}–{aMax}°</div>}
+                              </div>
+                              <p className="text-[10px] text-zinc-500 mt-1">
+                                The angle and the feed go together — they aren't independent. Axial bite per tooth scales with the tangent of the ramp angle, so this is the angle/feed pair we recommend for this material rather than a range to choose from.
+                                {axialRatio != null && axialRatio > 1.05 && hasBand && <> Ramping at the {aMax}° ceiling instead takes about <span className="text-zinc-300 font-medium">{axialRatio}× the axial bite per tooth</span> for the same feed, which is why the shallower angle is the one to program.</>}
+                                {" "}This feed is already reduced to {feedPct}% of the {((result?.milling?.feed_ipm ?? result?.customer?.feed_ipm) ?? 0).toFixed(1)} IPM full feed — program it directly, don't cut it again.
+                              </p>
+                            </>
+                          ) : (
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                            <div><span className="text-zinc-500">Ramp Angle</span><span className="ml-2 font-medium">{((em as any).ramp_angle_min_deg != null && (em as any).ramp_angle_min_deg > 0 && (em as any).ramp_angle_min_deg < em.ramp_angle_deg) ? `${(em as any).ramp_angle_min_deg}–${em.ramp_angle_deg}°` : `≤${em.ramp_angle_deg}°`}</span></div>
-                            <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{(em as any).ramp_pitch_in_per_in?.toFixed(4) ?? (Math.tan(em.ramp_angle_deg * Math.PI / 180)).toFixed(4)}"</span></div>
+                            <div><span className="text-zinc-500">Ramp Angle</span><span className="ml-2 font-medium">{hasBand ? `${aMin}–${aMax}°` : `≤${aMax}°`}</span></div>
+                            <div><span className="text-zinc-500">Pitch (Z/in XY)</span><span className="ml-2 font-medium">≤{pitchMax.toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Reduced Entry Feed</span><span className="ml-2 font-medium">{em.standard_ramp_ipm.toFixed(1)} IPM</span><span className="ml-1.5 text-zinc-500">— program as shown</span></div>
                           </div>
+                          )}
+                          {(() => {
+                            const advAngle = (em as any).adv_ramp_angle_deg as number | undefined;
+                            const advPitch = (em as any).adv_ramp_pitch_in_per_in as number | undefined;
+                            // advanced_feed clamps to full feed, so on hard material this
+                            // row can sit several times above the hardness-derated entry
+                            // feed. Say so out loud instead of labelling it merely "optional".
+                            const advFull = (result?.milling?.feed_ipm ?? result?.customer?.feed_ipm) ?? 0;
+                            const advIsFullFeed = advFull > 0 && em.advanced_ramp_ipm >= advFull * 0.98;
+                            const advVsRec = ipmRec != null && ipmRec > 0 ? em.advanced_ramp_ipm / ipmRec : 1;
+                            return (
                           <div className="mt-1.5 rounded border-l-2 border-zinc-500/50 bg-zinc-800/40 pl-2 pr-2 py-1.5">
-                            <div className="flex items-baseline gap-2 flex-wrap">
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Optional · Advanced Ramp Feed</span>
-                              <span className="text-[9px] text-zinc-500">shallow 0.5–1° ramp, chip-thinned</span>
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Optional · Advanced Ramp — chip-thinned</div>
+                            {/* Same one-line shape as the recommended row above:
+                                feed @ angle · pitch. The angle drives the feed, so it
+                                carries the same weight instead of sitting in fine print. */}
+                            <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-sm font-bold text-zinc-100 leading-none">{em.advanced_ramp_ipm.toFixed(1)} IPM</span>
+                              {advAngle != null && advAngle > 0 && (
+                                <>
+                                  <span className="text-zinc-500">@</span>
+                                  <span className="text-sm font-bold text-zinc-100 leading-none">{advAngle.toFixed(1)}°</span>
+                                </>
+                              )}
+                              {advPitch != null && advPitch > 0 && (
+                                <>
+                                  <span className="text-zinc-600 mx-1">·</span>
+                                  <span className="text-zinc-400">Pitch =</span>
+                                  <span className="text-sm font-bold text-zinc-100 leading-none">{advPitch.toFixed(4)}"</span>
+                                  <span className="text-[10px] text-zinc-500">Z per in XY</span>
+                                </>
+                              )}
                             </div>
-                            <div className="mt-0.5 font-semibold text-zinc-200">{em.advanced_ramp_ipm.toFixed(1)} IPM</div>
-                            <p className="text-[10px] text-zinc-500 mt-0.5">Faster than the standard entry feed, not slower. A near-flat 0.5–1° ramp thins the chip enough to carry more feed for the same edge load — use it when the setup is rigid and the control can hold a shallow ramp.</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">
+                              Faster than the recommended entry feed, not slower — the extra feed comes from chip-thinning at light radial engagement, at the same ramp angle. Use it only when the setup is rigid and engagement really is light.
+                              {advVsRec > 1.05 && <> That's <span className="text-zinc-300 font-medium">{advVsRec.toFixed(1)}× the recommended entry feed</span>{advIsFullFeed && <>, which is the <span className="text-zinc-300 font-medium">full cutting feed with no entry derate at all</span></>}.</>}
+                            </p>
+                            {advIsFullFeed && caution && (
+                              <p className="text-[10px] text-amber-400/90 mt-1">
+                                ⚠ On this material the recommended entry feed is deliberately cut to {feedPct}% because edge shock at entry is the dominant failure mode. This optional feed removes that protection — don't use it here unless you have proven it on your own setup.
+                              </p>
+                            )}
                           </div>
-                          <p className="text-[10px] text-zinc-500 mt-1">Entry feed above is already reduced to {feedPct}% of full feed — program it directly, don't cut it again.</p>
+                            );
+                          })()}
                         </>
-                      ));
+                        ));
+                      })();
 
                       // Helical
                       sections.helical = !entryTypes.includes("helical") ? null : entryCard("helical", "Helical Entry", (
@@ -20267,13 +20357,20 @@ ${stabSection}
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                             <div><span className="text-zinc-500">Min Bore Dia</span><span className="ml-2 font-medium">≥{em.helix_bore_min_in.toFixed(4)}"</span></div>
                             <div><span className="text-zinc-500">Ideal Bore Dia</span><span className="ml-2 font-medium">{em.helix_bore_ideal_low.toFixed(4)}" – {em.helix_bore_ideal_high.toFixed(4)}"</span></div>
-                            <div className="col-span-2 rounded bg-zinc-800/50 px-1.5 py-1 -mx-0.5">
-                              <span className="text-zinc-400">Pitch</span>
-                              <span className="ml-2 font-bold text-white">{em.helix_pitch_in.toFixed(5)}" per rev</span>
-                              <span className="ml-1.5 text-zinc-400">@ {em.helix_angle_deg.toFixed(2)}°</span>
-                              <span className="ml-2 text-[9px] text-zinc-500">← program this</span>
+                          </div>
+                          {/* Same "Program this" box as the ramp card — feed, angle, pitch
+                              on one line, in the order they get programmed. */}
+                          <div className="mt-1.5 rounded border border-zinc-600/60 bg-zinc-800/50 px-2.5 py-2">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Program this</div>
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-base font-bold text-white leading-none">{em.standard_helix_ipm.toFixed(1)} IPM</span>
+                              <span className="text-zinc-500">@</span>
+                              <span className="text-base font-bold text-white leading-none">{em.helix_angle_deg.toFixed(2)}°</span>
+                              <span className="text-zinc-600 mx-1">·</span>
+                              <span className="text-zinc-400">Pitch =</span>
+                              <span className="text-base font-bold text-white leading-none">{em.helix_pitch_in.toFixed(5)}"</span>
+                              <span className="text-[10px] text-zinc-500">per rev</span>
                             </div>
-                            <div className="col-span-2"><span className="text-zinc-500">Standard Bore Feed</span><span className="ml-2 font-medium">{em.standard_helix_ipm.toFixed(1)} IPM</span></div>
                           </div>
                           <div className="mt-1.5 rounded border-l-2 border-zinc-500/50 bg-zinc-800/40 pl-2 pr-2 py-1.5">
                             <div className="flex items-baseline gap-2 flex-wrap">
@@ -20355,18 +20452,24 @@ ${stabSection}
                         if (toolDia <= 0) return null;
                         return entryCard("predrill_plunge", "Pre-drill + Plunge", (
                           <>
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                              <div className="flex flex-col">
-                                <div><span className="text-zinc-500">Pre-drill Hole Dia</span><span className="ml-2 font-medium text-green-300">≥{(toolDia + 0.010).toFixed(4)}" <span className="text-green-400/70">({((toolDia + 0.010) * 25.4).toFixed(2)} mm)</span></span></div>
-                                <div className="text-[10px] text-zinc-500">(tool dia + 0.010" clearance)</div>
+                            {/* Same "Program this" box as the other entry cards. */}
+                            <div className="rounded border border-zinc-600/60 bg-zinc-800/50 px-2.5 py-2">
+                              <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Program this</div>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="text-zinc-400">Hole Ø</span>
+                                <span className="text-base font-bold text-white leading-none">≥{(toolDia + 0.010).toFixed(4)}"</span>
+                                <span className="text-[10px] text-zinc-500">({((toolDia + 0.010) * 25.4).toFixed(2)} mm)</span>
+                                {fullFeed > 0 && (
+                                  <>
+                                    <span className="text-zinc-600 mx-1">·</span>
+                                    <span className="text-base font-bold text-white leading-none">{fullFeed.toFixed(1)} IPM</span>
+                                    <span className="text-[10px] text-zinc-500">through the slot</span>
+                                  </>
+                                )}
                               </div>
-                              <div className="flex flex-col">
-                                <div><span className="text-zinc-500">Hole Depth</span><span className="ml-2 font-medium text-white">≥ slot DOC</span></div>
-                                {docIn != null && <div className="text-[10px] text-zinc-500">≥{docIn.toFixed(4)}"</div>}
+                              <div className="mt-1 text-[10px] text-zinc-500">
+                                Tool dia + 0.010" clearance · hole depth ≥ slot DOC{docIn != null && <> (≥{docIn.toFixed(4)}")</>}
                               </div>
-                              {fullFeed > 0 && (
-                                <div className="col-span-2"><span className="text-zinc-500">Slot Feed (after drop-in)</span><span className="ml-2 font-medium text-white">{fullFeed.toFixed(1)} IPM</span></div>
-                              )}
                             </div>
                             <p className="text-[10px] text-zinc-500 mt-1">Drill a clearance hole at one end of the slot, plunge the endmill into it, then feed laterally through the slot at full feed. Cleanest entry for closed slots — no shock load, no helix bore needed.</p>
                           </>

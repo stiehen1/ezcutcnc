@@ -6399,6 +6399,47 @@ def run(payload=None):
     standard_ramp_feed  = feed_ipm * entry_feed_mult
     standard_helix_feed = feed_ipm * (entry_feed_mult + 0.15)  # helix slightly higher (continuous chip)
 
+    # Ramp feed is angle-dependent, and printing one IPM next to a range implied
+    # every angle in the band runs the same. It doesn't: on a ramp the axial bite
+    # per tooth scales with tan(angle), so walking 0.5° -> 2° is a 4x increase in
+    # axial chip load at identical XY feed. Publish a feed for each end of the
+    # band, anchored on the STEEP end (the conservative case, and what the shown
+    # pitch has always been computed from) so the shallow end earns feed back
+    # rather than the steep end silently inheriting a feed set for shallow.
+    #   f_shallow / f_steep = tan(steep) / tan(shallow)
+    # Capped at 1.6x: past that the ramp is so flat it's effectively a helical
+    # bore, and the limit stops being axial load.
+    # Rather than publish the whole band and leave the programmer to guess, resolve
+    # ONE recommended angle and the feed that goes with it. Pick the shallow end of
+    # the material band: it carries the lightest axial bite per tooth, which is the
+    # dominant entry failure mode, and it earns feed back. Floor at 1.0° so the ramp
+    # stays practical to program and doesn't need an absurd XY run to reach depth
+    # (at 0.5° a 0.100" step needs ~11" of travel); never exceed the ceiling.
+    _tan_steep   = math.tan(math.radians(ramp_angle))
+    ramp_angle_rec = min(max(1.0, ramp_angle_min), ramp_angle)
+    _tan_rec       = math.tan(math.radians(ramp_angle_rec))
+    # Feed stays at the material's own entry derate — the recommendation resolves
+    # WHICH ANGLE to run, not a faster feed.
+    #
+    # A shallower ramp does take a smaller axial bite per tooth, so in principle it
+    # could carry more feed. Deliberately not doing that: nothing in this engine has
+    # ever raised an entry feed, there is no shop-validated anchor for how much a
+    # flatter ramp is worth, and every bound tried here (ratio cap, flat fraction of
+    # full feed, multiple of the derate) ended up being the thing that set the
+    # number -- a constant wearing the costume of a calculation. Worse, any such
+    # gain fights entry_feed_mult, which IS the hardness protection (50% normally,
+    # 35% at >=40 HRC, 25% at >=55 HRC): an earlier version pushed a 58 HRC entry
+    # from the intended 25% up to 38%, on exactly the material where edge shock
+    # kills tools fastest.
+    #
+    # So: recommend the angle, keep the derated feed. The shallow angle's benefit is
+    # taken as reduced axial shock rather than cashed in for feed. If a feed gain is
+    # ever wanted here it needs shop validation first, per material.
+    ramp_feed_rec = standard_ramp_feed
+    # How much axial bite the ceiling angle would add over the recommendation —
+    # used to explain why the recommended angle is the one to program.
+    ramp_axial_ratio = round(_tan_steep / _tan_rec, 2) if _tan_rec > 0 else 1.0
+
     # Sweep / roll-in arc entry calculations
     # Tangential arc = chip builds 0 → full WOC gradually; preferred over straight-in.
     # Arc radius: 0.5D min, 0.75D recommended.
@@ -6422,9 +6463,21 @@ def run(payload=None):
 
     advanced_feed = min(feed_ipm * multiplier, feed_ipm)
 
+    # The advanced ramp's angle band was hardcoded display text ("0.5-1.0°") with
+    # no link to advanced_feed, so it published one IPM for a 2x spread in axial
+    # bite. Anchor it to a real angle.
+    #
+    # Use the SAME angle as the standard recommendation, not a shallower one. The
+    # advanced move's extra feed comes from chip-thinning at light radial
+    # engagement (the chip_ratio multiplier), NOT from flattening the ramp -- so
+    # showing a shallower angle beside a higher feed implied the angle bought the
+    # feed, and left the card self-contradictory: 0.5 deg @ 28.6 IPM sitting under
+    # a 1.0 deg @ 22.9 IPM recommendation reads as "flatter AND faster", which is
+    # not what either number means.
+    adv_ramp_angle = ramp_angle_rec
     print(f"Standard Ramp: ≤{ramp_angle:.0f}°  @ {standard_ramp_feed:.1f} IPM")
     print(f"Standard Helix: same RPM, {standard_helix_feed:.1f} IPM feed")
-    print(f"Advanced Light Ramp: 0.5–1.0°  @ {advanced_feed:.1f} IPM (chip-thinning optimized)")
+    print(f"Advanced Light Ramp: {adv_ramp_angle:.1f}°  @ {advanced_feed:.1f} IPM (chip-thinning optimized)")
     advanced_helix_feed = min(feed_ipm * 0.65 * multiplier, feed_ipm * 0.75)
     helix_bore = diameter * 1.20
 
@@ -9172,6 +9225,19 @@ def run(payload=None):
             "ramp_angle_deg":           round(locals().get("ramp_angle", 3.0), 1),
             "ramp_angle_min_deg":       round(locals().get("ramp_angle_min", 0.0), 1),
             "ramp_pitch_in_per_in":     round(math.tan(math.radians(locals().get("ramp_angle", 3.0))), 5),
+            # Pitch at the shallow end of the band — the steep-end pitch above was
+            # the only one published, which read as if it applied to the whole range.
+            "ramp_pitch_min_in_per_in": round(math.tan(math.radians(locals().get("ramp_angle_min", 0.0) or locals().get("ramp_angle", 3.0))), 5),
+            # ONE recommended angle + the feed that belongs to it. Publishing the
+            # whole band with a single IPM implied every angle ran the same; it can't,
+            # because axial bite per tooth scales with tan(angle).
+            "ramp_angle_rec_deg":       round(locals().get("ramp_angle_rec", 0.0), 2),
+            "ramp_pitch_rec_in_per_in": round(math.tan(math.radians(locals().get("ramp_angle_rec", 2.0))), 5),
+            "ramp_ipm_rec":             round(locals().get("ramp_feed_rec", 0.0), 2),
+            "ramp_axial_ratio":         locals().get("ramp_axial_ratio", 1.0),
+            # Advanced ramp: a single specific angle + its pitch, not a range.
+            "adv_ramp_angle_deg":       round(locals().get("adv_ramp_angle", 0.0), 2),
+            "adv_ramp_pitch_in_per_in": round(math.tan(math.radians(locals().get("adv_ramp_angle", 0.5))), 5),
             "standard_ramp_ipm":        round(locals().get("standard_ramp_feed", 0.0), 2),
             "standard_helix_ipm":       round(locals().get("standard_helix_feed", 0.0), 2),
             "advanced_ramp_ipm":        round(locals().get("advanced_feed", 0.0), 2),

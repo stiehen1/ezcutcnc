@@ -594,6 +594,16 @@ export const mentorSchemas = {
     entry_moves: z.object({
       ramp_angle_deg:           z.number(),
       ramp_angle_min_deg:       z.number().optional(),
+      ramp_pitch_in_per_in:     z.number().optional(),
+      ramp_pitch_min_in_per_in: z.number().optional(),
+      // One recommended ramp angle + the feed that belongs to it. Axial bite scales
+      // with tan(angle), so a single IPM cannot cover a 0.5-2 degree band.
+      ramp_angle_rec_deg:       z.number().optional(),
+      ramp_pitch_rec_in_per_in: z.number().optional(),
+      ramp_ipm_rec:             z.number().optional(),
+      ramp_axial_ratio:         z.number().optional(),
+      adv_ramp_angle_deg:       z.number().optional(),
+      adv_ramp_pitch_in_per_in: z.number().optional(),
       standard_ramp_ipm:        z.number(),
       standard_helix_ipm:       z.number(),
       advanced_ramp_ipm:        z.number(),
