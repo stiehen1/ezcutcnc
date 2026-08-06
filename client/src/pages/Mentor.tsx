@@ -16221,6 +16221,26 @@ ${stabSection}
                   );
                 }
 
+                // Finishing: the wall is already roughed, so there is no Z-entry to make.
+                // The generic list below offers Helical / Pre-drill+Plunge / Straight Plunge,
+                // which are all ways of getting DOWN into stock — meaningless on a finish
+                // pass, and a ramp leaves a witness mark where the Z motion stops. The only
+                // entry that belongs here is a tangential arc onto the wall.
+                if (form.mode === "finish" && form.tool_type !== "chamfer_mill") {
+                  return (
+                    <>
+                      <div className="flex flex-wrap gap-3">
+                        {renderChip({ ...opts.sweep, recommended: true })}
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mt-1.5">
+                        Finishing follows an already-roughed wall, so there's no Z-entry move to make —
+                        arc on tangentially to avoid leaving a witness mark at the entry point. Lead out
+                        the same way, and keep the feed constant through the arc.
+                      </p>
+                    </>
+                  );
+                }
+
                 // No pre-drill: flat list with the same hide rules as before.
                 // Straight Plunge goes LAST — it is the least favorable entry of the set
                 // (full axial shock, bottom geometry not built for it), so it should not
@@ -19413,6 +19433,12 @@ ${stabSection}
                     />
                   );
                 })()}
+                {/* MRR sits ahead of the Ra block deliberately. Ra renders a full-width
+                    disclaimer (and sometimes a full-width banner) after its card, which
+                    breaks the grid row — with MRR last it got stranded alone on a line of
+                    its own. Card-then-card-then-card, prose after, keeps the row intact. */}
+                <Kpi label={UL("MRR (in³/min)", "MRR (cm³/min)")} hint="Material Removal Rate — volume of material removed per minute. The key productivity metric: higher MRR = faster cycle time. MRR = WOC × DOC × Feed IPM." value={UC(customer.mrr_in3_min, 16.387, metric ? 2 : 4)} />
+
                 {(form.mode === "face" || form.mode === "finish") && (() => {
                   const cr = form.corner_radius ?? 0;
                   const raUin = customer.ra_actual_uin;
@@ -19461,7 +19487,6 @@ ${stabSection}
                     </>
                   );
                 })()}
-                <Kpi label={UL("MRR (in³/min)", "MRR (cm³/min)")} hint="Material Removal Rate — volume of material removed per minute. The key productivity metric: higher MRR = faster cycle time. MRR = WOC × DOC × Feed IPM." value={UC(customer.mrr_in3_min, 16.387, metric ? 2 : 4)} />
 
                 {form.mode === "circ_interp" && (customer as any).circ_total_time_sec != null && (customer as any).circ_total_time_sec > 0 && (() => {
                   const sec = Number((customer as any).circ_total_time_sec);
