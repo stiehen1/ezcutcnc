@@ -8,6 +8,9 @@ Each operation includes a **How to Use panel** (step-by-step navigation for the 
 
 ## Recent Updates (August 2026)
 
+### Special tools read "CC# CC-14711"
+The Tool Being Run card and the optimized-match export header both prefixed the tool number with a hardcoded `CC# ` label. Extracted tool numbers already carry the prefix — the extraction spec at `server/routes.ts` returns the TOOL # field verbatim off the title block, e.g. `"CC-14371"` — so every uploaded special rendered the CC twice. The label is now only prepended when the number doesn't already start with `CC`, which keeps the recognizable `CC-` on extracted values and still labels a bare number from a hand-entered special or a print whose title block omits the prefix. The ROI panel was left alone: there the label sits above a separate input, so it reads as a field name rather than a doubled prefix.
+
 ### Makino MAG: high-speed aluminum calibration, and a necked-tool step that wouldn't go away
 The aluminum numbers were anchored to a conventional 40-taper VMC — `BASE_SFM` carries the comment "800 center for 8k–15k rpm shops", and `IPT_FRAC` says the same. Nothing in `speed_envelope()` looked at the spindle, so a Makino MAG A8 (HSK-F80, 33,000 rpm, 130 kW / ~174 hp) got the identical 800 SFM as a 15-hp Haas, with the manual-override band clamping at 2,080 SFM. Meanwhile `rpm_override` bypassed that clamp entirely, so the two paths disagreed about the same machine.
 

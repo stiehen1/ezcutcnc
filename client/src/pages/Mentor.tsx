@@ -6209,7 +6209,7 @@ export default function Mentor() {
           <thead>
             <tr style="background:#e55a00;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
               <th style="padding:4px 8px;text-align:left;font-weight:700;text-transform:uppercase;letter-spacing:.04em;"></th>
-              <th style="padding:4px 8px;text-align:center;font-weight:700;">Current (${form.edp ? `EDP# ${form.edp}` : pdfToolNumber ? `CC# ${pdfToolNumber}` : "—"})</th>
+              <th style="padding:4px 8px;text-align:center;font-weight:700;">Current (${form.edp ? `EDP# ${form.edp}` : pdfToolNumber ? (/^cc/i.test(pdfToolNumber) ? pdfToolNumber : `CC# ${pdfToolNumber}`) : "—"})</th>
               <th style="padding:4px 8px;text-align:center;font-weight:700;background:#166534;-webkit-print-color-adjust:exact;print-color-adjust:exact;">Recommended (EDP# ${headEdp})</th>
             </tr>
           </thead>
@@ -18579,6 +18579,14 @@ ${stabSection}
                 // tool number and the fact that it's a special. Surface that instead of
                 // falling through to the "no EDP" apology.
                 const _ccNum  = (pdfToolNumber || "").trim();
+                // Extracted tool numbers already carry the prefix — the extraction spec
+                // returns "CC-14711" verbatim off the title block — so a "CC# " label in
+                // front of it rendered "CC# CC-14711". Show the number as-is when it's
+                // already self-identifying, and only prepend the label for a bare number
+                // (hand-entered special, or a print whose title block omits the prefix).
+                // Keeps the "CC-" that makes it recognizable as a part number rather than
+                // stripping it down to digits.
+                const _ccLabel = /^cc/i.test(_ccNum) ? _ccNum : `CC# ${_ccNum}`;
                 const _isSpec = !!_ccNum || !!form.is_tapered;
                 const _edp  = (edpText || "").trim();
                 const _ser  = (form.tool_series || "").trim();
@@ -18714,7 +18722,7 @@ ${stabSection}
                           number you order against, and the one thing worth finding fast. */}
                       {(_edp || _ccNum) && (
                         <span className="text-xs font-bold text-yellow-400 tracking-wide">
-                          {_edp ? `EDP# ${_edp}` : `CC# ${_ccNum}`}
+                          {_edp ? `EDP# ${_edp}` : _ccLabel}
                           {_ser
                             ? <span className="font-semibold text-zinc-400"> <span className="text-zinc-600">|</span> Series {_ser}</span>
                             : !_edp
