@@ -2556,6 +2556,20 @@ export default function Mentor() {
           ? ("hydraulic" as const)
           : ("weldon" as const))
       : null;
+    // Makino MAG series (MAG1/MAG3/MAG4/MAG8 — HSK aerospace machining centers) run
+    // shrink fit as the house standard: high-RPM aluminum structural work where the
+    // <1 µm TIR and slim nose profile are the whole point of the platform. Matched on
+    // brand + model so a "MAGNUM" or a shop nickname containing "mag" can't trip it.
+    const _brandStr = String(m.brand ?? "").toLowerCase();
+    const _modelStr = String(m.model ?? "").toLowerCase();
+    const _isMakinoMag = _brandStr.includes("makino") && /\bmag\s*-?\d*\b/.test(_modelStr);
+    const _magTH = _isMakinoMag ? ("shrink_fit" as const) : null;
+    // MAG series also runs zero-point / pallet workholding as the house standard —
+    // the platform is built around large integrated pallets with sub-second fixture
+    // swap, which is the whole point of a lights-out aerospace cell. Forced the same
+    // way as the shrink-fit holder above rather than left to the machine_type default,
+    // which only fires when the prior selection is invalid for the new type.
+    const _magWH = _isMakinoMag ? ("zero_point" as const) : null;
     // Each machine_type only exposes a subset of workholding options in the UI button row.
     // If the prior workholding isn't valid for the new machine type, snap to a sensible
     // default for that lineup — otherwise the orphaned value still drives downstream UI
@@ -2563,7 +2577,7 @@ export default function Mentor() {
     const _allowedWH: Record<string, readonly string[]> = {
       vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","toe_clamps","soft_jaws"],
       hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","soft_jaws"],
-      "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
+      "5axis":       ["zero_point","rigid_fixture","tombstone","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
       gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
       hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
       double_column: ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
@@ -2589,8 +2603,10 @@ export default function Mentor() {
       spindle_drive: effectiveDrive as any,
       dual_contact: millDualContact ?? dualContact,
       machine_type: machType ?? p.machine_type,
-      workholding: _heavyWH ?? _typeWH ?? p.workholding,
-      toolholder:  _heavyTH ?? p.toolholder,
+      machine_brand: String(m.brand ?? ""),
+      machine_model: String(m.model ?? ""),
+      workholding: _heavyWH ?? _magWH ?? _typeWH ?? p.workholding,
+      toolholder:  _magTH ?? _heavyTH ?? p.toolholder,
       mill_spindle_rpm: _machData.mill_rpm ?? 0,
       mill_spindle_hp:  _machData.mill_hp  ?? 0,
       sub_spindle_rpm:  _machData.sub_rpm  ?? 0,
@@ -3426,6 +3442,12 @@ export default function Mentor() {
     rpm_override: 0,
 
     machine_hp: 15,
+    // Machine identity, sent to the engine for platform-specific calibration that
+    // can't be inferred from taper/rpm/hp (the Makino MAG high-speed aluminum
+    // recipe). Populated on catalog machine select; blank for a manual setup, which
+    // just falls through to the conventional material-driven numbers.
+    machine_brand: "",
+    machine_model: "",
     live_tool_connection: "",
     live_tool_hp: 0,
     spindle_drive: "direct" as "direct" | "belt" | "gear",
@@ -3778,25 +3800,57 @@ export default function Mentor() {
   // ── Flute+Material aware WOC/DOC med lookup ─────────────────────────────
   // Returns { wocMed (%), docMed (xD) } for HEM and Traditional.
   // DOC is always capped at LOC (caller must apply cap).
+  // Shop-validated 3-flute aluminum HEM ladder. A full-size 3-flute is NOT a small
+  // 5-flute: the table below used to bottom out at a `flutes <= 5` bucket, so a 3-fl
+  // read the 5-fl cell and got 30% med (with a 45% "high" derived off it) — roughly
+  // double what a 3-flute should carry, and at 45% radial it isn't a HEM cut anymore.
+  // Quoted explicitly rather than derived because the ladder is not a fixed ratio off
+  // med: 0.40x/1.50x around 15 would give 6/15/23, not 12/15/18.
+  const HEM_WOC_3FL_ALUMINUM = { low: 12, med: 15, high: 18 };
+  // Makino MAG high-speed aluminum — a HEAVY radial ladder, replacing the light-radial
+  // 12/15/18 above when a MAG is the selected machine. The tier-1 shop recipe is 50% of
+  // Ø at 1×D axial and 26,000 rpm (see hs_spindle_sfm_ceiling in legacy_engine.py for
+  // the full anchor). 45 is the top step rather than the validated 50 for the same reason
+  // the Ti hybrid offers 25 when 27 was run — the button stays a touch conservative and
+  // the operator can nudge to the proven value. 35 med is the honest starting point
+  // (~280 in³/min); 50% is also where the path stops being HEM at all, since radial chip
+  // thinning is 1.00 there and there's no trochoidal arc left.
+  // DOC deliberately NOT raised: the anchor ran 1×D, comfortably inside the existing
+  // 1.5×D 3-flute cap, and MAG tooling is mostly reduced-neck — stacking full LOC against
+  // a heavy radial bite loads the thinnest section of the tool. Needs its own shop run.
+  const HEM_WOC_MAG_ALUMINUM = { low: 25, med: 35, high: 45 };
+  // Makino MAG detection, read off the form fields the machine-select handler populates
+  // (machine_brand/machine_model) rather than threaded through getDynamicPresets' long
+  // arg list. Mirrors is_makino_mag() in legacy_engine.py — brand AND model, so a
+  // "MAGNUM" can't trip it. Keep the two in sync: if this says MAG and the engine
+  // disagrees, the WOC buttons and the computed feed would drift apart.
+  const isMakinoMagForm =
+    /makino/i.test(form.machine_brand ?? "") &&
+    /\bmag\s*-?\d*\b/i.test(form.machine_model ?? "");
+
   function getHemMed(iso: string, flutes: number): { wocMed: number; docMed: number } {
-    const f = flutes <= 5 ? 5 : flutes <= 6 ? 6 : flutes <= 7 ? 7 : flutes <= 9 ? 9 : 11;
+    // 3-flute gets its own bucket — see HEM_WOC_3FL_ALUMINUM. 4-flute still shares the
+    // 5-fl row: it has not been separately validated, and the shop numbers we have are
+    // for 3 and 5+.
+    const f = flutes <= 3 ? 3 : flutes <= 5 ? 5 : flutes <= 6 ? 6 : flutes <= 7 ? 7 : flutes <= 9 ? 9 : 11;
     // WOC med % by ISO × flute bucket
     const wocTable: Record<string, Record<number, number>> = {
-      N: { 5: 30, 6: 25, 7: 20, 9: 18, 11: 15 },  // aluminum — high WOC in HEM
-      P: { 5: 12, 6: 10, 7:  9, 9:  7, 11:  5 },
-      M: { 5: 10, 6:  8, 7:  7, 9:  6, 11:  4 },
-      K: { 5:  8, 6:  7, 7:  6, 9:  5, 11:  4 },
-      S: { 5:  7, 6:  6, 7:  5, 9:  4, 11:  3 },
-      H: { 5:  5, 6:  4, 7:  4, 9:  3, 11:  3 },
+      N: { 3: HEM_WOC_3FL_ALUMINUM.med, 5: 30, 6: 25, 7: 20, 9: 18, 11: 15 },  // aluminum — high WOC in HEM
+      P: { 3:  8, 5: 12, 6: 10, 7:  9, 9:  7, 11:  5 },
+      M: { 3:  6, 5: 10, 6:  8, 7:  7, 9:  6, 11:  4 },
+      K: { 3:  6, 5:  8, 6:  7, 7:  6, 9:  5, 11:  4 },
+      S: { 3:  5, 5:  7, 6:  6, 7:  5, 9:  4, 11:  3 },
+      H: { 3:  4, 5:  5, 6:  4, 7:  4, 9:  3, 11:  3 },
     };
-    // DOC med xD by ISO × flute bucket
+    // DOC med xD by ISO × flute bucket. 3-flute mirrors its 1.5×D HEM cap (see the
+    // `flutes <= 3 ? 1.5` term in getDynamicPresets) rather than the 5-fl depth.
     const docTable: Record<string, Record<number, number>> = {
-      N: { 5: 2.5, 6: 3.0, 7: 3.0, 9: 3.5, 11: 4.0 },  // aluminum — deep DOC in HEM
-      P: { 5: 2.0, 6: 2.5, 7: 2.5, 9: 3.0, 11: 3.0 },
-      M: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
-      K: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
-      S: { 5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
-      H: { 5: 0.75,6: 1.0, 7: 1.0, 9: 1.0, 11: 1.25 },
+      N: { 3: 1.5, 5: 2.5, 6: 3.0, 7: 3.0, 9: 3.5, 11: 4.0 },  // aluminum — deep DOC in HEM
+      P: { 3: 1.5, 5: 2.0, 6: 2.5, 7: 2.5, 9: 3.0, 11: 3.0 },
+      M: { 3: 1.25,5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
+      K: { 3: 1.25,5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
+      S: { 3: 1.25,5: 1.5, 6: 2.0, 7: 2.5, 9: 2.5, 11: 3.0 },
+      H: { 3: 0.75,5: 0.75,6: 1.0, 7: 1.0, 9: 1.0, 11: 1.25 },
     };
     const wocMed = wocTable[iso]?.[f] ?? wocTable["P"][5];
     const docMed = docTable[iso]?.[f] ?? docTable["P"][5];
@@ -3869,6 +3923,15 @@ export default function Mentor() {
         : iso === "K" ? { low: 10, med: 13, high: 15 }  // cast iron — can push WOC, good evacuation
         :               { low: 8,  med: 10, high: 12 }  // P steel — 3-fl + var helix supports 8–12%
       )
+      // 3-flute aluminum is quoted outright, not derived: the 0.40x/1.50x spread around
+      // med would give 6/15/23 where the shop runs 12/15/18. A full-size 3-fl carries a
+      // lighter radial bite than the 5-fl row it used to inherit (which produced 30% med
+      // and a 45% top step — past the point where the path is still HEM).
+      // Makino MAG + aluminum — heavy-radial recipe, ahead of the generic alu rows below.
+      // Not flute-gated: the anchor is a 3-flute, and the 5+fl alu ladder already tops out
+      // near this range, so one MAG ladder keeps the platform consistent either way.
+      : iso === "N" && isMakinoMagForm ? { ...HEM_WOC_MAG_ALUMINUM }
+      : iso === "N" && flutes <= 3 ? { ...HEM_WOC_3FL_ALUMINUM }
       : iso === "N" ? { low: Math.max(2, Math.round(alWocMed * 0.40)), med: alWocMed, high: Math.round(alWocMed * 1.50) }
       // Titanium HEM: shop-validated "hybrid HEM" — a heavier radial bite at a LOWER
       // surface speed outruns the classic light-WOC/high-SFM recipe. So the Ti ladder is
@@ -4675,7 +4738,16 @@ export default function Mentor() {
     // WOC optimal — same as WOC Optimal button
     const geoFloor = geometry === "chipbreaker" ? 8 : geometry === "truncated_rougher" ? 10 : 0;
     let optWocPct = wp.med;
-    if (isHemMode) {
+    // The DOC-scale trade (shallower axial → lighter radial) is a general heuristic, and
+    // it re-derives a number the 3-flute aluminum ladder states outright: on a 1×D-capped
+    // tool it drops 15% to 11%, which the low rung then floors back to 12%. That band is
+    // 12/15/18 tuned as a set, so Optimal holds the stated med and agrees with the quick-
+    // pick instead of landing a rung below it.
+    // Callers pass the RAW iso category, so clean non-ferrous arrives as "N1" — the same
+    // N1→N normalization getDynamicPresets does internally. Comparing to "N" alone would
+    // silently never match and this pin would be dead code.
+    const isPinned3flAl = isHemMode && (iso === "N" || iso === "N1") && flutes <= 3;
+    if (isHemMode && !isPinned3flAl) {
       const scale = Math.min(1.5, Math.max(0.5, (dp.med ?? 1.0) / optDocXd));
       optWocPct = Math.round(wp.med * scale * 2) / 2;
     }
@@ -6660,7 +6732,7 @@ ${stabSection}
     steady_rest: "Steady Rest", secondary_op_vise: "Secondary Op Vise",
     modular_quickchange: "Modular Quick-Change",
     ijaw: "DMG iJAW", autochuck: "DMG autoCHUCK 2.0",
-    zero_point: "Zero-Point / RockLock", pyramid: "Pyramid Fixture",
+    zero_point: "Zero-Point / Pallet System", pyramid: "Pyramid Fixture",
     guide_bushing: "Guide Bushing", gang_tooling: "Gang Tooling",
   };
   // Holder interfaces ranked worst → best. This order IS the ordering the user
@@ -6756,7 +6828,7 @@ ${stabSection}
   const WORKHOLDING_ALLOWED: Record<string, readonly string[]> = {
     vmc:           ["rigid_fixture","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","toe_clamps","soft_jaws"],
     hmc:           ["rigid_fixture","tombstone","dovetail","4_jaw_chuck","vise","trunnion_4th","3_jaw_on_rotary","3_jaw_chuck","soft_jaws"],
-    "5axis":       ["zero_point","rigid_fixture","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
+    "5axis":       ["zero_point","rigid_fixture","tombstone","pyramid","dovetail","5th_axis_vise","vise","soft_jaws"],
     gantry:        ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
     hbm:           ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
     double_column: ["rigid_fixture","tombstone","dovetail","toe_clamps","vise","soft_jaws"],
@@ -11473,7 +11545,7 @@ ${stabSection}
                   : form.machine_type === "hmc"
                   ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for HMC: Rigid Fixture → Tombstone → 4-Jaw Chuck → Dovetail → 4th-Axis Trunnion (axis locked) → Vise → 3-Jaw Chuck → 3-Jaw on Rotary → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead. Vise note: ensure the jaws make solid, secure contact across the full width of the part — partial contact lets it rock and chatter. A part bridged between widely-spread jaws is also supported only at its ends and the unsupported span can develop harmonics — for a large span add a center support or consider vibration damping."
                   : form.machine_type === "5axis"
-                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Zero-Point / RockLock → Rigid Fixture → Pyramid Fixture → 5th-Axis Vise → Dovetail → Vise → Soft Jaws. Zero-point systems give rigid-fixture rigidity with sub-second changeover."
+                  ? "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for 5-axis: Zero-Point / Pallet System → Rigid Fixture → Tombstone → Pyramid Fixture → 5th-Axis Vise → Dovetail → Vise → Soft Jaws. Zero-point systems give rigid-fixture rigidity with sub-second changeover."
                   : /* vmc default */ "Workholding compliance multiplies the chatter index — stiffer setups reduce chatter risk. Most rigid to least rigid for VMC: Rigid Fixture → 4-Jaw Chuck → Dovetail → 4th-Axis Trunnion (axis locked) → Vise → 3-Jaw Chuck → Toe Clamps → 3-Jaw on Rotary → Soft Jaws. Trunnion 4th assumes the rotary axis is fully locked for the cut — if the axis is live (contouring), select Vise or Rigid Fixture instead. Vise note: ensure the jaws make solid, secure contact across the full width of the part — partial contact lets it rock and chatter. A part bridged between widely-spread jaws is also supported only at its ends and the unsupported span can develop harmonics — for a large span add a center support or consider vibration damping."
               }>Workholding</FieldLabel>
               <div className="flex flex-wrap gap-1.5">
@@ -11581,8 +11653,9 @@ ${stabSection}
                     ] as const)
                   : form.machine_type === "5axis"
                   ? (/* 5axis — ordered stiffest→softest to match WORKHOLDING_RIGIDITY_VALUE */ [
-                      { key: "zero_point",    label: "Zero-Point / RockLock" },
+                      { key: "zero_point",    label: "Zero-Point / Pallet System" },
                       { key: "rigid_fixture", label: "Rigid Fixture"         },
+                      { key: "tombstone",     label: "Tombstone"             },
                       { key: "pyramid",       label: "Pyramid Fixture"       },
                       { key: "5th_axis_vise", label: "5th-Axis Vise"         },
                       { key: "dovetail",      label: "Dovetail"              },
@@ -11614,7 +11687,7 @@ ${stabSection}
                 ).map(({ key, label }) => {
                   const WH_TOOLTIPS: Record<string, string> = {
                     rigid_fixture:   "Dedicated fixture bolted solid to the table — custom jig, tooling plate with dowel pins, or zero-point pallet. No movable jaw compliance. Highest milling rigidity.",
-                    tombstone:       "Vertical tombstone mounted to HMC pallet. Multiple faces allow multi-part or multi-op setups. Rigidity depends on how well the part is fixtured to the tombstone face.",
+                    tombstone:       "Vertical tombstone mounted to a pallet — standard on HMCs, and common on large 5-axis horizontals (Makino MAG, etc.) for aerospace structural work. Multiple faces allow multi-part or multi-op setups. Rigidity depends on how well the part is fixtured to the tombstone face.",
                     dovetail:        "Dovetail-clamped workholding (e.g. Lang, Pierson, Orange Vise). Part has a matching dovetail ground in — allows 5-sided access with excellent grip and repeatability.",
                     vise:            "Standard precision vise (Kurt, Chick, etc.). Movable jaw introduces a small amount of compliance — baseline milling rigidity. Make sure the jaws make solid, secure contact across the full width of the part — partial or uneven contact lets it rock and chatter no matter the clamp force. A part bridged between widely-spread jaws is supported only at its ends, so a large unsupported span can develop harmonics — add a center support (parallels/step block, a third clamp, or a mid-span damper) or consider vibration damping before pushing feed.",
                     soft_jaws:       "Machinable aluminum or steel jaws bored to match the part profile. Good for odd shapes or second ops but jaw compliance is higher than a solid fixture.",
@@ -14263,8 +14336,11 @@ ${stabSection}
                   // Hard minimum = the bare floor (buffer removed): LBS, or LOC + flute_wash.
                   const _mo = form.min_stickout_override || 0;
                   // Specials/scanned prints: the floor is a guess, so don't clamp the
-                  // operator's typed value against it.
-                  const _minSo = form.tool_dia > 0 && !form.stickout_is_estimate
+                  // operator's typed value against it — UNLESS the tool is necked. LBS is
+                  // a dimensioned callout off the print and a hard stop (below it the
+                  // collet closes on the neck, not the shank), so it clamps even on a
+                  // special. Mirrors the engine's _min_so precedence.
+                  const _minSo = form.tool_dia > 0 && (!form.stickout_is_estimate || (form.lbs || 0) > 0)
                     ? resolveStickoutFloor(form.tool_dia, form.loc, _fw, form.lbs || 0, _mo) : 0;
                   if (_minSo > 0 && val < _minSo) {
                     val = _minSo;
@@ -14410,19 +14486,39 @@ ${stabSection}
                 || (form.stickout_is_estimate ? (form.stickout_estimate_base || 0) : 0);
               if (!(_def > 0) && !(_floor > 0)) return null;
               const cv = (v: number) => metric ? `${(v * 25.4).toFixed(1)}mm` : `${v.toFixed(3)}"`;
+              // Necked tools: one number, not two. A "preferred" of LBS + 0.20×D advises
+              // pulling the tool OUT past the neck, which is the opposite of what you want
+              // on a reduced-neck or special — you bury the shank to the neck and take all
+              // the grip the tool will give you. The neck length IS the answer, so state it
+              // once and drop the Preferred/Minimum pair that implies a range to aim within.
+              const _neckOnly = (form.lbs || 0) > 0;
               return (
                 <div className="rounded-md border border-zinc-700/60 bg-zinc-800/40 px-3 py-2 space-y-1 mt-2">
-                  {_def > 0 && (
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[11px] text-zinc-400">Preferred stickout</span>
-                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
-                    </div>
-                  )}
-                  {_floor > 0 && (
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[11px] text-zinc-400">Minimum stickout</span>
-                      <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
-                    </div>
+                  {_neckOnly ? (
+                    <>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[11px] text-zinc-400">Minimum stickout (LBS)</span>
+                        <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 leading-snug pt-0.5">
+                        Necked tool — bury the shank to the neck for maximum grip. Below this the collet closes on the neck.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      {_def > 0 && (
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-[11px] text-zinc-400">Preferred stickout</span>
+                          <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_def)}</span>
+                        </div>
+                      )}
+                      {_floor > 0 && (
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-[11px] text-zinc-400">Minimum stickout</span>
+                          <span className="text-xs font-semibold text-zinc-100 tabular-nums">{cv(_floor)}</span>
+                        </div>
+                      )}
+                    </>
                   )}
                   {form.stickout_is_estimate && (
                     <p className="text-[10px] text-amber-400/80 leading-snug pt-0.5">

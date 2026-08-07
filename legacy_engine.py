@@ -1,4 +1,5 @@
 import math
+import re
 from engine.physics import (
     micro_tool_feed_limit,
     chip_thinning_factor,
@@ -281,13 +282,130 @@ def biased_sfm(rated_sfm: float, preset: str, material_group: str, hybrid_hem: b
             out = max(out, min(float(floor), rated_sfm))
     return out
 
-def speed_envelope(rated_sfm: float, material_group: str, hybrid_hem: bool = False):
+# ── High-speed spindle SFM ceiling ────────────────────────────────────────────
+# BASE_SFM for aluminum (800 conventional / 1600 HEM) is anchored to an 8k-15k rpm
+# 40-taper VMC — see the IPT_FRAC and BASE_SFM comments. On a high-speed aluminum
+# platform (Makino MAG-class: HSK-F80, 33,000 rpm, 130 kW / ~174 hp) that ceiling
+# is 3x below what the machine actually runs, so the preset buttons could never
+# reach the platform's real operating point.
+#
+# SHOP ANCHOR (tier-1 aerospace, Makino MAG, 1.000" 3-fl solid carbide, 6061/7075):
+#   26,000 rpm (the spindle's PEAK-POWER band, deliberately below the 33k max)
+#   = 6,807 SFM on a 1.000" cutter. 600 IPM @ 0.0077 ipt -> 300 in3/min
+#                                   800 IPM @ 0.0102 ipt -> 400 in3/min
+#   both at DOC 1.000" (1xD) and WOC 0.500" (50% of Ø) — a HEAVY radial bite at a
+#   heavy chip load, where the chip is the heat sink. NOT light-radial HEM.
+#   ~90-120 hp at the cutter, well inside 174 hp.
+#
+# Only the 26,000-rpm / 6,807-SFM point is shop-validated. The gating thresholds
+# and the interpolation between spindle classes below are ESTIMATES extrapolated
+# from that single point — they need a logged run at a second rpm/WOC to become
+# real calibration. Treated the same way as the UN-CALIBRATED fixture constants.
+HS_SPINDLE_MIN_RPM   = 18000   # below this, a spindle isn't a high-speed alu platform
+HS_SPINDLE_MIN_HP    = 40.0    # 6807 SFM needs ~90-120 hp at the cutter; a small
+                               # high-rpm spindle can spin but can't push the chip
+HS_SPINDLE_SFM_CAP   = 6807.0  # the shop anchor — 26,000 rpm on a 1.000" cutter
+HS_SPINDLE_PEAK_RPM  = 26000.0 # the spindle's PEAK-POWER band, not its 33k max speed
+HS_SPINDLE_ALU_ONLY  = ("Aluminum", "Non-Ferrous")  # validated on alu only
+# Heavy-radial recipe, per the shop anchor: 1xD axial, and a radial bite in the
+# 25/35/45% ladder the UI offers on a MAG (HEM_WOC_MAG_ALUMINUM in Mentor.tsx).
+# The DEFAULT here is the ladder's MED step, not the anchor's 50% top end — the
+# honest starting recommendation is the middle of the range (~280 in3/min), and the
+# operator steps up. Keep this equal to HEM_WOC_MAG_ALUMINUM.med: if the engine
+# default and the button row disagree, the displayed WOC and the computed feed drift.
+# At these engagements the radial chip thinning factor is ~1.0 (no thinning), so the
+# light-radial HEM feed boost must NOT stack — see HS_SPINDLE_HEM_IPT_MULT.
+HS_SPINDLE_WOC_FRAC  = 0.35
+HS_SPINDLE_DOC_XD    = 1.00
+# IPT multiplier for the heavy-radial recipe, replacing the stock HEM_IPT_MULT.
+# The stock 2.0 presumes the ~1.7-2.1x chip thinning of a 6-10% radial arc; at 50%
+# WOC there is essentially none, so 2.0 stacks on an already-full chip and asks for
+# ~0.0180 fpt — about 2x the 0.0077-0.0102 the shop runs (measured ~800 in3/min at
+# 223 hp before this override).
+#
+# NOTE this multiplier is applied AFTER the chip-thinning factor, which still
+# contributes a residual ~1.134x at 50% WOC on a 1" cutter. So the value here is
+# NOT the raw fpt ratio (0.0102/0.0090 = 1.13) — that would double-count the
+# residual and overshoot to ~450 in3/min. 1.005 x 1.134 = 1.139 total, landing
+# 800 IPM / 0.0102 programmed fpt / 400 in3/min at the max_mrr end of the anchor.
+HS_SPINDLE_HEM_IPT_MULT = 1.005
+
+def is_makino_mag(payload: dict) -> bool:
+    """True only for a Makino MAG-series spindle.
+
+    The high-speed aluminum recipe below is calibrated from ONE tier-1 MAG run, so
+    it is deliberately scoped to that platform rather than to any fast spindle.
+    Matched on brand AND model so a "MAGNUM", or a shop nickname containing "mag",
+    can't trip it — same test the client uses to force shrink-fit on these machines."""
+    brand = str(payload.get("machine_brand") or payload.get("brand") or "").strip().lower()
+    model = str(payload.get("machine_model") or payload.get("model") or "").strip().lower()
+    if "makino" not in brand:
+        return False
+    return re.search(r"\bmag\s*-?\d*\b", model) is not None
+
+def _mag_hs_alu_active(payload: dict) -> bool:
+    """True when the Makino MAG high-speed aluminum recipe applies to this payload.
+
+    Resolves the material group from the payload itself so it can be called from
+    the defaults block, which runs before material_group is resolved. Shares every
+    gate with hs_spindle_sfm_ceiling so the WOC/DOC recipe and the raised SFM
+    ceiling can never apply independently of each other."""
+    return hs_spindle_sfm_ceiling(
+        payload, get_material_group(str(payload.get("material") or ""))
+    ) is not None
+
+def hs_spindle_sfm_ceiling(payload: dict, material_group: str):
+    """Return the SFM ceiling a Makino MAG spindle unlocks, or None.
+
+    Gated on ALL of: a Makino MAG, high max_rpm, real spindle power, a low-runout
+    holder (a side-lock at 26,000 rpm is a broken tool, not a fast one), and an
+    aluminum-family material. Returns None when any gate fails, in which case the
+    caller keeps the conventional material-only envelope untouched — so no
+    8k-15k VMC output changes, and no non-MAG machine is affected at all.
+
+    Scales linearly between HS_SPINDLE_MIN_RPM and the peak-power band so a
+    de-rated or lower-spec MAG gets a proportionally smaller lift. This
+    interpolation is an ESTIMATE; only the 26k point is validated."""
+    if material_group not in HS_SPINDLE_ALU_ONLY:
+        return None
+    if not is_makino_mag(payload):
+        return None
+    try:
+        max_rpm = float(payload.get("max_rpm", 0) or 0)
+        mach_hp = float(payload.get("machine_hp", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if max_rpm < HS_SPINDLE_MIN_RPM or mach_hp < HS_SPINDLE_MIN_HP:
+        return None
+    # Balanced/shrink/hydraulic only. A Weldon set-screw or ER collet at these
+    # speeds throws enough runout to chip corners before speed ever pays off.
+    holder = str(payload.get("toolholder") or "").strip().lower()
+    if holder not in ("shrink_fit", "hydraulic", "capto", "hsk_shrink", "balanced"):
+        return None
+    # Linear ramp: at HS_SPINDLE_MIN_RPM no lift, at the peak-power band the full
+    # anchor. Capped at the anchor — running PAST peak power (toward the 33k max)
+    # loses torque and does NOT buy more MRR, which is why the shops sit at 26k.
+    span = max(1.0, HS_SPINDLE_PEAK_RPM - HS_SPINDLE_MIN_RPM)
+    frac = min(1.0, (max_rpm - HS_SPINDLE_MIN_RPM) / span)
+    return HS_SPINDLE_SFM_CAP * frac
+
+def speed_envelope(rated_sfm: float, material_group: str, hybrid_hem: bool = False,
+                   payload: dict = None):
     """Return (lo, hi) — the safe SFM band a manual override is clamped to.
     Defined by the speed-preset extremes: lo = the Max Life value (incl. the
     rubbing floor), hi = the Max MRR value. Keeps manual entry inside the same
-    calibrated range the preset buttons cover."""
+    calibrated range the preset buttons cover.
+
+    On a high-speed aluminum spindle the ceiling is raised to the spindle-class
+    value (see hs_spindle_sfm_ceiling) — the material-only band is anchored to a
+    conventional VMC and would otherwise clamp a MAG-class machine to ~1/3 of
+    its real operating speed. Never LOWERS the conventional ceiling."""
     lo = biased_sfm(rated_sfm, "max_life", material_group, hybrid_hem)
     hi = rated_sfm * speed_preset_factor("max_mrr", material_group, hybrid_hem)
+    if payload is not None:
+        _hs = hs_spindle_sfm_ceiling(payload, material_group)
+        if _hs is not None:
+            hi = max(hi, _hs)   # max() so the gate can only ever open the band
     if lo > hi:  # degenerate (floor above ceiling for a very slow job) — swap
         lo, hi = hi, lo
     return lo, hi
@@ -307,7 +425,7 @@ def resolve_sfm(rated_sfm: float, payload: dict, material_group: str):
     # Hybrid HEM has its own preset spread, so the manual-override envelope has to use it
     # too — otherwise the clamp band and the buttons would disagree about the same job.
     _hyb = bool(payload.get("hybrid_hem")) and material_group == "Titanium"
-    lo, hi = speed_envelope(rated_sfm, material_group, _hyb)
+    lo, hi = speed_envelope(rated_sfm, material_group, _hyb, payload)
     if override > 0:
         clamped_val = max(lo, min(hi, override))
         return clamped_val, {
@@ -317,7 +435,24 @@ def resolve_sfm(rated_sfm: float, payload: dict, material_group: str):
             "lo": round(lo, 1), "hi": round(hi, 1),
         }
     preset = str(payload.get("speed_preset") or "balanced")
-    return biased_sfm(rated_sfm, preset, material_group, _hyb), {
+    _preset_sfm = biased_sfm(rated_sfm, preset, material_group, _hyb)
+    # High-speed alu spindle: the preset LADDER has to reach the raised ceiling too,
+    # or only a manual override could ever use the spindle and the buttons would top
+    # out 3x low. Re-anchor so max_mrr lands ON the spindle ceiling and the steps
+    # below it stay proportionally spaced. balanced and everything slower are left
+    # alone — the conventional value is still the honest default recommendation, and
+    # reaching for the spindle's peak-power band should be a deliberate choice.
+    _hs_hi = hs_spindle_sfm_ceiling(payload, material_group) if payload is not None else None
+    if _hs_hi is not None and preset in ("high_throughput", "max_mrr"):
+        _conv_top = rated_sfm * speed_preset_factor("max_mrr", material_group, _hyb)
+        if _hs_hi > _conv_top > 0:
+            _balanced = biased_sfm(rated_sfm, "balanced", material_group, _hyb)
+            # Fraction of the conventional balanced->max_mrr span this preset covers,
+            # remapped onto the balanced->spindle_ceiling span.
+            _span_conv = max(1e-6, _conv_top - _balanced)
+            _frac = (_preset_sfm - _balanced) / _span_conv
+            _preset_sfm = _balanced + _frac * (_hs_hi - _balanced)
+    return _preset_sfm, {
         "mode": "preset", "clamped": False, "requested": None,
         "lo": round(lo, 1), "hi": round(hi, 1),
     }
@@ -4936,6 +5071,25 @@ def run(payload=None):
         if needs_doc:
             doc_xd = default_doc
             data["doc_xd"] = doc_xd
+    # Makino MAG high-speed aluminum: the shop recipe is a HEAVY radial bite
+    # (50% of Ø at 1xD axial) at a heavy chip load, NOT the light-radial arc the
+    # generic HEM defaults assume. At 50% WOC the chip sees no radial thinning, so
+    # each tooth takes a real bite and the chip carries the heat out — which is the
+    # stated reason these shops run it. Only fills DEFAULTS: an explicit WOC/DOC
+    # from the user still wins, same as every other mode default above.
+    #
+    # Applies to TRADITIONAL roughing as well as HEM/trochoidal, and deliberately:
+    # at 50% radial engagement there is no meaningful trochoidal arc left, so the
+    # two strategies describe the SAME physical cut here. Gating it to HEM only
+    # would hand the identical machine 398 in3/min under one radio button and
+    # ~30 under the other, which is not a real difference in the shop.
+    if mode in ("hem", "trochoidal", "traditional") and _mag_hs_alu_active(data):
+        if needs_woc:
+            woc_pct = HS_SPINDLE_WOC_FRAC * 100.0
+            data["woc_pct"] = woc_pct
+        if needs_doc:
+            doc_xd = HS_SPINDLE_DOC_XD
+            data["doc_xd"] = doc_xd
     # --- end defaults ---
 
     # ── Surfacing (3D contouring) — D_eff at contact point ────────────────────
@@ -5262,6 +5416,15 @@ def run(payload=None):
         # 1/2" 6-flute. Titanium-only, matching the rest of the hybrid gating.
         if data.get("hybrid_hem") and material_group == "Titanium":
             _hem_ipt_mult = 1.35
+        # Makino MAG high-speed aluminum — same physics as the hybrid-Ti case above.
+        # The stock 2.0 assumes the 1.7-2.1x thinning of a 6-10% radial arc; at this
+        # recipe's 50% WOC the radial thinning factor is 1.00, so 2.0 stacks on an
+        # already-full chip and asks for 0.0180 fpt — about 2x the 0.0077-0.0102 the
+        # shop runs, and it doubled MRR to ~800 in3/min at 223 hp in testing.
+        # 1.13 lands the 800 IPM / 400 in3/min end of the anchor exactly
+        # (0.0090 IPT_FRAC x 1.13 = 0.0102 fpt); the feed ramp steps below it.
+        if _mag_hs_alu_active(data):
+            _hem_ipt_mult = HS_SPINDLE_HEM_IPT_MULT
         # HEM feed level — throttle only the boost ABOVE conventional (mult - 1.0)
         # so cautious shops can break a tool in and work up. full=100% (default,
         # unchanged), moderate=90%, mild=75%. Scaling the excess (not the whole
@@ -7143,21 +7306,52 @@ def run(payload=None):
     # (taper geometry / nearest-SKU lookup) and flute_wash is itself a guess, so there is
     # no trustworthy floor. Suppress the minimum entirely rather than quote a made-up one
     # — an explicit shop-measured override still wins if one was supplied.
+    #
+    # LBS is the exception, and it outranks the suppression. On a reduced-neck tool the
+    # neck length is a DIMENSIONED callout read straight off the print (e.g. CC-14711's
+    # 3.250"), not something derived from flute wash or a nearest-SKU guess — and it is a
+    # hard physical stop: below it the collet closes on the neck instead of the shank.
+    # Zeroing it let the generic "shorten stickout to 70%" ladder fire on a necked special
+    # and recommend clamping on the neck, which is impossible, not merely aggressive.
     _so_is_est = bool(data.get("stickout_is_estimate", False))
     if _min_so_ovr > 0:
         _min_so = _min_so_ovr
+    elif _lbs > 0:
+        _min_so = _lbs
     elif _so_is_est:
         _min_so = 0.0
     else:
-        _min_so = _lbs if _lbs > 0 else (_loc_for_min + _flute_wash_for_min)
+        _min_so = _loc_for_min + _flute_wash_for_min
     # Only assert the LBS floor when we actually have one. On an estimated (special/print)
     # tool _min_so is suppressed to 0, and printing "Minimum stickout = 0.000"" would be
     # both wrong and alarming.
-    if _lbs > 0 and _min_so > 0:
+    #
+    # A necked tool takes this branch even when stickout was estimated: LBS is dimensioned
+    # on the print, so the floor IS known and the "can't be derived" note below would be
+    # false. The estimate caveat still belongs on the tool as a whole, so it's folded in
+    # here rather than dropped — what's uncertain is the working stickout, not the neck.
+    # Suppress once the operator is already AT (or below) the floor. This step exists to
+    # tell them how much shorter they could go; when the actual stickout already equals
+    # the minimum there is nothing left to act on, and leaving it in the list reads as
+    # "shorten the stickout" against a value that physically can't shorten. 0.0005" of
+    # slack absorbs display rounding — the field shows 3 decimals, so a stored 3.2501
+    # against a 3.250 floor must still count as "at the floor".
+    _so_now = float(data.get("stickout", 0) or 0)
+    _at_min_so = _so_now > 0 and _so_now <= _min_so + 0.0005
+    if _lbs > 0 and _min_so > 0 and not _at_min_so:
+        _lbs_detail = (
+            f"Necked tool — you can bury the shank right to the neck, so stickout can't go"
+            f' below {_min_so:.3f}". Suggestions below respect this limit.'
+        )
+        if _so_is_est:
+            _lbs_detail += (
+                " The neck length is dimensioned on the print, so this floor is a real"
+                " number even though the working stickout above it was estimated."
+            )
         _stab_suggestions.insert(0, {
             "type": "lbs",
             "label": f'Minimum stickout = {_min_so:.3f}" (LBS — shank to neck)',
-            "detail": f"Necked tool — you can bury the shank right to the neck, so stickout can't go below {_min_so:.3f}\". Suggestions below respect this limit.",
+            "detail": _lbs_detail,
         })
     elif _so_is_est and _min_so <= 0:
         _stab_suggestions.insert(0, {
@@ -7497,11 +7691,24 @@ def run(payload=None):
                 if _so_target <= _min_so + 1e-4 and _so_for_full < _min_so:
                     # Can't reach full grip without burying the flutes — say so rather than
                     # implying the problem goes away entirely.
-                    _at_min_note = (
-                        f' This tool can only go to {_min_so:.3f}" before the collet reaches'
-                        f" the flutes/neck, so it can't fully recover — a shorter-LOC or"
-                        f" reduced-neck tool is the real fix."
-                    )
+                    #
+                    # On a tool that IS already necked, "get a reduced-neck tool" is circular
+                    # advice, and the limit isn't a setup mistake the operator can fix: the
+                    # neck length is how the tool was built, so the shank simply ends there.
+                    # Name that as the constraint and point at the levers that remain.
+                    if _lbs > 0:
+                        _at_min_note = (
+                            f' That is all the travel this tool has — the shank ends at the'
+                            f' neck ({_lbs:.3f}" LBS), so {_min_so:.3f}" is as deep as it can'
+                            f" go no matter the holder. It's how the tool is built, not a setup"
+                            f" error; DOC and WOC are the remaining levers."
+                        )
+                    else:
+                        _at_min_note = (
+                            f' This tool can only go to {_min_so:.3f}" before the collet reaches'
+                            f" the flutes, so it can't fully recover — a shorter-LOC or"
+                            f" reduced-neck tool is the real fix."
+                        )
                 _hw_suggestions.append({
                     "type": "shank_grip",
                     "label": f'Grip {_push_in:.2f}" more shank — {_grip_gain}% more rigidity',

@@ -169,6 +169,13 @@ export const mentorSchemas = {
     stickout_estimate_base: z.number().min(0).default(0),
 
     machine_hp: z.number().min(0).default(10),
+    // Machine identity — the engine needs brand/model for platform-specific
+    // calibration that can't be inferred from taper/rpm/hp alone (currently the
+    // Makino MAG high-speed aluminum recipe; see is_makino_mag in legacy_engine).
+    // Advisory only: absent or unrecognized values just fall through to the
+    // conventional material-driven numbers.
+    machine_brand: z.string().default(""),
+    machine_model: z.string().default(""),
     live_tool_connection: z.string().default(""),
     live_tool_hp: z.number().min(0).default(0),
     machine_id: z.number().int().positive().optional(),
