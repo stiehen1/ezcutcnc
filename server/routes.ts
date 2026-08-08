@@ -2163,6 +2163,10 @@ export async function registerRoutes(
           steel_alloy: "iso_p", steel_mild: "iso_p", steel_free: "iso_p",
           tool_steel_p20: "iso_p", tool_steel_a2: "iso_p", tool_steel_h13: "iso_p",
           tool_steel_s7: "iso_p", tool_steel_d2: "iso_p", cpm_10v: "iso_p",
+          tool_steel_o1: "iso_p", tool_steel_hss: "iso_p", tool_steel_hss_co: "iso_p",
+          tool_steel_w1: "iso_p", steel_maraging: "iso_p", steel_bearing: "iso_p",
+          cpm_3v: "iso_p", cpm_15v: "iso_p", steel_carburizing: "iso_p",
+          steel_high_carbon: "iso_p",
           stainless_304: "iso_m", stainless_316: "iso_m", stainless_fm: "iso_m",
           stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
           stainless_440c: "iso_m", stainless_15_5: "iso_m", stainless_ph: "iso_m",
@@ -2727,6 +2731,10 @@ export async function registerRoutes(
         steel_alloy: "iso_p", steel_mild: "iso_p", steel_free: "iso_p",
         tool_steel_p20: "iso_p", tool_steel_a2: "iso_p", tool_steel_h13: "iso_p",
         tool_steel_s7: "iso_p", tool_steel_d2: "iso_p", cpm_10v: "iso_p",
+        tool_steel_o1: "iso_p", tool_steel_hss: "iso_p", tool_steel_hss_co: "iso_p",
+        tool_steel_w1: "iso_p", steel_maraging: "iso_p", steel_bearing: "iso_p",
+        cpm_3v: "iso_p", cpm_15v: "iso_p", steel_carburizing: "iso_p",
+        steel_high_carbon: "iso_p",
         stainless_304: "iso_m", stainless_316: "iso_m", stainless_fm: "iso_m",
         stainless_ferritic: "iso_m", stainless_410: "iso_m", stainless_420: "iso_m",
         stainless_440c: "iso_m", stainless_15_5: "iso_m", stainless_ph: "iso_m",
@@ -3122,6 +3130,11 @@ export async function registerRoutes(
       const ISO_MAP: Record<string, string> = {
         aluminum_wrought: "N", aluminum_cast: "N",
         steel_mild: "P", steel_free: "P", steel_alloy: "P",
+        tool_steel_p20: "P", tool_steel_a2: "P", tool_steel_h13: "P", tool_steel_s7: "P",
+        tool_steel_d2: "P", tool_steel_o1: "P", tool_steel_hss: "P", tool_steel_hss_co: "P",
+        tool_steel_w1: "P", steel_maraging: "P", steel_bearing: "P",
+        cpm_10v: "P", cpm_3v: "P", cpm_15v: "P",
+        steel_carburizing: "P", steel_high_carbon: "P", steel_medium_carbon: "P",
         stainless_304: "M", stainless_316: "M", stainless_15_5: "M", stainless_ph: "M", stainless_13_8: "M",
         stainless_duplex: "M", stainless_superduplex: "M", stainless_fm: "M",
         stainless_ferritic: "M", stainless_410: "M", stainless_420: "M", stainless_440c: "M",
@@ -3130,8 +3143,11 @@ export async function registerRoutes(
         hastelloy_x: "S", waspaloy: "S", mp35n: "S", monel_k500: "S",
         cast_iron_gray: "K", cast_iron_ductile: "K",
         hardened_lt55: "H", hardened_gt55: "H",
-        tool_steel_p20: "H", tool_steel_a2: "H", tool_steel_h13: "H",
-        tool_steel_s7: "H", tool_steel_d2: "H",
+        // NOTE the named tool steels above are ISO **P**, matching ISO_SUBCATEGORIES
+        // in shared/materials.ts. They used to be re-declared as "H" right here — a
+        // duplicate key, so the later "H" silently won and every tool-steel job got
+        // ISO H peer filtering and preset lookups. Only the GENERIC hardened_lt55 /
+        // hardened_gt55 buckets are ISO H.
       };
       const isoCategory = ISO_MAP[matKey] ?? "P";
 
@@ -5888,13 +5904,13 @@ Required fields (use 0 for unknown numbers, null for unknown strings):
   "cutting_material": <string, the workpiece material this tool is designed for. Look for "CUTTING=", "FOR:", "MATERIAL TO CUT:", "MAT'L:", or any similar callout in the NOTES section, title block, or geometry-callout area (e.g. "ALUMINUM GEOMETRY", "STEEL GEOMETRY"). Map the text to ONE of these keys EXACTLY:
     ALUMINUM (N1): "aluminum_wrought" (6061, 6082, 5052, plain "ALUMINUM", "AL", "ALUM", or any 6xxx/5xxx series — DEFAULT if just "ALUMINUM" with no grade); "aluminum_wrought_hs" (7075, 2024, or any 7xxx/2xxx); "aluminum_cast" (A356, A380, A390, 356, 380, "cast aluminum", "high-silicon").
     COPPER/BRASS/BRONZE (N1/N2): "non_ferrous" (copper, free-cutting brass, leaded bronze, C360, C260); "manganese_bronze" (C86300, C86500); "silicon_bronze" (C65500, C64200); "copper_beryllium" (C17200, C17300, BeCu).
-    STEEL (P): "steel_alloy" (any ALLOY steel — 41xx/43xx/86xx/93xx Cr-Mo & NiCrMo, 4130/4140/4340/8620/9310, chrom-moly, 52100 bearing, 5160/6150/9260 spring, maraging, "alloy steel"); "steel_medium_carbon" (plain-carbon 10xx from 1030 up — 1030, 1035, 1040, 1045, 1050, 1055, 1070, 1080, 1090, 1095, "medium carbon", "high carbon"; NO alloy additions); "steel_mild" (plain low-carbon 10xx up to 1025 — A36, 1018, 1020, 1022, 1025, mild/low-carbon, structural, hot/cold rolled); "steel_free" (sulfur free-machining — 12L14, 1215, 1117, 1118, 1144); "tool_steel_p20" (P20); "tool_steel_a2" (A2); "tool_steel_h13" (H13); "tool_steel_s7" (S7); "tool_steel_d2" (D2); "cpm_10v" (CPM 10V, A11, PM tool steel). PLAIN-CARBON RULE: bare 10xx grades split by carbon — ≤1025 → steel_mild, ≥1030 → steel_medium_carbon; 41xx/43xx and higher are ALLOY → steel_alloy.
+    STEEL (P): "steel_alloy" (THROUGH-HARDENING alloy steel — 41xx/43xx Cr-Mo & NiCrMo, 4130/4140/4150/4340/300M/8640, chrom-moly, 5160/6150/9260 spring, "alloy steel"); "steel_carburizing" (CASE-HARDENING / carburizing gear steels in the PRE-CASE condition — 8620, 8622, 9310, 4320, 4620, 4820, "carburizing steel", "gear steel"; these are LOW-CARBON before heat treat, do NOT map them to steel_alloy); "steel_bearing" (52100, 100Cr6, GCr15, "bearing steel"); "steel_maraging" (18Ni 250/300, maraging); "steel_medium_carbon" (plain-carbon 1030-1055 — 1030, 1035, 1040, 1045, 1050, 1055, "medium carbon"; NO alloy additions); "steel_high_carbon" (plain-carbon 1060 and up — 1060, 1070, 1080, 1090, 1095, "high carbon"); "steel_mild" (plain low-carbon 10xx up to 1025 — A36, 1018, 1020, 1022, 1025, mild/low-carbon, structural, hot/cold rolled); "steel_free" (sulfur free-machining — 12L14, 1215, 1117, 1118, 1144); "tool_steel_p20" (P20, 1.2311, 1.2738 pre-hardened mold steel); "tool_steel_a2" (A2); "tool_steel_h13" (H13, H11); "tool_steel_s7" (S7); "tool_steel_d2" (D2); "tool_steel_o1" (O1, 1.2510); "tool_steel_w1" (W1 water-hardening); "tool_steel_hss" (HIGH-SPEED STEEL — M2, M3, M7, M50, T1, 1.3343, "HSS", "high speed steel"); "tool_steel_hss_co" (cobalt / high-vanadium HSS — M4, M42, T15, 1.3247); "cpm_10v" (CPM 10V, A11); "cpm_3v" (CPM 3V); "cpm_15v" (CPM 15V). PLAIN-CARBON RULE: bare 10xx grades split by carbon — ≤1025 → steel_mild, 1030-1055 → steel_medium_carbon, ≥1060 → steel_high_carbon; 41xx/43xx are ALLOY → steel_alloy. HSS RULE: an "Mx" or "Tx" tool-steel callout is HIGH-SPEED STEEL, never a plain alloy steel — "M2 STEEL" is tool_steel_hss, NOT steel_alloy. TOOL-STEEL CONDITION RULE: these grades are normally MACHINED ANNEALED (~20-25 HRC) and hardened afterwards. If the print states an as-machined or pre-heat-treat hardness, return THAT in hardness_hrc; if it states only the final service hardness (e.g. "HARDEN TO 62-64 HRC"), leave hardness_hrc null rather than returning the post-heat-treat value, since the cut happens before hardening.
     STAINLESS (M): "stainless_304" (304, 304L, 321, plain "STAINLESS" with no grade — DEFAULT for unqualified stainless); "stainless_fm" (303, 416, free-machining stainless); "stainless_ferritic" (409, 430, 441, ferritic); "stainless_410" (410); "stainless_trimrite" (TrimRite, S42010); "stainless_420" (420); "stainless_440c" (440C); "stainless_316" (316, 316L, Mo-bearing); "stainless_ph" (17-4, 17-4PH, 630, and any unqualified precipitation-hardening / "PH" grade — DEFAULT PH); "stainless_15_5" (15-5, 15-5PH, XM-12, S15500); "stainless_13_8" (13-8, 13-8PH, 13-8MO, XM-13, S13800); "stainless_duplex" (2205, duplex); "stainless_superduplex" (2507, super duplex); "manganese_steel" (A128, Hadfield, austenitic manganese steel, 11-14% Mn, mangalloy).
     CAST IRON (K): "cast_iron_gray" (Class 30/40, GG20/25, gray, HT200/250); "cast_iron_ductile" (65-45-12, ductile, nodular, GGG); "cast_iron_cgi" (CGI, compacted graphite, GJV); "cast_iron_malleable" (malleable, GTW, GTB, GTS).
     TITANIUM / SUPERALLOY (S): "titanium_64" (Ti-6Al-4V, Grade 5, Ti64); "titanium_cp" (CP Ti Grade 1–4); "hiTemp_fe" (A-286, Incoloy 800, Udimet — Fe-based superalloy); "hiTemp_co" (Stellite — Co-based); "monel_k500" (Monel K-500); "inconel_625" (Inconel 625, Hastelloy C-276, C-22, Incoloy 825); "inconel_718" (Inconel 718, 718 Plus, Allvac 718); "hastelloy_x" (Hastelloy X, Inconel X-750, Nimonic C-263); "inconel_617" (Inconel 617, Haynes 230); "waspaloy" (Waspaloy, René 41/77/80, Nimonic 80A/90); "mp35n" (MP35N, Udimet 720, René 95).
-    HARDENED / ARMOR (H): "hardened_lt55" (generic hardened steel below 55 HRC, no specific grade); "hardened_gt55" (generic hardened steel above 55 HRC); "armor_milspec" (MIL-A-12560, 46100); "armor_ar400" (AR400, AR450); "armor_ar500" (AR500, Armox 500T); "armor_ar600" (AR550, AR600, Armox 600T).
+    HARDENED / ARMOR (H): "hardened_lt55" (generic hardened steel below 55 HRC, no specific grade); "hardened_gt55" (generic hardened steel above 55 HRC; ALSO all HIGH-SPEED STEEL / HSS grades — M2, M3, M4, M7, M42, M50, T1, T15, "HSS", "high speed steel", 1.3343, and any bare "Mx"/"Tx" tool-steel callout. Map HSS here rather than to steel_alloy, and NEVER read "M2" as a plain alloy steel. If the print states a hardness or an "AS MACHINED"/pre-heat-treat condition, return it in hardness_hrc so the engine derates for the ACTUAL condition — HSS is usually cut annealed at ~20-25 HRC and hardened afterwards); "armor_milspec" (MIL-A-12560, 46100); "armor_ar400" (AR400, AR450); "armor_ar500" (AR500, Armox 500T); "armor_ar600" (AR550, AR600, Armox 600T).
     PLASTICS / COMPOSITES (O): "plastic_unfilled" (PEEK, POM, PA, PC, Delrin, Acetal, unfilled engineering thermoplastics); "plastic_filled" (GF/CF-PA, PEEK-GF, fiber-reinforced); "composite_tpc" (CF-PEEK, GF-PP, CFR-TP, continuous-fiber laminates).
-   Rules: (a) ALWAYS try to map — only return null if the print is COMPLETELY silent about workpiece material. (b) Pick the most specific match — if the print says "17-4 PH", return "stainless_ph", not null. (c) If a grade is mentioned but doesn't fit any key, fall back to the closest family default (e.g. "1050 steel" → "steel_medium_carbon"; "unknown 41xx" → "steel_alloy"; "PH stainless" → "stainless_ph"; "Ti grade 7" → "titanium_cp"). (d) A bare "STEEL" with no grade → "steel_alloy". A bare "STAINLESS" with no grade → "stainless_304". A bare "ALUMINUM" with no grade → "aluminum_wrought".>,
+   Rules: (a) ALWAYS try to map — only return null if the print is COMPLETELY silent about workpiece material. (b) Pick the most specific match — if the print says "17-4 PH", return "stainless_ph", not null. (c) If a grade is mentioned but doesn't fit any key, fall back to the closest family default (e.g. "1050 steel" → "steel_medium_carbon"; "unknown 41xx" → "steel_alloy"; "PH stainless" → "stainless_ph"; "Ti grade 7" → "titanium_cp"). (d) A bare "STEEL" with no grade → "steel_alloy". "Bare" means NO grade designation at all — a callout like "M2 STEEL", "D2 STEEL" or "4140 STEEL" is NOT bare, so match the GRADE first and only fall back on the word "steel" when there is nothing else to go on. A bare "STAINLESS" with no grade → "stainless_304". A bare "ALUMINUM" with no grade → "aluminum_wrought".>,
   "coolant_fed": <boolean, true if the print indicates coolant-through capability. Set true if EITHER (a) a NOTE calls it out — "COOLANT FED", "COOLANT THROUGH", "COOLANT THRU", "THRU COOLANT", "TSC", "THROUGH SPINDLE COOLANT", or any reference to internal coolant passages; OR (b) the GEOMETRY shows it — callouts for coolant holes (e.g. "2X Ø.028 COOLANT HOLES", "COOLANT HOLES"), a "BOLT CIRCLE" for coolant-hole placement (e.g. "Ø.094 BOLT CIRCLE"), or a "COOLANT SLOT" (e.g. ".039/.060 WIDE COOLANT SLOT"). These geometric callouts alone are sufficient — a print with coolant holes / bolt circle / coolant slot IS coolant-through even if the notes are unclear. false ONLY if none of the above appears.>,
   "shank_type": <string or null — look in the title block, notes section, or shank detail for shank type callouts. Return "weldon" if "WELDON FLAT", "WELDON", or "W/FLAT" is noted. Return "safe_lock" if "SAFE LOCK", "SAFELOCK", "SAFE-LOCK", "HAIMER", or "HAIMER SAFE-LOCK" is noted. Return null if no special shank type is noted.>,
   "oal": <number, overall length of the tool in inches — labeled "OAL" on the print. 0 if not shown.>,

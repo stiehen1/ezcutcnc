@@ -8888,9 +8888,39 @@ ${stabSection}
                 {(!form.material || !ISO_SUBCATEGORIES.find(s => s.key === form.material && s.iso === isoCategory)) && (
                   <option value="" disabled>— Please select actual material subgroup —</option>
                 )}
-                {ISO_SUBCATEGORIES.filter((s) => s.iso === isoCategory).map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
-                ))}
+                {/* Grouped with <optgroup> so a long list (ISO P is 20 entries once the
+                    tool steels, HSS and PM grades are broken out) reads as a few short
+                    sections instead of one wall of options. Native select, so this needs
+                    no new UI. Keys with no `group` fall into an untitled first block,
+                    which keeps every other ISO category rendering exactly as before. */}
+                {(() => {
+                  const _opts = ISO_SUBCATEGORIES.filter((s) => s.iso === isoCategory);
+                  const _ungrouped = _opts.filter((s) => !(s as any).group);
+                  const _groups: string[] = [];
+                  for (const s of _opts) {
+                    const g = (s as any).group as string | undefined;
+                    if (g && !_groups.includes(g)) _groups.push(g);
+                  }
+                  if (_groups.length === 0) {
+                    return _opts.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ));
+                  }
+                  return (
+                    <>
+                      {_ungrouped.map((s) => (
+                        <option key={s.key} value={s.key}>{s.label}</option>
+                      ))}
+                      {_groups.map((g) => (
+                        <optgroup key={g} label={g}>
+                          {_opts.filter((s) => (s as any).group === g).map((s) => (
+                            <option key={s.key} value={s.key}>{s.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </>
+                  );
+                })()}
               </select>
             </div>
 

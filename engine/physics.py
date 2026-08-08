@@ -1390,6 +1390,18 @@ REAM_SFM = {
     "aluminum_wrought": 700, "aluminum_wrought_hs": 560, "aluminum_cast": 550, "non_ferrous": 300,
     "plastic_unfilled": 300, "plastic_filled": 220, "composite_tpc": 200,
     "steel_mild": 250, "steel_free": 275, "steel_medium_carbon": 225, "steel_alloy": 175, "steel_tool": 75,
+    # Named tool steels had NO entries here — every one fell through to steel_tool (75)
+    # or the 150 default, so an annealed A2 and a hardened CPM 15V reamed identically.
+    # Values are the ANNEALED condition (as with the other per-op tables); the
+    # annealed->hardened curve is applied on top by apply_sfm_hardness(). ESTIMATES,
+    # scaled off each grade's milling anchor at the ~0.75x reaming ratio steel_alloy
+    # shows (175 ream / 350 mill = 0.50 at the low end, mild 250/440 = 0.57).
+    "tool_steel_p20": 150, "tool_steel_a2": 120, "tool_steel_h13": 110,
+    "tool_steel_s7": 120, "tool_steel_d2": 90, "tool_steel_o1": 100,
+    "tool_steel_w1": 130, "tool_steel_hss": 75, "tool_steel_hss_co": 62,
+    "steel_maraging": 105, "steel_bearing": 108,
+    "cpm_10v": 55, "cpm_3v": 70, "cpm_15v": 45,
+    "steel_carburizing": 205, "steel_high_carbon": 195,
     "armor_milspec": 80, "armor_ar400": 50, "armor_ar500": 35, "armor_ar600": 18,
     "stainless_martensitic": 85, "stainless_fm": 90,
     "stainless_austenitic": 185, "stainless_15_5": 82, "stainless_ph": 75, "stainless_13_8": 68,

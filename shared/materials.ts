@@ -13,11 +13,21 @@ export const MATERIAL_NOTES: Record<string, string> = {
   "steel_alloy":         "Cr-Mo and NiCrMo alloy steels (4130 Chrom-Moly, 4140, 4340, 8620, 9310 and similar grades). Hardness matters more than the grade name — set it to match your actual condition. 4130 normalized cuts easily; 4140 prehard (~30 HRC) is the most common shop challenge. Variable-pitch geometry and TiAlN coating are the right tool choice for any of these. Never let the tool rub — hardened alloy steel work-hardens at the cut faster than mild steel.",
   "steel_medium_carbon": "Plain medium/high-carbon steels (1040, 1045, 1055, 1070–1095) — higher carbon than mild steel, no alloy additions. Runs a touch faster than alloy steel (no Cr/Mo carbides to abrade the edge) but slower than mild; the sweet spot for predictability — chips behave, finishes are consistent, and tool wear is gradual and linear. Set hardness to your actual condition (typically ~15–25 HRC as-rolled/normalized, higher if quench-and-tempered). Variable-pitch geometry and TiAlN coating; keep chip load up so the edge cuts rather than plows.",
   "tool_steel_p20":      "Prehardened mold steel (~30 HRC) — cuts like firm alloy steel. Well-suited to long roughing passes with standard TiAlN solid carbide endmills.",
-  "tool_steel_a2":       "Air-hardening tool steel — tougher than D2 and more forgiving on cutting edges. Machines consistently at working hardness; AlTiN coating preferred.",
-  "tool_steel_h13":      "Hot-work die steel (44–48 HRC typical). Work-hardens at the cut if the tool rubs — keep feed up and never let the tool dwell. AlTiN or AlCrN coating required.",
-  "tool_steel_s7":       "Shock-resistant and tough, but less abrasive than D2 — more forgiving on cutting edges. Good for punches and dies where impact resistance matters.",
+  "tool_steel_a2":       "Air-hardening cold-work tool steel — tougher than D2 and more forgiving on cutting edges. Normally MILLED ANNEALED (~20–25 HRC) and hardened to 54–62 HRC afterwards; set the hardness below to your actual condition and speeds derate automatically. AlTiN coating preferred.",
+  "tool_steel_h13":      "Hot-work die steel (H13/H11). Supplied annealed (~20–25 HRC) and hardened to 38–54 HRC, with 44–46 HRC the common die condition — enter your actual condition. Work-hardens at the cut if the tool rubs, so keep feed up and never let the tool dwell. AlTiN or AlCrN coating required.",
+  "tool_steel_s7":       "Shock-resisting tool steel — tough, and less abrasive than D2, so more forgiving on cutting edges. Normally milled annealed (~20–25 HRC) then hardened to 54–60 HRC for punch and die service where impact resistance matters. Set the hardness to your actual condition.",
+  "tool_steel_o1":       "Oil-hardening cold-work tool steel — lower alloy content than D2, so it cuts more freely annealed (~20–25 HRC, the normal milled condition) while hardening to a similar 57–62 HRC service range. Watch distortion on thin sections through heat treat; leave a finishing allowance.",
+  "tool_steel_w1":       "Water-hardening plain-carbon tool steel — the lowest-alloy tool steel, so it cuts the most freely of the family in the annealed state. Shallow hardening and prone to distortion/cracking in the quench; hardens to ~58–64 HRC at the surface.",
+  "tool_steel_hss":      "High-speed steel (M2/M3/M7/T1) — almost always MILLED ANNEALED (~20–25 HRC) and hardened to 62–65 HRC afterwards, so set the hardness to the condition you're actually cutting. Even annealed it is NOT a plain alloy steel: machinability is only ~50–60% of a 1%-carbon reference because tungsten/molybdenum carbides, not bulk hardness, limit the cutting data. Common in punches, form tools and broaches.",
+  "tool_steel_hss_co":   "Cobalt / high-vanadium high-speed steel (M4, M42, T15) — tougher and markedly more abrasive than M2 at equal hardness. Milled annealed (~20–25 HRC) and hardened to 63–67 HRC. Expect noticeably shorter tool life than plain M2 in either condition; premium PVD coating and conservative chip load.",
+  "steel_carburizing":   "Carburizing (case-hardening) alloy steel — 8620, 9310, 4320, 4620 — in the PRE-CASE condition, which is when it's normally machined. At ~10–20 HRC it cuts like a tough low-carbon steel, NOT like 4140 at 32 HRC: lower carbon means gummier chips, so keep feed up and edges sharp. Once carburized the cutter sees a 55–62 HRC case — switch to a hardened-steel selection and enter the CASE hardness for that work.",
+  "steel_bearing":       "52100 / 100Cr6 bearing steel — high-carbon chromium steel, normally machined annealed (~20–25 HRC) and through-hardened to 60–64 HRC. Annealed it cuts near medium-carbon steel; hardened it is genuine hard-milling territory. Set the hardness to your actual condition.",
+  "steel_maraging":      "18Ni maraging steel (250/300 grade) — machined in the solution-annealed condition (~30–35 HRC) and AGE-hardened to ~50–54 HRC, not quenched, so distortion is low. Tough and work-hardening at the cut; keep the edge engaged and never dwell.",
+  "steel_high_carbon":   "Plain high-carbon steel (1060–1095) — more carbide than the medium-carbon grades, so slightly lower SFM and faster edge wear, but no alloy additions to abrade the tool the way Cr-Mo does. Common in springs, blades and wear parts. Set hardness to your actual condition.",
   "tool_steel_d2":       "The most abrasive common tool steel. High chromium carbide content eats edges fast — conservative SFM, reduced chip load, and expect shorter tool life. Mill D2 in the ANNEALED state (~20–25 HRC) whenever possible, leaving a small finishing allowance, then heat treat to 58–62 HRC. Set the hardness below to your actual condition — speeds derate automatically.",
   "cpm_10v":             "PM high-vanadium wear steel (A11). Vanadium carbides are harder than carbide binders — treat this as an abrasion problem, not a heat problem. Lower SFM than D2, moderate chip load (don't baby it — rubbing on vanadium carbides accelerates edge breakdown faster than correct chip load). HEM with 5–15% WOC is the preferred strategy; AlTiN or AlCrN coating required.",
+  "cpm_3v":              "PM cold-work tool steel — tougher and much lower in vanadium than 10V, so meaningfully more machinable while still a PM grade. Typically 54–60 HRC in service, ~20–25 HRC annealed. Treat as an abrasion problem like 10V but with more headroom on speed and chip load.",
+  "cpm_15v":             "PM ultra-high-vanadium wear steel — the most abrasive of the CPM cold-work family, with vanadium carbide volume well above 10V. Abrasion dominates completely: conservative SFM, premium PVD coating, and expect short tool life even annealed. HEM at light WOC is the only practical roughing strategy.",
   // M — Stainless Steel
   "stainless_fm":        "303 and 416 are the sulfur-added free-machining grades — the easiest stainless to cut by a wide margin. Fast, clean chips; runs significantly faster than 304.",
   "stainless_ferritic":  "Machines more like carbon steel than austenitic SS — far less work-hardening and gumminess. A good option when corrosion resistance is needed without the headaches of 304/316.",
@@ -86,56 +96,79 @@ export const ISO_SUBCATEGORIES = [
   { iso: "N2" as IsoCategory, key: "manganese_bronze",     label: "Manganese Bronze (C86300, C86500)",            hardness: { value: 75, scale: "hrb" as const } },
   { iso: "N2" as IsoCategory, key: "silicon_bronze",       label: "Silicon Bronze (C65500, C64200)",              hardness: { value: 70, scale: "hrb" as const } },
   { iso: "N2" as IsoCategory, key: "copper_beryllium",     label: "Beryllium Copper (C17200, C17300) — Hazmat",   hardness: { value: 36, scale: "hrc" as const } },
-  // P — Steel
-  { iso: "P" as IsoCategory, key: "steel_alloy",           label: "Alloy Steel (4130 Chrom-Moly, 4140, 4340, 8620, 9310)", hardness: { value: 32, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "steel_medium_carbon",   label: "Medium-Carbon Steel (1040, 1045, 1055, 1070-1095)", hardness: { value: 20, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "steel_mild",            label: "Mild / Low-Carbon Steel (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
-  { iso: "P" as IsoCategory, key: "steel_free",            label: "Free Machining Steel (12L14, 1215, 1117)",  hardness: { value: 80, scale: "hrb" as const } },
-  { iso: "P" as IsoCategory, key: "tool_steel_p20",        label: "P20 Tool Steel (prehardened ~30 HRC)",      hardness: { value: 30, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "tool_steel_a2",         label: "A2 Tool Steel",                             hardness: { value: 36, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "tool_steel_h13",        label: "H13 Tool Steel",                            hardness: { value: 44, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "tool_steel_s7",         label: "S7 Tool Steel",                             hardness: { value: 38, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "tool_steel_d2",         label: "D2 Tool Steel",                             hardness: { value: 22, scale: "hrc" as const } },
-  { iso: "P" as IsoCategory, key: "cpm_10v",               label: "CPM 10V / A11 (PM Tool Steel)",               hardness: { value: 60, scale: "hrc" as const } },
+  // P — Steel. `group` renders as an <optgroup> in the material dropdown so this
+  // list reads as four short sections instead of 20 flat options. Labels are short
+  // because the group heading already supplies the context.
+  // ── Carbon & alloy ──
+  { iso: "P" as IsoCategory, key: "steel_mild",             group: "Carbon & Alloy Steel", label: "Mild / Low-Carbon (A36, 1018, 1020)", hardness: { value: 75, scale: "hrb" as const } },
+  { iso: "P" as IsoCategory, key: "steel_free",             group: "Carbon & Alloy Steel", label: "Free-Machining (12L14, 1215, 1117)", hardness: { value: 80, scale: "hrb" as const } },
+  { iso: "P" as IsoCategory, key: "steel_medium_carbon",    group: "Carbon & Alloy Steel", label: "Medium-Carbon (1030-1055)", hardness: { value: 20, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "steel_high_carbon",      group: "Carbon & Alloy Steel", label: "High-Carbon (1060-1095)", hardness: { value: 24, scale: "hrc" as const } },
+  // 8620/9310/4320 moved OUT to steel_carburizing — pre-case they're low-carbon
+  // steels, and post-case the cutter sees a hardened case. Neither is 32 HRC Cr-Mo.
+  { iso: "P" as IsoCategory, key: "steel_alloy",            group: "Carbon & Alloy Steel", label: "Alloy / Cr-Mo (4130, 4140, 4340, 4150)", hardness: { value: 32, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "steel_carburizing",      group: "Carbon & Alloy Steel", label: "Carburizing, pre-case (8620, 9310, 4320)", hardness: { value: 15, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "steel_bearing",          group: "Carbon & Alloy Steel", label: "Bearing Steel (52100, 100Cr6)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "steel_maraging",         group: "Carbon & Alloy Steel", label: "Maraging (18Ni 250 / 300)", hardness: { value: 32, scale: "hrc" as const } },
+  // ── Conventional tool steels. Normally MILLED ANNEALED (~20-25 HRC) and hardened
+  //    afterwards, which is why these default to annealed, not the service band.
+  { iso: "P" as IsoCategory, key: "tool_steel_p20",         group: "Tool Steel", label: "P20 / 1.2311 Pre-Hard Mold (28-34 HRC)", hardness: { value: 30, scale: "hrc" as const } },
+  // A2 defaulted to 36 HRC while its own valid range was 54-62 — the picker opened
+  // on a value the app itself rejected. Annealed is the milled condition.
+  { iso: "P" as IsoCategory, key: "tool_steel_a2",          group: "Tool Steel", label: "A2 Air-Hardening (annealed or 54-62 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_d2",          group: "Tool Steel", label: "D2 Cold-Work (annealed or 55-62 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_o1",          group: "Tool Steel", label: "O1 Oil-Hardening (annealed or 57-62 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_w1",          group: "Tool Steel", label: "W1 Water-Hardening (annealed or 58-64 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_s7",          group: "Tool Steel", label: "S7 Shock-Resisting (annealed or 54-60 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_h13",         group: "Tool Steel", label: "H13 / H11 Hot-Work (38-54 HRC)", hardness: { value: 44, scale: "hrc" as const } },
+  // ── HSS. Split from the cold-work grades because HSS machinability is only
+  //    ~50-60% of a 1%-carbon reference at the SAME hardness: the W/Mo/V carbide
+  //    content, not the bulk hardness, limits the cutting data.
+  { iso: "P" as IsoCategory, key: "tool_steel_hss",         group: "High-Speed Steel (HSS)", label: "M2 / M3 / M7 / T1 (annealed or 62-65 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "tool_steel_hss_co",      group: "High-Speed Steel (HSS)", label: "Co / high-V — M4 / M42 / T15 (annealed or 63-67 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  // ── PM tool steels ──
+  { iso: "P" as IsoCategory, key: "cpm_3v",                 group: "PM Tool Steel", label: "CPM 3V (annealed or 54-60 HRC)", hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "cpm_10v",                group: "PM Tool Steel", label: "CPM 10V / A11 (annealed or 58-64 HRC)", hardness: { value: 60, scale: "hrc" as const } },
+  { iso: "P" as IsoCategory, key: "cpm_15v",                group: "PM Tool Steel", label: "CPM 15V (annealed or 60-64 HRC)", hardness: { value: 22, scale: "hrc" as const } },
   // M — Stainless Steel
-  { iso: "M" as IsoCategory, key: "stainless_304",         label: "304 / 304L / 321 Stainless",                  hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_fm",          label: "303 / 416 Free-Machining Stainless",          hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_ferritic",    label: "Ferritic Stainless (409 / 430 / 441)",         hardness: { value: 80, scale: "hrb" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_410",         label: "410 Martensitic Stainless",                   hardness: { value: 22, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_trimrite",    label: "TrimRite® Stainless (S42010 / Carpenter)",    hardness: { value: 25, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_420",         label: "420 Martensitic Stainless",                   hardness: { value: 25, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_440c",        label: "440C Stainless",                              hardness: { value: 58, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_316",         label: "316 / 316L Stainless (Mo-bearing)",           hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_15_5",        label: "15-5 PH Stainless (XM-12)",                   hardness: { value: 33, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_ph",          label: "17-4 PH Stainless (630)",                     hardness: { value: 33, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_13_8",        label: "13-8 Mo PH Stainless (XM-13)",                hardness: { value: 43, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "stainless_superduplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 28, scale: "hrc" as const } },
-  { iso: "M" as IsoCategory, key: "manganese_steel",       label: "Hadfield Manganese Steel (A128 / 11–14% Mn)", hardness: { value: 95, scale: "hrb" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_304", group: "Austenitic",         label: "304 / 304L / 321 Stainless",                  hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_316", group: "Austenitic",         label: "316 / 316L Stainless (Mo-bearing)",           hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_fm", group: "Austenitic",          label: "303 / 416 Free-Machining Stainless",          hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_ferritic", group: "Ferritic",    label: "Ferritic Stainless (409 / 430 / 441)",         hardness: { value: 80, scale: "hrb" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_410", group: "Martensitic",         label: "410 Martensitic Stainless",                   hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_trimrite", group: "Martensitic",    label: "TrimRite® Stainless (S42010 / Carpenter)",    hardness: { value: 25, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_420", group: "Martensitic",         label: "420 Martensitic Stainless",                   hardness: { value: 25, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_440c", group: "Martensitic",        label: "440C Stainless",                              hardness: { value: 58, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_15_5", group: "Precipitation-Hardening (PH)",        label: "15-5 PH Stainless (XM-12)",                   hardness: { value: 33, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_ph", group: "Precipitation-Hardening (PH)",          label: "17-4 PH Stainless (630)",                     hardness: { value: 33, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_13_8", group: "Precipitation-Hardening (PH)",        label: "13-8 Mo PH Stainless (XM-13)",                hardness: { value: 43, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_duplex", group: "Duplex",      label: "Duplex Stainless (2205)",                     hardness: { value: 22, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "stainless_superduplex", group: "Duplex", label: "Super Duplex Stainless (2507)",               hardness: { value: 28, scale: "hrc" as const } },
+  { iso: "M" as IsoCategory, key: "manganese_steel", group: "Work-Hardening",       label: "Hadfield Manganese Steel (A128 / 11–14% Mn)", hardness: { value: 95, scale: "hrb" as const } },
   // K — Cast Iron
   { iso: "K" as IsoCategory, key: "cast_iron_gray",        label: "Gray Cast Iron (Class 30/40, GG20/25, HT200/250)",        hardness: { value: 92, scale: "hrb" as const } },
   { iso: "K" as IsoCategory, key: "cast_iron_ductile",     label: "Ductile / Nodular Iron (65-45-12, GGG-40/50/60)",         hardness: { value: 90, scale: "hrb" as const } },
   { iso: "K" as IsoCategory, key: "cast_iron_cgi",         label: "Compacted Graphite Iron / CGI (GJV-300/400)",             hardness: { value: 95, scale: "hrb" as const } },
   { iso: "K" as IsoCategory, key: "cast_iron_malleable",   label: "Malleable Cast Iron (GTW/GTB, GTS-35-10)",                hardness: { value: 82, scale: "hrb" as const } },
   // S — Superalloys / Titanium
-  { iso: "S" as IsoCategory, key: "titanium_64",           label: "Ti-6Al-4V (Grade 5)",                         hardness: { value: 36, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "titanium_cp",           label: "CP Titanium Grade 1–4",                       hardness: { value: 80, scale: "hrb" as const } },
-  { iso: "S" as IsoCategory, key: "hiTemp_fe",             label: "A-286 / Incoloy 800 / Udimet (Fe-based)",     hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "S" as IsoCategory, key: "hiTemp_co",             label: "Stellite (Co-based superalloy)",              hardness: { value: 35, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "monel_k500",            label: "Monel K-500 (Ni-Cu age-hardened)",            hardness: { value: 30, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "inconel_625",           label: "Inconel 625 / Hastelloy C-276 / C-22 / Incoloy 825", hardness: { value: 25, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "inconel_718",           label: "Inconel 718 / 718 Plus / Allvac 718",         hardness: { value: 40, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "hastelloy_x",           label: "Hastelloy X / Inconel X-750 / Nimonic C-263", hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "S" as IsoCategory, key: "inconel_617",           label: "Inconel 617 / Haynes 230 (power-gen Ni)",     hardness: { value: 85, scale: "hrb" as const } },
-  { iso: "S" as IsoCategory, key: "waspaloy",              label: "Waspaloy / René 41/77/80 / Nimonic 80A/90",   hardness: { value: 40, scale: "hrc" as const } },
-  { iso: "S" as IsoCategory, key: "mp35n",                 label: "MP35N / Udimet 720 / René 95 (ultra-high-str)", hardness: { value: 40, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "titanium_64", group: "Titanium",           label: "Ti-6Al-4V (Grade 5)",                         hardness: { value: 36, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "titanium_cp", group: "Titanium",           label: "CP Titanium Grade 1–4",                       hardness: { value: 80, scale: "hrb" as const } },
+  { iso: "S" as IsoCategory, key: "hiTemp_fe", group: "Fe / Co-Based Superalloy",             label: "A-286 / Incoloy 800 / Udimet (Fe-based)",     hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "S" as IsoCategory, key: "hiTemp_co", group: "Fe / Co-Based Superalloy",             label: "Stellite (Co-based superalloy)",              hardness: { value: 35, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "monel_k500", group: "Nickel Superalloy",            label: "Monel K-500 (Ni-Cu age-hardened)",            hardness: { value: 30, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "inconel_625", group: "Nickel Superalloy",           label: "Inconel 625 / Hastelloy C-276 / C-22 / Incoloy 825", hardness: { value: 25, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "inconel_718", group: "Nickel Superalloy",           label: "Inconel 718 / 718 Plus / Allvac 718",         hardness: { value: 40, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "hastelloy_x", group: "Nickel Superalloy",           label: "Hastelloy X / Inconel X-750 / Nimonic C-263", hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "S" as IsoCategory, key: "inconel_617", group: "Nickel Superalloy",           label: "Inconel 617 / Haynes 230 (power-gen Ni)",     hardness: { value: 85, scale: "hrb" as const } },
+  { iso: "S" as IsoCategory, key: "waspaloy", group: "Nickel Superalloy",              label: "Waspaloy / René 41/77/80 / Nimonic 80A/90",   hardness: { value: 40, scale: "hrc" as const } },
+  { iso: "S" as IsoCategory, key: "mp35n", group: "Ni-Co Ultra-High-Strength",                 label: "MP35N / Udimet 720 / René 95 (ultra-high-str)", hardness: { value: 40, scale: "hrc" as const } },
   // H — Hardened Steel & Armor
-  { iso: "H" as IsoCategory, key: "hardened_lt55",         label: "Hardened Steel < 55 HRC",                              hardness: { value: 48, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "hardened_gt55",         label: "Hardened Steel > 55 HRC",                              hardness: { value: 60, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_milspec",         label: "Mil-Spec Armor (MIL-A-12560 / 46100, ~260-300 HB)",    hardness: { value: 29, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_ar400",           label: "AR400 / AR450 Armor Plate (~360-480 HB)",              hardness: { value: 43, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_ar500",           label: "AR500 / Armox 500T Armor Plate (~470-540 HB)",         hardness: { value: 53, scale: "hrc" as const } },
-  { iso: "H" as IsoCategory, key: "armor_ar600",           label: "AR550 / AR600 / Armox 600T (~570-640 HB)",             hardness: { value: 60, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "hardened_lt55", group: "Hardened Steel",         label: "Hardened Steel < 55 HRC",                              hardness: { value: 48, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "hardened_gt55", group: "Hardened Steel",         label: "Hardened Steel > 55 HRC",                              hardness: { value: 60, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_milspec", group: "Armor Plate",         label: "Mil-Spec Armor (MIL-A-12560 / 46100, ~260-300 HB)",    hardness: { value: 29, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar400", group: "Armor Plate",           label: "AR400 / AR450 Armor Plate (~360-480 HB)",              hardness: { value: 43, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar500", group: "Armor Plate",           label: "AR500 / Armox 500T Armor Plate (~470-540 HB)",         hardness: { value: 53, scale: "hrc" as const } },
+  { iso: "H" as IsoCategory, key: "armor_ar600", group: "Armor Plate",           label: "AR550 / AR600 / Armox 600T (~570-640 HB)",             hardness: { value: 60, scale: "hrc" as const } },
   // O — Plastics & Composites
   { iso: "O" as IsoCategory, key: "plastic_unfilled",      label: "Unfilled Engineering Thermoplastics (PEEK, POM, PA, PC)", hardness: { value: 0, scale: "hrb" as const } },
   { iso: "O" as IsoCategory, key: "plastic_filled",        label: "Fiber-Reinforced Thermoplastics (GF/CF-PA, PEEK-GF)",     hardness: { value: 0, scale: "hrb" as const } },
@@ -156,11 +189,25 @@ export const MATERIAL_HARDNESS_RANGE: Record<string, {
   "steel_alloy":     { min: 18, max: 52,  scale: "hrc", note: "Alloy steels (4140, 4340) range 18–52 HRC depending on temper condition." },
   "steel_medium_carbon": { min: 10, max: 45, scale: "hrc", note: "Plain carbon steels (1045, 1050, etc.) run ~10–25 HRC as-rolled/normalized and up to ~40–45 HRC quenched-and-tempered. Enter your actual condition; annealed stock reads on the HRB scale (~80–95 HRB)." },
   "tool_steel_p20":  { min: 28, max: 36,  scale: "hrc", note: "P20 is supplied prehardened 28–36 HRC — outside this range it's likely a different condition." },
-  "tool_steel_a2":   { min: 54, max: 62,  scale: "hrc", note: "A2 in working condition is hardened 54–62 HRC. Annealed (~92 HRB) is pre-heat treat stock." },
-  "tool_steel_h13":  { min: 44, max: 54,  scale: "hrc", note: "H13 die steel typical working range is 44–54 HRC. Below 44 is annealed or under-tempered." },
-  "tool_steel_s7":   { min: 54, max: 60,  scale: "hrc", note: "S7 shock-resistant tool steel is hardened 54–60 HRC in service." },
+  // Ranges now START at annealed (~20 HRC) rather than at the hardened service band.
+  // These grades are normally MILLED annealed and hardened afterwards, so the old
+  // 54-62 floor rejected the condition most jobs actually cut — and the picker's own
+  // default (36 HRC for A2, 38 for S7) sat outside it.
+  "tool_steel_a2":   { min: 18, max: 62,  scale: "hrc", note: "A2 spans annealed ~20–25 HRC (how it's normally milled, ~92 HRB) up to 54–62 HRC hardened. Mill it annealed and leave a finishing allowance for heat treat whenever you can — cutting data derates automatically for the hardness you enter." },
+  "tool_steel_h13":  { min: 18, max: 54,  scale: "hrc", note: "H13/H11 spans annealed ~20–25 HRC up to the 38–54 HRC working range (44–46 HRC is the common die condition). Enter your actual condition." },
+  "tool_steel_s7":   { min: 18, max: 60,  scale: "hrc", note: "S7 spans annealed ~20–25 HRC up to 54–60 HRC hardened (47–60 is the usual service band). Enter your actual condition." },
   "tool_steel_d2":   { min: 18, max: 64,  scale: "hrc", note: "D2 spans annealed ~20–25 HRC (how it's normally milled) up to 58–62 HRC hardened. Mill it annealed and leave a finishing allowance for heat treat whenever you can — cutting data is derated automatically for the hardness you enter." },
-  "cpm_10v":         { min: 58, max: 64,  scale: "hrc", note: "CPM 10V / A11 is typically used at 58–64 HRC. Below 55 HRC is annealed stock — machinability improves substantially but is still worse than D2 due to vanadium carbide abrasion." },
+  "tool_steel_o1":   { min: 18, max: 62,  scale: "hrc", note: "O1 oil-hardening tool steel spans annealed ~20–25 HRC up to 57–62 HRC hardened. Lower alloy content than D2 so it cuts more freely annealed, but it hardens to a similar service range." },
+  "tool_steel_hss":  { min: 18, max: 65,  scale: "hrc", note: "M2/M3/M7/T1 high-speed steel is normally MILLED ANNEALED (~20–25 HRC, up to ~248 HBW) and hardened to 62–65 HRC afterwards. Even annealed, HSS machinability is only ~50–60% of a 1%-carbon reference — the tungsten/molybdenum carbide content limits cutting data, not the bulk hardness." },
+  "tool_steel_hss_co": { min: 18, max: 67, scale: "hrc", note: "M4/M42/T15 are cobalt-bearing or high-vanadium HSS — tougher and markedly more abrasive than M2 at the same hardness. Normally milled annealed (~20–25 HRC) and hardened to 63–67 HRC. Expect shorter tool life than plain M2 in either condition." },
+  "cpm_10v":         { min: 18, max: 64,  scale: "hrc", note: "CPM 10V / A11 is typically used at 58–64 HRC; annealed stock is ~20–25 HRC. Vanadium carbides are harder than the carbide binder phase, so abrasion — not hardness — is the limit. Machinability stays well below D2 in either condition." },
+  "cpm_3v":          { min: 18, max: 60,  scale: "hrc", note: "CPM 3V is a tougher, lower-vanadium PM cold-work grade, typically 54–60 HRC in service and ~20–25 HRC annealed. More machinable than 10V but still a PM tool steel." },
+  "cpm_15v":         { min: 18, max: 64,  scale: "hrc", note: "CPM 15V is the most abrasive of the CPM cold-work family — vanadium carbide volume well above 10V. Typically 60–64 HRC in service, ~20–25 HRC annealed. Abrasion dominates in either condition." },
+  "tool_steel_w1":   { min: 18, max: 64,  scale: "hrc", note: "W1 water-hardening plain-carbon tool steel spans annealed ~20–25 HRC up to ~58–64 HRC at the surface. Shallow hardening, so the core stays softer than the case." },
+  "steel_high_carbon": { min: 10, max: 45, scale: "hrc", note: "Plain high-carbon steel (1060–1095) runs ~15–25 HRC as-rolled/normalized and up to ~40–45 HRC quenched-and-tempered. Annealed stock reads on the HRB scale (~85–95 HRB)." },
+  "steel_bearing":   { min: 18, max: 64,  scale: "hrc", note: "52100 / 100Cr6 spans annealed ~20–25 HRC (the normal machining condition) up to 60–64 HRC through-hardened. Enter your actual condition — hardened 52100 is genuine hard-milling work." },
+  "steel_maraging":  { min: 25, max: 56,  scale: "hrc", note: "18Ni maraging steel is machined solution-annealed at ~30–35 HRC and AGE-hardened to ~50–54 HRC. It is never quenched, so it does not have a soft annealed state like the carbon tool steels." },
+  "steel_carburizing": { min: 5, max: 30, scale: "hrc", note: "PRE-CASE condition: 8620/9310/4320/4620 are low-carbon carburizing steels at ~10–20 HRC before heat treat, which is when they're normally machined. AFTER carburizing the cutter sees a 55–62 HRC case — select Case-Hardened Steel and enter the CASE hardness for that, not this key." },
   // M — Stainless
   "stainless_fm":        { min: 65, max: 95,  scale: "hrb", note: "303/416 free-machining stainless ranges 65–95 HRB — sulfur additives prevent heat-treat hardening." },
   "stainless_ferritic":  { min: 65, max: 95,  scale: "hrb", note: "Ferritic stainless (409/430/441) cannot be hardened by heat treatment — HRB scale only." },
@@ -342,12 +389,19 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "chromemoly": "steel_alloy", "4130 normalized": "steel_alloy",
   "4130 n": "steel_alloy", "4130 ht": "steel_alloy",
   // ── NiCrMo (43xx, high-toughness) ────────────────────────────────────────
-  "4320": "steel_alloy", "4340": "steel_alloy", "4340 ht": "steel_alloy",
+  "4340": "steel_alloy", "4340 ht": "steel_alloy",
   "e4340": "steel_alloy", "300m": "steel_alloy",
-  // ── NiCrMo case-hardening / gear steels ──────────────────────────────────
-  "4620": "steel_alloy", "4820": "steel_alloy",
-  "8620": "steel_alloy", "8640": "steel_alloy",
-  "9310": "steel_alloy",
+  // ── Carburizing / case-hardening gear steels ──────────────────────────────
+  // These are LOW-CARBON in the condition they're machined in, so they don't
+  // belong on the 32 HRC Cr-Mo line — pre-case they cut like a tough low-carbon
+  // steel. Post-carburize the cutter sees a 55-62 HRC case; that's case_hardened,
+  // not this key. 8640 stays with steel_alloy: it's a through-hardening grade.
+  "4320": "steel_carburizing", "4620": "steel_carburizing", "4820": "steel_carburizing",
+  "8620": "steel_carburizing", "9310": "steel_carburizing",
+  "8617": "steel_carburizing", "8622": "steel_carburizing",
+  "carburizing steel": "steel_carburizing", "case hardening steel": "steel_carburizing",
+  "gear steel": "steel_carburizing",
+  "8640": "steel_alloy",
   // ── Mo steels ─────────────────────────────────────────────────────────────
   "4037": "steel_alloy", "4047": "steel_alloy",
   // ── Spring / Si-Mn steels ─────────────────────────────────────────────────
@@ -375,10 +429,34 @@ export const MATERIAL_ALIASES: Record<string, string> = {
   "en19": "steel_alloy", "en24": "steel_alloy", "en36": "steel_alloy",
   "en25": "steel_alloy", "en26": "steel_alloy", "en30b": "steel_alloy",
   "817m40": "steel_alloy",  // UK equiv of 4340
-  // ── HSS (rare to machine; routes to hardened_gt55 — they're 62–65 HRC) ───
-  "m2": "hardened_gt55", "m4": "hardened_gt55", "m42": "hardened_gt55",
-  "t1": "hardened_gt55", "t15": "hardened_gt55",
-  "hss": "hardened_gt55", "high speed steel": "hardened_gt55",
+  // ── HSS ───────────────────────────────────────────────────────────────────
+  // These used to route to hardened_gt55, which assumes the 62-65 HRC SERVICE
+  // condition — the wrong end of the process, since HSS punches, form tools and
+  // broaches are MACHINED ANNEALED (~220-250 HBW) and hardened afterwards. They
+  // now have their own keys with HRC curves spanning annealed -> hardened.
+  // matchMaterialAlias() is an EXACT lookup, so the compound forms a title block
+  // actually uses ("M2 STEEL") need their own entries or they miss "m2" and fall
+  // through to the bare-"steel" default, steel_alloy at 350 SFM.
+  // M2/M3/M7/T1 — plain W-Mo high-speed steel
+  "m2": "tool_steel_hss", "m3": "tool_steel_hss", "m7": "tool_steel_hss",
+  "m50": "tool_steel_hss", "t1": "tool_steel_hss",
+  "hss": "tool_steel_hss", "high speed steel": "tool_steel_hss",
+  "m2 steel": "tool_steel_hss", "m2 hss": "tool_steel_hss", "m2 tool steel": "tool_steel_hss",
+  "m3 steel": "tool_steel_hss", "m7 steel": "tool_steel_hss", "m50 steel": "tool_steel_hss",
+  "t1 steel": "tool_steel_hss", "hss steel": "tool_steel_hss",
+  "high speed tool steel": "tool_steel_hss",
+  "1.3343": "tool_steel_hss",  // DIN designation for M2
+  // M4/M42/T15 — cobalt-bearing or high-vanadium: tougher, far more abrasive
+  "m4": "tool_steel_hss_co", "m42": "tool_steel_hss_co", "t15": "tool_steel_hss_co",
+  "m4 steel": "tool_steel_hss_co", "m42 steel": "tool_steel_hss_co",
+  "m42 hss": "tool_steel_hss_co", "t15 steel": "tool_steel_hss_co",
+  "1.3247": "tool_steel_hss_co",  // DIN designation for M42
+  // ── O1 / additional conventional tool steels ──────────────────────────────
+  "o1": "tool_steel_o1", "o1 steel": "tool_steel_o1", "o1 tool steel": "tool_steel_o1",
+  "1.2510": "tool_steel_o1",
+  "h11 steel": "tool_steel_h13",  // bare "h11" is already mapped in the H13 block below
+  // ── PM tool steels ────────────────────────────────────────────────────────
+  "cpm 3v": "cpm_3v", "cpm3v": "cpm_3v", "3v": "cpm_3v",
   // ── Generic text matches ──────────────────────────────────────────────────
   "alloy steel": "steel_alloy", "cr-mo steel": "steel_alloy", "crmo": "steel_alloy",
   "nickel steel": "steel_alloy", "chrome moly": "steel_alloy",

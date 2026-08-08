@@ -174,7 +174,26 @@ BASE_SFM = {
     "tool_steel_h13": 220,  # H13 tool steel: 180–260 SFM; 220 SFM confirmed
     "tool_steel_s7":  240,  # S7 tool steel: 190–270 SFM; 240 SFM confirmed
     "tool_steel_d2":  180,  # D2 tool steel: 140–220 SFM; 180 SFM confirmed (high carbide, abrasive)
-    "cpm_10v":        85,   # CPM 10V / A11: PM high-vanadium wear steel. Vanadium carbides (~80 HRC) harder than carbide binder — treat as abrasion problem. Assumes premium TiAlSiN HiPIMS coating (e.g. Cemecon Inoxicon); standard AlTiN ~70 SFM. HEM = 2× = 170 SFM.
+    "tool_steel_o1":  200,  # O1 oil-hardening: lower alloy than D2, cuts freer annealed. ESTIMATE.
+    # HSS is published at only ~50-60% machinability vs a 1%-carbon reference, so the
+    # annealed anchor sits well below A2/S7 despite similar annealed hardness — the
+    # W/Mo/V carbide content is the limit, not the bulk hardness. ESTIMATES.
+    "tool_steel_hss":    150,  # M2/M3/M7/T1 annealed (~20-25 HRC, the milled condition)
+    "tool_steel_hss_co": 125,  # M4/M42/T15 — Co / high-V: tougher and more abrasive
+    "cpm_3v":         140,  # CPM 3V annealed: PM but far less vanadium than 10V. ESTIMATE.
+    "cpm_15v":        90,   # CPM 15V annealed: highest vanadium of the family. ESTIMATE.
+    "tool_steel_w1":  260,  # W1 water-hardening plain-carbon — lowest alloy tool steel. ESTIMATE.
+    # Maraging (18Ni 250/300) and 52100 bearing steel were on the 32 HRC alloy-steel
+    # line, but both through-harden well past it (maraging ages to ~54 HRC, 52100 to
+    # 60-64). Own keys so the annealed->hardened curve applies. ESTIMATES.
+    "steel_maraging": 210,
+    "steel_bearing":  215,
+    # High-carbon 1060-1095 split from medium-carbon 1030-1055: more carbide, lower SFM.
+    "steel_high_carbon": 290,
+    # Carburizing grades PRE-CASE (8620/9310/4320/4620). Low-carbon and gummy rather
+    # than hard — cuts near mild steel, NOT the 350 of 32 HRC 4140 where they used to sit.
+    "steel_carburizing": 330,
+    "cpm_10v":        110,  # CPM 10V / A11 ANNEALED. PM high-vanadium wear steel; vanadium carbides (~80 HRC) harder than carbide binder — treat as abrasion problem. Was a flat 85 (the HARDENED value) before the annealed->hardened curve existed; 85 is now what the curve returns at ~61 HRC. Assumes premium TiAlSiN HiPIMS coating (e.g. Cemecon Inoxicon); standard AlTiN ~70 SFM at hardness.
     "hardened_lt55": 240,   # Carbide endmill in hardened tool steel 35–54 HRC (e.g. H13 45 HRC → 240 SFM confirmed)
     "hardened_gt55": 100,  # Carbide in very hard steel ≥55 HRC (CBN territory starts ~60 HRC)
     # ── Armor plate steels (HEM preferred; abrasion-dominated wear mechanism) ─
@@ -526,7 +545,19 @@ HP_PER_CUIN = {
     "tool_steel_h13": 1.10,
     "tool_steel_s7":  1.10,
     "tool_steel_d2":  1.20,  # Higher carbide content — more unit power
-    "cpm_10v":        1.30,  # CPM 10V: vanadium carbides harder than tool binder phases = higher cutting force
+    "cpm_10v":        1.30,
+    "tool_steel_o1":  1.15,  # O1 — lower alloy than D2, between A2 and D2. ESTIMATE.
+    # HSS: high W/Mo/V carbide content raises unit power above the conventional
+    # cold-work grades even annealed. Co/high-V higher still. ESTIMATES.
+    "tool_steel_hss":    1.30,
+    "tool_steel_hss_co": 1.40,
+    "cpm_3v":         1.25,  # PM but far less vanadium than 10V. ESTIMATE.
+    "steel_carburizing": 0.90,  # Low-carbon pre-case — below 4140, above mild.
+    "tool_steel_w1":  1.05,  # Water-hardening plain-carbon tool steel. ESTIMATE.
+    "steel_maraging": 1.20,  # 18Ni — tough, work-hardens at the cut. ESTIMATE.
+    "steel_bearing":  1.15,  # 52100 — high carbon, through-hardening. ESTIMATE.
+    "cpm_15v":        1.45,  # Highest vanadium of the PM family. ESTIMATE.
+    "steel_high_carbon": 1.05,  # 1060-1095 — above medium-carbon. ESTIMATE.  # CPM 10V: vanadium carbides harder than tool binder phases = higher cutting force
     "hardened_lt55": 1.35,
     "hardened_gt55": 1.50,
     "armor_milspec": 1.25,  # MIL-A-12560 — tough but lower hardness
@@ -899,6 +930,16 @@ CHAMFER_IPT_MULT = {
     "tool_steel_s7":       1.25,
     "tool_steel_d2":       1.20,
     "cpm_10v":             1.20,
+    "tool_steel_o1":       1.22,
+    "tool_steel_hss":      1.20,
+    "tool_steel_hss_co":   1.18,
+    "cpm_3v":              1.20,
+    "steel_carburizing":   1.60,
+    "tool_steel_w1":       1.30,
+    "steel_maraging":      1.25,
+    "steel_bearing":       1.22,
+    "cpm_15v":             1.18,
+    "steel_high_carbon":   1.65,
     # Stainless
     "stainless_fm":        1.75,
     "stainless_ferritic":  1.75,
@@ -1138,7 +1179,19 @@ IPT_FRAC = {
     "tool_steel_h13": 0.0040,  # H13: .0020 IPT on 0.5" → 0.40%×D confirmed
     "tool_steel_s7":  0.0044,  # S7: .0022 IPT on 0.5" → 0.44%×D confirmed
     "tool_steel_d2":  0.0032,  # D2: .0016 IPT on 0.5" → 0.32%×D confirmed (abrasive, conservative)
-    "cpm_10v":        0.0030,  # CPM 10V: 0.30%×D — slightly below D2; can't go too light (rubbing on vanadium carbides accelerates wear)
+    "cpm_10v":        0.0030,
+    "tool_steel_o1":  0.0038,  # O1 — between A2 (.0044) and D2 (.0032). ESTIMATE.
+    # HSS annealed takes a real chip — the reason routing M2 to hardened_gt55 was
+    # wrong is that hard-milling IPT (~.0018) starves an annealed blank. ESTIMATES.
+    "tool_steel_hss":    0.0036,
+    "tool_steel_hss_co": 0.0032,
+    "cpm_3v":         0.0032,
+    "steel_carburizing": 0.0062,  # Low-carbon, gummy — near mild steel chip load.
+    "tool_steel_w1":  0.0046,
+    "steel_maraging": 0.0040,
+    "steel_bearing":  0.0038,
+    "cpm_15v":        0.0028,
+    "steel_high_carbon": 0.0052,  # CPM 10V: 0.30%×D — slightly below D2; can't go too light (rubbing on vanadium carbides accelerates wear)
     "hardened_lt55": 0.0045,  # H13/D2/A2 hardened 35–54 HRC: 0.0036/0.750" = 0.0048×D; conservative 0.0045 confirmed
     "hardened_gt55": 0.0012,  # ≥55 HRC — light chip load, avoid rubbing
     "armor_milspec": 0.0042,  # MIL-A-12560 structural armor — maintain chip load, never rub
@@ -1168,7 +1221,17 @@ HEM_IPT_MULT = {
     "tool_steel_h13": 1.5,
     "tool_steel_s7":  1.5,
     "tool_steel_d2":  1.4,   # D2 — minimal HEM boost; abrasive/hard
-    "cpm_10v":        1.4,   # CPM 10V — same as D2; vanadium carbide abrasion limits HEM chip load upside
+    "cpm_10v":        1.4,
+    "tool_steel_o1":  1.45,
+    "tool_steel_hss":    1.4,
+    "tool_steel_hss_co": 1.35,
+    "cpm_3v":         1.4,
+    "steel_carburizing": 2.0,
+    "tool_steel_w1":  1.5,
+    "steel_maraging": 1.45,
+    "steel_bearing":  1.45,
+    "cpm_15v":        1.3,
+    "steel_high_carbon": 1.9,   # CPM 10V — same as D2; vanadium carbide abrasion limits HEM chip load upside
     "Stainless": 2.0,
     "stainless_fm":          2.0,
     "stainless_ferritic":    2.0,
@@ -1290,6 +1353,16 @@ _ISO_KEY_TO_GROUP = {
     "tool_steel_s7":  "Steel",
     "tool_steel_d2":  "Steel",
     "cpm_10v":        "Steel",
+    "tool_steel_o1":  "Steel",
+    "tool_steel_hss":    "Steel",
+    "tool_steel_hss_co": "Steel",
+    "cpm_3v":         "Steel",
+    "steel_carburizing": "Steel",
+    "tool_steel_w1":  "Steel",
+    "steel_maraging": "Steel",
+    "steel_bearing":  "Steel",
+    "cpm_15v":        "Steel",
+    "steel_high_carbon": "Steel",
     "hardened_lt55": "Steel",
     "hardened_gt55": "Steel",
     "armor_milspec": "Steel",
@@ -1368,6 +1441,14 @@ _NO_HRC_PENALTY = frozenset((
     "Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
     "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
     "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+    # Grades with their own annealed->hardened curve (TOOL_STEEL_SFM_ANCHORS). They
+    # are listed here so the GENERIC hardness_sfm_mult never stacks on top of the
+    # curve — apply_sfm_hardness() intercepts them before this check and applies the
+    # curve ratio instead. steel_carburizing is NOT here: it's a plain low-carbon
+    # steel pre-case with no curve, so the normal hardness mult is correct for it.
+    "tool_steel_o1", "tool_steel_hss", "tool_steel_hss_co",
+    "tool_steel_w1", "steel_maraging", "steel_bearing",
+    "cpm_3v", "cpm_15v",
     "cpm_10v", "stainless_15_5", "stainless_ph", "stainless_13_8",
     "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420",
     "Titanium", "titanium_64", "titanium_cp", "titanium",
@@ -1383,6 +1464,19 @@ def apply_sfm_hardness(base_sfm: float, hrc: float, mat: str, mat_group: str) ->
     # through — otherwise hardened D2 gets annealed speeds on every operation.
     if mat == "tool_steel_d2" or mat_group == "tool_steel_d2":
         return apply_d2_hardness(base_sfm, hrc, mat, mat_group)
+    # Every other tool steel with an annealed->hardened curve gets the same
+    # treatment: its per-operation tables (DRILL_SFM, KEYSEAT_SFM, FEEDMILL_SFM,
+    # ...) are calibrated ANNEALED, so scale them by the curve's own ratio rather
+    # than passing straight through. Without this, a 62 HRC M2 punch would be
+    # drilled and keyseated at annealed speeds — the same bug D2 was fixed for.
+    _ts_key = mat if mat in TOOL_STEEL_SFM_ANCHORS else (
+        mat_group if mat_group in TOOL_STEEL_SFM_ANCHORS else None)
+    if _ts_key:
+        _annealed = TOOL_STEEL_SFM_ANCHORS[_ts_key][0]
+        _cur = tool_steel_sfm_absolute(_ts_key, hrc)
+        if _annealed > 0 and _cur is not None:
+            return base_sfm * (_cur / _annealed)
+        return base_sfm
     if mat in _NO_HRC_PENALTY or mat_group in _NO_HRC_PENALTY:
         return base_sfm
     return base_sfm * hardness_sfm_mult(hrc)
@@ -1440,6 +1534,65 @@ def d2_sfm_absolute(hrc: float) -> float:
         return 105.0 - (105.0 - 85.0) * (hrc - 55) / 7.0
     # >62 HRC: past the usual D2 spec; keep derating toward CBN/grinding territory
     return max(60.0, 85.0 - 4.0 * (hrc - 62))
+
+
+def _anneal_hard_sfm(hrc: float, sfm_annealed: float, sfm_hard: float,
+                     hrc_hard: float = 60.0) -> float:
+    """Generic annealed -> hardened SFM curve for a tool steel.
+
+    Same shape as d2_sfm_absolute, generalized so each grade supplies its own two
+    anchors instead of hand-authoring a piecewise function per grade:
+      * <=30 HRC        — annealed / spheroidized, full sfm_annealed
+      * 30 -> hrc_hard  — linear derate from sfm_annealed to sfm_hard
+      * > hrc_hard      — keep derating toward CBN/grinding territory
+
+    hrc <= 0 (unspecified) returns the ANNEALED value, because that is the
+    condition these grades are normally milled in — the same default d2 uses.
+    """
+    hrc = float(hrc or 0)
+    if hrc <= 0 or hrc <= 30:
+        return sfm_annealed
+    if hrc <= hrc_hard:
+        span = max(1e-6, hrc_hard - 30.0)
+        return sfm_annealed - (sfm_annealed - sfm_hard) * (hrc - 30.0) / span
+    return max(sfm_hard * 0.70, sfm_hard - 4.0 * (hrc - hrc_hard))
+
+
+# Per-grade (annealed, hardened) SFM anchors for the tool steels that carry a real
+# annealed->hardened span. The ANNEALED number is the calibrated BASE_SFM already in
+# use (so the default condition is unchanged); the HARDENED number is derated for
+# the service condition.
+#
+# CALIBRATION NOTE: only the D2 curve (d2_sfm_absolute) and the annealed anchors are
+# shop-validated. The HARDENED anchors below are ESTIMATES scaled from the D2 curve's
+# annealed->hardened ratio (180 -> 85, i.e. ~0.47) adjusted for each grade's carbide
+# content and known machinability rating. HSS in particular is published at only
+# ~50-60% of a 1%-carbon reference, which is why its annealed anchor sits well below
+# A2/S7 despite a similar annealed hardness. Needs shop runs to become real data.
+TOOL_STEEL_SFM_ANCHORS = {
+    #                    annealed  hardened  hrc_at_hardened
+    "tool_steel_a2":      (240.0,   115.0,   58.0),
+    "tool_steel_s7":      (240.0,   115.0,   57.0),
+    "tool_steel_h13":     (220.0,   120.0,   50.0),  # hardened band is lower (38-54)
+    "tool_steel_o1":      (200.0,   100.0,   60.0),  # lower alloy than D2, cuts freer annealed
+    "tool_steel_hss":     (150.0,    75.0,   64.0),  # ~50-60% machinability vs 1%C reference
+    "tool_steel_hss_co":  (125.0,    62.0,   65.0),  # Co / high-V: tougher + more abrasive
+    "cpm_3v":             (140.0,    80.0,   58.0),  # PM, but far less V than 10V
+    "cpm_10v":            (110.0,    85.0,   61.0),  # abrasion-limited; flatter curve
+    "cpm_15v":            ( 90.0,    68.0,   62.0),  # highest V — flattest, most abrasive
+    "tool_steel_w1":      (260.0,   120.0,   60.0),  # plain-carbon, cuts freely annealed
+    "steel_maraging":     (210.0,   120.0,   54.0),  # ages to ~54 HRC, not quenched
+    "steel_bearing":      (215.0,    95.0,   62.0),  # 52100 through-hardens to 60-64
+}
+
+
+def tool_steel_sfm_absolute(mat_key: str, hrc: float):
+    """Absolute carbide SFM for a tool steel with an annealed->hardened span.
+    Returns None when the grade has no curve (caller keeps its flat BASE_SFM)."""
+    anchors = TOOL_STEEL_SFM_ANCHORS.get(mat_key)
+    if not anchors:
+        return None
+    return _anneal_hard_sfm(hrc, anchors[0], anchors[1], anchors[2])
 
 
 def d2_hardness_sfm_mult(hrc: float) -> float:
@@ -2300,6 +2453,10 @@ DRILL_SFM = {
     # Annealed tool steels = external ref low-end 110 (2026-07-23). In _NO_HRC_PENALTY so base IS annealed condition.
     "tool_steel_p20": 110, "tool_steel_a2": 110, "tool_steel_h13": 110,
     "tool_steel_s7": 110, "tool_steel_d2": 110, "cpm_10v": 90,
+    "tool_steel_o1": 105, "tool_steel_hss": 85, "tool_steel_hss_co": 70,
+    "cpm_3v": 80, "steel_carburizing": 190, "tool_steel_w1": 115,
+    "steel_maraging": 95, "steel_bearing": 100, "cpm_15v": 65,
+    "steel_high_carbon": 175,
     # Bronzes = brass/bronze external ref low-end 250 (2026-07-23). "moderate" coolant class (cap 1.50).
     "manganese_bronze": 250, "silicon_bronze": 250, "copper_beryllium": 200,  # BeCu AT/HT centerline per Materion guide (C17200 aged HRC 36–45)
     # Legacy group fallbacks — Stainless/Steel raised to match the austenitic/mild external anchors above.
@@ -2330,6 +2487,10 @@ DRILL_IPR_BASE = {
     "armor_milspec": 0.0018, "armor_ar400": 0.0015, "armor_ar500": 0.0012, "armor_ar600": 0.0008,
     "tool_steel_p20": 0.0035, "tool_steel_a2": 0.0028, "tool_steel_h13": 0.0025,
     "tool_steel_s7": 0.0028, "tool_steel_d2": 0.0022, "cpm_10v": 0.0018,
+    "tool_steel_o1": 0.0026, "tool_steel_hss": 0.0022, "tool_steel_hss_co": 0.0019,
+    "cpm_3v": 0.0020, "steel_carburizing": 0.0048, "tool_steel_w1": 0.0030,
+    "steel_maraging": 0.0024, "steel_bearing": 0.0025, "cpm_15v": 0.0016,
+    "steel_high_carbon": 0.0044,
     "manganese_bronze": 0.005, "silicon_bronze": 0.0055, "copper_beryllium": 0.009,  # BeCu free-cuts; anchor 0.002 IPR at Ø.040 after dia^0.6 scaling per Materion guide
     # Legacy group fallbacks
     "Aluminum": 0.009, "Non-Ferrous": 0.007, "Abrasive Non-Ferrous": 0.005, "Steel": 0.004, "Stainless": 0.0042,
@@ -2380,6 +2541,10 @@ def run_chamfer_mill(payload: dict) -> dict:
         base_sfm = d2_sfm_absolute(_hrc)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                        "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+                       # Curve-bearing grades — see _NO_HRC_PENALTY; the annealed->hardened
+                       # curve already accounts for hardness, so skip the generic mult.
+                       "tool_steel_o1", "tool_steel_hss", "tool_steel_hss_co",
+                       "tool_steel_w1", "steel_maraging", "steel_bearing", "cpm_3v", "cpm_15v",
                        "stainless_15_5", "stainless_ph", "stainless_13_8",
                        "stainless_duplex", "stainless_superduplex", "stainless_440c", "stainless_420",
                        # Titanium: 30-36 HRC is intrinsic to Ti-6Al-4V; BASE_SFM already reflects it
@@ -2815,7 +2980,16 @@ def run_drilling(payload: dict) -> dict:
     else:
         # D2's DRILL_SFM (110) is an annealed number — scale it by the D2 curve so
         # a hardened-D2 hole isn't drilled at annealed speed. No-op when annealed.
-        base_sfm = apply_d2_hardness(base_sfm, hrc, mat, mat_group)
+        # Every other curve-bearing tool steel (A2/S7/H13/O1/W1/HSS/PM/maraging/52100)
+        # has the same annealed-calibrated table, so route them through the central
+        # apply_sfm_hardness rather than leaving them flat — a 62 HRC M2 punch was
+        # being drilled at the annealed 85 SFM. Same drift this comment warns about.
+        _ts_drill = mat if mat in TOOL_STEEL_SFM_ANCHORS else (
+            mat_group if mat_group in TOOL_STEEL_SFM_ANCHORS else None)
+        if _ts_drill:
+            base_sfm = apply_sfm_hardness(base_sfm, hrc, mat, mat_group)
+        else:
+            base_sfm = apply_d2_hardness(base_sfm, hrc, mat, mat_group)
     base_sfm *= cool_factor * geo_factor  # PA factor applies to IPR only, not SFM
     # Micro-drill SFM bonus — base table calibrated for ~1/4" drills; micro-drills run hotter SFM.
     # Bonus scales with sfm_dia (the operating dia that drives RPM/heat) — not feed_dia.
@@ -3565,7 +3739,17 @@ KEYSEAT_SFM = {
     "tool_steel_h13":    160,
     "tool_steel_s7":     180,
     "tool_steel_d2":     130,
-    "cpm_10v":            60,  # CPM 10V keyseat: full-slot = high abrasive exposure; very conservative
+    "cpm_10v":            60,
+    "tool_steel_o1":     165,
+    "tool_steel_hss":    120,
+    "tool_steel_hss_co":  95,
+    "cpm_3v":            110,
+    "steel_carburizing": 235,
+    "tool_steel_w1":     185,
+    "steel_maraging":    140,
+    "steel_bearing":     150,
+    "cpm_15v":            50,
+    "steel_high_carbon": 215,  # CPM 10V keyseat: full-slot = high abrasive exposure; very conservative
     "hardened_lt55":     160,
     "hardened_gt55":      70,
     "armor_milspec":     160,  # MIL-A-12560 keyseat — full-slot is harsh, reduce vs endmill
@@ -3640,6 +3824,16 @@ FEEDMILL_SFM = {
     "tool_steel_h13":         275,
     "tool_steel_s7":          300,
     "tool_steel_d2":          220,
+    "tool_steel_o1":          260,
+    "tool_steel_hss":         190,
+    "tool_steel_hss_co":      155,
+    "cpm_3v":                 175,
+    "steel_carburizing":      400,
+    "tool_steel_w1":          290,
+    "steel_maraging":         230,
+    "steel_bearing":          245,
+    "cpm_15v":                 70,
+    "steel_high_carbon":      390,
     "cpm_10v":                 80,
     "hardened_lt55":           175,
     "hardened_gt55":            70,   # above 52 HRC: not recommended
@@ -5191,6 +5385,18 @@ def run(payload=None):
     _d2_hrc = float(data.get("hardness_hrc", 0) or 0) if _is_d2 else 0.0
     if _is_d2:
         base_sfm = d2_sfm_absolute(_d2_hrc)
+    # Other tool steels with a real annealed->hardened span (A2, S7, H13, O1, HSS,
+    # HSS-Co, CPM 3V/10V) get the same treatment on their own anchors. Before this
+    # they sat in _NO_HRC_PENALTY with a flat BASE_SFM, so the hardness field was
+    # INERT for them — an annealed A2 blank and a 62 HRC one both quoted 240 SFM.
+    # These keys stay in _NO_HRC_PENALTY below: the curve already accounts for
+    # hardness, so the generic hardness_sfm_mult would double-derate.
+    _ts_curve_hrc = float(data.get("hardness_hrc", 0) or 0)
+    _ts_sfm = tool_steel_sfm_absolute(_mat_key, _ts_curve_hrc)
+    if _ts_sfm is None:
+        _ts_sfm = tool_steel_sfm_absolute(material_group, _ts_curve_hrc)
+    if _ts_sfm is not None:
+        base_sfm = _ts_sfm
     if data["mode"] in ("hem", "trochoidal"):
         # Hardened steel is abrasion/thermal-limited, NOT chip-evacuation-limited,
         # so the blanket HEM 2× doesn't physically apply — the light radial arc
@@ -5229,6 +5435,10 @@ def run(payload=None):
     _hrc = float(data.get("hardness_hrc", 0) or 0)
     _no_hrc_penalty = ("Inconel", "hiTemp_fe", "hiTemp_co", "hardened_lt55", "hardened_gt55",
                         "tool_steel_p20", "tool_steel_a2", "tool_steel_h13", "tool_steel_s7", "tool_steel_d2",
+                       # Curve-bearing grades — see _NO_HRC_PENALTY; the annealed->hardened
+                       # curve already accounts for hardness, so skip the generic mult.
+                       "tool_steel_o1", "tool_steel_hss", "tool_steel_hss_co",
+                       "tool_steel_w1", "steel_maraging", "steel_bearing", "cpm_3v", "cpm_15v",
                         "cpm_10v", "armor_milspec", "armor_ar400", "armor_ar500", "armor_ar600",
                         # PH/duplex stainless: SFM already calibrated for their hardness range — don't double-penalize
                         "stainless_15_5", "stainless_ph", "stainless_13_8",
